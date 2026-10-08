@@ -1,0 +1,16 @@
+V10 AUDIT NOTES
+
+[OK] Minecraft 1.20.1
+[OK] Forge 47.4.10
+[OK] 79 unique CurseForge projects
+[OK] Essential present
+[OK] Berezka API 1.2.9.6 / file 8762847
+[OK] Sound Physics Remastered 1.4.10 / file 6352920
+
+Known non-fatal warnings from latest(5).log:
+- Oculus modifies Embeddium internals.
+- The Knocker reports at least one broken/missing texture.
+- Box of Horrors and Born in Chaos report missing model/texture warnings.
+- GeckoLib logs malformed animation expressions from at least one content mod.
+
+The fatal error in v8 was the missing Berezka structure type dependency.
