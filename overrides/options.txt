@@ -1,0 +1,10 @@
+soundCategory_master:0.62
+soundCategory_music:0.10
+soundCategory_ambient:0.72
+soundCategory_hostile:0.70
+soundCategory_weather:0.65
+showSubtitles:true
+gamma:0.0
+renderDistance:12
+simulationDistance:8
+entityDistanceScaling:0.8
