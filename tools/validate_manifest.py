@@ -10,6 +10,7 @@ BANNED = {
 }
 CORE = {388172,546670,908741,790626,429235,448233,967848}
 DEPENDENCY_RULES = {
+    974401: {237749},                 # Mobtimizations -> CoroUtil
     1484738: {388172,419699,1425144}, # do_not_join -> GeckoLib, Architectury, WallClimber API
     1475092: {388172},                # StalkerEntity -> GeckoLib
     1715713: {388172},                # Pale Watcher -> GeckoLib
