@@ -10,8 +10,8 @@
   },
   "manifestType": "minecraftModpack",
   "manifestVersion": 1,
-  "name": "EHTID Horror REBORN v11 - Client Fix",
-  "version": "11.0.0",
+  "name": "EHTID Horror REBORN v12 - No Oculus",
+  "version": "12.0.0",
   "author": "EHTID",
   "files": [
     {
@@ -37,11 +37,6 @@
     {
       "projectID": 535489,
       "fileID": 6352920,
-      "required": true
-    },
-    {
-      "projectID": 581495,
-      "fileID": 6020952,
       "required": true
     },
     {
@@ -507,6 +502,11 @@
     {
       "projectID": 1233947,
       "fileID": 6874107,
+      "required": true
+    },
+    {
+      "projectID": 686911,
+      "fileID": 4725250,
       "required": true
     }
   ],
