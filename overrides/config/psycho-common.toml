@@ -8,23 +8,23 @@ enableHeartbeat = true
 
 [spawn]
 enabled = true
-dayDistanceMin = 56
-dayDistanceMax = 88
-nightDistanceMin = 28
-nightDistanceMax = 72
-timeMin = 480.0
-timeMax = 900.0
-chance = 4
-returnAfterDeath = 1200.0
-positionAttempts = 16
-firstSpawnDay = 1
+dayDistanceMin = 48
+dayDistanceMax = 80
+nightDistanceMin = 24
+nightDistanceMax = 64
+timeMin = 300.0
+timeMax = 600.0
+chance = 3
+returnAfterDeath = 600.0
+positionAttempts = 24
+firstSpawnDay = 0
 caveY = 60
-caveIntervalFactor = 0.75
-dayIntervalFactor = 2.5
+caveIntervalFactor = 0.6
+dayIntervalFactor = 1.6
 requireOutOfSight = true
-guaranteedStalker = false
-guaranteedNightPsycho = false
+guaranteedStalker = true
+guaranteedNightPsycho = true
 
 [ambient]
-cooldownMin = 420.0
-cooldownMax = 900.0
+cooldownMin = 300.0
+cooldownMax = 600.0
