@@ -3,15 +3,15 @@
     "version": "1.20.1",
     "modLoaders": [
       {
-        "id": "forge-47.4.10",
+        "id": "forge-47.4.15",
         "primary": true
       }
     ]
   },
   "manifestType": "minecraftModpack",
   "manifestVersion": 1,
-  "name": "EHTID Horror REBORN - Massive Horror",
-  "version": "1.0.0",
+  "name": "EHTID Horror REBORN v2 - CN Obscure Horror",
+  "version": "2.0.0",
   "author": "EHTID",
   "files": [
     {
@@ -547,6 +547,46 @@
     {
       "projectID": 335493,
       "fileID": 7546908,
+      "required": true
+    },
+    {
+      "projectID": 1609589,
+      "fileID": 8610944,
+      "required": true
+    },
+    {
+      "projectID": 1028675,
+      "fileID": 7119202,
+      "required": true
+    },
+    {
+      "projectID": 1304540,
+      "fileID": 6754884,
+      "required": true
+    },
+    {
+      "projectID": 934103,
+      "fileID": 6857842,
+      "required": true
+    },
+    {
+      "projectID": 1509634,
+      "fileID": 8379769,
+      "required": true
+    },
+    {
+      "projectID": 1536200,
+      "fileID": 8051912,
+      "required": true
+    },
+    {
+      "projectID": 1245392,
+      "fileID": 8865455,
+      "required": true
+    },
+    {
+      "projectID": 1691054,
+      "fileID": 8856743,
       "required": true
     }
   ],
