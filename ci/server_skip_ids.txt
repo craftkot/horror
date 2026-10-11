@@ -22,3 +22,6 @@
 448233
 686911
 335493
+
+# The Idol: client-only code path crashes dedicated server
+1421612
