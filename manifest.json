@@ -10,8 +10,8 @@
   },
   "manifestType": "minecraftModpack",
   "manifestVersion": 1,
-  "name": "EHTID Horror REBORN v6 - CoroUtil Fix",
-  "version": "6.0.0",
+  "name": "EHTID Horror REBORN v7 - Diagnostic",
+  "version": "7.0.0",
   "author": "EHTID",
   "files": [
     {
@@ -502,11 +502,6 @@
     {
       "projectID": 1248459,
       "fileID": 8504931,
-      "required": true
-    },
-    {
-      "projectID": 1709569,
-      "fileID": 9106186,
       "required": true
     },
     {
