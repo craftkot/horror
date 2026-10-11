@@ -34,3 +34,6 @@
 
 # Nostalgophobia: CurseForge marks it client-only; built-in client resource/datapack behavior
 1584826
+
+# The Red Grin: references client Screen on dedicated server
+1435522
