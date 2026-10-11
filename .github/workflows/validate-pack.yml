@@ -1,0 +1,27 @@
+name: Validate Horror Pack
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate manifest and known dependencies
+        run: python tools/validate_manifest.py
+      - name: Build distributable manifest archive
+        run: zip -r EHTID-Horror-Manifest.zip manifest.json overrides README.md
+      - name: Upload checked pack artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EHTID-Horror-Checked
+          path: EHTID-Horror-Manifest.zip
