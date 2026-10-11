@@ -1,0 +1,24 @@
+[general]
+enabled = true
+
+[spawning]
+spawnRadiusMin = 20
+spawnRadiusMax = 40
+stalkSpawnRadiusMin = 32
+stalkSpawnRadiusMax = 56
+arielVerticalMin = 15
+arielVerticalMax = 30
+knightSpawnIntervalTicks = 120
+knightEscalationMinTicks = 80
+knightEscalationMaxTicks = 200
+
+[detection]
+stalkFollowDistance = 15
+stalkSpotCloseRange = 10
+arielTakedownRadius = 5
+stalkCoverPreferenceChance = 0.4
+stalkPeekSearchRadius = 6
+stalkPeekDurationTicks = 24
+
+[epicEntrance]
+lightDestructionRadius = 32
