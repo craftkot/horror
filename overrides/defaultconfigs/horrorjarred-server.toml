@@ -1,7 +1,7 @@
 [intruders]
-intruderFrequency = 0.65
+intruderFrequency = 1.2
 shuffleIntruders = true
-pityCap = 1.75
+pityCap = 1.25
 
 [intruders.enabledIntruders]
 animosity = true
@@ -18,10 +18,10 @@ morsel = true
 partygoer = true
 
 [world]
-angerGrowth = 0.7
+angerGrowth = 1.0
 startingAnger = 0
 dreadMoonEnabled = true
-dreadMoonChance = 6.0
+dreadMoonChance = 12.0
 phonicFlickerLamps = true
 phonicFlickerLampsIntensity = 1.0
 craftingTableFurnaceSwapping = true
