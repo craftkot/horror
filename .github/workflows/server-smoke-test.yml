@@ -6,6 +6,8 @@ on:
     paths:
       - "manifest.json"
       - "ci/**"
+      - "overrides/config/**"
+      - "overrides/defaultconfigs/**"
       - ".github/workflows/server-smoke-test.yml"
   workflow_dispatch:
 
@@ -41,6 +43,12 @@ jobs:
 
       - name: Download server-safe mod set
         run: python ci/download_server_mods.py
+
+      - name: Apply tuned modpack configs
+        run: |
+          mkdir -p server/config server/defaultconfigs
+          if [ -d overrides/config ]; then cp -a overrides/config/. server/config/; fi
+          if [ -d overrides/defaultconfigs ]; then cp -a overrides/defaultconfigs/. server/defaultconfigs/; fi
 
       - name: Run Forge smoke test
         run: python ci/run_server_smoke.py
