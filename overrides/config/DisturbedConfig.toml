@@ -1,0 +1,62 @@
+# EHTID tuned: rare major encounters, ambient tension between them.
+[Spawns]
+"masked stalking spawnrate modifier" = 14000.0
+"masked behind spawnrate modifier" = 12000.0
+"masked running spawnrate modifier" = 13000.0
+"footsteps spawnrate modifier" = 9000.0
+"masked chase spawn chance" = 4.0
+"masked behind spawning" = true
+"footsteps spawning" = true
+"masked running spawning" = true
+"masked stalking spawning" = true
+"masked chase spawning" = true
+"masked turn around spawning" = true
+"masked turn around spawnrate modifier" = 16000.0
+"minimum behind spawning cooldown" = 48000.0
+"maximum behind spawning cooldown" = 84000.0
+"minimum running spawning cooldown" = 60000.0
+"maximum running spawning cooldown" = 108000.0
+"minimum stalking spawning cooldown" = 84000.0
+"maximum stalking spawning cooldown" = 144000.0
+"minimum turn around spawning cooldown" = 108000.0
+"maximum turn around spawning cooldown" = 180000.0
+"minimum intruder spawning cooldown" = 84000.0
+"maximum intruder spawning cooldown" = 144000.0
+"masked shadow spawnrate modifier" = 18000.0
+"masked shadow spawning" = true
+
+[Sounds]
+"twigsnap sfx playrate modifier" = 18000.0
+"twigsnap sfx playing" = true
+"leaves rustling sfx playrate modifier" = 24000.0
+"leaves rustling sfx playing" = true
+"wood knocking sfx playrate modifier" = 30000.0
+"wood knocking sfx playing" = true
+"bone cracking sfx playrate modifier" = 42000.0
+"bone cracking sfx playing" = true
+"breath sfx playrate modifier" = 60000.0
+"breath sfx playing" = true
+"long breath sfx playrate modifier" = 84000.0
+"long breath sfx playing" = true
+"tree falling sfx playrate modifier" = 144000.0
+"tree falling sfx playing" = true
+
+[Events]
+"paranoia event happening" = true
+"paranoia eventrate modifier" = 48000.0
+"masked sleeping event happening" = true
+"masked sleeping eventrate modifier" = 6.0
+"torch removal event happening" = true
+"torch removal eventrate modifier" = 48000.0
+"masked intruder event happening" = true
+"masked intruder eventrate modifier" = 48000.0
+"jumpscare after murdering animals event happening" = true
+"jumpscare after murdering animals eventrate modifier" = 150.0
+"dead body event happening" = true
+"deadbody event minimum cooldown" = 84000.0
+"deadbody event maximum cooldown" = 144000.0
+
+["Visual Effects"]
+"red fog enabled" = true
+"nighttime and rain enabled on decay spawn" = true
+"particles enabled" = true
