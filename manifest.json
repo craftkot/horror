@@ -10,8 +10,8 @@
   },
   "manifestType": "minecraftModpack",
   "manifestVersion": 1,
-  "name": "EHTID Horror REBORN v5 - Internet Abyss",
-  "version": "5.0.0",
+  "name": "EHTID Horror REBORN v6 - CoroUtil Fix",
+  "version": "6.0.0",
   "author": "EHTID",
   "files": [
     {
@@ -512,6 +512,11 @@
     {
       "projectID": 1233947,
       "fileID": 6874107,
+      "required": true
+    },
+    {
+      "projectID": 237749,
+      "fileID": 5096038,
       "required": true
     }
   ],
