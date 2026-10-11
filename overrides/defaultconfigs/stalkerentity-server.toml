@@ -1,136 +1,136 @@
-# EHTID tuned subset. Forge fills unspecified keys with mod defaults.
+# EHTID v14: all encounters profile. Unspecified settings use mod defaults.
 [horror.commands]
 enableCheatCommands = false
 
 [horror.director]
-intervalTicks = 2400
-spawnChanceCalm = 0.04
-spawnChanceTension = 0.08
-spawnChanceUncertainty = 0.16
-hallucinationChance = 0.08
-disruptiveEffectMinGapTicks = 1200
+intervalTicks = 1200
+spawnChanceCalm = 0.10
+spawnChanceTension = 0.16
+spawnChanceUncertainty = 0.28
+hallucinationChance = 0.12
+disruptiveEffectMinGapTicks = 600
 
 [horror.world_sound]
-cooldownTicks = 9000
-chanceMin = 0.04
-chanceMax = 0.08
-checkIntervalMinTicks = 900
-checkIntervalMaxTicks = 3000
+cooldownTicks = 6000
+chanceMin = 0.06
+chanceMax = 0.12
+checkIntervalMinTicks = 600
+checkIntervalMaxTicks = 2400
 
 [horror.distant_steps]
-checkIntervalTicks = 2400
-chance = 0.08
-cooldownMinTicks = 7200
-cooldownMaxTicks = 12000
-
-[horror.wrong_sound]
-checkIntervalTicks = 3000
-chance = 0.06
+checkIntervalTicks = 1800
+chance = 0.12
 cooldownMinTicks = 4800
-cooldownMaxTicks = 9000
-
-[horror.cave_stone]
-checkIntervalTicks = 900
-chance = 0.04
-cooldownMinTicks = 3600
 cooldownMaxTicks = 7200
 
-[horror.phantom_torch]
-checkIntervalTicks = 1800
+[horror.wrong_sound]
+checkIntervalTicks = 2400
+chance = 0.10
+cooldownMinTicks = 3000
+cooldownMaxTicks = 6000
+
+[horror.cave_stone]
+checkIntervalTicks = 600
 chance = 0.07
-cooldownMinTicks = 4800
-cooldownMaxTicks = 9000
+cooldownMinTicks = 2400
+cooldownMaxTicks = 4800
+
+[horror.phantom_torch]
+checkIntervalTicks = 1200
+chance = 0.12
+cooldownMinTicks = 2400
+cooldownMaxTicks = 4800
 
 [horror.night_knock]
-checkIntervalTicks = 600
-cooldownMinTicks = 5400
-cooldownMaxTicks = 9000
-chanceMin = 0.03
-chanceMax = 0.12
+checkIntervalTicks = 500
+cooldownMinTicks = 3600
+cooldownMaxTicks = 6000
+chanceMin = 0.05
+chanceMax = 0.20
 
 [horror.warning_broadcast]
-checkIntervalTicks = 300
-chance = 0.03
-cooldownMinTicks = 6000
-cooldownMaxTicks = 12000
+checkIntervalTicks = 200
+chance = 0.05
+cooldownMinTicks = 3600
+cooldownMaxTicks = 6000
 
 [horror.false_alarm]
-checkIntervalTicks = 3600
-chanceMin = 0.006
-chanceMid = 0.02
-chanceMax = 0.045
-cooldownMinTicks = 7200
-cooldownMaxTicks = 12000
+checkIntervalTicks = 3000
+chanceMin = 0.01
+chanceMid = 0.04
+chanceMax = 0.08
+cooldownMinTicks = 4800
+cooldownMaxTicks = 8400
 
 [horror.silhouette_natural_spawn]
-chance = 0.025
-checkIntervalTicks = 7200
-cooldownTicks = 24000
+chance = 0.05
+checkIntervalTicks = 4800
+cooldownTicks = 12000
 
 [horror.invisible_watcher]
 lifetimeMinSec = 120
 lifetimeMaxSec = 300
-spawnChance = 0.06
-checkIntervalTicks = 3600
-cooldownMinTicks = 14400
-cooldownMaxTicks = 24000
+spawnChance = 0.12
+checkIntervalTicks = 1800
+cooldownMinTicks = 7200
+cooldownMaxTicks = 12000
 
 [horror.self_chat]
-chance = 0.04
-checkIntervalTicks = 1800
-cooldownMinTicks = 9000
-cooldownMaxTicks = 18000
-minTimeInWorldTicks = 12000
+chance = 0.07
+checkIntervalTicks = 1200
+cooldownMinTicks = 4800
+cooldownMaxTicks = 9000
+minTimeInWorldTicks = 6000
 
 [horror.stalker_warning]
-threshold = 40.0
-chance = 0.05
-checkIntervalTicks = 3000
-cooldownMinTicks = 18000
-cooldownMaxTicks = 30000
+threshold = 50.0
+chance = 0.10
+checkIntervalTicks = 1800
+cooldownMinTicks = 9000
+cooldownMaxTicks = 15000
 chaserDelayMinTicks = 200
 chaserDelayMaxTicks = 400
 chaserNoTargetDespawnTicks = 800
 chaserNoHitDespawnTicks = 1800
-chanceAtZero = 0.12
+chanceAtZero = 0.20
 sanityDrain = 2.0
 
 [horror.siren_event]
-threshold = 50.0
-chanceAtThreshold = 0.05
-chanceAtZero = 0.10
-checkIntervalTicks = 2400
-cooldownMinTicks = 12000
-cooldownMaxTicks = 24000
+threshold = 60.0
+chanceAtThreshold = 0.10
+chanceAtZero = 0.18
+checkIntervalTicks = 1800
+cooldownMinTicks = 7200
+cooldownMaxTicks = 12000
 animalsFollowTicks = 1200
 
 [horror.sad_shadow_spawn]
-threshold = 55.0
-checkIntervalTicks = 3000
-chanceAtThreshold = 0.03
-chanceAtZero = 0.07
-cooldownMinTicks = 18000
-cooldownMaxTicks = 30000
-minTimeInWorldTicks = 6000
+threshold = 65.0
+checkIntervalTicks = 1800
+chanceAtThreshold = 0.06
+chanceAtZero = 0.14
+cooldownMinTicks = 9000
+cooldownMaxTicks = 15000
+minTimeInWorldTicks = 3000
 
 [horror.clone_spawn]
-threshold = 80.0
-checkIntervalTicks = 6000
-chanceAtThreshold = 0.01
-chanceAtZero = 0.035
-cooldownMinTicks = 36000
-cooldownMaxTicks = 60000
-minTimeInWorldTicks = 12000
+threshold = 85.0
+checkIntervalTicks = 3600
+chanceAtThreshold = 0.025
+chanceAtZero = 0.08
+cooldownMinTicks = 12000
+cooldownMaxTicks = 24000
+minTimeInWorldTicks = 6000
 
 [horror.villager_insanity]
-threshold = 60.0
-chanceAt60 = 0.04
-chanceAt20 = 0.10
-checkIntervalTicks = 3000
+threshold = 70.0
+chanceAt60 = 0.08
+chanceAt20 = 0.18
+checkIntervalTicks = 1800
 effectDurationTicks = 7200
 fleeChance = 0.35
 rangeBlocks = 14.0
-cooldownTicks = 9000
+cooldownTicks = 4800
 
 [horror.atmospheric_throttle]
-durationTicks = 2400
+durationTicks = 1800
