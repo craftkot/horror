@@ -1,14 +1,24 @@
-# EHTID Horror REBORN — Massive Horror v1
+# EHTID Horror REBORN v5 — Internet Abyss
 
-Fresh rebuild for Minecraft 1.20.1 / Forge 47.4.10.
+Minecraft 1.20.1 · Forge 47.4.15
 
-- 107 unique CurseForge entries
-- 46 horror mods
-- 13 performance mods
-- Essential included
-- One Shot Protection included
-- Horror Structures and Box of Horrors intentionally removed from the core after previous test issues
+Current manifest: **100 unique CurseForge entries**.
 
-This repository is now based on REBORN v1 rather than the old v10 pack.
+## Direction
+The pack intentionally focuses on obscure, Chinese, experimental and low-download horror mods.
+The user's previous 46-mod stop-list is enforced by CI and must not return.
 
-Main goals: many different horror systems, dark atmosphere, multiplayer support, and enough optimization for an AI-heavy pack.
+## Validation
+Every push to main runs `.github/workflows/validate-pack.yml`.
+
+CI checks:
+- CurseForge manifest structure;
+- duplicate project IDs;
+- Minecraft / Forge fields;
+- banned horror stop-list;
+- required performance/core mods;
+- known dependencies for selected horror mods.
+
+## Runtime test
+GitHub CI validates the pack statically. Actual Minecraft world creation and runtime
+compatibility still require a client launch and latest.log/crash-report review.
