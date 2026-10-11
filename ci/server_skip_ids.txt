@@ -1,0 +1,24 @@
+# CurseForge project IDs skipped by dedicated-server smoke test
+# Client-only UI/render/audio mods. The client pack still keeps them.
+255389
+535489
+581495
+1280023
+227874
+546670
+580555
+238222
+457570
+263420
+317780
+60089
+248787
+250398
+858542
+272515
+401648
+368825
+908741
+448233
+686911
+335493
