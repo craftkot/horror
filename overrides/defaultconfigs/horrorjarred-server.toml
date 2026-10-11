@@ -1,0 +1,34 @@
+[intruders]
+intruderFrequency = 0.65
+shuffleIntruders = true
+pityCap = 1.75
+
+[intruders.enabledIntruders]
+animosity = true
+stalker_stretch = true
+phonic = true
+slate = true
+starved_animals = true
+skin_reaper_fake = true
+fraudroot = true
+caver = true
+sun_monger = true
+moon_monger = true
+morsel = true
+partygoer = true
+
+[world]
+angerGrowth = 0.7
+startingAnger = 0
+dreadMoonEnabled = true
+dreadMoonChance = 6.0
+phonicFlickerLamps = true
+phonicFlickerLampsIntensity = 1.0
+craftingTableFurnaceSwapping = true
+emetophobiaFriendlyMode = false
+
+[dimensions]
+keepInventoryInOtherworld = true
+keepExperienceInOtherworld = true
+teamDimtravelRadius = 16
+betaSpawnPriority = true
