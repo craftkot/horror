@@ -31,3 +31,6 @@
 
 # The Unseen: client Screen classes on dedicated server
 1595083
+
+# Nostalgophobia: CurseForge marks it client-only; built-in client resource/datapack behavior
+1584826
