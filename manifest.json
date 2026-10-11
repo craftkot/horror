@@ -10,8 +10,8 @@
   },
   "manifestType": "minecraftModpack",
   "manifestVersion": 1,
-  "name": "EHTID Horror REBORN v12 - No Oculus",
-  "version": "12.0.0",
+  "name": "EHTID Horror REBORN v13 - Deeper Abyss",
+  "version": "13.0.0",
   "author": "EHTID",
   "files": [
     {
@@ -507,6 +507,61 @@
     {
       "projectID": 686911,
       "fileID": 4725250,
+      "required": true
+    },
+    {
+      "projectID": 1435522,
+      "fileID": 7529291,
+      "required": true
+    },
+    {
+      "projectID": 1248540,
+      "fileID": 7221710,
+      "required": true
+    },
+    {
+      "projectID": 1168271,
+      "fileID": 9119530,
+      "required": true
+    },
+    {
+      "projectID": 1429861,
+      "fileID": 7621714,
+      "required": true
+    },
+    {
+      "projectID": 1449580,
+      "fileID": 7621778,
+      "required": true
+    },
+    {
+      "projectID": 1216279,
+      "fileID": 8997038,
+      "required": true
+    },
+    {
+      "projectID": 1444709,
+      "fileID": 7547599,
+      "required": true
+    },
+    {
+      "projectID": 1492237,
+      "fileID": 8876364,
+      "required": true
+    },
+    {
+      "projectID": 1400064,
+      "fileID": 7452224,
+      "required": true
+    },
+    {
+      "projectID": 1308554,
+      "fileID": 6819547,
+      "required": true
+    },
+    {
+      "projectID": 1584826,
+      "fileID": 8312272,
       "required": true
     }
   ],
