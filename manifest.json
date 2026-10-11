@@ -10,8 +10,8 @@
   },
   "manifestType": "minecraftModpack",
   "manifestVersion": 1,
-  "name": "EHTID Horror REBORN v8 - Baseline Diagnostic",
-  "version": "8.0.0",
+  "name": "EHTID Horror REBORN v9 - Split Package Fix",
+  "version": "9.0.0",
   "author": "EHTID",
   "files": [
     {
@@ -402,11 +402,6 @@
     {
       "projectID": 1687960,
       "fileID": 9051785,
-      "required": true
-    },
-    {
-      "projectID": 1589743,
-      "fileID": 8330882,
       "required": true
     },
     {
