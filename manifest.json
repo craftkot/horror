@@ -10,8 +10,8 @@
   },
   "manifestType": "minecraftModpack",
   "manifestVersion": 1,
-  "name": "EHTID Horror REBORN v9 - Split Package Fix",
-  "version": "9.0.0",
+  "name": "EHTID Horror REBORN v10 - Full GitHub Tested",
+  "version": "10.0.0",
   "author": "EHTID",
   "files": [
     {
@@ -432,6 +432,86 @@
     {
       "projectID": 237749,
       "fileID": 5096038,
+      "required": true
+    },
+    {
+      "projectID": 1475092,
+      "fileID": 9038598,
+      "required": true
+    },
+    {
+      "projectID": 1589531,
+      "fileID": 8615465,
+      "required": true
+    },
+    {
+      "projectID": 1528589,
+      "fileID": 8013821,
+      "required": true
+    },
+    {
+      "projectID": 1254362,
+      "fileID": 6475233,
+      "required": true
+    },
+    {
+      "projectID": 1423360,
+      "fileID": 7547463,
+      "required": true
+    },
+    {
+      "projectID": 1595083,
+      "fileID": 8779742,
+      "required": true
+    },
+    {
+      "projectID": 1715713,
+      "fileID": 9014241,
+      "required": true
+    },
+    {
+      "projectID": 1484738,
+      "fileID": 8795935,
+      "required": true
+    },
+    {
+      "projectID": 1425144,
+      "fileID": 9013802,
+      "required": true
+    },
+    {
+      "projectID": 1666104,
+      "fileID": 8855253,
+      "required": true
+    },
+    {
+      "projectID": 1613605,
+      "fileID": 8449920,
+      "required": true
+    },
+    {
+      "projectID": 1578224,
+      "fileID": 8263350,
+      "required": true
+    },
+    {
+      "projectID": 1307495,
+      "fileID": 8139600,
+      "required": true
+    },
+    {
+      "projectID": 1248459,
+      "fileID": 8504931,
+      "required": true
+    },
+    {
+      "projectID": 1709569,
+      "fileID": 9106186,
+      "required": true
+    },
+    {
+      "projectID": 1233947,
+      "fileID": 6874107,
       "required": true
     }
   ],
