@@ -1,0 +1,51 @@
+# EHTID tuned: atmospheric, not constant audio spam.
+[general]
+enableMod = true
+soundChanceMultiplier = 0.7
+hardcoreMode = false
+hardcoreFrequencyMultiplier = 1.75
+enableDatapackSoundPools = true
+
+[timing]
+minimumSoundDelayTicks = 2400
+maximumSoundDelayTicks = 4800
+fastTestingMode = false
+fastTestingMinimumDelayTicks = 40
+fastTestingMaximumDelayTicks = 120
+
+[gameplay]
+onlyPlayAtNight = false
+onlyPlayUnderground = false
+disableInCreativeMode = true
+enableCaveScreens = true
+caveScreamDistance = 30
+enableApproachingSounds = true
+approachingSoundMaxDistance = 40
+enable3DPositioning = true
+minimum3DDistance = 8
+maximum3DDistance = 28
+schedulerCheckIntervalTicks = 20
+nearbyBlockScanRadius = 14
+nearbyBlockVerticalRadius = 5
+onlyPlayIndoorsForBlockAnchored = false
+maxBlockScanSamples = 900
+enableLightLevelInfluence = true
+
+[categories]
+masterVolume = 0.8
+enableWhispers = true
+whispersVolume = 0.7
+enableAmbience = true
+ambienceVolume = 0.7
+enableStructure = true
+structureVolume = 0.85
+enableNature = true
+natureVolume = 0.55
+enableCave = true
+caveVolume = 0.95
+enableFootsteps = true
+footstepsVolume = 0.75
+enableApproaching = true
+approachingVolume = 0.9
+enableWeather = true
+weatherVolume = 0.65
