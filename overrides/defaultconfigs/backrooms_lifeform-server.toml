@@ -1,0 +1,25 @@
+[entities]
+partygoer = true
+partygoer_stalker = true
+partygoer_horde = true
+partygoer_cake = true
+lifeform = false
+lifeform_stalker = false
+hound = true
+smiler = true
+skinstealer_watch = true
+skinstealer_attack = true
+bone_thief = true
+
+[systems]
+heartbeat = false
+stamina = false
+sanity = true
+sanity_red_lines = true
+screen_shake = true
+jumpscare = true
+backrooms_level = true
+difficulty = "NORMAL"
+spawn_rate = 1.35
+min_event_delay_seconds = 35
+max_event_delay_seconds = 80
