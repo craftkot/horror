@@ -6,7 +6,8 @@ keywords = (
     "horror","fear","psych","disturb","masked","grin","fluffy","clown",
     "cursed","stalker","unseen","dngo","gotham","idol","entity303",
     "skinwalker","creepy","paranormal","mirror","rot","viostt","night",
-    "coroutil","mobtim","otherworld","death","backroom"
+    "coroutil","mobtim","otherworld","death","backroom","palewatcher","harasser",
+    "donotharethem","donotlookatthem","nyctophobia","devcounterentity","the_skin_walker"
 )
 print("===== GENERATED CONFIG INVENTORY =====")
 for base in roots:
