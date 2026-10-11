@@ -1,24 +1,14 @@
-# EHTID Horror 1.20.1 Forge
+# EHTID Horror REBORN — Massive Horror v1
 
-Рабочий репозиторий сборки.
+Fresh rebuild for Minecraft 1.20.1 / Forge 47.4.10.
 
-- Minecraft: 1.20.1
-- Forge: 47.4.10
-- Current pack: v10 Audited
-- CurseForge manifest entries: 79
+- 107 unique CurseForge entries
+- 46 horror mods
+- 13 performance mods
+- Essential included
+- One Shot Protection included
+- Horror Structures and Box of Horrors intentionally removed from the core after previous test issues
 
-## Цель
-Хоррор-survival сборка с реальной темнотой, динамическим светом, атмосферным звуком,
-структурами, stalker/analog-horror модами, QoL и оптимизацией.
+This repository is now based on REBORN v1 rather than the old v10 pack.
 
-## Важно
-Чужие JAR-файлы модов не хранятся в репозитории автоматически.
-manifest.json фиксирует точные CurseForge projectID/fileID, а overrides/
-хранит наши настройки.
-
-## Проверка
-1. Импортировать pack через CurseForge/совместимый лаунчер.
-2. Запустить до меню.
-3. Создать новый мир.
-4. Проверить ночь/пещеры, Dynamic Lights, EMI/JEI, Xaero, Essential.
-5. При краше сохранять latest.log и crash-report.
+Main goals: many different horror systems, dark atmosphere, multiplayer support, and enough optimization for an AI-heavy pack.
