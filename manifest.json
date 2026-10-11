@@ -10,8 +10,8 @@
   },
   "manifestType": "minecraftModpack",
   "manifestVersion": 1,
-  "name": "EHTID Horror REBORN v10 - Full GitHub Tested",
-  "version": "10.0.0",
+  "name": "EHTID Horror REBORN v11 - Client Fix",
+  "version": "11.0.0",
   "author": "EHTID",
   "files": [
     {
@@ -297,11 +297,6 @@
     {
       "projectID": 1091339,
       "fileID": 8779054,
-      "required": true
-    },
-    {
-      "projectID": 686911,
-      "fileID": 4725250,
       "required": true
     },
     {
