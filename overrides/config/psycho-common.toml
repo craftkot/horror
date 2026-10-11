@@ -1,0 +1,30 @@
+["Discord Rich Presence"]
+"Enable Discord RPC" = false
+
+["Visual Effects"]
+showVignette = true
+enableBlur = true
+enableHeartbeat = true
+
+[spawn]
+enabled = true
+dayDistanceMin = 56
+dayDistanceMax = 88
+nightDistanceMin = 28
+nightDistanceMax = 72
+timeMin = 480.0
+timeMax = 900.0
+chance = 4
+returnAfterDeath = 1200.0
+positionAttempts = 16
+firstSpawnDay = 1
+caveY = 60
+caveIntervalFactor = 0.75
+dayIntervalFactor = 2.5
+requireOutOfSight = true
+guaranteedStalker = false
+guaranteedNightPsycho = false
+
+[ambient]
+cooldownMin = 420.0
+cooldownMax = 900.0
