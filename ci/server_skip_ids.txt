@@ -25,3 +25,9 @@
 
 # The Idol: client-only code path crashes dedicated server
 1421612
+
+# do_not_join.jar: client Screen classes on dedicated server
+1484738
+
+# The Unseen: client Screen classes on dedicated server
+1595083
