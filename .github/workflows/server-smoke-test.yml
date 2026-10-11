@@ -45,6 +45,10 @@ jobs:
       - name: Run Forge smoke test
         run: python ci/run_server_smoke.py
 
+      - name: Dump generated horror configs
+        if: success()
+        run: python ci/dump_generated_configs.py
+
       - name: Upload Forge logs
         if: always()
         uses: actions/upload-artifact@v4
