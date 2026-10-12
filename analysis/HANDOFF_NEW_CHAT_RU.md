@@ -1,3 +1,22 @@
+# ОБНОВЛЕНИЕ 2026-10-12: v14.2.1 — Clear Screen + TPS Relief
+
+**ЭТО АКТУАЛЬНЫЙ СТАТУС**. Дальнейший текст ниже сохраняет исторические сведения о v14 и НЕ является актуальным списком модов.
+
+- Репозиторий: craftkot/horror, main, Minecraft 1.20.1, Forge 47.4.15.
+- Текущий manifest: `EHTID Horror REBORN v14.2.1`, 107 файлов.
+- В v14.1 снижена нагрузка от событий и добавлен spark (361579); 2 TPS в конкретном сохранении пока не подтверждено как исправленное.
+- В v14.2.1 по просьбе пользователя **удалены** целиком 255389 (EnhancedVisuals), 1475092 (StalkerEntity), 1421612 (The Idol), 1484738 (do_not_join.jar). НЕ возвращать их без прямого разрешения пользователя.
+- Дополнительно отключены Psychopath vignette/blur/heartbeat, Backrooms screen_shake/jumpscare/sanity_red_lines, Sound of Fear cave screens.
+- В `tools/validate_manifest.py` есть `SCREEN_BLOCKING_EXCLUSIONS`: это часть стоп-листа, не обходить.
+- `overrides/defaultconfigs/stalkerentity-server.toml` удалён из репозитория.
+- Актуальный перечень — `manifest.json`, `overrides/MODLIST_RU.txt` перегенерирован.
+- При установке поверх старого профиля необходимо удалить старые JAR 4 модов вручную; в мире сделать бэкап. Serverconfig существующего мира нужно проверить отдельно.
+- Старые GitHub Actions «SUCCESS» для v14.1 не подтверждают TPS. Для v14.2.1 проверить три CI: validate, server, client.
+
+---
+
+## Исторический HANDOFF по v14 (неактуальные данные сохранены ниже)
+
 # EHTID Horror — HANDOFF для нового чата
 Дата: 2026-10-12
 
