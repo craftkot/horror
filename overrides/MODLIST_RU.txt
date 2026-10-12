@@ -1,6 +1,6 @@
-# EHTID Horror REBORN v14.2.1 — актуальный список модов
-# Единственный источник истины: ../../manifest.json
-# EnhancedVisuals, StalkerEntity, The Idol и do_not_join.jar сознательно исключены.
+# EHTID Horror REBORN v14.3 — актуальный список модов
+# Использовать manifest.json; удалённые моды в этот список не входят.
+# Запрещённые HUD/таймер/рестарт: 255389, 1475092, 1421612, 1484738, 1595083, 1651479.
 
 001. GeckoLib — project 388172, file 8285794
 002. AmbientSounds 6 — project 254284, file 8042994
@@ -67,45 +67,43 @@
 063. CurseForge project 1245392 — project 1245392, file 8865455
 064. CurseForge project 1691054 — project 1691054, file 8856743
 065. The Stalker Horror — project 1572473, file 8658245
-066. _Viostt.jar — project 1651479, file 8691222
-067. Error 404 Not Found — project 1131382, file 6497766
-068. Do Not Hear Them... — project 1628002, file 8625872
-069. Nexor's Stalkers — project 1643575, file 8733856
-070. Urban Terrors — project 1345678, file 8985718
-071. ROT — project 1673586, file 9124204
-072. DO NOT LOOK AT THEM — project 1685880, file 8980547
-073. DNGO - Do Not Go Outside — project 1679999, file 8807569
-074. gotham.jar / Gotham Terror — project 1315701, file 8362070
-075. Don't look away — project 1687960, file 9051785
-076. Horror by Death — project 1273416, file 7819784
-077. MineZero — project 1157812, file 8377917
-078. Mirror Horror Project — project 1237774, file 6710993
-079. Paranormal Activity: Horror Reborn — project 1245885, file 6460119
-080. CoroUtil — project 237749, file 5096038
-081. The Harasser [Horror] — project 1589531, file 8615465
-082. Horror - The Stalker — project 1528589, file 8013821
-083. The Stalker - Horror — project 1254362, file 6475233
-084. THE HUNTER (HORROR) — project 1423360, file 7547463
-085. The Unseen Entity — project 1595083, file 8779742
-086. The Pale Watcher — project 1715713, file 9014241
-087. Advanced Wall Climber API — project 1425144, file 9013802
-088. Entity 303 (Horror) — project 1666104, file 8855253
-089. HeWantsYou — project 1613605, file 8449920
-090. Corner Horror Entity — project 1578224, file 8263350
-091. They are Watching — project 1307495, file 8139600
-092. Legend of The Dwerden — project 1248459, file 8504931
-093. Otherworld [Horror] — project 1709569, file 9106186
-094. Cataclysms [By TheOman] — project 1233947, file 6874107
-095. ImmediatelyFast — project 686911, file 4725250
-096. CurseForge project 1435522 — project 1435522, file 7529291
-097. CurseForge project 1248540 — project 1248540, file 7221710
-098. Psychopath [Horror] — project 1168271, file 9119530
-099. CurseForge project 1429861 — project 1429861, file 7621714
-100. CurseForge project 1449580 — project 1449580, file 7621778
-101. CurseForge project 1216279 — project 1216279, file 8997038
-102. Sound of Fear — project 1444709, file 7547599
-103. CurseForge project 1492237 — project 1492237, file 8876364
-104. Horror Messages — project 1400064, file 7452224
-105. CurseForge project 1308554 — project 1308554, file 6819547
-106. Nostalgophobia — project 1584826, file 8312272
-107. CurseForge project 361579 — project 361579, file 4738952
+066. Error 404 Not Found — project 1131382, file 6497766
+067. Do Not Hear Them... — project 1628002, file 8625872
+068. Nexor's Stalkers — project 1643575, file 8733856
+069. Urban Terrors — project 1345678, file 8985718
+070. ROT — project 1673586, file 9124204
+071. DO NOT LOOK AT THEM — project 1685880, file 8980547
+072. DNGO - Do Not Go Outside — project 1679999, file 8807569
+073. gotham.jar / Gotham Terror — project 1315701, file 8362070
+074. Don't look away — project 1687960, file 9051785
+075. Horror by Death — project 1273416, file 7819784
+076. MineZero — project 1157812, file 8377917
+077. Mirror Horror Project — project 1237774, file 6710993
+078. Paranormal Activity: Horror Reborn — project 1245885, file 6460119
+079. CoroUtil — project 237749, file 5096038
+080. The Harasser [Horror] — project 1589531, file 8615465
+081. Horror - The Stalker — project 1528589, file 8013821
+082. The Stalker - Horror — project 1254362, file 6475233
+083. THE HUNTER (HORROR) — project 1423360, file 7547463
+084. The Pale Watcher — project 1715713, file 9014241
+085. Advanced Wall Climber API — project 1425144, file 9013802
+086. Entity 303 (Horror) — project 1666104, file 8855253
+087. HeWantsYou — project 1613605, file 8449920
+088. Corner Horror Entity — project 1578224, file 8263350
+089. They are Watching — project 1307495, file 8139600
+090. Legend of The Dwerden — project 1248459, file 8504931
+091. Otherworld [Horror] — project 1709569, file 9106186
+092. Cataclysms [By TheOman] — project 1233947, file 6874107
+093. ImmediatelyFast — project 686911, file 4725250
+094. CurseForge project 1435522 — project 1435522, file 7529291
+095. CurseForge project 1248540 — project 1248540, file 7221710
+096. Psychopath [Horror] — project 1168271, file 9119530
+097. CurseForge project 1429861 — project 1429861, file 7621714
+098. CurseForge project 1449580 — project 1449580, file 7621778
+099. CurseForge project 1216279 — project 1216279, file 8997038
+100. Sound of Fear — project 1444709, file 7547599
+101. CurseForge project 1492237 — project 1492237, file 8876364
+102. Horror Messages — project 1400064, file 7452224
+103. CurseForge project 1308554 — project 1308554, file 6819547
+104. Nostalgophobia — project 1584826, file 8312272
+105. CurseForge project 361579 — project 361579, file 4738952
