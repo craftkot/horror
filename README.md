@@ -1,6 +1,6 @@
-# EHTID Horror REBORN v14.2 — Clear Screen + TPS Relief
+# EHTID Horror REBORN v14.2.1 — Clear Screen + TPS Relief
 
-Minecraft 1.20.1 · Forge 47.4.15 · 109 CurseForge entries.
+Minecraft 1.20.1 · Forge 47.4.15 · 107 CurseForge entries.
 
 ## Changes from v14.1
 
@@ -10,12 +10,14 @@ Minecraft 1.20.1 · Forge 47.4.15 · 109 CurseForge entries.
 - Removed EnhancedVisuals (project 255389): no more blood, dirt, water
   and other first-person HUD overlays from that mod. CreativeCore stays:
   it is shared by other mods (e.g. AmbientSounds).
+- Removed The Idol (1421612), which displays hands and screen effects during encounters.
+- Removed do_not_join.jar (1484738), which triggers fast visual effects and jumpscares.
 - Disabled Psychopath vignette/blur/heartbeat visual effects.
 - Disabled Backrooms screen shake, jumpscare and sanity red lines
   (preserving entities, dimension and the underlying sanity mechanic).
 - Disabled Sound of Fear cave screens (retaining its spatial audio).
 - Retained v14.1 performance mitigation and the spark profiler.
-- Added both removed mod IDs to the CI exclusion list.
+- Added all four removed mod IDs to the CI exclusion list.
 
 This targets **known screen-obscuring effects**. Other obscure horror mods
 may still implement their own custom full-screen visuals. Report any
@@ -24,7 +26,7 @@ remaining effect (screenshot + what triggered it) for targeted removal.
 ### Existing-world upgrade
 
 **BACK UP THE WORLD FIRST.** Updating the manifest is not enough if the
-old install is reused. Delete the old JARs for StalkerEntity and EnhancedVisuals
+old install is reused. Delete all four old JARs (StalkerEntity, EnhancedVisuals, The Idol, do_not_join.jar)
 from the existing instance's `mods/` folder, or import into a **new
 CurseForge profile**. An old profile may retain removed JARs and old
 configs. Verify the mods are missing from the in-game Mods menu.
