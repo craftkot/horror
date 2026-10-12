@@ -36,7 +36,7 @@ def valid_basename(text):
     if not isinstance(text, str):
         return None
     text = unquote(text).replace("\\", "/").split("/")[-1].strip()
-    text = re.sub(r"(?i)\.(jar|zip)$", "", text)
+    text = re.sub(r"(?i)(?:\.(?:jar|zip))+$", "", text)
     text = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "-", text)
     text = re.sub(r"\s+", " ", text).strip(" .-_")[:120].strip(" .-_")
     if not text or re.fullmatch(r"\d+(?:[-_]\d+)+", text):
