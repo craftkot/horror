@@ -5,6 +5,9 @@ on:
     branches: [ main ]
     paths:
       - "manifest.json"
+      - "README.md"
+      - "ci/build_mrpack.py"
+      - ".github/workflows/publish-release.yml"
   workflow_dispatch:
 
 permissions:
