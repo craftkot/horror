@@ -1,100 +1,111 @@
+# EHTID Horror REBORN v14.2.1 — актуальный список модов
+# Единственный источник истины: ../../manifest.json
+# EnhancedVisuals, StalkerEntity, The Idol и do_not_join.jar сознательно исключены.
+
 001. GeckoLib — project 388172, file 8285794
 002. AmbientSounds 6 — project 254284, file 8042994
-003. EnhancedVisuals — project 255389, file 8676471
-004. CreativeCore — project 257814, file 8947229
-005. Sound Physics Remastered — project 535489, file 6352920
-006. Oculus — project 581495, file 6020952
-007. Hardcore True Darkness — project 1280023, file 8794861
-008. Dynamic Lights — project 227874, file 4861183
-009. Enhanced Celestials — project 438447, file 8592325
-010. CorgiLib — project 693313, file 8591767
-011. Data Anchor — project 1203668, file 8925506
-012. Nyctophobia — project 584868, file 8709071
-013. TerraBlender — project 563928, file 6290448
-014. Alex's Caves — project 924854, file 5848216
-015. Alex's Mobs — project 426558, file 5698791
-016. Citadel — project 331936, file 6002521
-017. When Dungeons Arise — project 442508, file 4798432
-018. Dungeons Enhanced — project 480715, file 7069098
-019. Repurposed Structures — project 368293, file 8688287
-020. YUNG's API — project 421850, file 5769971
-021. YUNG's Better Mineshafts — project 389665, file 4769063
-022. YUNG's Better Dungeons — project 510089, file 4769431
-023. YUNG's Better Strongholds — project 465575, file 4769083
-024. YUNG's Better Desert Temples — project 631016, file 4760867
-025. YUNG's Better Witch Huts — project 631401, file 4769489
-026. Structure Gel API — project 378802, file 5278429
-027. One Shot Protection — project 967848, file 5066980
-028. Essential Mod — project 546670, file 8905499
-029. EMI — project 580555, file 8071084
-030. JEI — project 238222, file 8759243
-031. Configured — project 457570, file 5180900
-032. Xaero's Minimap — project 263420, file 9067172
-033. Xaero's World Map — project 317780, file 8849965
-034. Mouse Tweaks — project 60089, file 4581240
-035. AppleSkin — project 248787, file 4770828
-036. Jade — project 324717, file 8479276
-037. Jade Addons — project 583345, file 8203724
-038. Controlling — project 250398, file 4646682
-039. Searchables — project 858542, file 5284015
-040. Better Advancements — project 272515, file 8569648
-041. BetterF3 — project 401648, file 4863626
-042. Inventory Essentials — project 368825, file 8697044
-043. Balm — project 531761, file 8362090
-044. Architectury API — project 419699, file 5137938
-045. Cloth Config API — project 348521, file 5729105
-046. Embeddium — project 908741, file 5681725
-047. ModernFix — project 790626, file 8099770
-048. FerriteCore — project 429235, file 4810975
-049. Entity Culling — project 448233, file 8287086
-050. Clumps — project 256717, file 5278538
-051. FastSuite — project 475117, file 7527943
-052. FastWorkbench — project 288885, file 5101229
-053. FastFurnace — project 299540, file 5181098
-054. Placebo — project 283644, file 6274231
-055. CurseForge project 974401 — project 974401, file 7594372
-056. CurseForge project 233019 — project 233019, file 4578262
-057. CurseForge project 1091339 — project 1091339, file 8779054
-058. CurseForge project 686911 — project 686911, file 4725250
-059. CurseForge project 335493 — project 335493, file 7546908
-060. CurseForge project 1609589 — project 1609589, file 8610944
-061. CurseForge project 1028675 — project 1028675, file 7119202
-062. CurseForge project 1304540 — project 1304540, file 6754884
-063. CurseForge project 934103 — project 934103, file 6857842
-064. CurseForge project 1509634 — project 1509634, file 8379769
-065. CurseForge project 1536200 — project 1536200, file 8051912
-066. CurseForge project 1245392 — project 1245392, file 8865455
-067. CurseForge project 1691054 — project 1691054, file 8856743
-068. The Stalker Horror — project 1572473, file 8658245
-069. _Viostt.jar — project 1651479, file 8691222
-070. Error 404 Not Found — project 1131382, file 6497766
-071. Do Not Hear Them... — project 1628002, file 8625872
-072. Nexor's Stalkers — project 1643575, file 8733856
-073. Urban Terrors — project 1345678, file 8985718
-074. ROT — project 1673586, file 9124204
-075. DO NOT LOOK AT THEM — project 1685880, file 8980547
-076. DNGO - Do Not Go Outside — project 1679999, file 8807569
-077. gotham.jar / Gotham Terror — project 1315701, file 8362070
-078. Don't look away — project 1687960, file 9051785
-079. Sweet Dreams — project 1589743, file 8330882
-080. Horror by Death — project 1273416, file 7819784
-081. MineZero — project 1157812, file 8377917
-082. Mirror Horror Project — project 1237774, file 6710993
-083. The Idol — project 1421612, file 8350354
-084. Paranormal Activity: Horror Reborn — project 1245885, file 6460119
-085. StalkerEntity — project 1475092, file 9038598
-086. The Harasser [Horror] — project 1589531, file 8615465
-087. Horror - The Stalker — project 1528589, file 8013821
-088. The Stalker - Horror — project 1254362, file 6475233
-089. THE HUNTER (HORROR) — project 1423360, file 7547463
-090. The Unseen Entity — project 1595083, file 8779742
-091. The Pale Watcher — project 1715713, file 9014241
-092. do_not_join.jar — project 1484738, file 8795935
-093. Advanced Wall Climber API — project 1425144, file 9013802
-094. Entity 303 (Horror) — project 1666104, file 8855253
-095. HeWantsYou — project 1613605, file 8449920
-096. Corner Horror Entity — project 1578224, file 8263350
-097. They are Watching — project 1307495, file 8139600
-098. Legend of The Dwerden — project 1248459, file 8504931
-099. Otherworld [Horror] — project 1709569, file 9106186
-100. Cataclysms [By TheOman] — project 1233947, file 6874107
+003. CreativeCore — project 257814, file 8947229
+004. Sound Physics Remastered — project 535489, file 6352920
+005. Hardcore True Darkness — project 1280023, file 8794861
+006. Dynamic Lights — project 227874, file 4861183
+007. Enhanced Celestials — project 438447, file 8592325
+008. CorgiLib — project 693313, file 8591767
+009. Data Anchor — project 1203668, file 8925506
+010. Nyctophobia — project 584868, file 8709071
+011. TerraBlender — project 563928, file 6290448
+012. Alex's Caves — project 924854, file 5848216
+013. Alex's Mobs — project 426558, file 5698791
+014. Citadel — project 331936, file 6002521
+015. When Dungeons Arise — project 442508, file 4798432
+016. Dungeons Enhanced — project 480715, file 7069098
+017. Repurposed Structures — project 368293, file 8688287
+018. YUNG's API — project 421850, file 5769971
+019. YUNG's Better Mineshafts — project 389665, file 4769063
+020. YUNG's Better Dungeons — project 510089, file 4769431
+021. YUNG's Better Strongholds — project 465575, file 4769083
+022. YUNG's Better Desert Temples — project 631016, file 4760867
+023. YUNG's Better Witch Huts — project 631401, file 4769489
+024. Structure Gel API — project 378802, file 5278429
+025. One Shot Protection — project 967848, file 5066980
+026. Essential Mod — project 546670, file 8905499
+027. EMI — project 580555, file 8071084
+028. JEI — project 238222, file 8759243
+029. Configured — project 457570, file 5180900
+030. Xaero's Minimap — project 263420, file 9067172
+031. Xaero's World Map — project 317780, file 8849965
+032. Mouse Tweaks — project 60089, file 4581240
+033. AppleSkin — project 248787, file 4770828
+034. Jade — project 324717, file 8479276
+035. Jade Addons — project 583345, file 8203724
+036. Controlling — project 250398, file 4646682
+037. Searchables — project 858542, file 5284015
+038. Better Advancements — project 272515, file 8569648
+039. BetterF3 — project 401648, file 4863626
+040. Inventory Essentials — project 368825, file 8697044
+041. Balm — project 531761, file 8362090
+042. Architectury API — project 419699, file 5137938
+043. Cloth Config API — project 348521, file 5729105
+044. Embeddium — project 908741, file 5681725
+045. ModernFix — project 790626, file 8099770
+046. FerriteCore — project 429235, file 4810975
+047. Entity Culling — project 448233, file 8287086
+048. Clumps — project 256717, file 5278538
+049. FastSuite — project 475117, file 7527943
+050. FastWorkbench — project 288885, file 5101229
+051. FastFurnace — project 299540, file 5181098
+052. Placebo — project 283644, file 6274231
+053. Mobtimizations — project 974401, file 7594372
+054. CurseForge project 233019 — project 233019, file 4578262
+055. CurseForge project 1091339 — project 1091339, file 8779054
+056. CurseForge project 335493 — project 335493, file 7546908
+057. CurseForge project 1609589 — project 1609589, file 8610944
+058. CurseForge project 1028675 — project 1028675, file 7119202
+059. CurseForge project 1304540 — project 1304540, file 6754884
+060. CurseForge project 934103 — project 934103, file 6857842
+061. CurseForge project 1509634 — project 1509634, file 8379769
+062. CurseForge project 1536200 — project 1536200, file 8051912
+063. CurseForge project 1245392 — project 1245392, file 8865455
+064. CurseForge project 1691054 — project 1691054, file 8856743
+065. The Stalker Horror — project 1572473, file 8658245
+066. _Viostt.jar — project 1651479, file 8691222
+067. Error 404 Not Found — project 1131382, file 6497766
+068. Do Not Hear Them... — project 1628002, file 8625872
+069. Nexor's Stalkers — project 1643575, file 8733856
+070. Urban Terrors — project 1345678, file 8985718
+071. ROT — project 1673586, file 9124204
+072. DO NOT LOOK AT THEM — project 1685880, file 8980547
+073. DNGO - Do Not Go Outside — project 1679999, file 8807569
+074. gotham.jar / Gotham Terror — project 1315701, file 8362070
+075. Don't look away — project 1687960, file 9051785
+076. Horror by Death — project 1273416, file 7819784
+077. MineZero — project 1157812, file 8377917
+078. Mirror Horror Project — project 1237774, file 6710993
+079. Paranormal Activity: Horror Reborn — project 1245885, file 6460119
+080. CoroUtil — project 237749, file 5096038
+081. The Harasser [Horror] — project 1589531, file 8615465
+082. Horror - The Stalker — project 1528589, file 8013821
+083. The Stalker - Horror — project 1254362, file 6475233
+084. THE HUNTER (HORROR) — project 1423360, file 7547463
+085. The Unseen Entity — project 1595083, file 8779742
+086. The Pale Watcher — project 1715713, file 9014241
+087. Advanced Wall Climber API — project 1425144, file 9013802
+088. Entity 303 (Horror) — project 1666104, file 8855253
+089. HeWantsYou — project 1613605, file 8449920
+090. Corner Horror Entity — project 1578224, file 8263350
+091. They are Watching — project 1307495, file 8139600
+092. Legend of The Dwerden — project 1248459, file 8504931
+093. Otherworld [Horror] — project 1709569, file 9106186
+094. Cataclysms [By TheOman] — project 1233947, file 6874107
+095. ImmediatelyFast — project 686911, file 4725250
+096. CurseForge project 1435522 — project 1435522, file 7529291
+097. CurseForge project 1248540 — project 1248540, file 7221710
+098. Psychopath [Horror] — project 1168271, file 9119530
+099. CurseForge project 1429861 — project 1429861, file 7621714
+100. CurseForge project 1449580 — project 1449580, file 7621778
+101. CurseForge project 1216279 — project 1216279, file 8997038
+102. Sound of Fear — project 1444709, file 7547599
+103. CurseForge project 1492237 — project 1492237, file 8876364
+104. Horror Messages — project 1400064, file 7452224
+105. CurseForge project 1308554 — project 1308554, file 6819547
+106. Nostalgophobia — project 1584826, file 8312272
+107. CurseForge project 361579 — project 361579, file 4738952
