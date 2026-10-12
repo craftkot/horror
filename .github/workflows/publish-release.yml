@@ -1,0 +1,62 @@
+name: Publish Horror Release
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "manifest.json"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate pack
+        run: python tools/validate_manifest.py
+      - name: Package CurseForge installable ZIP
+        run: |
+          mkdir -p dist
+          zip -qr dist/EHTID-Horror-CurseForge.zip manifest.json overrides README.md
+      - name: Download mods only for MRPACK checksums (do not redistribute)
+        run: python ci/download_client_mods.py
+      - name: Attempt fully verified MRPACK with upstream links
+        run: python ci/build_mrpack.py
+      - name: Create GitHub Release
+        run: |
+          VERSION="$(python -c 'import json; print(json.load(open("manifest.json"))["version"])')"
+          TAG="v$VERSION"
+          printf '%s\n' "EHTID Horror v$VERSION" "" \
+            "Forge 1.20.1 (47.4.15). Install via CurseForge -> Import." \
+            "EHTID-Horror.mrpack appears only if ALL upstream URLs were publicly verified." \
+            "Original third-party JAR binaries are not redistributed here." \
+            "Back up your world; install into a fresh profile to avoid old removed JARs." > notes.txt
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/EHTID-Horror-CurseForge.zip --clobber
+            if [ -f dist/EHTID-Horror.mrpack ]; then
+              gh release upload "$TAG" dist/EHTID-Horror.mrpack --clobber
+            fi
+          elif [ -f dist/EHTID-Horror.mrpack ]; then
+            gh release create "$TAG" dist/EHTID-Horror-CurseForge.zip dist/EHTID-Horror.mrpack \
+              --title "EHTID Horror v$VERSION" --notes-file notes.txt --target "$GITHUB_SHA"
+          else
+            gh release create "$TAG" dist/EHTID-Horror-CurseForge.zip \
+              --title "EHTID Horror v$VERSION" --notes-file notes.txt --target "$GITHUB_SHA"
+          fi
+      - name: Upload portability audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mrpack-portability
+          path: mrpack-audit.txt
+          if-no-files-found: ignore
