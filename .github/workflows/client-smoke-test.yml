@@ -1,0 +1,73 @@
+name: Forge Client Smoke Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - "manifest.json"
+      - "overrides/**"
+      - "ci/download_client_mods.py"
+      - "ci/run_client_smoke.py"
+      - ".github/workflows/client-smoke-test.yml"
+
+jobs:
+  client-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}
+      DISPLAY: :99
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      MESA_LOADER_DRIVER_OVERRIDE: llvmpipe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install client smoke dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xdotool scrot mesa-utils libgl1-mesa-dri libx11-6 libxext6 libxrender1 libxtst6 libxi6 libxrandr2 libxcursor1 libxinerama1 libxxf86vm1
+          python -m pip install --upgrade pip
+          python -m pip install minecraft-launcher-lib
+
+      - name: Start virtual display
+        run: |
+          Xvfb :99 -screen 0 1280x720x24 -ac +extension GLX +render -noreset >xvfb.log 2>&1 &
+          sleep 2
+          glxinfo -B || true
+
+      - name: Download full client mod set
+        run: python ci/download_client_mods.py
+
+      - name: Apply modpack overrides
+        run: |
+          mkdir -p client
+          if [ -d overrides ]; then cp -a overrides/. client/; fi
+
+      - name: Launch real Forge client
+        run: python ci/run_client_smoke.py
+
+      - name: Upload client smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-client-smoke
+          if-no-files-found: ignore
+          path: |
+            client/logs/**
+            client/crash-reports/**
+            client-console.log
+            client-smoke-artifacts/**
+            xvfb.log
