@@ -1,4 +1,4 @@
-# EHTID Horror v14.2: диагностика и снижение 2 TPS + чистый экран
+# EHTID Horror v14.2.1: диагностика и снижение 2 TPS + чистый экран
 
 **Причина 2 TPS пока не доказана.** 2 TPS означает ~500 мс на серверный тик
 (вместо бюджетных 50 мс при 20 TPS). FPS и TPS не одно и то же:
@@ -25,8 +25,9 @@
 
 ## Удалённые экранные помехи в v14.2
 - Из manifest полностью удалены StalkerEntity (1475092, принудительные
-  экранные оповещения и системные ошибки) и EnhancedVisuals (255389,
-  экранные эффекты крови/грязи).
+  экранные оповещения и системные ошибки), EnhancedVisuals (255389,
+  экранные эффекты крови/грязи), The Idol (1421612, руки на экране)
+  и do_not_join.jar (1484738, быстрые помехи и экранные спецэффекты).
 - Psychopath: отключены vignette, blur и heartbeat visual effects.
 - Backrooms: screen_shake, jumpscare, sanity_red_lines = false.
 - Sound of Fear: enableCaveScreens = false.
