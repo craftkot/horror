@@ -10,8 +10,8 @@
   },
   "manifestType": "minecraftModpack",
   "manifestVersion": 1,
-  "name": "EHTID Horror REBORN v14.2.1 - Clear Screen + TPS Relief",
-  "version": "14.2.1",
+  "name": "EHTID Horror REBORN v14.3 - No Forced Reboot Or Timer",
+  "version": "14.3.0",
   "author": "EHTID",
   "files": [
     {
@@ -340,11 +340,6 @@
       "required": true
     },
     {
-      "projectID": 1651479,
-      "fileID": 8691222,
-      "required": true
-    },
-    {
       "projectID": 1131382,
       "fileID": 6497766,
       "required": true
@@ -432,11 +427,6 @@
     {
       "projectID": 1423360,
       "fileID": 7547463,
-      "required": true
-    },
-    {
-      "projectID": 1595083,
-      "fileID": 8779742,
       "required": true
     },
     {
