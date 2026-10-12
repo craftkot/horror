@@ -24,10 +24,12 @@ for i, entry in enumerate(man["files"], 1):
         else:
             fname = str(pid)+"-"+str(fid)+".jar"
             url = "https://www.curseforge.com/api/v1/mods/"+str(pid)+"/files/"+str(fid)+"/download"
-        probe = urllib.request.Request(url, headers={"Range":"bytes=0-0","User-Agent":"Mozilla/5.0"})
+        # The CurseForge public download endpoint does not accept HTTP Range.
+        # Use a plain anonymous GET, as a real launcher would, then read its ZIP magic.
+        probe = urllib.request.Request(url, headers={"User-Agent":"PrismLauncher/1.0"})
         with urllib.request.urlopen(probe, timeout=30) as r:
-            if r.status not in (200,206):
-                raise RuntimeError("HTTP "+str(r.status))
+            if r.status not in (200, 206) or r.read(4) != b"PK\x03\x04":
+                raise RuntimeError("Endpoint did not return a JAR")
         data = jar.read_bytes()
         files.append({"path":"mods/"+fname,
                       "hashes":{"sha1":hashlib.sha1(data).hexdigest(),
