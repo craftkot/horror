@@ -10,8 +10,8 @@
   },
   "manifestType": "minecraftModpack",
   "manifestVersion": 1,
-  "name": "EHTID Horror REBORN v14.1 - TPS Relief",
-  "version": "14.1.0",
+  "name": "EHTID Horror REBORN v14.2 - Clear Screen + TPS Relief",
+  "version": "14.2.0",
   "author": "EHTID",
   "files": [
     {
@@ -22,11 +22,6 @@
     {
       "projectID": 254284,
       "fileID": 8042994,
-      "required": true
-    },
-    {
-      "projectID": 255389,
-      "fileID": 8676471,
       "required": true
     },
     {
@@ -422,11 +417,6 @@
     {
       "projectID": 237749,
       "fileID": 5096038,
-      "required": true
-    },
-    {
-      "projectID": 1475092,
-      "fileID": 9038598,
       "required": true
     },
     {

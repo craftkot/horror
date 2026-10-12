@@ -2,9 +2,9 @@
 "Enable Discord RPC" = false
 
 ["Visual Effects"]
-showVignette = true
-enableBlur = true
-enableHeartbeat = true
+showVignette = false
+enableBlur = false
+enableHeartbeat = false
 
 [spawn]
 enabled = true

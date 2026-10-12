@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+SCREEN_BLOCKING_EXCLUSIONS = {255389, 1475092}  # EnhancedVisuals, StalkerEntity
+
 BANNED = {
 890565,686437,940557,1082195,1454646,839197,971482,852533,1279376,349597,
 531188,695021,1455237,1380564,1001299,923133,970277,1495006,304719,1043571,
@@ -41,6 +43,7 @@ for i, f in enumerate(files):
 s = set(ids)
 assert len(ids) == len(s), "duplicate projectID detected"
 assert not (s & BANNED), f"banned horror mods returned: {sorted(s & BANNED)}"
+assert not (s & SCREEN_BLOCKING_EXCLUSIONS), f"screen-obscuring mods returned: {sorted(s & SCREEN_BLOCKING_EXCLUSIONS)}"
 assert CORE <= s, f"missing core projects: {sorted(CORE - s)}"
 
 for mod, deps in DEPENDENCY_RULES.items():

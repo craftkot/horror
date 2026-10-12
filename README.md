@@ -1,31 +1,50 @@
-# EHTID Horror REBORN v14.1 — TPS Relief
+# EHTID Horror REBORN v14.2 — Clear Screen + TPS Relief
 
-Minecraft 1.20.1 · Forge 47.4.15 · 111 CurseForge entries (including spark)
+Minecraft 1.20.1 · Forge 47.4.15 · 109 CurseForge entries.
 
-This branch contains the actual playable modpack manifest (`manifest.json`) and
-configuration overrides (`overrides/`). The older numbered mod list in
-`overrides/MODLIST_RU.txt` is a historical reference and is NOT the source of truth.
+## Changes from v14.1
 
-## Performance hotfix
+- Removed StalkerEntity (project 1475092): its forced emergency alerts,
+  fake error screens, EAS broadcasts, glitch/jumpscare screens and the
+  associated entities/dimensions are no longer part of this modpack.
+- Removed EnhancedVisuals (project 255389): no more blood, dirt, water
+  and other first-person HUD overlays from that mod. CreativeCore stays:
+  it is shared by other mods (e.g. AmbientSounds).
+- Disabled Psychopath vignette/blur/heartbeat visual effects.
+- Disabled Backrooms screen shake, jumpscare and sanity red lines
+  (preserving entities, dimension and the underlying sanity mechanic).
+- Disabled Sound of Fear cave screens (retaining its spatial audio).
+- Retained v14.1 performance mitigation and the spark profiler.
+- Added both removed mod IDs to the CI exclusion list.
 
-The v14 All Encounters profile increased simultaneous horror encounter pressure.
-v14.1 reduces the *frequency*, ambient scan overhead and active entity load of
-several event-driven mods, without removing those mods or their entities.
+This targets **known screen-obscuring effects**. Other obscure horror mods
+may still implement their own custom full-screen visuals. Report any
+remaining effect (screenshot + what triggered it) for targeted removal.
 
-Added spark 1.10.53 (Forge 1.20.1) for real profiling.
+### Existing-world upgrade
 
-**Important:** These edits are *mitigations*, not a verified fix for reported
-2 TPS; profiling an affected game world is still required to identify the bottleneck.
-The GitHub Forge CI smoke tests validate startup, not gameplay TPS/FPS.
+**BACK UP THE WORLD FIRST.** Updating the manifest is not enough if the
+old install is reused. Delete the old JARs for StalkerEntity and EnhancedVisuals
+from the existing instance's `mods/` folder, or import into a **new
+CurseForge profile**. An old profile may retain removed JARs and old
+configs. Verify the mods are missing from the in-game Mods menu.
 
-See [analysis/PERFORMANCE_TPS_RU.md](analysis/PERFORMANCE_TPS_RU.md)
-for installing this build, applying configs to existing worlds, spark commands,
-and what logs/profiles to share for further investigation.
+`overrides/defaultconfigs/` applies mainly when creating a new world.
+For existing saves merge the adjusted `backrooms_lifeform-server.toml`
+and `sound_of_fear-server.toml` into `saves/<world>/serverconfig/` if
+present. For Psychopath, replace the changed settings in
+`config/psycho-common.toml`. No need to delete all server configs.
 
-## CI
+Removing content mods can cause old world entities, items, dimensions,
+and blocks from those mods to disappear. Always back up before loading.
 
+## Diagnostic status
+
+The original 2 TPS issue has NOT been proven fixed on the user's world.
+GitHub CI is only startup-level validation. For further investigation,
+use spark and see [analysis/PERFORMANCE_TPS_RU.md](analysis/PERFORMANCE_TPS_RU.md).
+
+After a push, verify all three workflows:
 - Validate Horror Pack
 - Forge Server Smoke Test
 - Forge Client Smoke Test
-
-Do not claim client-side stability until all applicable CI jobs succeed.
