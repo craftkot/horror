@@ -3,12 +3,12 @@
 enableCheatCommands = false
 
 [horror.director]
-intervalTicks = 1200
-spawnChanceCalm = 0.10
-spawnChanceTension = 0.16
-spawnChanceUncertainty = 0.28
-hallucinationChance = 0.12
-disruptiveEffectMinGapTicks = 600
+intervalTicks = 2400
+spawnChanceCalm = 0.07
+spawnChanceTension = 0.12
+spawnChanceUncertainty = 0.18
+hallucinationChance = 0.08
+disruptiveEffectMinGapTicks = 1800
 
 [horror.world_sound]
 cooldownTicks = 6000
@@ -49,7 +49,7 @@ chanceMin = 0.05
 chanceMax = 0.20
 
 [horror.warning_broadcast]
-checkIntervalTicks = 200
+checkIntervalTicks = 600
 chance = 0.05
 cooldownMinTicks = 3600
 cooldownMaxTicks = 6000
@@ -64,14 +64,14 @@ cooldownMaxTicks = 8400
 
 [horror.silhouette_natural_spawn]
 chance = 0.05
-checkIntervalTicks = 4800
+checkIntervalTicks = 9600
 cooldownTicks = 12000
 
 [horror.invisible_watcher]
-lifetimeMinSec = 120
-lifetimeMaxSec = 300
-spawnChance = 0.12
-checkIntervalTicks = 1800
+lifetimeMinSec = 90
+lifetimeMaxSec = 180
+spawnChance = 0.10
+checkIntervalTicks = 3600
 cooldownMinTicks = 7200
 cooldownMaxTicks = 12000
 
@@ -126,10 +126,10 @@ minTimeInWorldTicks = 6000
 threshold = 70.0
 chanceAt60 = 0.08
 chanceAt20 = 0.18
-checkIntervalTicks = 1800
-effectDurationTicks = 7200
+checkIntervalTicks = 3600
+effectDurationTicks = 3600
 fleeChance = 0.35
-rangeBlocks = 14.0
+rangeBlocks = 8.0
 cooldownTicks = 4800
 
 [horror.atmospheric_throttle]

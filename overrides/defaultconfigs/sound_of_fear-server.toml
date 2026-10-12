@@ -7,8 +7,8 @@ hardcoreFrequencyMultiplier = 1.75
 enableDatapackSoundPools = true
 
 [timing]
-minimumSoundDelayTicks = 2400
-maximumSoundDelayTicks = 4800
+minimumSoundDelayTicks = 3600
+maximumSoundDelayTicks = 7200
 fastTestingMode = false
 fastTestingMinimumDelayTicks = 40
 fastTestingMaximumDelayTicks = 120
@@ -24,11 +24,11 @@ approachingSoundMaxDistance = 40
 enable3DPositioning = true
 minimum3DDistance = 8
 maximum3DDistance = 28
-schedulerCheckIntervalTicks = 20
-nearbyBlockScanRadius = 14
-nearbyBlockVerticalRadius = 5
+schedulerCheckIntervalTicks = 80
+nearbyBlockScanRadius = 8
+nearbyBlockVerticalRadius = 3
 onlyPlayIndoorsForBlockAnchored = false
-maxBlockScanSamples = 900
+maxBlockScanSamples = 160
 enableLightLevelInfluence = true
 
 [categories]

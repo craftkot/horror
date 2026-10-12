@@ -8,9 +8,9 @@ stalkSpawnRadiusMin = 32
 stalkSpawnRadiusMax = 56
 arielVerticalMin = 15
 arielVerticalMax = 30
-knightSpawnIntervalTicks = 120
-knightEscalationMinTicks = 80
-knightEscalationMaxTicks = 200
+knightSpawnIntervalTicks = 1800
+knightEscalationMinTicks = 400
+knightEscalationMaxTicks = 1000
 
 [detection]
 stalkFollowDistance = 15
@@ -21,4 +21,4 @@ stalkPeekSearchRadius = 6
 stalkPeekDurationTicks = 24
 
 [epicEntrance]
-lightDestructionRadius = 32
+lightDestructionRadius = 12

@@ -10,8 +10,8 @@
   },
   "manifestType": "minecraftModpack",
   "manifestVersion": 1,
-  "name": "EHTID Horror REBORN v14 - All Encounters",
-  "version": "14.0.0",
+  "name": "EHTID Horror REBORN v14.1 - TPS Relief",
+  "version": "14.1.0",
   "author": "EHTID",
   "files": [
     {
@@ -562,6 +562,11 @@
     {
       "projectID": 1584826,
       "fileID": 8312272,
+      "required": true
+    },
+    {
+      "projectID": 361579,
+      "fileID": 4738952,
       "required": true
     }
   ],

@@ -1,24 +1,31 @@
-# EHTID Horror REBORN v5 — Internet Abyss
+# EHTID Horror REBORN v14.1 — TPS Relief
 
-Minecraft 1.20.1 · Forge 47.4.15
+Minecraft 1.20.1 · Forge 47.4.15 · 111 CurseForge entries (including spark)
 
-Current manifest: **100 unique CurseForge entries**.
+This branch contains the actual playable modpack manifest (`manifest.json`) and
+configuration overrides (`overrides/`). The older numbered mod list in
+`overrides/MODLIST_RU.txt` is a historical reference and is NOT the source of truth.
 
-## Direction
-The pack intentionally focuses on obscure, Chinese, experimental and low-download horror mods.
-The user's previous 46-mod stop-list is enforced by CI and must not return.
+## Performance hotfix
 
-## Validation
-Every push to main runs `.github/workflows/validate-pack.yml`.
+The v14 All Encounters profile increased simultaneous horror encounter pressure.
+v14.1 reduces the *frequency*, ambient scan overhead and active entity load of
+several event-driven mods, without removing those mods or their entities.
 
-CI checks:
-- CurseForge manifest structure;
-- duplicate project IDs;
-- Minecraft / Forge fields;
-- banned horror stop-list;
-- required performance/core mods;
-- known dependencies for selected horror mods.
+Added spark 1.10.53 (Forge 1.20.1) for real profiling.
 
-## Runtime test
-GitHub CI validates the pack statically. Actual Minecraft world creation and runtime
-compatibility still require a client launch and latest.log/crash-report review.
+**Important:** These edits are *mitigations*, not a verified fix for reported
+2 TPS; profiling an affected game world is still required to identify the bottleneck.
+The GitHub Forge CI smoke tests validate startup, not gameplay TPS/FPS.
+
+See [analysis/PERFORMANCE_TPS_RU.md](analysis/PERFORMANCE_TPS_RU.md)
+for installing this build, applying configs to existing worlds, spark commands,
+and what logs/profiles to share for further investigation.
+
+## CI
+
+- Validate Horror Pack
+- Forge Server Smoke Test
+- Forge Client Smoke Test
+
+Do not claim client-side stability until all applicable CI jobs succeed.

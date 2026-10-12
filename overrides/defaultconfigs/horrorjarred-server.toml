@@ -1,5 +1,5 @@
 [intruders]
-intruderFrequency = 1.2
+intruderFrequency = 0.8
 shuffleIntruders = true
 pityCap = 1.25
 

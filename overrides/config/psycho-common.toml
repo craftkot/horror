@@ -12,18 +12,18 @@ dayDistanceMin = 48
 dayDistanceMax = 80
 nightDistanceMin = 24
 nightDistanceMax = 64
-timeMin = 300.0
-timeMax = 600.0
+timeMin = 600.0
+timeMax = 1200.0
 chance = 3
 returnAfterDeath = 600.0
-positionAttempts = 24
+positionAttempts = 12
 firstSpawnDay = 0
 caveY = 60
 caveIntervalFactor = 0.6
 dayIntervalFactor = 1.6
 requireOutOfSight = true
-guaranteedStalker = true
-guaranteedNightPsycho = true
+guaranteedStalker = false
+guaranteedNightPsycho = false
 
 [ambient]
 cooldownMin = 300.0
