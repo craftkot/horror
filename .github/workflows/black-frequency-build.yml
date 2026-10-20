@@ -24,6 +24,10 @@ jobs:
           cat black-frequency/payload/part_*.b64 | base64 --decode > "$RUNNER_TEMP/black-frequency-source.zip"
           printf '%s  %s\n' 'd5d72e834699c5eed53944b3e8d39d66d72e10dbfe4c73ddd4f49f376fd704fe' "$RUNNER_TEMP/black-frequency-source.zip" | sha256sum --check
           unzip -q "$RUNNER_TEMP/black-frequency-source.zip" -d black-frequency/project
+      - name: Apply Forge 47.4.10 access-modifier compatibility fix
+        run: |
+          sed -i 's/@Override protected boolean removeWhenFarAway/@Override public boolean removeWhenFarAway/' black-frequency/project/src/main/java/com/blackfrequency/hollowsignal/entity/WatcherEntity.java
+          grep 'public boolean removeWhenFarAway' black-frequency/project/src/main/java/com/blackfrequency/hollowsignal/entity/WatcherEntity.java
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
