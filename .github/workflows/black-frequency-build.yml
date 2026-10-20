@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           base64 --decode black-frequency/patch/v0.8.zip.b64 > "$RUNNER_TEMP/bf-v0.8.zip"
-          printf '%s  %s\n' '7f8d14d2f3ba3a3a20a1527194428d1727c50e30c9a234754e71a5e551c221df' "$RUNNER_TEMP/bf-v0.8.zip" | sha256sum --check
+          printf '%s  %s\n' '732f5b359bb270ecd05534e9a010aeda496fa2fa8b03446be03d9c3fddd92e3f' "$RUNNER_TEMP/bf-v0.8.zip" | sha256sum --check
           unzip -o -q "$RUNNER_TEMP/bf-v0.8.zip" -d black-frequency/project
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
