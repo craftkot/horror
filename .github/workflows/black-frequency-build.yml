@@ -34,6 +34,19 @@ jobs:
           base64 --decode black-frequency/patch/v0.8.zip.b64 > "$RUNNER_TEMP/bf-v0.8.zip"
           printf '%s  %s\n' '732f5b359bb270ecd05534e9a010aeda496fa2fa8b03446be03d9c3fddd92e3f' "$RUNNER_TEMP/bf-v0.8.zip" | sha256sum --check
           unzip -o -q "$RUNNER_TEMP/bf-v0.8.zip" -d black-frequency/project
+      - name: Apply v0.9 cave-contour patch (verified)
+        shell: bash
+        run: |
+          base64 --decode black-frequency/patch/v0.9.zip.b64 > "$RUNNER_TEMP/bf-v0.9.zip"
+          printf '%s  %s\n' 'db92347c9832086863c7557c03eeee27138700a96809cb3b14ed79338f08a24f' "$RUNNER_TEMP/bf-v0.9.zip" | sha256sum --check
+          unzip -o -q "$RUNNER_TEMP/bf-v0.9.zip" -d black-frequency/project
+      - name: Test cave geometry on asymmetric and multi-chamber shapes
+        shell: bash
+        working-directory: black-frequency/project
+        run: |
+          mkdir -p /tmp/bf-geometry-tests
+          javac -d /tmp/bf-geometry-tests src/main/java/com/blackfrequency/hollowsignal/world/AdaptiveWallGeometry.java scripts/TestAdaptiveWallGeometry.java
+          java -cp /tmp/bf-geometry-tests TestAdaptiveWallGeometry
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
@@ -45,6 +58,6 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.8.0
-          path: black-frequency/project/build/libs/hollowsignal-0.8.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.9.0
+          path: black-frequency/project/build/libs/hollowsignal-0.9.0.jar
           if-no-files-found: error
