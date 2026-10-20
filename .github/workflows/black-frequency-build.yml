@@ -1,0 +1,40 @@
+name: BLACK FREQUENCY Forge 1.20.1 JAR
+on:
+  push:
+    branches: [feature/black-frequency-forge-1-20-1]
+  workflow_dispatch:
+jobs:
+  forge-jar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.8'
+      - name: Restore exact source bundle and verify SHA256
+        shell: bash
+        run: |
+          mkdir -p black-frequency/project
+          cat black-frequency/payload/part_*.b64 | base64 --decode > "$RUNNER_TEMP/black-frequency-source.zip"
+          printf '%s  %s\n' 'd5d72e834699c5eed53944b3e8d39d66d72e10dbfe4c73ddd4f49f376fd704fe' "$RUNNER_TEMP/black-frequency-source.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/black-frequency-source.zip" -d black-frequency/project
+      - name: Parse Java 17 and validate anomaly routing
+        working-directory: black-frequency/project
+        run: |
+          python3 scripts/check_java_syntax.py
+          python3 scripts/validate_anomalies.py
+      - name: Build reobfuscated Forge jar
+        working-directory: black-frequency/project
+        run: gradle --no-daemon --stacktrace build
+      - name: Publish JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.7.0
+          path: black-frequency/project/build/libs/hollowsignal-0.7.0.jar
+          if-no-files-found: error
