@@ -28,6 +28,12 @@ jobs:
         run: |
           sed -i 's/@Override protected boolean removeWhenFarAway/@Override public boolean removeWhenFarAway/' black-frequency/project/src/main/java/com/blackfrequency/hollowsignal/entity/WatcherEntity.java
           grep 'public boolean removeWhenFarAway' black-frequency/project/src/main/java/com/blackfrequency/hollowsignal/entity/WatcherEntity.java
+      - name: Apply BLACK FREQUENCY v0.8 gameplay and admin UI patch
+        shell: bash
+        run: |
+          base64 --decode black-frequency/patch/v0.8.zip.b64 > "$RUNNER_TEMP/bf-v0.8.zip"
+          printf '%s  %s\n' '7f8d14d2f3ba3a3a20a1527194428d1727c50e30c9a234754e71a5e551c221df' "$RUNNER_TEMP/bf-v0.8.zip" | sha256sum --check
+          unzip -o -q "$RUNNER_TEMP/bf-v0.8.zip" -d black-frequency/project
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
@@ -39,6 +45,6 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.7.0
-          path: black-frequency/project/build/libs/hollowsignal-0.7.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.8.0
+          path: black-frequency/project/build/libs/hollowsignal-0.8.0.jar
           if-no-files-found: error
