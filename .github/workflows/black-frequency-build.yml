@@ -40,6 +40,20 @@ jobs:
           base64 --decode black-frequency/patch/v0.9.zip.b64 > "$RUNNER_TEMP/bf-v0.9.zip"
           printf '%s  %s\n' 'db92347c9832086863c7557c03eeee27138700a96809cb3b14ed79338f08a24f' "$RUNNER_TEMP/bf-v0.9.zip" | sha256sum --check
           unzip -o -q "$RUNNER_TEMP/bf-v0.9.zip" -d black-frequency/project
+      - name: Apply cave-independent scenes v0.10
+        shell: bash
+        run: |
+          base64 --decode black-frequency/patch/v0.10.zip.b64 > "$RUNNER_TEMP/bf-v0.10.zip"
+          printf '%s  %s\n' 'a2601a5d0d0270f03ca523c69328b5b4896a44bca540fb6915ab56480c1c333e' "$RUNNER_TEMP/bf-v0.10.zip" | sha256sum --check
+          unzip -o -q "$RUNNER_TEMP/bf-v0.10.zip" -d black-frequency/project
+      - name: Test five cave-free irregular wall geometries and gates
+        shell: bash
+        working-directory: black-frequency/project
+        run: |
+          mkdir -p /tmp/bf-cavefree-tests
+          javac -d /tmp/bf-cavefree-tests src/main/java/com/blackfrequency/hollowsignal/world/AdaptiveWallGeometry.java scripts/TestCaveFreeGeometry.java
+          java -cp /tmp/bf-cavefree-tests TestCaveFreeGeometry
+          python3 scripts/verify_cave_independence.py
       - name: Test cave geometry on asymmetric and multi-chamber shapes
         shell: bash
         working-directory: black-frequency/project
@@ -58,6 +72,6 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.9.0
-          path: black-frequency/project/build/libs/hollowsignal-0.9.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.10.0
+          path: black-frequency/project/build/libs/hollowsignal-0.10.0.jar
           if-no-files-found: error
