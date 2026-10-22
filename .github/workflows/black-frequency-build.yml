@@ -94,8 +94,8 @@ jobs:
           import re
           src = Path('src/main/java/com/blackfrequency/hollowsignal/world/HorrorDirector.java').read_text()
           catalog = Path('src/main/java/com/blackfrequency/hollowsignal/client/AdminAnomalyCatalog.java').read_text()
-          ids = set(re.findall(r'(?:d|major)\\("([a-z_]+)"', src))
-          labels = set(re.findall(r'^\\s+([a-z_]+)\\|', catalog, re.M))
+          ids = set(re.findall(r'(?:d|major)\("([a-z_]+)"', src))
+          labels = set(re.findall(r'^\s+([a-z_]+)\|', catalog, re.M))
           assert ids == labels, (ids-labels, labels-ids)
           print('PASS:', len(ids), 'anomalies have Russian labels')
           PY
