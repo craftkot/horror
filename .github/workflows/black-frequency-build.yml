@@ -79,6 +79,26 @@ jobs:
       - name: Verify fake-game-screen safety and cleanup
         working-directory: black-frequency/project
         run: python3 scripts/verify_screen_scares_v12.py
+      - name: Apply Russian admin console v0.13
+        shell: bash
+        run: |
+          base64 --decode black-frequency/patch/v0.13.zip.b64 > "$RUNNER_TEMP/bf-v0.13.zip"
+          printf '%s  %s\n' 'b561435fdb3cd284b8d3d21562ffe31b49f6168221672dbf38fcff5f4deb2a9b' "$RUNNER_TEMP/bf-v0.13.zip" | sha256sum --check
+          unzip -o -q "$RUNNER_TEMP/bf-v0.13.zip" -d black-frequency/project
+      - name: Validate Russian titles for every anomaly
+        working-directory: black-frequency/project
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          src = Path('src/main/java/com/blackfrequency/hollowsignal/world/HorrorDirector.java').read_text()
+          catalog = Path('src/main/java/com/blackfrequency/hollowsignal/client/AdminAnomalyCatalog.java').read_text()
+          ids = set(re.findall(r'(?:d|major)\\("([a-z_]+)"', src))
+          labels = set(re.findall(r'^\\s+([a-z_]+)\\|', catalog, re.M))
+          assert ids == labels, (ids-labels, labels-ids)
+          print('PASS:', len(ids), 'anomalies have Russian labels')
+          PY
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
@@ -90,6 +110,6 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.12.0
-          path: black-frequency/project/build/libs/hollowsignal-0.12.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.13.0
+          path: black-frequency/project/build/libs/hollowsignal-0.13.0.jar
           if-no-files-found: error
