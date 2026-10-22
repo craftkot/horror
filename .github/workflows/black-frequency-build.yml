@@ -61,6 +61,15 @@ jobs:
           mkdir -p /tmp/bf-geometry-tests
           javac -d /tmp/bf-geometry-tests src/main/java/com/blackfrequency/hollowsignal/world/AdaptiveWallGeometry.java scripts/TestAdaptiveWallGeometry.java
           java -cp /tmp/bf-geometry-tests TestAdaptiveWallGeometry
+      - name: Apply private reality and psychic overhaul v0.11
+        shell: bash
+        run: |
+          base64 --decode black-frequency/patch/v0.11.zip.b64 > "$RUNNER_TEMP/bf-v0.11.zip"
+          printf '%s  %s\n' 'c5ff914b7781edf3a34a216c8e2f0d6cf20714d52057bff5f4aefd0bf82e92ab' "$RUNNER_TEMP/bf-v0.11.zip" | sha256sum --check
+          unzip -o -q "$RUNNER_TEMP/bf-v0.11.zip" -d black-frequency/project
+      - name: Check private hallucination safety and cleanup
+        working-directory: black-frequency/project
+        run: python3 scripts/verify_reality_v11.py
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
@@ -72,6 +81,6 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.10.0
-          path: black-frequency/project/build/libs/hollowsignal-0.10.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.11.0
+          path: black-frequency/project/build/libs/hollowsignal-0.11.0.jar
           if-no-files-found: error
