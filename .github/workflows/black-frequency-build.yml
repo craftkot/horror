@@ -70,6 +70,15 @@ jobs:
       - name: Check private hallucination safety and cleanup
         working-directory: black-frequency/project
         run: python3 scripts/verify_reality_v11.py
+      - name: Apply BLACK FREQUENCY v0.12 screen horror update
+        shell: bash
+        run: |
+          base64 --decode black-frequency/patch/v0.12.zip.b64 > "$RUNNER_TEMP/bf-v0.12.zip"
+          printf '%s  %s\n' 'e47a62ae648663dd0c3ed08af4c6bc393d9ef317a08d4ce6d5e36ecb0f16ac21' "$RUNNER_TEMP/bf-v0.12.zip" | sha256sum --check
+          unzip -o -q "$RUNNER_TEMP/bf-v0.12.zip" -d black-frequency/project
+      - name: Verify fake-game-screen safety and cleanup
+        working-directory: black-frequency/project
+        run: python3 scripts/verify_screen_scares_v12.py
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
@@ -81,6 +90,6 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.11.0
-          path: black-frequency/project/build/libs/hollowsignal-0.11.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.12.0
+          path: black-frequency/project/build/libs/hollowsignal-0.12.0.jar
           if-no-files-found: error
