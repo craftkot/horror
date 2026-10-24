@@ -459,12 +459,12 @@ edit(rupture,
      '        if(!data.ruptureActive() || data.ruptureStage==0) return;\n')
 
 psy = JAVA / "world/PsychologySystem.java"
-edit(psy, '        PsychologyData.Mind m=data.mind(p);\n',
+edit(psy, '        PsychologyData.Mind m=data.mind(p);\n        if(m.pendingQte!=0 && now>=m.qteDeadline) {',
      '''        PsychologyData.Mind m=data.mind(p);
         // Regular QTEs and mental effects cannot interrupt the host's release scene.
         if (data.ruptureActive() && data.ruptureStage == 0
                 && p.getUUID().equals(data.ruptureHost)) return;
-''')
+        if(m.pendingQte!=0 && now>=m.qteDeadline) {''')
 edit(psy,
      '        if(!p.isAlive() || data.mind(p).pendingQte!=0 || p.isSpectator()) return;',
      '        if(!p.isAlive() || data.mind(p).pendingQte!=0 || p.isSpectator()\n'
