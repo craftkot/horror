@@ -103,7 +103,7 @@ jobs:
         shell: bash
         run: |
           base64 --decode black-frequency/patch/v0.14.zip.b64 > "$RUNNER_TEMP/bf-v0.14.zip"
-          printf '%s  %s\n' '4fdf2916f2c35259972cd33f61a39804d43efc46feb93c0ce7e825561baccaac' "$RUNNER_TEMP/bf-v0.14.zip" | sha256sum --check
+          printf '%s  %s\n' '22b975b1668688faa6d80c42d421a50eddc29d0f5b0dad569f5c51a540685190' "$RUNNER_TEMP/bf-v0.14.zip" | sha256sum --check
           unzip -o -q "$RUNNER_TEMP/bf-v0.14.zip" -d black-frequency/project
       - name: Verify single-rupture state and bounded real-world edits
         shell: bash
