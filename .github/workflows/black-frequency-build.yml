@@ -180,7 +180,7 @@ jobs:
           assert 'mouseScrolled' in note and 'МАЛЫЕ РАЗЛОМЫ' in note
           assert 'FragmentNotePacket.send' in (root/'registry/RitualItems.java').read_text()
           assert 'watcher.setNoAi(true)' in ritual and 'd.noteDelivered=true' in ritual
-          assert 'Blocks.NETHERITE_BLOCK' in ritual and 'findCrystals' in ritual
+          assert 'Blocks.NETHERITE_BLOCK' in ritual and 'Blocks.CRYING_OBSIDIAN' in ritual and 'findCrystals' in ritual
           assert 'MAX_HP*.05f' in battle and 'd.recharge<5' in battle
           assert 'd.phase++' in battle and 'd.bossDefeated' in battle
           assert 'bossId' in data and 'tag' not in '' 

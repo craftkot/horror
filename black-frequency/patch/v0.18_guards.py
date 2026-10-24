@@ -109,4 +109,46 @@ edit("world/PsychologyData.java",
             }
         }
         if(changed) setDirty();''')
+
+# Crying obsidian is part of the requested recipe. Its exact quantity/layout is
+# not canon yet, so require >=1 adjacent stabilizer outside the 3x3 pyramid.
+edit("world/RitualSystem.java",
+     '''        }
+        return true;
+    }
+    /** One End Crystal in each corner-quadrant, never accidentally reuse a crystal. */''',
+     '''        }
+        boolean cryingAnchor=false;
+        for(int x=-5;x<=5;x++) for(int z=-5;z<=5;z++) {
+            if(Math.abs(x)<=1 && Math.abs(z)<=1) continue;
+            BlockPos anchor=beacon.offset(x,-1,z);
+            if(level.hasChunkAt(anchor) && level.getBlockState(anchor).is(Blocks.CRYING_OBSIDIAN))
+                cryingAnchor=true;
+        }
+        return cryingAnchor;
+    }
+    /** One End Crystal in each corner-quadrant, never accidentally reuse a crystal. */''')
+edit("world/RitualSystem.java",
+     '"Требуется незеритовый блок прямо под маяком и полный слой основания 3×3"',
+     '"Нужны незерит под маяком, основание 3×3 и плачущий обсидиан рядом"')
+edit("client/FragmentNoteScreen.java",
+     '"Вокруг него — блоки основания маяка.",',
+     '"Основание: блоки обычного маяка.",')
+edit("client/FragmentNoteScreen.java",
+     '"Место разрыва:   [???]"',
+     '"Плачущий обсидиан рядом. [???]"')
+
+# Do not spawn hostile 0/0 taunts on top of the one-time silent good-fragment handoff.
+edit("world/EntityEncounters.java",
+     '''        PsychologyData.Mind mind=data.mind(player);
+        boolean zero=mind.sanity==0 && mind.morality==0;''',
+     '''        PsychologyData.Mind mind=data.mind(player);
+        if(level.dimension()==Level.OVERWORLD && data.ruptureActive()
+                && !RitualData.get(player.getServer()).noteDelivered
+                && Math.abs(player.getX())<18 && Math.abs(player.getZ())<18) {
+            clear(player);
+            return;
+        }
+        boolean zero=mind.sanity==0 && mind.morality==0;''')
+
 print("PASS v0.18 guard fixes, note recovery diagnostics and safe server-owned boss UUID")
