@@ -120,6 +120,13 @@ jobs:
           assert 'm.pendingQte!=challenge' in c and 'now>m.qteDeadline' in c
           print('PASS: global rupture, saveback, limited terrain edits, server-authenticated QTE')
           PY
+      - name: Apply BLACK FREQUENCY v0.15 source overlay
+        run: python3 black-frequency/patch/v0.15_overlay.py
+      - name: Validate overlay recovery and QTE changes
+        run: |
+          grep -q 'ruptureCooldownUntil' black-frequency/project/src/main/java/com/blackfrequency/hollowsignal/world/PsychologyData.java
+          grep -q 'hollowsignal_rupture' black-frequency/project/src/main/java/com/blackfrequency/hollowsignal/world/RuptureSystem.java
+          grep -q 'RegisterKeyMappingsEvent' black-frequency/project/src/main/java/com/blackfrequency/hollowsignal/client/ClientQte.java
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
@@ -131,6 +138,6 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.14.0
-          path: black-frequency/project/build/libs/hollowsignal-0.14.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.15.0
+          path: black-frequency/project/build/libs/hollowsignal-0.15.0.jar
           if-no-files-found: error
