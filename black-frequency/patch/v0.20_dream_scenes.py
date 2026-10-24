@@ -360,6 +360,11 @@ edit(client,
      '        active=-1; age=0; duration=0; finish=0; eventType=0; morality=0;\n'
      '        scene=0; variant=0;')
 
+# The dream packet gained scene + appearance fields; reject older channel peers.
+edit("network/DreamPacket.java",
+     '    private static final String VERSION="1";',
+     '    private static final String VERSION="2";')
+
 props=ROOT/"gradle.properties"
 src=props.read_text(encoding="utf-8")
 assert src.count("0.19.0")==1

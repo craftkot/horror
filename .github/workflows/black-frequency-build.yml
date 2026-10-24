@@ -233,7 +233,7 @@ jobs:
           assert 'onCalm(p,dream.scene)' in dream and 'onNightmare(p,dream.scene)' in dream
           assert 'int scene=p.getRandom().nextInt(DreamScenes.COUNT)' in dream
           assert 'dreamAppearanceIndex++' in dream and 'dreamAppearanceIndex' in saved
-          assert 'packet.scene(),packet.variant()' in packet
+          assert 'packet.scene(),packet.variant()' in packet and 'VERSION="2"' in packet
           assert 'skyTop=nightmare?' in client and 'uneasy?0xFFF0A367' in client
           assert 'paintMine' in client and 'paintGrove' in client and 'paintRuins' in client
           assert 'Math.floorMod(mind.dreamAppearanceIndex++,8)' in dream
