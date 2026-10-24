@@ -214,6 +214,31 @@ jobs:
           assert 'PLAY_TO_CLIENT' in packet and 'PLAY_TO_SERVER' not in packet
           print('PASS: day three, separate moral influence, per-player isolation, 10s, half drumstick')
           PY
+      - name: Apply dream scene modifiers v0.20
+        run: |
+          python3 -m py_compile black-frequency/patch/v0.20_dream_scenes.py
+          python3 black-frequency/patch/v0.20_dream_scenes.py
+      - name: Validate location-linked dream effects and lighting
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          j=Path('black-frequency/project/src/main/java/com/blackfrequency/hollowsignal')
+          fx=(j/'world/DreamScenes.java').read_text()
+          dream=(j/'world/DreamSystem.java').read_text()
+          client=(j/'client/ClientDream.java').read_text()
+          packet=(j/'network/DreamPacket.java').read_text()
+          saved=(j/'world/PsychologyData.java').read_text()
+          assert 'MobEffects.DIG_SPEED,20*300' in fx
+          assert 'MobEffects.DIG_SLOWDOWN,20*180' in fx
+          assert 'onCalm(p,dream.scene)' in dream and 'onNightmare(p,dream.scene)' in dream
+          assert 'int scene=p.getRandom().nextInt(DreamScenes.COUNT)' in dream
+          assert 'dreamAppearanceIndex++' in dream and 'dreamAppearanceIndex' in saved
+          assert 'packet.scene(),packet.variant()' in packet
+          assert 'skyTop=nightmare?' in client and 'uneasy?0xFFF0A367' in client
+          assert 'paintMine' in client and 'paintGrove' in client and 'paintRuins' in client
+          assert 'Math.floorMod(mind.dreamAppearanceIndex++,8)' in dream
+          print('PASS: same place different appearance, three light palettes, paired location-based status effects')
+          PY
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
@@ -225,6 +250,6 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.19.0
-          path: black-frequency/project/build/libs/hollowsignal-0.19.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.20.0
+          path: black-frequency/project/build/libs/hollowsignal-0.20.0.jar
           if-no-files-found: error
