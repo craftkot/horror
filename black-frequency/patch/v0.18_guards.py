@@ -143,7 +143,7 @@ edit("world/EntityEncounters.java",
      '''        PsychologyData.Mind mind=data.mind(player);
         boolean zero=mind.sanity==0 && mind.morality==0;''',
      '''        PsychologyData.Mind mind=data.mind(player);
-        if(level.dimension()==Level.OVERWORLD && data.ruptureActive()
+        if(level.dimension()==net.minecraft.world.level.Level.OVERWORLD && data.ruptureActive()
                 && !RitualData.get(player.getServer()).noteDelivered
                 && Math.abs(player.getX())<18 && Math.abs(player.getZ())<18) {
             clear(player);
