@@ -143,6 +143,23 @@ jobs:
           assert 'd.ruptureHost = host.getUUID()' in server
           print('PASS: server-verified QTE success -> green -> red fracture, globally locked')
           PY
+      - name: Apply v0.17 entity interactions
+        run: |
+          python3 -m py_compile black-frequency/patch/v0.17_overlay.py
+          python3 black-frequency/patch/v0.17_overlay.py
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('black-frequency/project/src/main/java/com/blackfrequency/hollowsignal')
+          src=(root/'world/EntityEncounters.java').read_text()
+          client=(root/'client/ClientRuptureQte.java').read_text()
+          assert 'УЖЕ ПОЗДНО' in client
+          assert 'NetworkHooks.getEntitySpawningPacket' in src
+          assert 'player.connection.send' in src
+          assert 'mind.sanity==0 && mind.morality==0' in src
+          assert 'setCustomNameVisible(true)' in src
+          assert 'isWatched(player,old.watcher)' in src
+          print('PASS: visual text, personal darkness entity, physical 0/0 apparition')
+          PY
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
@@ -154,6 +171,6 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.16.0
-          path: black-frequency/project/build/libs/hollowsignal-0.16.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.17.0
+          path: black-frequency/project/build/libs/hollowsignal-0.17.0.jar
           if-no-files-found: error
