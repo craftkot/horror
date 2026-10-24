@@ -99,6 +99,27 @@ jobs:
           assert ids == labels, (ids-labels, labels-ids)
           print('PASS:', len(ids), 'anomalies have Russian labels')
           PY
+      - name: Apply psycho-morality and rupture v0.14 patch
+        shell: bash
+        run: |
+          base64 --decode black-frequency/patch/v0.14.zip.b64 > "$RUNNER_TEMP/bf-v0.14.zip"
+          printf '%s  %s\n' '4fdf2916f2c35259972cd33f61a39804d43efc46feb93c0ce7e825561baccaac' "$RUNNER_TEMP/bf-v0.14.zip" | sha256sum --check
+          unzip -o -q "$RUNNER_TEMP/bf-v0.14.zip" -d black-frequency/project
+      - name: Verify single-rupture state and bounded real-world edits
+        shell: bash
+        working-directory: black-frequency/project
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          a=Path('src/main/java/com/blackfrequency/hollowsignal/world/PsychologyData.java').read_text()
+          b=Path('src/main/java/com/blackfrequency/hollowsignal/world/RuptureSystem.java').read_text()
+          c=Path('src/main/java/com/blackfrequency/hollowsignal/world/PsychologySystem.java').read_text()
+          assert 'if(data.ruptureActive()' in b and 'data.ruptureHost=host.getUUID()' in b
+          assert 'SavedData' in a and 'tag.put("minds", list)' in a
+          assert 'HorrorConfig.CRACKS_LIMIT.get()' in b and 'data.remember(' in b
+          assert 'm.pendingQte!=challenge' in c and 'now>m.qteDeadline' in c
+          print('PASS: global rupture, saveback, limited terrain edits, server-authenticated QTE')
+          PY
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
@@ -110,6 +131,6 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.13.0
-          path: black-frequency/project/build/libs/hollowsignal-0.13.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.14.0
+          path: black-frequency/project/build/libs/hollowsignal-0.14.0.jar
           if-no-files-found: error
