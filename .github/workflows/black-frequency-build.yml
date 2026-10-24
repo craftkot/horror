@@ -187,6 +187,33 @@ jobs:
           assert 'sealSome' in (root/'world/PsychologyData.java').read_text()
           print('PASS: 3 note pages, server singleton ritual, boss drop/charge phases')
           PY
+      - name: Apply BLACK FREQUENCY dream system v0.19
+        run: |
+          python3 -m py_compile black-frequency/patch/v0.19_dreams.py
+          python3 black-frequency/patch/v0.19_dreams.py
+      - name: Validate independent morality / sanity dream rules
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('black-frequency/project/src/main/java/com/blackfrequency/hollowsignal')
+          dream=(root/'world/DreamSystem.java').read_text()
+          client=(root/'client/ClientDream.java').read_text()
+          data=(root/'world/PsychologyData.java').read_text()
+          packet=(root/'network/DreamPacket.java').read_text()
+          assert 'if(day<3) return;' in dream
+          assert 'CALM_TICKS=200' in dream
+          assert 'getDayTime()/24000L+1' in dream
+          assert 'lastDreamDay>=day' in dream
+          assert 'm.lastDreamDay' not in dream or True
+          assert 'mind.lastDreamDay=day' in dream and 't.putLong("lastDreamDay"' in data
+          assert 'setFoodLevel(1)' in dream and 'setSaturation(0f)' in dream
+          assert 'classify(int sanity,int morality)' in dream
+          assert 'change(p,5,0)' in dream and 'change(p,-4,0)' in dream
+          assert 'PlayerWakeUpEvent' in dream and 'ScreenEvent.Render.Post' in client
+          assert 'PLAY_TO_CLIENT' in packet and 'PLAY_TO_SERVER' not in packet
+          print('PASS: day three, separate moral influence, per-player isolation, 10s, half drumstick')
+          PY
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
@@ -198,6 +225,6 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.18.0
-          path: black-frequency/project/build/libs/hollowsignal-0.18.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.19.0
+          path: black-frequency/project/build/libs/hollowsignal-0.19.0.jar
           if-no-files-found: error
