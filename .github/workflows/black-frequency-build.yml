@@ -138,6 +138,6 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.15.0
-          path: black-frequency/project/build/libs/hollowsignal-0.15.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.15.1
+          path: black-frequency/project/build/libs/hollowsignal-0.15.1.jar
           if-no-files-found: error

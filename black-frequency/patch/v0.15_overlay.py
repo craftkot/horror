@@ -196,6 +196,36 @@ edit(cmd, '                            if(!ok) ctx.getSource().sendFailure(Compo
      """                            if(!ok) ctx.getSource().sendFailure(Component.literal(
                                     "Прорыв уже активен, выключен в конфигурации или действует 5-минутная защита после сброса"));""")
 
+
+# Tagged riftlings must not reappear after loading chunks restored on an admin reset.
+edit(rupture,
+     '    private static void spawnRiftling(ServerPlayer p,int stage) {',
+     """    @SubscribeEvent public void onRiftlingJoin(net.minecraftforge.event.entity.EntityJoinLevelEvent e) {
+        if (!(e.getLevel() instanceof ServerLevel level)
+                || !e.getEntity().getTags().contains("hollowsignal_rupture")) return;
+        if (!PsychologyData.get(level.getServer()).ruptureActive()) e.setCanceled(true);
+    }
+    private static void spawnRiftling(ServerPlayer p,int stage) {""")
+edit(psy,
+     '                || !HorrorConfig.PSYCHOLOGY_SYSTEM.get()) return;',
+     '                || !HorrorConfig.ENABLED.get() || !HorrorConfig.PSYCHOLOGY_SYSTEM.get()) return;')
+edit(psy,
+     '        if(!(e.getPlayer() instanceof ServerPlayer p) || e.isCanceled() || !HorrorConfig.PSYCHOLOGY_SYSTEM.get()) return;',
+     '        if(!(e.getPlayer() instanceof ServerPlayer p) || e.isCanceled() || !HorrorConfig.ENABLED.get() || !HorrorConfig.PSYCHOLOGY_SYSTEM.get()) return;')
+
+import json
+for language, labels in {
+    "ru_ru": {"key.hollowsignal.react": "Реакция на аномалию",
+              "key.categories.hollowsignal": "BLACK FREQUENCY"},
+    "en_us": {"key.hollowsignal.react": "React to anomaly",
+              "key.categories.hollowsignal": "BLACK FREQUENCY"}
+}.items():
+    path = ROOT / "src/main/resources/assets/hollowsignal/lang" / f"{language}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    catalog = json.loads(path.read_text(encoding="utf-8-sig")) if path.exists() else {}
+    catalog.update(labels)
+    path.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
 properties=ROOT / "gradle.properties"
-edit(properties, "0.14.0", "0.15.0")
-print("v0.15 overlay applied: persistent safe recovery, QTE lifecycle + remapping, shared pulses, tagged riftlings")
+edit(properties, "0.14.0", "0.15.1")
+print("v0.15.1 overlay applied: persistent safe recovery, QTE lifecycle + remapping, shared pulses, tagged riftlings")
