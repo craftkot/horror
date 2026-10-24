@@ -160,6 +160,33 @@ jobs:
           assert 'isWatched(player,old.watcher)' in src
           print('PASS: visual text, personal darkness entity, physical 0/0 apparition')
           PY
+      - name: Apply fractured note and first beacon ritual v0.18
+        run: |
+          python3 -m py_compile black-frequency/patch/v0.18_ritual.py
+          python3 black-frequency/patch/v0.18_ritual.py
+          python3 -m py_compile black-frequency/patch/v0.18_battle.py
+          python3 black-frequency/patch/v0.18_battle.py
+          python3 -m py_compile black-frequency/patch/v0.18_guards.py
+          python3 black-frequency/patch/v0.18_guards.py
+      - name: Validate saved ritual state and four 25 percent stages
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('black-frequency/project/src/main/java/com/blackfrequency/hollowsignal')
+          note=(root/'client/FragmentNoteScreen.java').read_text()
+          battle=(root/'world/RitualBattle.java').read_text()
+          ritual=(root/'world/RitualSystem.java').read_text()
+          data=(root/'world/RitualData.java').read_text()
+          assert 'mouseScrolled' in note and 'МАЛЫЕ РАЗЛОМЫ' in note
+          assert 'FragmentNotePacket.send' in (root/'registry/RitualItems.java').read_text()
+          assert 'watcher.setNoAi(true)' in ritual and 'd.noteDelivered=true' in ritual
+          assert 'Blocks.NETHERITE_BLOCK' in ritual and 'findCrystals' in ritual
+          assert 'MAX_HP*.05f' in battle and 'd.recharge<5' in battle
+          assert 'd.phase++' in battle and 'd.bossDefeated' in battle
+          assert 'bossId' in data and 'tag' not in '' 
+          assert 'sealSome' in (root/'world/PsychologyData.java').read_text()
+          print('PASS: 3 note pages, server singleton ritual, boss drop/charge phases')
+          PY
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
@@ -171,6 +198,6 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.17.0
-          path: black-frequency/project/build/libs/hollowsignal-0.17.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.18.0
+          path: black-frequency/project/build/libs/hollowsignal-0.18.0.jar
           if-no-files-found: error
