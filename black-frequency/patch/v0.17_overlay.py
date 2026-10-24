@@ -142,7 +142,7 @@ public final class EntityEncounters {
             player.connection.send(NetworkHooks.getEntitySpawningPacket(watcher));
         }
         active.put(id,new Encounter(watcher,zero,level,now));
-        player.playNotifySound(SoundEvents.AMBIENT_SOUL_SAND_VALLEY_MOOD,
+        player.playNotifySound(SoundEvents.WARDEN_HEARTBEAT,
                 SoundSource.AMBIENT,.55f,.7f);
     }
 
