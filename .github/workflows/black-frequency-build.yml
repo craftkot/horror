@@ -312,6 +312,9 @@ jobs:
         continue-on-error: true
         run: |
           base64 --decode black-frequency/tools/client_smoke.sh.gz.b64 | gzip -dc > "$RUNNER_TEMP/bf-client-smoke.sh"
+          # Verified by ACTUAL Forge 1.20.1 title screenshot: Singleplayer
+          # button is centered at Y≈40% of the game window (not 33% in 1.21).
+          sed -i 's/click_ratio 500 330/click_ratio 500 400/' "$RUNNER_TEMP/bf-client-smoke.sh"
           bash -n "$RUNNER_TEMP/bf-client-smoke.sh"
           bash "$RUNNER_TEMP/bf-client-smoke.sh"
       - name: Show real client verification outcome
