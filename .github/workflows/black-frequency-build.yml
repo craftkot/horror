@@ -336,6 +336,18 @@ jobs:
           assert s.count("sleep 1.5\ncapture 20-red-screen-fractures")==1
           s=s.replace("sleep 1.5\ncapture 20-red-screen-fractures",
                       "sleep .25\ncapture 20-red-screen-fractures")
+          # Require the ACTUAL player-login log. 'Starting integrated server'
+          # fires while terrain is still loading: commands sent then are lost.
+          old_gate="if grep -Eiq 'joined the game|Starting integrated minecraft server|Starting integrated Minecraft server'"
+          new_gate="if grep -Eiq 'joined the game'"
+          assert s.count(old_gate)==1
+          s=s.replace(old_gate,new_gate)
+          old_check="if ! grep -Eiq 'joined the game|Starting integrated minecraft server'"
+          new_check="if ! grep -Eiq 'joined the game'"
+          assert s.count(old_check)==1
+          s=s.replace(old_check,new_check)
+          s=s.replace("echo 'guiScale:2' > run/options.txt",
+                      "printf 'guiScale:2\\ntutorialStep:none\\n' > run/options.txt")
           p.write_text(s)
           PY
           bash -n "$RUNNER_TEMP/bf-client-smoke.sh"
