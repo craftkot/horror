@@ -315,6 +315,29 @@ jobs:
           # Verified by ACTUAL Forge 1.20.1 title screenshot: Singleplayer
           # button is centered at Y≈40% of the game window (not 33% in 1.21).
           sed -i 's/click_ratio 500 330/click_ratio 500 400/' "$RUNNER_TEMP/bf-client-smoke.sh"
+          # Real screenshot audit #2: Escape before EVERY chat command toggled
+          # the PAUSE screen, so every second attempted command was lost.
+          # Remove that Escape only inside send_chat; other explicit closes remain.
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path(__import__('os').environ['RUNNER_TEMP'])/'bf-client-smoke.sh'
+          s=p.read_text()
+          old='''send_chat() {
+            local cmd="$1"
+            xdotool key --clearmodifiers Escape || true
+            xdotool key --clearmodifiers t'''
+          new='''send_chat() {
+            local cmd="$1"
+            xdotool key --clearmodifiers t'''
+          assert s.count(old)==1, 'send_chat old anchor not unique'
+          s=s.replace(old,new)
+          assert s.count("send_chat '/difficulty peaceful'")==1
+          s=s.replace("send_chat '/difficulty peaceful'","send_chat '/difficulty easy'")
+          assert s.count("sleep 1.5\ncapture 20-red-screen-fractures")==1
+          s=s.replace("sleep 1.5\ncapture 20-red-screen-fractures",
+                      "sleep .25\ncapture 20-red-screen-fractures")
+          p.write_text(s)
+          PY
           bash -n "$RUNNER_TEMP/bf-client-smoke.sh"
           bash "$RUNNER_TEMP/bf-client-smoke.sh"
       - name: Show real client verification outcome
