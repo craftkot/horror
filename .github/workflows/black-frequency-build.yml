@@ -300,3 +300,35 @@ jobs:
           name: BLACK-FREQUENCY-Forge-1.20.1-v0.21.1
           path: black-frequency/project/build/libs/hollowsignal-0.21.1.jar
           if-no-files-found: error
+
+      - name: Install graphics stack for real Forge client smoke
+        timeout-minutes: 7
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y             xvfb x11-utils xdotool openbox mesa-utils libgl1-mesa-dri             libgl1 libxrender1 imagemagick ffmpeg
+      - name: Start actual Minecraft 1.20.1 client and take in-game screenshots
+        id: real_client_smoke
+        timeout-minutes: 18
+        continue-on-error: true
+        run: |
+          base64 --decode black-frequency/tools/client_smoke.sh.gz.b64 | gzip -dc > "$RUNNER_TEMP/bf-client-smoke.sh"
+          bash -n "$RUNNER_TEMP/bf-client-smoke.sh"
+          bash "$RUNNER_TEMP/bf-client-smoke.sh"
+      - name: Show real client verification outcome
+        if: always()
+        run: |
+          echo "CLIENT_SMOKE_OUTCOME=${{ steps.real_client_smoke.outcome }}"
+          test -e black-frequency/client-smoke/status.txt && cat black-frequency/client-smoke/status.txt || true
+          echo "CAPTURED_ACTUAL_SCREENSHOTS:"
+          find black-frequency/client-smoke/screenshots -type f -name '*.png' 2>/dev/null | sort || true
+      - name: Upload real Minecraft screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: black-frequency-real-game-screenshots
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            black-frequency/client-smoke/
+            black-frequency/project/run/logs/
+            black-frequency/project/run/crash-reports/
