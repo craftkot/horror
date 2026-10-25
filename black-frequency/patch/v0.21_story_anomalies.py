@@ -13,8 +13,18 @@ def edit(name, old, new):
     p=JAVA/name
     s=p.read_text(encoding="utf-8")
     n=s.count(old)
-    assert n==1, (name, "anchor count", n, repr(old[:90]))
-    p.write_text(s.replace(old,new,1),encoding="utf-8")
+    if n==1:
+        p.write_text(s.replace(old,new,1),encoding="utf-8")
+        return
+    # Source bundles sometimes change only Java indentation between releases.
+    # Match the COMPLETE anchor, retaining literal tokens but ignoring line indent.
+    import re
+    parts=old.split("\n")
+    pattern=r"(?m)^[ \\t]*"+r"\n[ \\t]*".join(re.escape(part.lstrip(" \\t")) for part in parts)
+    matches=list(re.finditer(pattern,s))
+    assert len(matches)==1, (name,"ambiguous/absent anchor",n,len(matches),repr(old[:95]))
+    match=matches[0]
+    p.write_text(s[:match.start()]+new+s[match.end():],encoding="utf-8")
 
 def fresh(name, source):
     p=JAVA/name
