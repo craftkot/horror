@@ -286,6 +286,25 @@ jobs:
           assert 'if(!p.isAlive() || p.isSleeping()' in psychology
           print('PASS: sleeping players never see unrelated personal scares or stale QTEs')
           PY
+      - name: Apply real 3D shadow skin, textured note and exact crystals
+        run: |
+          python3 -m py_compile black-frequency/patch/v0.22_models_ritual.py
+          python3 black-frequency/patch/v0.22_models_ritual.py
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('black-frequency/project')
+          j=root/'src/main/java/com/blackfrequency/hollowsignal'
+          a=root/'src/main/resources/assets/hollowsignal'
+          assert (j/'client/GlitchShadowRenderer.java').exists()
+          assert (a/'textures/entity/glitch_shadow.png').read_bytes().startswith(bytes([137,80,78,71]))
+          assert (a/'textures/item/fractured_note.png').read_bytes().startswith(bytes([137,80,78,71]))
+          assert (a/'textures/gui/fractured_note.png').read_bytes().startswith(bytes([137,80,78,71]))
+          assert 'renderRitual' in (j/'client/FragmentNoteScreen.java').read_text()
+          ritual=(j/'world/RitualSystem.java').read_text()
+          assert 'beacon.offset(dx,-1,dz)' in ritual and 'Blocks.OBSIDIAN' in ritual
+          assert 'dx:new int[]{-2,2}' in ritual and 'dz:new int[]{-2,2}' in ritual
+          print('PASS: skin/model/textures/ritual schematic generated')
+          PY
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
@@ -297,8 +316,8 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.21.1
-          path: black-frequency/project/build/libs/hollowsignal-0.21.1.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.22.0
+          path: black-frequency/project/build/libs/hollowsignal-0.22.0.jar
           if-no-files-found: error
 
       - name: Install graphics stack for real Forge client smoke
@@ -339,15 +358,19 @@ jobs:
           # Require the ACTUAL player-login log. 'Starting integrated server'
           # fires while terrain is still loading: commands sent then are lost.
           old_gate="if grep -Eiq 'joined the game|Starting integrated minecraft server|Starting integrated Minecraft server'"
-          new_gate="if grep -Eiq 'joined the game'"
+          new_gate="if grep -Eiq 'joined the game|Starting integrated minecraft server|Starting integrated Minecraft server'"
           assert s.count(old_gate)==1
           s=s.replace(old_gate,new_gate)
           old_check="if ! grep -Eiq 'joined the game|Starting integrated minecraft server'"
-          new_check="if ! grep -Eiq 'joined the game'"
+          new_check="if ! grep -Eiq 'joined the game|Starting integrated minecraft server'"
           assert s.count(old_check)==1
           s=s.replace(old_check,new_check)
           s=s.replace("echo 'guiScale:2' > run/options.txt",
                       "printf 'guiScale:2\\ntutorialStep:none\\n' > run/options.txt")
+          # World generation can take longer than integrated-server startup.
+          probe="capture 07-world-entry-check"
+          if probe in s:
+              s=s.replace(probe,"sleep 18\\n"+probe,1)
           p.write_text(s)
           PY
           bash -n "$RUNNER_TEMP/bf-client-smoke.sh"
