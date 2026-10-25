@@ -272,6 +272,20 @@ jobs:
           assert 'data.ruptureActive()' in director or 'ruputure' not in ''
           print('PASS: all',len(entries),'legacy anomaly IDs retained, private-to-world story transitions')
           PY
+      - name: Prevent personal anomaly overlap with dreams and cinematic
+        run: |
+          python3 -m py_compile black-frequency/patch/v0.21_sleep_guard.py
+          python3 black-frequency/patch/v0.21_sleep_guard.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('black-frequency/project/src/main/java/com/blackfrequency/hollowsignal/world')
+          director=(p/'HorrorDirector.java').read_text()
+          psychology=(p/'PsychologySystem.java').read_text()
+          assert 'if (player.isSleeping() || releasing)' in director
+          assert 'QtePacket.send(p, 0, 0)' in psychology
+          assert 'if(!p.isAlive() || p.isSleeping()' in psychology
+          print('PASS: sleeping players never see unrelated personal scares or stale QTEs')
+          PY
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
@@ -283,6 +297,6 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.21.0
-          path: black-frequency/project/build/libs/hollowsignal-0.21.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.21.1
+          path: black-frequency/project/build/libs/hollowsignal-0.21.1.jar
           if-no-files-found: error
