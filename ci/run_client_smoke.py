@@ -71,11 +71,17 @@ def capture_test_world():
         subprocess.run(["scrot","-a","0,0,1280,720",str(shots/name)],check=False)
     snap("01-main-menu.png")
     # EHTID/STALKER custom title screen: Singleplayer sits on the LEFT, not center.
-    click(225,328)
+    click(640,300) if os.environ.get("BF_ISOLATED_TEST")=="1" else click(225,328)
     time.sleep(8)
     snap("02-after-singleplayer.png")
     # EHTID title screen opens world creation directly; bottom-left button at x400.
-    click(400,665)
+    if os.environ.get("BF_ISOLATED_TEST")=="1":
+        click(640,665)
+        time.sleep(5)
+        snap("02b-world-selection.png")
+        click(640,665)
+    else:
+        click(400,665)
     time.sleep(10)
     snap("03-after-create-world.png")
     print("WORLD_CAPTURE: requested new disposable singleplayer world",flush=True)
