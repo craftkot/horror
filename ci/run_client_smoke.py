@@ -140,6 +140,23 @@ def capture_test_world():
                 time.sleep(0.5)
             subprocess.run(["scrot","-a","0,0,1280,720",
                 str(ROOT/"client-smoke-artifacts"/"world.png")],check=False)
+            # Ground fracture starts after finale tick 260. Early 16-second frames
+            # mostly show the sky; wait for actual terrain edits before final proof.
+            fracture_deadline=time.time()+90
+            fracture_seen=False
+            while time.time()<fracture_deadline and p.poll() is None:
+                current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                if "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in current:
+                    fracture_seen=True
+                    print("WORLD_CAPTURE: first physical terrain fracture confirmed",flush=True)
+                    break
+                time.sleep(1)
+            if fracture_seen:
+                time.sleep(5)
+                snap("terrain-fracture-after-first-block.png")
+            else:
+                print("WORLD_CAPTURE: no terrain edit marker during capture window",flush=True)
+                snap("terrain-fracture-not-seen.png")
             log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
             if "BLACK_FREQUENCY_TEST FINALE_STARTED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: screenshots exist, but accelerated finale not observed",flush=True)
