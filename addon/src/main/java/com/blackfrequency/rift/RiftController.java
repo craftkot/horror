@@ -103,6 +103,30 @@ public final class RiftController {
             return;
         }
         s.finaleTicks++;
+        // Spatial gravity anomalies drift through the rift field. Server-side only;
+        // gentle bounded impulses allow movement without overriding vanilla physics.
+        if (s.finaleTicks > 85 && s.finaleTicks % 5 == 0) {
+            for (var player : level.players()) {
+                if (player.isCreative() || player.isSpectator()) continue;
+                double px=player.getX(), pz=player.getZ();
+                double zone=Math.sin(px*.115+Math.sin(s.finaleTicks*.011)*1.8)
+                            *Math.cos(pz*.125-s.finaleTicks*.008);
+                if(zone > .42) {
+                    var v=player.getDeltaMovement();
+                    // Reduced gravity, occasional sideways shear, maximum safe vertical speed.
+                    double lift=Math.max(.045, Math.min(.19, (.11+zone*.07)));
+                    double dx=Math.sin(pz*.14+s.finaleTicks*.022)*.035;
+                    double dz=Math.cos(px*.13-s.finaleTicks*.018)*.035;
+                    player.setDeltaMovement(v.x+dx,Math.min(.43,v.y+lift),v.z+dz);
+                    player.hurtMarked=true;
+                    player.fallDistance=0;
+                } else if (zone < -.68) {
+                    var v=player.getDeltaMovement();
+                    player.setDeltaMovement(v.x*.94,Math.max(-.55,v.y-.09),v.z*.94);
+                    player.hurtMarked=true;
+                }
+            }
+        }
         // Allow the opening, green silence and sudden return to play before terrain removal.
         if (s.finaleTicks < 190) { if(s.finaleTicks%20==0)s.setDirty(); return; }
         if(CI_TEST && s.finaleTicks == 190) LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_PHASE_STARTED");
