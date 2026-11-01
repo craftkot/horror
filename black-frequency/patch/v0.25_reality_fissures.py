@@ -415,11 +415,16 @@ edit("world/PsychologyData.java",
 # Verify where sealSome is defined: do NOT make a fragile assumption about its tail.
 datafile=J/"world/PsychologyData.java"
 data=datafile.read_text(encoding="utf-8")
-needle='        if(fixed>0) setDirty();\n        return fixed;\n    }\n'
-assert data.count(needle)==1,"sealSome anchor missing"
-datafile.write_text(data.replace(needle,
-  '        fixed+=FaultJournal.get(server).restore(server,Math.max(1,budget/2));\n'
-  '        if(fixed>0) setDirty();\n        return fixed;\n    }\n',1),encoding="utf-8")
+# Earlier world-data refactors changed the spacing inside sealSome; operate on
+# the actual method region rather than a brittle exact-whitespace substring.
+import re
+hit=re.search(r'    public int sealSome\(MinecraftServer server,int budget\) \{.*?\n    \}',data,re.S)
+assert hit,"sealSome method missing"
+region=hit.group(0)
+assert 'return fixed;' in region,"sealSome return not found"
+region=region.replace('return fixed;',
+    'return fixed+FaultJournal.get(server).restore(server,Math.max(1,budget/2));',1)
+datafile.write_text(data[:hit.start()]+region+data[hit.end():],encoding="utf-8")
 edit("BlackFrequency.java",
      '        MinecraftForge.EVENT_BUS.register(new com.blackfrequency.hollowsignal.world.DayTenClimax());',
      '        MinecraftForge.EVENT_BUS.register(new com.blackfrequency.hollowsignal.world.DayTenClimax());\n'
