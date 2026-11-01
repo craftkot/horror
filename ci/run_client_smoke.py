@@ -84,7 +84,25 @@ def capture_test_world():
         logs=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
         if "Starting integrated minecraft server" in logs or "Starting integrated minecraft server version" in logs:
             print("WORLD_CAPTURE: integrated server detected",flush=True)
-            # Capture all the accelerated stages rather than just a single late frame.
+            # The integrated server starting is NOT proof of gameplay: world creation can
+            # fail at 0% and still leave a visible client window.
+            spawned=False
+            spawn_deadline=time.time()+150
+            while time.time()<spawn_deadline and p.poll() is None:
+                current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                if ("logged in with entity id" in current or
+                    "joined the game" in current or
+                    "Starting to track player" in current):
+                    spawned=True
+                    break
+                time.sleep(2)
+            if not spawned:
+                print("WORLD_CAPTURE_FAIL: integrated server started but player never spawned",flush=True)
+                snap("world-spawn-failure.png")
+                return False
+            print("WORLD_CAPTURE: player spawn verified in log",flush=True)
+            time.sleep(8)
+            # Capture the accelerated stages only after actual player spawn.
             for stage in range(16):
                 if p.poll() is not None:
                     break
