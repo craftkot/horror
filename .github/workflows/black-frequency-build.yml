@@ -305,6 +305,55 @@ jobs:
           assert 'dx:new int[]{-2,2}' in ritual and 'dz:new int[]{-2,2}' in ritual
           print('PASS: skin/model/textures/ritual schematic generated')
           PY
+      - name: Apply native GLSL shaders and plot progression v0.23
+        run: |
+          python3 -m py_compile black-frequency/patch/v0.23_shader_story.py
+          python3 black-frequency/patch/v0.23_shader_story.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('black-frequency/project')
+          a=root/'src/main/resources/assets/hollowsignal/shaders'
+          j=root/'src/main/java/com/blackfrequency/hollowsignal'
+          shader=a/'program/atmosphere.fsh'
+          program=json.loads((a/'program/atmosphere.json').read_text())
+          assert '#version 150' in shader.read_text()
+          assert 'uniform float Strength;' in shader.read_text()
+          assert program['fragment']=='hollowsignal:atmosphere'
+          strengths=[]
+          for name in ('quiet','visions','pressure','critical','rupture'):
+              config=json.loads((a/('post/atmosphere_'+name+'.json')).read_text())
+              assert len(config['passes'])==2
+              assert config['passes'][0]['name']=='hollowsignal:atmosphere'
+              assert config['passes'][1]['name']=='blit'
+              strengths.append(config['passes'][0]['uniforms'][0]['values'][0])
+          assert strengths==sorted(strengths)
+          client=(j/'client/ClientAtmosphere.java').read_text()
+          data=(j/'world/PsychologyData.java').read_text()
+          story=(j/'world/StoryAnomalies.java').read_text()
+          assert 'new PostChain(' in client and 'gameRenderer.loadEffect(' in client
+          assert 'dayTenChosen' in data and 'RuptureCinematicSystem.begin' in (j/'world/DayTenClimax.java').read_text()
+          assert 'if(n<=3) return 0;' in story
+          assert 'voice=null; // The white silhouette never speaks.' in story
+          assert 'MinecraftForge.EVENT_BUS.register(new com.blackfrequency.hollowsignal.world.DayTenClimax());' in (j/'BlackFrequency.java').read_text()
+          print('PASS: five native post shaders, startup prewarm, quiet days, one-shot day-10 cinematic')
+          PY
+      - name: Validate real GLSL 150 on compiler
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y glslang-tools
+          glslangValidator -S frag black-frequency/project/src/main/resources/assets/hollowsignal/shaders/program/atmosphere.fsh
+      - name: Java 17 taunt phrase smoke
+        working-directory: black-frequency/project
+        run: |
+          mkdir -p build/taunt-test
+          javac --release 17 -d build/taunt-test src/main/java/com/blackfrequency/hollowsignal/world/HorrorTaunts.java
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/main/java/com/blackfrequency/hollowsignal/world/HorrorTaunts.java').read_text()
+          assert 'Math.floorMod' in p and 'BEGIN[a]' in p and 'MIDDLE[b]' in p
+          print('PASS: compositional taunt generator compiles')
+          PY
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
@@ -316,8 +365,8 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.22.0
-          path: black-frequency/project/build/libs/hollowsignal-0.22.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.23.0
+          path: black-frequency/project/build/libs/hollowsignal-0.23.0.jar
           if-no-files-found: error
 
       - name: Install graphics stack for real Forge client smoke
