@@ -1,6 +1,10 @@
 package com.blackfrequency.rift;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
@@ -51,7 +55,28 @@ public final class RiftController {
         }
         if(!s.started) {
             s.elapsed++;
-            if(s.elapsed >= DAY*10) { s.started=true;s.setDirty(); }
+            // Narrative beats are delivered as on-screen titles, not chat messages.
+            // No manual commands are needed.
+            if(s.elapsed == DAY*3 || s.elapsed == DAY*6 || s.elapsed == DAY*9) {
+                String subtitle = s.elapsed == DAY*3
+                    ? "Ты уверен, что небо всегда было таким?"
+                    : s.elapsed == DAY*6
+                    ? "Граница мира становится тоньше."
+                    : "Оно больше не удерживает то, что снаружи.";
+                for(var player : level.players()) {
+                    player.connection.send(new ClientboundSetTitlesAnimationPacket(20, 90, 35));
+                    player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§8BLACK FREQUENCY")));
+                    player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§7"+subtitle)));
+                }
+            }
+            if(s.elapsed >= DAY*10) {
+                s.started=true;s.setDirty();
+                for(var player : level.players()) {
+                    player.connection.send(new ClientboundSetTitlesAnimationPacket(5, 120, 25));
+                    player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§2ВЫСВОБОЖДЕНИЕ")));
+                    player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§7Мир больше не цел.")));
+                }
+            }
             if(s.elapsed%200==0)s.setDirty();
             return;
         }
