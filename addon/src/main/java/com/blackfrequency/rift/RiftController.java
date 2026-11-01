@@ -97,10 +97,13 @@ public final class RiftController {
         }
         int restoredThisTick=0,checks=0;
         while(s.restoreIndex>=0 && restoredThisTick<96 && checks<192) {
-            CompoundTag entry=s.snapshots.get(s.restoreIndex--);
+            CompoundTag entry=s.snapshots.get(s.restoreIndex);
             BlockPos pos=BlockPos.of(entry.getLong("pos"));
+            // Keep the snapshot queued until its chunk loads. Never silently lose
+            // the original state of blocks in unloaded regions.
+            if(!level.hasChunk(pos.getX()>>4,pos.getZ()>>4)) break;
+            s.restoreIndex--;
             checks++;
-            if(!level.hasChunk(pos.getX()>>4,pos.getZ()>>4)) continue;
             if(!level.getBlockState(pos).isAir()) continue;
             BlockState original=NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK),entry.getCompound("state"));
             if(original.isAir()) continue;
