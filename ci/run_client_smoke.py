@@ -113,14 +113,13 @@ def capture_test_world():
                 print("WORLD_CAPTURE: JVM thread dump saved",flush=True)
                 return False
             print("WORLD_CAPTURE: player spawn verified in log",flush=True)
-            time.sleep(8)
-            # Capture the accelerated stages only after actual player spawn.
-            for stage in range(16):
+            # Immediately capture after spawn; the green phase is only four seconds.
+            for stage in range(32):
                 if p.poll() is not None:
                     break
                 subprocess.run(["scrot","-a","0,0,1280,720",
                     str(ROOT/"client-smoke-artifacts"/f"world-stage-{stage:02d}.png")],check=False)
-                time.sleep(2)
+                time.sleep(0.5)
             subprocess.run(["scrot","-a","0,0,1280,720",
                 str(ROOT/"client-smoke-artifacts"/"world.png")],check=False)
             log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
