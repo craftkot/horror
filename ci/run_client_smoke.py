@@ -126,7 +126,10 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST FINALE_STARTED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: screenshots exist, but accelerated finale not observed",flush=True)
                 return False
-            print("WORLD_CAPTURE: accelerated finale confirmed by server marker",flush=True)
+            if "BLACK_FREQUENCY_RENDER_ACTIVE" not in log_after:
+                print("WORLD_CAPTURE_FAIL: no actual sky renderer invocation observed",flush=True)
+                return False
+            print("WORLD_CAPTURE: accelerated finale and in-world sky rendering confirmed",flush=True)
             return True
         time.sleep(2)
     print("WORLD_CAPTURE: no integrated-server marker; preserving diagnostic screenshot",flush=True)
