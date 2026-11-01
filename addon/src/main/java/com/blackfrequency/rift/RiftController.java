@@ -23,13 +23,14 @@ public final class RiftController {
         long elapsed;
         int x, z, cursorX=-RADIUS, cursorZ=-RADIUS, cursorY;
         int edits;
+        int finaleTicks;
         boolean started, finished, initialized;
         static State load(CompoundTag n) {
             State s = new State();
             s.elapsed=n.getLong("elapsed");
             s.x=n.getInt("x");s.z=n.getInt("z");
             s.cursorX=n.getInt("cx");s.cursorZ=n.getInt("cz");s.cursorY=n.getInt("cy");
-            s.edits=n.getInt("edits");
+            s.edits=n.getInt("edits");s.finaleTicks=n.getInt("finaleTicks");
             s.started=n.getBoolean("started");s.finished=n.getBoolean("finished");
             s.initialized=n.getBoolean("initialized");
             return s;
@@ -37,7 +38,7 @@ public final class RiftController {
         @Override public CompoundTag save(CompoundTag n) {
             n.putLong("elapsed",elapsed);n.putInt("x",x);n.putInt("z",z);
             n.putInt("cx",cursorX);n.putInt("cz",cursorZ);n.putInt("cy",cursorY);
-            n.putInt("edits",edits);n.putBoolean("started",started);
+            n.putInt("edits",edits);n.putInt("finaleTicks",finaleTicks);n.putBoolean("started",started);
             n.putBoolean("finished",finished);n.putBoolean("initialized",initialized);
             return n;
         }
@@ -50,7 +51,7 @@ public final class RiftController {
         // Keep clients synchronized even on old worlds or after the finale.
         if(level.getGameTime()%100L==0) {
             float progress=s.finished ? 1f : Math.max(0f, Math.min(1f,(s.elapsed-3f*DAY)/(7f*DAY)));
-            for(var player : level.players()) RiftNetwork.send(player,progress,s.started || s.finished);
+            for(var player : level.players()) RiftNetwork.send(player,progress,s.started || s.finished, s.finaleTicks);
         }
         if(s.finished) return;
         if(!s.initialized) {
@@ -76,7 +77,7 @@ public final class RiftController {
             }
             if(s.elapsed >= DAY*10) {
                 s.started=true;s.setDirty();
-                for(var player : level.players()) RiftNetwork.send(player,1f,true);
+                for(var player : level.players()) RiftNetwork.send(player,1f,true,0);
                 for(var player : level.players()) {
                     player.connection.send(new ClientboundSetTitlesAnimationPacket(5, 120, 25));
                     player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§2ВЫСВОБОЖДЕНИЕ")));
@@ -86,6 +87,9 @@ public final class RiftController {
             if(s.elapsed%200==0)s.setDirty();
             return;
         }
+        s.finaleTicks++;
+        // Allow the opening, green silence and sudden return to play before terrain removal.
+        if (s.finaleTicks < 260) { if(s.finaleTicks%20==0)s.setDirty(); return; }
         int edits=0, checks=0;
         while(edits<EDIT_BUDGET && checks<2048 && !s.finished) {
             if(s.edits>=MAX_EDITS || s.cursorX>RADIUS) {s.finished=true;break;}
