@@ -170,6 +170,13 @@ edit("client/ClientAtmosphere.java",
      '        if(release || ClientRuptureQte.isActive()) {\n'
      '            stage=ClientRuptureQte.isGreen()?6:ClientRuptureQte.isRed()?7:5;\n'
      '        } else if(stage==4)stage=8;')
+edit("client/ClientAtmosphere.java",
+     '    private static ResourceLocation location(String name) {',
+     '    /** Shared scene state, including other witnesses on multiplayer servers. */\n'
+     '    public static boolean voidSkyActive() {\n'
+     '        return release || ClientRuptureQte.isActive();\n'
+     '    }\n'
+     '    private static ResourceLocation location(String name) {')
 # Sky vanishes during actual QTE. RenderLevelStageEvent Stage.AFTER_SKY
 # is the Forge-supported stage after clouds/celestial visuals and before
 # solid terrain. Only COLOR is cleared; depth is left unchanged.
@@ -193,7 +200,7 @@ public final class ReleaseVoidSky {
     @SubscribeEvent
     public static void sky(RenderLevelStageEvent event) {
         if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_SKY
-                || !ClientRuptureQte.isActive())return;
+                || !ClientAtmosphere.voidSkyActive())return;
         RenderSystem.assertOnRenderThread();
         // Without clearing depth, terrain and entities still render normally.
         RenderSystem.clearColor(.006f,.002f,.011f,1f);
@@ -353,8 +360,9 @@ public final class PhysicalFaults {
                 ServerPlayer p=survivors.get((int)(time/60%survivors.size()));
                 // Winding jagged ground fault in loaded terrain near witnesses.
                 int seq=scheduled;
-                double angle=(seq*.618033988749895)*6.283185;
-                int distance=9+(seq*7)%29;
+                // Three continuous radial fault arms, fourteen connected segments each.
+                double angle=((seq/14)*.618033988749895)*6.283185;
+                int distance=9+(seq%14)*2;
                 int x=p.blockPosition().getX()+(int)Math.round(Math.cos(angle)*distance);
                 int z=p.blockPosition().getZ()+(int)Math.round(Math.sin(angle)*distance);
                 BlockPos marker=new BlockPos(x,0,z);
@@ -432,5 +440,5 @@ edit("BlackFrequency.java",
 props=ROOT/"gradle.properties"
 s=props.read_text(encoding="utf-8")
 assert s.count("0.24.0")==1
-props.write_text(s.replace("0.24.0","0.25.0"),encoding="utf-8")
+props.write_text(s.replace("0.24.0","0.25.1"),encoding="utf-8")
 print("PASS v0.25: multi-branch fractal GPU faults, sky void, red-green collapse, reversible real bedrock trenches")
