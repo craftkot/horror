@@ -24,25 +24,27 @@ public final class RiftNetwork {
         if (registered) return;
         registered = true;
         CHANNEL.messageBuilder(RiftStatePacket.class, 0, NetworkDirection.PLAY_TO_CLIENT)
-            .encoder((p, buf) -> { buf.writeFloat(p.progress); buf.writeBoolean(p.collapse); })
-            .decoder(buf -> new RiftStatePacket(buf.readFloat(), buf.readBoolean()))
+            .encoder((p, buf) -> { buf.writeFloat(p.progress); buf.writeBoolean(p.collapse); buf.writeVarInt(p.finaleTicks); })
+            .decoder(buf -> new RiftStatePacket(buf.readFloat(), buf.readBoolean(), buf.readVarInt()))
             .consumerMainThread(RiftNetwork::receive)
             .add();
     }
-    public static void send(ServerPlayer player, float progress, boolean collapse) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new RiftStatePacket(progress, collapse));
+    public static void send(ServerPlayer player, float progress, boolean collapse, int finaleTicks) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new RiftStatePacket(progress, collapse, finaleTicks));
     }
     private static void receive(RiftStatePacket packet, Supplier<NetworkEvent.Context> ctx) {
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () ->
-            com.blackfrequency.rift.client.RiftClientState.update(packet.progress, packet.collapse));
+            com.blackfrequency.rift.client.RiftClientState.update(packet.progress, packet.collapse, packet.finaleTicks));
         ctx.get().setPacketHandled(true);
     }
     public static final class RiftStatePacket {
         public final float progress;
         public final boolean collapse;
-        public RiftStatePacket(float progress, boolean collapse) {
+        public final int finaleTicks;
+        public RiftStatePacket(float progress, boolean collapse, int finaleTicks) {
             this.progress = progress;
             this.collapse = collapse;
+            this.finaleTicks = finaleTicks;
         }
     }
 }
