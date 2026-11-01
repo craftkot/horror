@@ -39,9 +39,10 @@ public final class RiftSkyRenderer {
             if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_SKY || shader==null) return;
             Minecraft mc=Minecraft.getInstance();
             if(mc.level==null || mc.player==null) return;
-            float strength=RiftClientState.strength();
+            float strength=RiftClientState.visibleStrength();
             if(strength<=0) return;
             if(shader.getUniform("RiftStrength")!=null)shader.getUniform("RiftStrength").set(strength);
+            if(shader.getUniform("GreenPhase")!=null)shader.getUniform("GreenPhase").set(RiftClientState.greenPhase());
             if(shader.getUniform("GameTime")!=null)shader.getUniform("GameTime").set((float)(mc.level.getGameTime()%100000L));
             PoseStack stack=event.getPoseStack();
             stack.pushPose();
