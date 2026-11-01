@@ -60,17 +60,30 @@ def capture_test_world():
         subprocess.run(["xdotool","key","--clearmodifiers",k],check=False)
     def click(x,y):
         subprocess.run(["xdotool","mousemove",str(x),str(y),"click","1"],check=False)
-    os.makedirs(ROOT/"client-smoke-artifacts",exist_ok=True)
+    shots=ROOT/"client-smoke-artifacts"
+    os.makedirs(shots,exist_ok=True)
+    window=subprocess.run(["xdotool","search","--onlyvisible","--name","Minecraft"],capture_output=True,text=True).stdout.splitlines()
+    if window:
+        subprocess.run(["xdotool","windowactivate","--sync",window[-1]],check=False)
+        subprocess.run(["xdotool","windowsize",window[-1],"1280","720"],check=False)
+        subprocess.run(["xdotool","windowmove",window[-1],"0","0"],check=False)
+    def snap(name):
+        subprocess.run(["scrot","-a","0,0,1280,720",str(shots/name)],check=False)
+    snap("01-main-menu.png")
     # Minecraft window at 1280x720. Title screen Singleplayer button.
     click(640,335)
-    time.sleep(5)
+    time.sleep(8)
+    snap("02-after-singleplayer.png")
     # World selection: Create New World button at the bottom.
     click(640,665)
-    time.sleep(5)
+    time.sleep(8)
+    snap("03-after-create-selection.png")
     # World creation screen, confirm default settings.
     click(640,665)
+    time.sleep(4)
+    snap("04-after-create-world.png")
     print("WORLD_CAPTURE: requested new disposable singleplayer world",flush=True)
-    deadline_world=time.time()+150
+    deadline_world=time.time()+240
     while time.time()<deadline_world and p.poll() is None:
         logs=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
         if "Starting integrated minecraft server" in logs or "Starting integrated minecraft server version" in logs:
