@@ -22,11 +22,13 @@ void main(){
  float b=cells(n.xz+vec2(0.,cos(t)*.012),4.0);
  float c=cells(n.xy,4.0);
  float d=dot(vec3(a,b,c),w);
+ float warped=dot(vec3(cells(n.yz*1.33+sin(t+n.x*14.)*.042,6.8),cells(n.xz*1.27+cos(t+n.y*17.)*.045,7.2),cells(n.xy*1.21+sin(t+n.z*11.)*.04,6.3)),w);
+ d=min(d,warped*.62);
  float secondary=dot(vec3(cells(n.yz,9.),cells(n.xz,9.),cells(n.xy,9.)),w);
  float jitter=.012*sin(t*2.+n.x*37.+n.z*29.);
- float width=.052+.038*clamp(RiftStrength,0.,1.)+jitter;
+ float width=.09+.085*clamp(RiftStrength,0.,1.)+jitter;
  float fissure=1.-smoothstep(width,width+.04,d);
- float branch=(1.-smoothstep(.018,.075,secondary))*.30;
+ float branch=(1.-smoothstep(.035,.12,secondary))*.68;
  float crack=max(fissure,branch);
  float voidPocket=smoothstep(.20,.44,hash(floor(n.xz*9.)+floor(n.y*8.)))*smoothstep(.10,.28,crack);
  float halo=exp(-max(d-width,0.)*19.);
@@ -35,9 +37,9 @@ void main(){
  // The world beyond the fracture is black, not a bright blue sky.
  vec3 background=vec3(.008,.005,.017);
  vec3 purple=vec3(.16,.035,.27);
- vec3 edge=vec3(.28,.11,.46);
+ vec3 edge=vec3(.52,.19,.87);
  float pulse=.82+.18*sin(t*3.+n.x*29.);
- vec3 color=background+purple*halo*.27+edge*max(crack-voidPocket,0.)*.58*pulse;
+ vec3 color=background+purple*halo*.27+edge*max(crack-voidPocket,0.)*.94*pulse;
  color=mix(color,vec3(.0003,.0002,.0015),voidPocket*.98);
  color=mix(color,vec3(.002,.011,.009),green);
  // Darken the entire sky while retaining angular fracture boundaries.
