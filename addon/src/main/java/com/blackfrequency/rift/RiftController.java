@@ -20,9 +20,9 @@ public final class RiftController {
     // Only for disposable CI worlds. Never increases Minecraft's global tick rate.
     private static final long TEST_STEP = Boolean.getBoolean("blackfrequency.ciTestMode")
         ? Math.max(1L, Math.min(2400L, Long.getLong("blackfrequency.ciTickStep", 2400L))) : 1L;
-    private static final int RADIUS = 32;
-    private static final int EDIT_BUDGET = 32;
-    private static final int MAX_EDITS = 18000;
+    private static final int RADIUS = 48;
+    private static final int EDIT_BUDGET = 64;
+    private static final int MAX_EDITS = 40000;
 
     private static final class State extends SavedData {
         long elapsed;
@@ -130,8 +130,14 @@ public final class RiftController {
             }
             checks++;
             double u=dx/12.0, v=dz/12.0;
-            double crack=Math.abs(Math.sin(u*2.1+Math.sin(v*1.7))*Math.cos(v*1.8-Math.sin(u*1.9)));
-            if(crack>0.21 || dx*dx+dz*dz>RADIUS*RADIUS) continue;
+            // Intersecting winding faults, with occasional broad void openings.
+            // Natural bedrock is deliberately included: the fissures reach world bottom.
+            double faultA=Math.abs(Math.sin(u*1.8+Math.sin(v*1.4)*0.65));
+            double faultB=Math.abs(Math.cos(v*1.55-Math.sin(u*1.2)*0.7));
+            double pocket=Math.sin(u*0.61+1.2)*Math.cos(v*0.73-0.8);
+            double width=pocket>0.78 ? 0.48 : 0.19;
+            boolean fracture=faultA<width || faultB<width*0.77;
+            if(!fracture || dx*dx+dz*dz>RADIUS*RADIUS) continue;
             BlockPos pos=new BlockPos(wx,y,wz);
             if(level.getBlockState(pos).isAir()) continue;
             if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),2|16)){
