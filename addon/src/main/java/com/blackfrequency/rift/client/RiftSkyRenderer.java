@@ -28,7 +28,10 @@ public final class RiftSkyRenderer {
             event.registerShader(
                 new ShaderInstance(event.getResourceProvider(),
                     new ResourceLocation("blackfrequency","sky_rift"), DefaultVertexFormat.POSITION),
-                loaded -> shader=loaded);
+                loaded -> {
+                    shader=loaded;
+                    com.mojang.logging.LogUtils.getLogger().info("BLACK_FREQUENCY_SHADER_READY sky_rift");
+                });
         }
     }
 
