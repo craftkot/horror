@@ -284,7 +284,18 @@ public final class RiftController {
             s.restoring=true;
             s.restoreIndex=s.snapshots.size()-1;
             s.restoreTicks=0;
-            s.beaconPos=new BlockPos(s.x,level.getSeaLevel()+4,s.z).asLong();
+            BlockPos demoPos=new BlockPos(s.x,level.getSeaLevel()+4,s.z);
+            if(!level.players().isEmpty()) {
+                var demoPlayer=level.players().get(0);
+                demoPos=demoPlayer.blockPosition().relative(demoPlayer.getDirection(),4).above(1);
+                // Visual-only test fixture in disposable CI worlds: the production
+                // interaction still requires right-clicking a genuine beacon.
+                level.setBlock(demoPos,Blocks.BEACON.defaultBlockState(),3);
+                demoPlayer.connection.send(new ClientboundSetTitlesAnimationPacket(8,75,20));
+                demoPlayer.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§5СТАБИЛИЗАЦИЯ")));
+                demoPlayer.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§dМаяк запечатывает разлом")));
+            }
+            s.beaconPos=demoPos.asLong();
             LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED");
         }
         // Persist the cursor every tick; restart must not rewind destructive edits.
