@@ -15,6 +15,9 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 /** No commands. Ten days after installing this addon in a world, its finale begins. */
 public final class RiftController {
     private static final long DAY = 24000L;
+    // Only for disposable CI worlds. Never increases Minecraft's global tick rate.
+    private static final long TEST_STEP = Boolean.getBoolean("blackfrequency.ciTestMode")
+        ? Math.max(1L, Math.min(2400L, Long.getLong("blackfrequency.ciTickStep", 2400L))) : 1L;
     private static final int RADIUS = 32;
     private static final int EDIT_BUDGET = 32;
     private static final int MAX_EDITS = 18000;
@@ -60,13 +63,15 @@ public final class RiftController {
             s.cursorY=level.getMinBuildHeight();s.setDirty();
         }
         if(!s.started) {
-            s.elapsed++;
+            s.elapsed += TEST_STEP;
             // Narrative beats are delivered as on-screen titles, not chat messages.
             // No manual commands are needed.
-            if(s.elapsed == DAY*3 || s.elapsed == DAY*6 || s.elapsed == DAY*9) {
-                String subtitle = s.elapsed == DAY*3
+            if ((s.elapsed >= DAY*3 && s.elapsed-TEST_STEP < DAY*3) ||
+                (s.elapsed >= DAY*6 && s.elapsed-TEST_STEP < DAY*6) ||
+                (s.elapsed >= DAY*9 && s.elapsed-TEST_STEP < DAY*9)) {
+                String subtitle = s.elapsed < DAY*4
                     ? "Ты уверен, что небо всегда было таким?"
-                    : s.elapsed == DAY*6
+                    : s.elapsed < DAY*7
                     ? "Граница мира становится тоньше."
                     : "Оно больше не удерживает то, что снаружи.";
                 for(var player : level.players()) {
@@ -89,7 +94,7 @@ public final class RiftController {
                     player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§7Мир больше не цел.")));
                 }
             }
-            if(s.elapsed%200==0)s.setDirty();
+            if(level.getGameTime()%20L==0)s.setDirty();
             return;
         }
         s.finaleTicks++;
