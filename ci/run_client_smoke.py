@@ -99,6 +99,12 @@ def capture_test_world():
             if not spawned:
                 print("WORLD_CAPTURE_FAIL: integrated server started but player never spawned",flush=True)
                 snap("world-spawn-failure.png")
+                # Collect JVM state when world creation stalls at 0%.
+                dump=shots/"world-spawn-jvm-threads.txt"
+                with dump.open("w",encoding="utf-8") as f:
+                    subprocess.run(["jcmd",str(p.pid),"Thread.print","-l"],
+                                   stdout=f,stderr=subprocess.STDOUT,timeout=25,check=False)
+                print("WORLD_CAPTURE: JVM thread dump saved",flush=True)
                 return False
             print("WORLD_CAPTURE: player spawn verified in log",flush=True)
             time.sleep(8)
