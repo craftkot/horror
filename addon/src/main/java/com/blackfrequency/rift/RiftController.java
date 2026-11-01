@@ -47,6 +47,11 @@ public final class RiftController {
         if(event.phase != TickEvent.Phase.END || !(event.level instanceof ServerLevel level)
            || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
         State s = level.getDataStorage().computeIfAbsent(State::load, State::new, "blackfrequency_finale");
+        // Keep clients synchronized even on old worlds or after the finale.
+        if(level.getGameTime()%100L==0) {
+            float progress=s.finished ? 1f : Math.max(0f, Math.min(1f,(s.elapsed-3f*DAY)/(7f*DAY)));
+            for(var player : level.players()) RiftNetwork.send(player,progress,s.started || s.finished);
+        }
         if(s.finished) return;
         if(!s.initialized) {
             s.initialized=true;
@@ -71,6 +76,7 @@ public final class RiftController {
             }
             if(s.elapsed >= DAY*10) {
                 s.started=true;s.setDirty();
+                for(var player : level.players()) RiftNetwork.send(player,1f,true);
                 for(var player : level.players()) {
                     player.connection.send(new ClientboundSetTitlesAnimationPacket(5, 120, 25));
                     player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§2ВЫСВОБОЖДЕНИЕ")));
