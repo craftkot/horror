@@ -21,6 +21,15 @@ jobs:
       - name: Build addon
         working-directory: addon
         run: gradle --no-daemon build
+      - name: Verify packaged shader resources
+        working-directory: addon
+        run: |
+          JAR=$(find build/libs -name 'blackfrequency-*.jar' -print -quit)
+          test -n "$JAR"
+          jar tf "$JAR" | grep -Fx 'pack.mcmeta'
+          jar tf "$JAR" | grep -Fx 'assets/blackfrequency/shaders/core/sky_rift.json'
+          jar tf "$JAR" | grep -Fx 'assets/blackfrequency/shaders/core/sky_rift.vsh'
+          jar tf "$JAR" | grep -Fx 'assets/blackfrequency/shaders/core/sky_rift.fsh'
       - uses: actions/upload-artifact@v4
         with:
           name: blackfrequency-forge
