@@ -39,7 +39,7 @@ public final class RiftController {
         int edits;
         int finaleTicks;
         boolean started, finished, initialized, restoring, restored;
-        int restoreIndex, restoreTicks;
+        int restoreIndex, restoreTicks, restoredBlocks;
         long beaconPos;
         final List<CompoundTag> snapshots = new ArrayList<>();
         static State load(CompoundTag n) {
@@ -51,7 +51,7 @@ public final class RiftController {
             s.started=n.getBoolean("started");s.finished=n.getBoolean("finished");
             s.initialized=n.getBoolean("initialized");
             s.restoring=n.getBoolean("restoring");s.restored=n.getBoolean("restored");
-            s.restoreIndex=n.getInt("restoreIndex");s.restoreTicks=n.getInt("restoreTicks");s.beaconPos=n.getLong("beaconPos");
+            s.restoreIndex=n.getInt("restoreIndex");s.restoreTicks=n.getInt("restoreTicks");s.restoredBlocks=n.getInt("restoredBlocks");s.beaconPos=n.getLong("beaconPos");
             ListTag saved=n.getList("snapshots",Tag.TAG_COMPOUND);
             for(int i=0;i<saved.size();i++) s.snapshots.add(saved.getCompound(i));
             return s;
@@ -62,7 +62,7 @@ public final class RiftController {
             n.putInt("edits",edits);n.putInt("finaleTicks",finaleTicks);n.putBoolean("started",started);
             n.putBoolean("finished",finished);n.putBoolean("initialized",initialized);
             n.putBoolean("restoring",restoring);n.putBoolean("restored",restored);
-            n.putInt("restoreIndex",restoreIndex);n.putInt("restoreTicks",restoreTicks);n.putLong("beaconPos",beaconPos);
+            n.putInt("restoreIndex",restoreIndex);n.putInt("restoreTicks",restoreTicks);n.putInt("restoredBlocks",restoredBlocks);n.putLong("beaconPos",beaconPos);
             ListTag saved=new ListTag();for(CompoundTag tag:snapshots)saved.add(tag.copy());
             n.put("snapshots",saved);
             return n;
@@ -78,7 +78,7 @@ public final class RiftController {
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
         if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
         if(pos.distSqr(new BlockPos(s.x,pos.getY(),s.z))>128d*128d) return;
-        s.restoring=true;s.restoreIndex=s.snapshots.size()-1;s.restoreTicks=0;s.beaconPos=pos.asLong();s.setDirty();
+        s.restoring=true;s.restoreIndex=s.snapshots.size()-1;s.restoreTicks=0;s.restoredBlocks=0;s.beaconPos=pos.asLong();s.setDirty();
         for(var player:level.players()) {
             player.connection.send(new ClientboundSetTitlesAnimationPacket(10,100,30));
             player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§5СТАБИЛИЗАЦИЯ")));
@@ -108,7 +108,7 @@ public final class RiftController {
             BlockState original=NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK),entry.getCompound("state"));
             if(original.isAir()) continue;
             if(level.setBlock(pos,original,2|16)) {
-                restoredThisTick++;
+                restoredThisTick++;s.restoredBlocks++;
                 if(restoredThisTick%12==0)
                     level.sendParticles(ParticleTypes.REVERSE_PORTAL,pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5,6,.45,.45,.45,.07);
             }
@@ -132,7 +132,7 @@ public final class RiftController {
         if(s.restoreIndex<0) {
             s.restoring=false;s.restored=true;s.finished=true;s.snapshots.clear();
             for(var player:level.players()) RiftNetwork.send(player,0f,false,0);
-            if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED");
+            if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored={} destroyed={}",s.restoredBlocks,s.edits);
             for(var player:level.players()) {
                 player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§dМИР ВОССТАНОВЛЕН")));
                 player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§7Разлом закрывается")));
