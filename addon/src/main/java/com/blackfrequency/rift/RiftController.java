@@ -78,6 +78,9 @@ public final class RiftController {
         if(!level.getBlockState(pos).is(Blocks.BEACON)) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
         if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
+        // Normal beacon activation must be accepted only from a real player.
+        // Record it distinctly from the synthetic CI restoration path.
+        if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
         if(pos.distSqr(new BlockPos(s.x,pos.getY(),s.z))>128d*128d) return;
         s.restoring=true;s.restoreIndex=s.snapshots.size()-1;s.restoreTicks=0;s.restoredBlocks=0;s.beaconPos=pos.asLong();s.setDirty();
         for(var player:level.players()) {
