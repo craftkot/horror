@@ -123,6 +123,11 @@ def capture_test_world():
                 time.sleep(2)
             subprocess.run(["scrot","-a","0,0,1280,720",
                 str(ROOT/"client-smoke-artifacts"/"world.png")],check=False)
+            log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+            if "BLACK_FREQUENCY_TEST FINALE_STARTED" not in log_after:
+                print("WORLD_CAPTURE_FAIL: screenshots exist, but accelerated finale not observed",flush=True)
+                return False
+            print("WORLD_CAPTURE: accelerated finale confirmed by server marker",flush=True)
             return True
         time.sleep(2)
     print("WORLD_CAPTURE: no integrated-server marker; preserving diagnostic screenshot",flush=True)
