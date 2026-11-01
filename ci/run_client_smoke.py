@@ -29,7 +29,7 @@ opts.update({
     "executablePath":"java",
     "defaultExecutablePath":"java",
     "gameDirectory":str(MC),
-    "jvmArguments":["-Xms1G","-Xmx6G","-Djava.awt.headless=false"],
+    "jvmArguments":["-Xms1G","-Xmx6G","-Djava.awt.headless=false","-Dblackfrequency.ciTestMode=true","-Dblackfrequency.ciTickStep=2400"],
     "customResolution":True,
     "resolutionWidth":"1280",
     "resolutionHeight":"720",
@@ -75,9 +75,15 @@ def capture_test_world():
         logs=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
         if "Starting integrated minecraft server" in logs or "Starting integrated minecraft server version" in logs:
             print("WORLD_CAPTURE: integrated server detected",flush=True)
-            time.sleep(20)
-            time.sleep(2)
-            subprocess.run(["scrot","-a","0,0,1280,720",str(ROOT/"client-smoke-artifacts"/"world.png")],check=False)
+            # Capture all the accelerated stages rather than just a single late frame.
+            for stage in range(16):
+                if p.poll() is not None:
+                    break
+                subprocess.run(["scrot","-a","0,0,1280,720",
+                    str(ROOT/"client-smoke-artifacts"/f"world-stage-{stage:02d}.png")],check=False)
+                time.sleep(2)
+            subprocess.run(["scrot","-a","0,0,1280,720",
+                str(ROOT/"client-smoke-artifacts"/"world.png")],check=False)
             return True
         time.sleep(2)
     print("WORLD_CAPTURE: no integrated-server marker; preserving diagnostic screenshot",flush=True)
