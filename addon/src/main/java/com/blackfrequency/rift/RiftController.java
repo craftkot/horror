@@ -67,11 +67,67 @@ public final class RiftController {
             return n;
         }
     }
+    /** Right-click a vanilla beacon within 128 blocks of the fracture anchor. */
+    @SubscribeEvent
+    public void onBeacon(PlayerInteractEvent.RightClickBlock event) {
+        if(!(event.getLevel() instanceof ServerLevel level)
+            || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
+        BlockPos pos=event.getPos();
+        if(!level.getBlockState(pos).is(Blocks.BEACON)) return;
+        State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
+        if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
+        if(pos.distSqr(new BlockPos(s.x,pos.getY(),s.z))>128d*128d) return;
+        s.restoring=true;s.restoreIndex=s.snapshots.size()-1;s.restoreTicks=0;s.setDirty();
+        for(var player:level.players()) {
+            player.connection.send(new ClientboundSetTitlesAnimationPacket(10,100,30));
+            player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§5СТАБИЛИЗАЦИЯ")));
+            player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§dМаяк возвращает миру его форму")));
+        }
+        event.setCanceled(true);
+        event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+        if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED");
+    }
+
+    private static void restore(ServerLevel level,State s) {
+        s.restoreTicks++;
+        int restoredThisTick=0,checks=0;
+        while(s.restoreIndex>=0 && restoredThisTick<96 && checks<192) {
+            CompoundTag entry=s.snapshots.get(s.restoreIndex--);
+            BlockPos pos=BlockPos.of(entry.getLong("pos"));
+            checks++;
+            if(!level.hasChunk(pos.getX()>>4,pos.getZ()>>4)) continue;
+            if(!level.getBlockState(pos).isAir()) continue;
+            BlockState original=NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK),entry.getCompound("state"));
+            if(original.isAir()) continue;
+            if(level.setBlock(pos,original,2|16)) {
+                restoredThisTick++;
+                if(restoredThisTick%12==0)
+                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5,6,.45,.45,.45,.07);
+            }
+        }
+        if(s.restoreTicks%10==0) {
+            for(var player:level.players()) {
+                BlockPos p=player.blockPosition();
+                level.sendParticles(ParticleTypes.END_ROD,p.getX()+.5,p.getY()+1.5,p.getZ()+.5,12,3,2,3,.03);
+            }
+        }
+        if(s.restoreIndex<0) {
+            s.restoring=false;s.restored=true;s.finished=true;s.snapshots.clear();
+            if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED");
+            for(var player:level.players()) {
+                player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§dМИР ВОССТАНОВЛЕН")));
+                player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§7Разлом закрывается")));
+            }
+        }
+        s.setDirty();
+    }
+
     @SubscribeEvent
     public void onTick(TickEvent.LevelTickEvent event) {
         if(event.phase != TickEvent.Phase.END || !(event.level instanceof ServerLevel level)
            || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
         State s = level.getDataStorage().computeIfAbsent(State::load, State::new, "blackfrequency_finale");
+        if(s.restoring) { restore(level,s); return; }
         // Keep clients synchronized even on old worlds or after the finale.
         if(level.getGameTime()%(s.started && !s.finished ? 10L : 100L)==0) {
             float progress=s.finished ? 1f : Math.max(0f, Math.min(1f,(s.elapsed-3f*DAY)/(7f*DAY)));
