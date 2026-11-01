@@ -74,14 +74,10 @@ def capture_test_world():
     click(225,328)
     time.sleep(8)
     snap("02-after-singleplayer.png")
-    # World selection: Create New World button at the bottom.
-    click(640,665)
-    time.sleep(8)
-    snap("03-after-create-selection.png")
-    # World creation screen, confirm default settings.
-    click(640,665)
-    time.sleep(4)
-    snap("04-after-create-world.png")
+    # EHTID title screen opens world creation directly; bottom-left button at x400.
+    click(400,665)
+    time.sleep(10)
+    snap("03-after-create-world.png")
     print("WORLD_CAPTURE: requested new disposable singleplayer world",flush=True)
     deadline_world=time.time()+150
     while time.time()<deadline_world and p.poll() is None:
