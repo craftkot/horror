@@ -1,0 +1,53 @@
+name: BLACK FREQUENCY World Integration
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/world-sky-rift]
+    paths:
+      - 'addon/**'
+      - '.github/workflows/world-integration.yml'
+
+jobs:
+  world-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.8'
+      - name: Build addon
+        working-directory: addon
+        run: gradle --no-daemon build
+      - name: Launch disposable Forge world with accelerated narrative
+        working-directory: addon
+        env:
+          JAVA_TOOL_OPTIONS: "-Dblackfrequency.ciTestMode=true -Dblackfrequency.ciTickStep=2400 -Xmx3G"
+        run: |
+          mkdir -p run
+          printf 'eula=true\n' > run/eula.txt
+          printf 'online-mode=false\nspawn-protection=0\nlevel-name=ci-disposable-world\n' > run/server.properties
+          set +e
+          timeout --signal=TERM --kill-after=10s 240s gradle --no-daemon runServer --args='--nogui' > world-test.log 2>&1
+          CODE=$?
+          set -e
+          echo "Server process exit: $CODE"
+          tail -n 100 world-test.log
+          test "$CODE" -eq 124 -o "$CODE" -eq 0
+          grep -q 'BLACK_FREQUENCY_TEST FINALE_STARTED' world-test.log
+          grep -q 'BLACK_FREQUENCY_TEST FRACTURE_PHASE_STARTED' world-test.log
+          grep -q 'BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED' world-test.log
+      - name: Upload logs and crash reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blackfrequency-world-integration
+          if-no-files-found: ignore
+          path: |
+            addon/world-test.log
+            addon/run/logs/**
+            addon/run/crash-reports/**
