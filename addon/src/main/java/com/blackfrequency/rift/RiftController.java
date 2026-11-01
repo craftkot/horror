@@ -54,6 +54,7 @@ public final class RiftController {
             s.restoreIndex=n.getInt("restoreIndex");s.restoreTicks=n.getInt("restoreTicks");s.restoredBlocks=n.getInt("restoredBlocks");s.beaconPos=n.getLong("beaconPos");
             ListTag saved=n.getList("snapshots",Tag.TAG_COMPOUND);
             for(int i=0;i<saved.size();i++) s.snapshots.add(saved.getCompound(i));
+            if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST STATE_LOADED elapsed={} edits={} restored={} restoring={} snapshots={}",s.elapsed,s.edits,s.restored,s.restoring,s.snapshots.size());
             return s;
         }
         @Override public CompoundTag save(CompoundTag n) {
