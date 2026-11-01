@@ -19,6 +19,7 @@ jobs:
     env:
       CF_API_KEY: ${{ secrets.CF_API_KEY }}
       DISPLAY: :99
+      BF_ISOLATED_TEST: "1"
       LIBGL_ALWAYS_SOFTWARE: "1"
       MESA_LOADER_DRIVER_OVERRIDE: llvmpipe
     steps:
@@ -65,9 +66,11 @@ jobs:
           ls -lh client/mods/blackfrequency-*.jar
 
       - name: Download full client mod set
+        if: env.BF_ISOLATED_TEST != '1'
         run: python ci/download_client_mods.py
 
       - name: Apply modpack overrides
+        if: env.BF_ISOLATED_TEST != '1'
         run: |
           mkdir -p client
           if [ -d overrides ]; then cp -a overrides/. client/; fi
