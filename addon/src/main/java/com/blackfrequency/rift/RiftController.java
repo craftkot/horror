@@ -21,8 +21,8 @@ public final class RiftController {
     private static final long TEST_STEP = Boolean.getBoolean("blackfrequency.ciTestMode")
         ? Math.max(1L, Math.min(2400L, Long.getLong("blackfrequency.ciTickStep", 2400L))) : 1L;
     private static final int RADIUS = 48;
-    private static final int EDIT_BUDGET = 64;
-    private static final int MAX_EDITS = 40000;
+    private static final int EDIT_BUDGET = 160;
+    private static final int MAX_EDITS = 95000;
 
     private static final class State extends SavedData {
         long elapsed;
@@ -104,8 +104,8 @@ public final class RiftController {
         }
         s.finaleTicks++;
         // Allow the opening, green silence and sudden return to play before terrain removal.
-        if (s.finaleTicks < 260) { if(s.finaleTicks%20==0)s.setDirty(); return; }
-        if(CI_TEST && s.finaleTicks == 260) LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_PHASE_STARTED");
+        if (s.finaleTicks < 190) { if(s.finaleTicks%20==0)s.setDirty(); return; }
+        if(CI_TEST && s.finaleTicks == 190) LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_PHASE_STARTED");
         int edits=0, checks=0;
         while(edits<EDIT_BUDGET && checks<2048 && !s.finished) {
             if(s.edits>=MAX_EDITS || s.cursorX>RADIUS) {s.finished=true;break;}
@@ -135,7 +135,7 @@ public final class RiftController {
             double faultA=Math.abs(Math.sin(u*1.8+Math.sin(v*1.4)*0.65));
             double faultB=Math.abs(Math.cos(v*1.55-Math.sin(u*1.2)*0.7));
             double pocket=Math.sin(u*0.61+1.2)*Math.cos(v*0.73-0.8);
-            double width=pocket>0.78 ? 0.48 : 0.19;
+            double width=pocket>0.67 ? 0.72 : 0.32;
             boolean fracture=faultA<width || faultB<width*0.77;
             if(!fracture || dx*dx+dz*dz>RADIUS*RADIUS) continue;
             BlockPos pos=new BlockPos(wx,y,wz);
