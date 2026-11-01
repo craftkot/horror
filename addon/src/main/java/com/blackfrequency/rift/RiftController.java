@@ -49,7 +49,7 @@ public final class RiftController {
            || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
         State s = level.getDataStorage().computeIfAbsent(State::load, State::new, "blackfrequency_finale");
         // Keep clients synchronized even on old worlds or after the finale.
-        if(level.getGameTime()%100L==0) {
+        if(level.getGameTime()%(s.started && !s.finished ? 10L : 100L)==0) {
             float progress=s.finished ? 1f : Math.max(0f, Math.min(1f,(s.elapsed-3f*DAY)/(7f*DAY)));
             for(var player : level.players()) RiftNetwork.send(player,progress,s.started || s.finished, s.finaleTicks);
         }
