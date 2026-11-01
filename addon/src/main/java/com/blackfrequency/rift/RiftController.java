@@ -91,6 +91,11 @@ public final class RiftController {
 
     private static void restore(ServerLevel level,State s) {
         s.restoreTicks++;
+        if(s.restoreTicks%40==0 && !s.snapshots.isEmpty()) {
+            int percent=(int)(100d*(s.snapshots.size()-Math.max(0,s.restoreIndex+1))/(double)s.snapshots.size());
+            for(var player:level.players())
+                player.displayClientMessage(Component.literal("§5✦ §dСТАБИЛИЗАЦИЯ §f"+percent+"% §7— восстановлено "+s.restoredBlocks+" блоков"),true);
+        }
         if(s.restoreTicks%10==0) {
             float remaining=s.snapshots.isEmpty()?0f:Math.max(0f,(s.restoreIndex+1f)/s.snapshots.size());
             for(var player:level.players()) RiftNetwork.send(player,remaining,false,0);
