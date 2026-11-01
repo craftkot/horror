@@ -105,7 +105,7 @@ public final class RiftController {
             for(var player:level.players()) RiftNetwork.send(player,remaining,false,0);
         }
         int restoredThisTick=0,checks=0;
-        while(s.restoreIndex>=0 && restoredThisTick<96 && checks<192) {
+        while(s.restoreIndex>=0 && restoredThisTick<12 && checks<48) {
             CompoundTag entry=s.snapshots.get(s.restoreIndex);
             BlockPos pos=BlockPos.of(entry.getLong("pos"));
             // Keep the snapshot queued until its chunk loads. Never silently lose
@@ -138,7 +138,8 @@ public final class RiftController {
                 level.sendParticles(ParticleTypes.END_ROD,p.getX()+.5,p.getY()+1.5,p.getZ()+.5,12,3,2,3,.03);
             }
         }
-        if(s.restoreIndex<0) {
+        // Hold the final stabilization glow long enough to be visible in-game.
+        if(s.restoreIndex<0 && s.restoreTicks>=100) {
             s.restoring=false;s.restored=true;s.finished=true;s.snapshots.clear();
             for(var player:level.players()) RiftNetwork.send(player,0f,false,0);
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored={} destroyed={}",s.restoredBlocks,s.edits);
