@@ -95,10 +95,9 @@ def capture_test_world():
     snap("02-after-singleplayer.png")
     # EHTID title screen opens world creation directly; bottom-left button at x400.
     if os.environ.get("BF_ISOLATED_TEST")=="1":
-        click(640,665)
-        time.sleep(5)
+        # Singleplayer may open Create World directly on a fresh installation.
         snap("02b-world-selection.png")
-        click(640,665)
+        click(400,665)
     else:
         click(400,665)
     time.sleep(10)
