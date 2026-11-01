@@ -265,6 +265,15 @@ public final class RiftController {
                 if(CI_TEST && s.edits==1) LOGGER.info("BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x={} y={} z={}", wx,y,wz);
             }
         }
+        // CI-only rollback exercise; normal gameplay still needs a real beacon.
+        if(CI_TEST && Boolean.getBoolean("blackfrequency.ciExerciseRestoration")
+            && !s.restoring && s.edits>=160 && !s.snapshots.isEmpty()) {
+            s.restoring=true;
+            s.restoreIndex=s.snapshots.size()-1;
+            s.restoreTicks=0;
+            s.beaconPos=new BlockPos(s.x,level.getSeaLevel()+4,s.z).asLong();
+            LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED");
+        }
         // Persist the cursor every tick; restart must not rewind destructive edits.
         s.setDirty();
     }
