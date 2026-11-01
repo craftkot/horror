@@ -20,6 +20,7 @@ import java.io.IOException;
 
 public final class RiftSkyRenderer {
     private static ShaderInstance shader;
+    private static boolean firstVisibleFrameLogged;
 
     @Mod.EventBusSubscriber(modid="blackfrequency", bus=Mod.EventBusSubscriber.Bus.MOD, value=Dist.CLIENT)
     public static final class Registration {
@@ -44,6 +45,10 @@ public final class RiftSkyRenderer {
             if(mc.level==null || mc.player==null) return;
             float strength=RiftClientState.visibleStrength();
             if(strength<=0) return;
+            if(!firstVisibleFrameLogged) {
+                firstVisibleFrameLogged=true;
+                com.mojang.logging.LogUtils.getLogger().info("BLACK_FREQUENCY_RENDER_ACTIVE strength={}",strength);
+            }
             if(shader.getUniform("RiftStrength")!=null)shader.getUniform("RiftStrength").set(strength);
             if(shader.getUniform("GreenPhase")!=null)shader.getUniform("GreenPhase").set(RiftClientState.greenPhase());
             if(shader.getUniform("GameTime")!=null)shader.getUniform("GameTime").set((float)(mc.level.getGameTime()%100000L));
