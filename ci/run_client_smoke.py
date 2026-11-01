@@ -76,8 +76,7 @@ def capture_test_world():
         if "Starting integrated minecraft server" in logs or "Starting integrated minecraft server version" in logs:
             print("WORLD_CAPTURE: integrated server detected",flush=True)
             time.sleep(20)
-            key("Escape")
-            time.sleep(1)
+            time.sleep(2)
             subprocess.run(["scrot","-a","0,0,1280,720",str(ROOT/"client-smoke-artifacts"/"world.png")],check=False)
             return True
         time.sleep(2)
@@ -122,7 +121,11 @@ while time.time()<deadline:
     if window_seen and ready_marker and rift_shader_ready and ready_since and time.time()-ready_since>=30 and p.poll() is None:
         subprocess.run(["bash","-lc","mkdir -p client-smoke-artifacts; scrot -a 0,0,1280,720 client-smoke-artifacts/client.png || true"])
         world_ok=capture_test_world()
-        print("CLIENT_SMOKE_PASS: shader registered; world capture attempted, integrated server="+str(world_ok),flush=True)
+        if not world_ok:
+            print("CLIENT_SMOKE_FAIL: no integrated world; screenshot is diagnostic only",file=sys.stderr)
+            p.terminate()
+            sys.exit(1)
+        print("CLIENT_SMOKE_PASS: shader registered and integrated singleplayer world created.",flush=True)
         p.terminate()
         try: p.wait(timeout=15)
         except subprocess.TimeoutExpired: p.kill()
