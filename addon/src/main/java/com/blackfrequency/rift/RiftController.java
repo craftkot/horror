@@ -77,6 +77,11 @@ public final class RiftController {
             }
             if(s.elapsed >= DAY*10) {
                 s.started=true;s.setDirty();
+                // Anchor the fracture near a living player, not an abandoned world spawn.
+                if (!level.players().isEmpty()) {
+                    BlockPos anchor=level.players().get(0).blockPosition();
+                    s.x=anchor.getX();s.z=anchor.getZ();
+                }
                 for(var player : level.players()) RiftNetwork.send(player,1f,true,0);
                 for(var player : level.players()) {
                     player.connection.send(new ClientboundSetTitlesAnimationPacket(5, 120, 25));
@@ -94,7 +99,14 @@ public final class RiftController {
         while(edits<EDIT_BUDGET && checks<2048 && !s.finished) {
             if(s.edits>=MAX_EDITS || s.cursorX>RADIUS) {s.finished=true;break;}
             int wx=s.x+s.cursorX,wz=s.z+s.cursorZ;
-            if(!level.hasChunk(wx>>4,wz>>4)) break;
+            if(!level.hasChunk(wx>>4,wz>>4)) {
+                // Never force-load chunks for destruction. Skip this column and keep advancing.
+                s.cursorY=level.getMinBuildHeight();
+                s.cursorZ++;
+                if(s.cursorZ>RADIUS){s.cursorZ=-RADIUS;s.cursorX++;}
+                checks++;
+                continue;
+            }
             int y=s.cursorY;
             // Capture the current column before advancing: otherwise its final block
             // is evaluated against the NEXT column's fracture coordinates.
