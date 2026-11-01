@@ -419,7 +419,7 @@ jobs:
           # World generation can take longer than integrated-server startup.
           probe="capture 07-world-entry-check"
           if probe in s:
-              s=s.replace(probe,"sleep 18\\n"+probe,1)
+              s=s.replace(probe,"sleep 18\n"+probe,1)
           p.write_text(s)
           PY
           bash -n "$RUNNER_TEMP/bf-client-smoke.sh"
