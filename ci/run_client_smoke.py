@@ -59,7 +59,13 @@ def capture_test_world():
     def key(k):
         subprocess.run(["xdotool","key","--clearmodifiers",k],check=False)
     def click(x,y):
-        subprocess.run(["xdotool","mousemove",str(x),str(y),"click","1"],check=False)
+        # Hold/release explicitly: some GLFW clients ignore xdotool's fast click.
+        subprocess.run(["xdotool","mousemove","--sync",str(x),str(y)],check=False)
+        time.sleep(0.25)
+        subprocess.run(["xdotool","mousedown","1"],check=False)
+        time.sleep(0.18)
+        subprocess.run(["xdotool","mouseup","1"],check=False)
+        print("WORLD_CAPTURE_INPUT: mouse click",x,y,flush=True)
     shots=ROOT/"client-smoke-artifacts"
     os.makedirs(shots,exist_ok=True)
     window=subprocess.run(["xdotool","search","--onlyvisible","--name","Minecraft"],capture_output=True,text=True).stdout.splitlines()
@@ -69,6 +75,13 @@ def capture_test_world():
         subprocess.run(["xdotool","windowmove",window[-1],"0","0"],check=False)
     def snap(name):
         subprocess.run(["scrot","-a","0,0,1280,720",str(shots/name)],check=False)
+    time.sleep(2)
+    print("WORLD_CAPTURE_INPUT: active window",
+        subprocess.run(["xdotool","getactivewindow","getwindowname"],
+                       capture_output=True,text=True).stdout.strip(),flush=True)
+    print("WORLD_CAPTURE_INPUT: mouse position",
+        subprocess.run(["xdotool","getmouselocation","--shell"],
+                       capture_output=True,text=True).stdout.strip(),flush=True)
     snap("01-main-menu.png")
     # EHTID/STALKER custom title screen: Singleplayer sits on the LEFT, not center.
     click(640,353) if os.environ.get("BF_ISOLATED_TEST")=="1" else click(225,328)
