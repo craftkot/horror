@@ -68,7 +68,9 @@ while time.time()<deadline:
     text=""
     if latest.exists():
         text=latest.read_text(encoding="utf-8",errors="replace")
-    if "BLACK_FREQUENCY_SHADER_READY sky_rift" in text:\n        rift_shader_ready=True\n    if any(x in text for x in fatal_patterns):
+    if "BLACK_FREQUENCY_SHADER_READY sky_rift" in text:
+        rift_shader_ready=True
+    if any(x in text for x in fatal_patterns):
         print("\nCLIENT_SMOKE_FAIL: fatal marker detected",file=sys.stderr)
         break
 
