@@ -58,6 +58,7 @@ latest=MC/"logs"/"latest.log"
 deadline=time.time()+420
 window_seen=False
 ready_marker=False
+rift_shader_ready=False
 ready_since=None
 fatal_patterns=("Mod Loading has failed","LoadingFailedException","ResolutionException",
                 "Mixin apply failed","Exception in thread \"Render thread\"","FATAL")
@@ -67,7 +68,7 @@ while time.time()<deadline:
     text=""
     if latest.exists():
         text=latest.read_text(encoding="utf-8",errors="replace")
-    if any(x in text for x in fatal_patterns):
+    if "BLACK_FREQUENCY_SHADER_READY sky_rift" in text:\n        rift_shader_ready=True\n    if any(x in text for x in fatal_patterns):
         print("\nCLIENT_SMOKE_FAIL: fatal marker detected",file=sys.stderr)
         break
 
@@ -85,9 +86,9 @@ while time.time()<deadline:
             print("Client resource/sound initialization marker reached.",flush=True)
 
     # Survive 30s after renderer/resources are up with a visible window.
-    if window_seen and ready_marker and ready_since and time.time()-ready_since>=30 and p.poll() is None:
+    if window_seen and ready_marker and rift_shader_ready and ready_since and time.time()-ready_since>=30 and p.poll() is None:
         subprocess.run(["bash","-lc","mkdir -p client-smoke-artifacts; scrot -a 0,0,1280,720 client-smoke-artifacts/client.png || true"])
-        print("CLIENT_SMOKE_PASS: client window alive after full resource initialization.",flush=True)
+        print("CLIENT_SMOKE_PASS: client window alive and BLACK FREQUENCY sky shader registered.",flush=True)
         p.terminate()
         try: p.wait(timeout=15)
         except subprocess.TimeoutExpired: p.kill()
