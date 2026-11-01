@@ -67,7 +67,7 @@ public final class RiftController {
         if(!s.started) {
             // Do not accelerate world generation before the test player has entered.
             // An empty integrated server may still be creating spawn chunks.
-            s.elapsed += (CI_TEST && level.players().isEmpty()) ? 1L : TEST_STEP;
+            s.elapsed += (CI_TEST && level.players().isEmpty() && !Boolean.getBoolean("blackfrequency.ciAllowEmptyServer")) ? 1L : TEST_STEP;
             // Narrative beats are delivered as on-screen titles, not chat messages.
             // No manual commands are needed.
             if ((s.elapsed >= DAY*3 && s.elapsed-TEST_STEP < DAY*3) ||
