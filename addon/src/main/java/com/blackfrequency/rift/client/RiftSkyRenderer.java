@@ -39,17 +39,14 @@ public final class RiftSkyRenderer {
             if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_SKY || shader==null) return;
             Minecraft mc=Minecraft.getInstance();
             if(mc.level==null || mc.player==null) return;
-            long days=mc.level.getDayTime()/24000L;
-            if(days<3) return;
-            float strength=Math.min(1f, Math.max(0f,(days-3f)/7f));
+            float strength=RiftClientState.strength();
             if(strength<=0) return;
             if(shader.getUniform("RiftStrength")!=null)shader.getUniform("RiftStrength").set(strength);
             if(shader.getUniform("GameTime")!=null)shader.getUniform("GameTime").set((float)(mc.level.getGameTime()%100000L));
             PoseStack stack=event.getPoseStack();
             stack.pushPose();
             // Rendered relative to the camera, so it stays on the sky instead of moving with terrain.
-            var camera=event.getCamera().getPosition();
-            stack.translate(camera.x,camera.y,camera.z);
+            // Forge's level pose stack is already camera-relative; adding camera coordinates breaks sky alignment.
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();
             RenderSystem.disableDepthTest();
