@@ -20,6 +20,7 @@ jobs:
       CF_API_KEY: ${{ secrets.CF_API_KEY }}
       DISPLAY: :99
       BF_ISOLATED_TEST: "1"
+      BF_TEST_RESTORATION: "1"
       LIBGL_ALWAYS_SOFTWARE: "1"
       MESA_LOADER_DRIVER_OVERRIDE: llvmpipe
     steps:
