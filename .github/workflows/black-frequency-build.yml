@@ -354,6 +354,36 @@ jobs:
           assert 'Math.floorMod' in p and 'BEGIN[a]' in p and 'MIDDLE[b]' in p
           print('PASS: compositional taunt generator compiles')
           PY
+      - name: Apply living-smoke entity and target-only cinematic whisper HUD v0.24
+        run: |
+          python3 -m py_compile black-frequency/patch/v0.24_smoke_hud.py
+          python3 black-frequency/patch/v0.24_smoke_hud.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct
+          root=Path('black-frequency/project')
+          j=root/'src/main/java/com/blackfrequency/hollowsignal'
+          a=root/'src/main/resources/assets/hollowsignal'
+          renderer=(j/'client/GlitchShadowRenderer.java').read_text()
+          fx=(j/'client/ClientSmokeFx.java').read_text()
+          hud=(j/'client/ClientWhisperHud.java').read_text()
+          packet=(j/'network/WhisperPacket.java').read_text()
+          encounters=(j/'world/EntityEncounters.java').read_text()
+          story=(j/'world/StoryAnomalies.java').read_text()
+          assert 'RenderType.entityTranslucent' in renderer
+          assert 'shouldShowName' in renderer and 'return false' in renderer
+          assert 'ParticleTypes.SMOKE' in fx and 'ParticleTypes.ASH' in fx
+          assert 'RenderGuiEvent.Post' in hud and 'drawCenteredString' in hud
+          assert 'NetworkDirection.PLAY_TO_CLIENT' in packet
+          assert 'WhisperPacket.send(player,taunt,1,92)' in encounters
+          assert 'WhisperPacket.send(p,voice' in story
+          assert 'displayClientMessage(Component.literal("§8[Шёпот]' not in encounters
+          for i in range(4):
+              b=(a/f'textures/entity/shadow_smoke_{i}.png').read_bytes()
+              assert b[:8]==bytes([137,80,78,71,13,10,26,10])
+              assert struct.unpack('>II',b[16:24])==(64,64)
+          print('PASS: translucent 4-frame smoke skin, client smoke, server-only HUD phrases')
+          PY
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
@@ -365,8 +395,8 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.23.0
-          path: black-frequency/project/build/libs/hollowsignal-0.23.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.24.0
+          path: black-frequency/project/build/libs/hollowsignal-0.24.0.jar
           if-no-files-found: error
 
       - name: Install graphics stack for real Forge client smoke
@@ -416,6 +446,11 @@ jobs:
           s=s.replace(old_check,new_check)
           s=s.replace("echo 'guiScale:2' > run/options.txt",
                       "printf 'guiScale:2\\ntutorialStep:none\\n' > run/options.txt")
+          # Capture the REAL server-sent whisper HUD while the smoky Watcher is visible.
+          whisper_anchor="capture 15-watcher-entity-in-world"
+          assert s.count(whisper_anchor)==1, "smoke screenshot injection missing"
+          s=s.replace(whisper_anchor,
+              whisper_anchor+"\nsend_chat '/horror whisper'\nsleep 0.9\ncapture 15b-real-smoke-whisper-hud",1)
           # World generation can take longer than integrated-server startup.
           probe="capture 07-world-entry-check"
           if probe in s:
