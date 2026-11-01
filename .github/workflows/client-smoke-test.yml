@@ -3,18 +3,19 @@ name: Forge Client Smoke Test
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, feature/world-sky-rift ]
     paths:
       - "manifest.json"
       - "overrides/**"
       - "ci/download_client_mods.py"
       - "ci/run_client_smoke.py"
       - ".github/workflows/client-smoke-test.yml"
+      - "addon/**"
 
 jobs:
   client-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     env:
       CF_API_KEY: ${{ secrets.CF_API_KEY }}
       DISPLAY: :99
@@ -47,6 +48,21 @@ jobs:
           Xvfb :99 -screen 0 1280x720x24 -ac +extension GLX +render -noreset >xvfb.log 2>&1 &
           sleep 2
           glxinfo -B || true
+
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.8'
+
+      - name: Compile BLACK FREQUENCY
+        working-directory: addon
+        run: gradle --no-daemon build
+
+      - name: Install addon in client mods
+        run: |
+          mkdir -p client/mods
+          cp addon/build/libs/blackfrequency-*.jar client/mods/
+          ls -lh client/mods/blackfrequency-*.jar
 
       - name: Download full client mod set
         run: python ci/download_client_mods.py
