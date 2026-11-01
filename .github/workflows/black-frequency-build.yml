@@ -384,6 +384,37 @@ jobs:
               assert struct.unpack('>II',b[16:24])==(64,64)
           print('PASS: translucent 4-frame smoke skin, client smoke, server-only HUD phrases')
           PY
+      - name: Apply physical bedrock faults and fully animated GPU sky fractures v0.25
+        run: |
+          python3 -m py_compile black-frequency/patch/v0.25_reality_fissures.py
+          python3 black-frequency/patch/v0.25_reality_fissures.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('black-frequency/project')
+          java=root/'src/main/java/com/blackfrequency/hollowsignal'
+          assets=root/'src/main/resources/assets/hollowsignal/shaders'
+          shader=(assets/'program/reality_fracture.fsh').read_text()
+          assert 'for(int branch=0;branch<6;branch++)' in shader
+          assert 'GreenPulse' in shader and 'RedReturn' in shader
+          assert 'segment(p,z,tip)' in shader
+          for name in ('release','green','relapse','aftershock'):
+              o=json.loads((assets/('post/atmosphere_'+name+'.json')).read_text())
+              assert len(o['passes'])==2 and o['passes'][0]['name']=='hollowsignal:reality_fracture'
+          data=(java/'world/FaultJournal.java').read_text()
+          engine=(java/'world/PhysicalFaults.java').read_text()
+          sky=(java/'client/ReleaseVoidSky.java').read_text()
+          assert 'BLOCKS_PER_TICK=72' in engine and 'level.setBlock(pos,Blocks.AIR' in engine
+          assert 'MAX_CHANGES=12000' in data and 'Block.stateById' in data
+          assert 'AFTER_SKY' in sky and 'GL_COLOR_BUFFER_BIT' in sky
+          assert 'FaultJournal.get(server).restore' in (java/'world/PsychologyData.java').read_text()
+          print('PASS: true bedrock faults budget + rollback, shader green/red snap, void-sky event')
+          PY
+      - name: Compile 1.20.1 reality fracture GLSL
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y glslang-tools
+          glslangValidator -S frag black-frequency/project/src/main/resources/assets/hollowsignal/shaders/program/reality_fracture.fsh
       - name: Parse Java 17 and validate anomaly routing
         working-directory: black-frequency/project
         run: |
@@ -395,8 +426,8 @@ jobs:
       - name: Publish JAR
         uses: actions/upload-artifact@v4
         with:
-          name: BLACK-FREQUENCY-Forge-1.20.1-v0.24.0
-          path: black-frequency/project/build/libs/hollowsignal-0.24.0.jar
+          name: BLACK-FREQUENCY-Forge-1.20.1-v0.25.0
+          path: black-frequency/project/build/libs/hollowsignal-0.25.0.jar
           if-no-files-found: error
 
       - name: Install graphics stack for real Forge client smoke
