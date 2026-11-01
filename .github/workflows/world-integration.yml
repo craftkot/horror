@@ -26,7 +26,7 @@ jobs:
       - name: Launch disposable Forge world with accelerated narrative
         working-directory: addon
         env:
-          JAVA_TOOL_OPTIONS: "-Dblackfrequency.ciTestMode=true -Dblackfrequency.ciTickStep=2400 -Xmx3G"
+          JAVA_TOOL_OPTIONS: "-Dblackfrequency.ciTestMode=true -Dblackfrequency.ciTickStep=2400 -Dblackfrequency.ciAllowEmptyServer=true -Xmx3G"
         run: |
           mkdir -p run
           printf 'eula=true\n' > run/eula.txt
