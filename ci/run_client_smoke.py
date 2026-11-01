@@ -164,6 +164,7 @@ def capture_test_world():
                 while time.time()<deadline_restore and p.poll() is None:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     if not restoration_shot and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current:
+                        time.sleep(1.5)  # allow beacon block and title to reach render thread
                         snap("beacon-restoration-active.png")
                         restoration_shot=True
                     if "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" in current:
