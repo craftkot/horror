@@ -70,8 +70,8 @@ def capture_test_world():
     def snap(name):
         subprocess.run(["scrot","-a","0,0,1280,720",str(shots/name)],check=False)
     snap("01-main-menu.png")
-    # Minecraft window at 1280x720. Title screen Singleplayer button.
-    click(640,335)
+    # EHTID/STALKER custom title screen: Singleplayer sits on the LEFT, not center.
+    click(225,328)
     time.sleep(8)
     snap("02-after-singleplayer.png")
     # World selection: Create New World button at the bottom.
