@@ -450,7 +450,12 @@ jobs:
           whisper_anchor="capture 15-watcher-entity-in-world"
           assert s.count(whisper_anchor)==1, "smoke screenshot injection missing"
           s=s.replace(whisper_anchor,
-              whisper_anchor+"\nsend_chat '/horror whisper'\nsleep 0.9\ncapture 15b-real-smoke-whisper-hud",1)
+              whisper_anchor+"\nsend_chat '/hollowsignal whisper'\nsleep 0.9\ncapture 15b-real-smoke-whisper-hud",1)
+          # Test the HUD before teleports, while ordinary terrain is still in view.
+          clear_frame="capture 08-story-day-in-real-world"
+          assert s.count(clear_frame)==1, "HUD terrain capture anchor missing"
+          s=s.replace(clear_frame,
+              clear_frame+"\nsend_chat '/hollowsignal whisper'\nsleep 0.9\ncapture 08b-real-whisper-hud",1)
           # World generation can take longer than integrated-server startup.
           probe="capture 07-world-entry-check"
           if probe in s:
