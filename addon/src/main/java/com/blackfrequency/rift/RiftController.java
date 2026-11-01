@@ -61,6 +61,9 @@ public final class RiftController {
             int wx=s.x+s.cursorX,wz=s.z+s.cursorZ;
             if(!level.hasChunk(wx>>4,wz>>4)) break;
             int y=s.cursorY;
+            // Capture the current column before advancing: otherwise its final block
+            // is evaluated against the NEXT column's fracture coordinates.
+            int dx=s.cursorX,dz=s.cursorZ;
             s.cursorY++;
             if(s.cursorY>=level.getMaxBuildHeight()) {
                 s.cursorY=level.getMinBuildHeight();
@@ -68,7 +71,6 @@ public final class RiftController {
                 if(s.cursorZ>RADIUS){s.cursorZ=-RADIUS;s.cursorX++;}
             }
             checks++;
-            int dx=s.cursorX,dz=s.cursorZ;
             double u=dx/12.0, v=dz/12.0;
             double crack=Math.abs(Math.sin(u*2.1+Math.sin(v*1.7))*Math.cos(v*1.8-Math.sin(u*1.9)));
             if(crack>0.21 || dx*dx+dz*dz>RADIUS*RADIUS) continue;
@@ -76,6 +78,7 @@ public final class RiftController {
             if(level.getBlockState(pos).isAir()) continue;
             if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),2|16)){edits++;s.edits++;}
         }
-        if(level.getGameTime()%20==0 || s.finished)s.setDirty();
+        // Persist the cursor every tick; restart must not rewind destructive edits.
+        s.setDirty();
     }
 }
