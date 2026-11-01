@@ -90,6 +90,10 @@ public final class RiftController {
 
     private static void restore(ServerLevel level,State s) {
         s.restoreTicks++;
+        if(s.restoreTicks%10==0) {
+            float remaining=s.snapshots.isEmpty()?0f:Math.max(0f,(s.restoreIndex+1f)/s.snapshots.size());
+            for(var player:level.players()) RiftNetwork.send(player,remaining,false,0);
+        }
         int restoredThisTick=0,checks=0;
         while(s.restoreIndex>=0 && restoredThisTick<96 && checks<192) {
             CompoundTag entry=s.snapshots.get(s.restoreIndex--);
@@ -113,6 +117,7 @@ public final class RiftController {
         }
         if(s.restoreIndex<0) {
             s.restoring=false;s.restored=true;s.finished=true;s.snapshots.clear();
+            for(var player:level.players()) RiftNetwork.send(player,0f,false,0);
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED");
             for(var player:level.players()) {
                 player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§dМИР ВОССТАНОВЛЕН")));
@@ -130,8 +135,8 @@ public final class RiftController {
         if(s.restoring) { restore(level,s); return; }
         // Keep clients synchronized even on old worlds or after the finale.
         if(level.getGameTime()%(s.started && !s.finished ? 10L : 100L)==0) {
-            float progress=s.finished ? 1f : Math.max(0f, Math.min(1f,(s.elapsed-3f*DAY)/(7f*DAY)));
-            for(var player : level.players()) RiftNetwork.send(player,progress,s.started || s.finished, s.finaleTicks);
+            float progress=s.restored ? 0f : s.finished ? 1f : Math.max(0f, Math.min(1f,(s.elapsed-3f*DAY)/(7f*DAY)));
+            for(var player : level.players()) RiftNetwork.send(player,progress,!s.restored && (s.started || s.finished), s.finaleTicks);
         }
         if(s.finished) return;
         if(!s.initialized) {
