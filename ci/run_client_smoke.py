@@ -29,7 +29,7 @@ opts.update({
     "executablePath":"java",
     "defaultExecutablePath":"java",
     "gameDirectory":str(MC),
-    "jvmArguments":["-Xms1G","-Xmx6G","-Djava.awt.headless=false","-Dblackfrequency.ciTestMode=true","-Dblackfrequency.ciTickStep=2400"],
+    "jvmArguments":["-Xms1G","-Xmx6G","-Djava.awt.headless=false","-Dblackfrequency.ciTestMode=true","-Dblackfrequency.ciTickStep=2400"] + (["-Dblackfrequency.ciExerciseRestoration=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []),
     "customResolution":True,
     "resolutionWidth":"1280",
     "resolutionHeight":"720",
@@ -157,6 +157,22 @@ def capture_test_world():
             else:
                 print("WORLD_CAPTURE: no terrain edit marker during capture window",flush=True)
                 snap("terrain-fracture-not-seen.png")
+            if os.environ.get("BF_TEST_RESTORATION")=="1":
+                deadline_restore=time.time()+80
+                restored=False
+                while time.time()<deadline_restore and p.poll() is None:
+                    current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                    if "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current:
+                        snap("beacon-restoration-active.png")
+                    if "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" in current:
+                        restored=True
+                        break
+                    time.sleep(2)
+                snap("beacon-restoration-finished.png")
+                if not restored:
+                    print("WORLD_CAPTURE_FAIL: restoration did not finish in client",flush=True)
+                    return False
+                print("WORLD_CAPTURE: restoration finished in integrated client",flush=True)
             log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
             if not fracture_seen:
                 print("WORLD_CAPTURE_FAIL: ground fracture never removed a block",flush=True)
