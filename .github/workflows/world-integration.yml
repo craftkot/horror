@@ -62,6 +62,14 @@ jobs:
           assert restored==destroyed, f"Restoration incomplete: {restored}/{destroyed}"
           print(f"BEACON_RESTORATION_VERIFIED {restored}/{destroyed}")
           PY
+          echo 'Restarting disposable server to verify restoration persists'
+          set +e
+          timeout --signal=TERM --kill-after=10s 110s gradle --no-daemon runServer --args='--nogui' > world-restart.log 2>&1
+          RESTART_CODE=$?
+          set -e
+          test "$RESTART_CODE" -eq 124 -o "$RESTART_CODE" -eq 0
+          grep -Eq 'BLACK_FREQUENCY_TEST STATE_LOADED .*restored=true .*restoring=false .*snapshots=0' world-restart.log
+          echo 'BEACON_RESTORATION_RESTART_VERIFIED'
           fi
       - name: Upload logs and crash reports
         if: always()
@@ -71,5 +79,6 @@ jobs:
           if-no-files-found: ignore
           path: |
             addon/world-test.log
+            addon/world-restart.log
             addon/run/logs/**
             addon/run/crash-reports/**
