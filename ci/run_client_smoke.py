@@ -83,6 +83,12 @@ def capture_test_world():
         subprocess.run(["xdotool","getmouselocation","--shell"],
                        capture_output=True,text=True).stdout.strip(),flush=True)
     snap("01-main-menu.png")
+    if os.environ.get("BF_ISOLATED_TEST")=="1":
+        # Fresh vanilla install displays a first-run accessibility welcome overlay.
+        # It must be dismissed before the underlying Singleplayer button can receive clicks.
+        click(640,665)
+        time.sleep(6)
+        snap("01b-after-accessibility-continue.png")
     # EHTID/STALKER custom title screen: Singleplayer sits on the LEFT, not center.
     click(640,353) if os.environ.get("BF_ISOLATED_TEST")=="1" else click(225,328)
     time.sleep(8)
