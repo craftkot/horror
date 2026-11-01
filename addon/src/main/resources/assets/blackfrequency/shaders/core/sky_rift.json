@@ -67,6 +67,14 @@
       "values": [
         0
       ]
+    },
+    {
+      "name": "GreenPhase",
+      "type": "float",
+      "count": 1,
+      "values": [
+        0
+      ]
     }
   ]
 }
