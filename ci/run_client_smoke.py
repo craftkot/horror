@@ -83,7 +83,7 @@ def capture_test_world():
     time.sleep(4)
     snap("04-after-create-world.png")
     print("WORLD_CAPTURE: requested new disposable singleplayer world",flush=True)
-    deadline_world=time.time()+240
+    deadline_world=time.time()+150
     while time.time()<deadline_world and p.poll() is None:
         logs=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
         if "Starting integrated minecraft server" in logs or "Starting integrated minecraft server version" in logs:
