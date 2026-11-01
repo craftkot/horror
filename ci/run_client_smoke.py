@@ -158,6 +158,9 @@ def capture_test_world():
                 print("WORLD_CAPTURE: no terrain edit marker during capture window",flush=True)
                 snap("terrain-fracture-not-seen.png")
             log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+            if not fracture_seen:
+                print("WORLD_CAPTURE_FAIL: ground fracture never removed a block",flush=True)
+                return False
             if "BLACK_FREQUENCY_TEST FINALE_STARTED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: screenshots exist, but accelerated finale not observed",flush=True)
                 return False
