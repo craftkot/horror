@@ -10,6 +10,10 @@ on:
 jobs:
   world-integration:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [fracture, restoration]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +31,11 @@ jobs:
         working-directory: addon
         env:
           JAVA_TOOL_OPTIONS: "-Dblackfrequency.ciTestMode=true -Dblackfrequency.ciTickStep=2400 -Dblackfrequency.ciAllowEmptyServer=true -Xmx3G"
+          BF_TEST_MODE: ${{ matrix.mode }}
         run: |
+          if [ "$BF_TEST_MODE" = "restoration" ]; then
+            export JAVA_TOOL_OPTIONS="$JAVA_TOOL_OPTIONS -Dblackfrequency.ciExerciseRestoration=true"
+          fi
           mkdir -p run
           printf 'eula=true\n' > run/eula.txt
           printf 'online-mode=false\nspawn-protection=0\nlevel-name=ci-disposable-world\n' > run/server.properties
@@ -41,11 +49,15 @@ jobs:
           grep -q 'BLACK_FREQUENCY_TEST FINALE_STARTED' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST FRACTURE_PHASE_STARTED' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED' world-test.log
+          if [ "$BF_TEST_MODE" = "restoration" ]; then
+            grep -q 'BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED' world-test.log
+          fi
       - name: Upload logs and crash reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: blackfrequency-world-integration
+          name: blackfrequency-world-integration-${{ matrix.mode }}
           if-no-files-found: ignore
           path: |
             addon/world-test.log
