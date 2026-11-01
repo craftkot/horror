@@ -160,10 +160,12 @@ def capture_test_world():
             if os.environ.get("BF_TEST_RESTORATION")=="1":
                 deadline_restore=time.time()+80
                 restored=False
+                restoration_shot=False
                 while time.time()<deadline_restore and p.poll() is None:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-                    if "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current:
+                    if not restoration_shot and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current:
                         snap("beacon-restoration-active.png")
+                        restoration_shot=True
                     if "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" in current:
                         restored=True
                         break
