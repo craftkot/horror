@@ -2,6 +2,7 @@
 in vec3 direction;
 uniform float RiftStrength;
 uniform float GameTime;
+uniform float GreenPhase;
 out vec4 fragColor;
 float hash(vec2 p) {return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 vec2 seed(vec2 p) {return vec2(hash(p),hash(p+19.37));}
@@ -26,6 +27,10 @@ void main(){
  float line=1.-smoothstep(.025,.13,d);
  float halo=exp(-d*12.);
  float fade=clamp(RiftStrength,0.,1.);
+ float green=clamp(GreenPhase,0.,1.);
+ line *= (1.0-green);
+ halo *= (1.0-green);
  vec3 color=mix(vec3(.008,.013,.029),vec3(.08,.5,1.),line)+vec3(.04,.18,.32)*halo;
+ color=mix(color,vec3(.002,.018,.009),green);
  fragColor=vec4(color,fade*(.16+.77*line));
 }
