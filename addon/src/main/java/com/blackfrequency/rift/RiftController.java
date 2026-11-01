@@ -14,6 +14,8 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 /** No commands. Ten days after installing this addon in a world, its finale begins. */
 public final class RiftController {
+    private static final org.slf4j.Logger LOGGER = com.mojang.logging.LogUtils.getLogger();
+    private static final boolean CI_TEST = Boolean.getBoolean("blackfrequency.ciTestMode");
     private static final long DAY = 24000L;
     // Only for disposable CI worlds. Never increases Minecraft's global tick rate.
     private static final long TEST_STEP = Boolean.getBoolean("blackfrequency.ciTestMode")
@@ -82,6 +84,7 @@ public final class RiftController {
             }
             if(s.elapsed >= DAY*10) {
                 s.started=true;s.setDirty();
+                if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST FINALE_STARTED");
                 // Anchor the fracture near a living player, not an abandoned world spawn.
                 if (!level.players().isEmpty()) {
                     BlockPos anchor=level.players().get(0).blockPosition();
@@ -100,6 +103,7 @@ public final class RiftController {
         s.finaleTicks++;
         // Allow the opening, green silence and sudden return to play before terrain removal.
         if (s.finaleTicks < 260) { if(s.finaleTicks%20==0)s.setDirty(); return; }
+        if(CI_TEST && s.finaleTicks == 260) LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_PHASE_STARTED");
         int edits=0, checks=0;
         while(edits<EDIT_BUDGET && checks<2048 && !s.finished) {
             if(s.edits>=MAX_EDITS || s.cursorX>RADIUS) {s.finished=true;break;}
@@ -128,7 +132,10 @@ public final class RiftController {
             if(crack>0.21 || dx*dx+dz*dz>RADIUS*RADIUS) continue;
             BlockPos pos=new BlockPos(wx,y,wz);
             if(level.getBlockState(pos).isAir()) continue;
-            if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),2|16)){edits++;s.edits++;}
+            if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),2|16)){
+                edits++;s.edits++;
+                if(CI_TEST && s.edits==1) LOGGER.info("BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x={} y={} z={}", wx,y,wz);
+            }
         }
         // Persist the cursor every tick; restart must not rewind destructive edits.
         s.setDirty();
