@@ -51,6 +51,8 @@ public final class RiftSkyRenderer {
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();
             RenderSystem.disableDepthTest();
+            // The camera is INSIDE the sky cube; back-face culling would hide its walls.
+            RenderSystem.disableCull();
             RenderSystem.depthMask(false);
             RenderSystem.setShader(() -> shader);
             RenderSystem.setShaderColor(1f,1f,1f,1f);
@@ -66,6 +68,7 @@ public final class RiftSkyRenderer {
             BufferUploader.drawWithShader(bb.end());
             RenderSystem.depthMask(true);
             RenderSystem.enableDepthTest();
+            RenderSystem.enableCull();
             RenderSystem.disableBlend();
             stack.popPose();
         }
