@@ -6,6 +6,15 @@ import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.nbt.NbtUtils;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -29,7 +38,9 @@ public final class RiftController {
         int x, z, cursorX=-RADIUS, cursorZ=-RADIUS, cursorY;
         int edits;
         int finaleTicks;
-        boolean started, finished, initialized;
+        boolean started, finished, initialized, restoring, restored;
+        int restoreIndex, restoreTicks;
+        final List<CompoundTag> snapshots = new ArrayList<>();
         static State load(CompoundTag n) {
             State s = new State();
             s.elapsed=n.getLong("elapsed");
@@ -38,6 +49,10 @@ public final class RiftController {
             s.edits=n.getInt("edits");s.finaleTicks=n.getInt("finaleTicks");
             s.started=n.getBoolean("started");s.finished=n.getBoolean("finished");
             s.initialized=n.getBoolean("initialized");
+            s.restoring=n.getBoolean("restoring");s.restored=n.getBoolean("restored");
+            s.restoreIndex=n.getInt("restoreIndex");s.restoreTicks=n.getInt("restoreTicks");
+            ListTag saved=n.getList("snapshots",Tag.TAG_COMPOUND);
+            for(int i=0;i<saved.size();i++) s.snapshots.add(saved.getCompound(i));
             return s;
         }
         @Override public CompoundTag save(CompoundTag n) {
@@ -45,6 +60,10 @@ public final class RiftController {
             n.putInt("cx",cursorX);n.putInt("cz",cursorZ);n.putInt("cy",cursorY);
             n.putInt("edits",edits);n.putInt("finaleTicks",finaleTicks);n.putBoolean("started",started);
             n.putBoolean("finished",finished);n.putBoolean("initialized",initialized);
+            n.putBoolean("restoring",restoring);n.putBoolean("restored",restored);
+            n.putInt("restoreIndex",restoreIndex);n.putInt("restoreTicks",restoreTicks);
+            ListTag saved=new ListTag();for(CompoundTag tag:snapshots)saved.add(tag.copy());
+            n.put("snapshots",saved);
             return n;
         }
     }
@@ -163,8 +182,13 @@ public final class RiftController {
             boolean fracture=faultA<width || faultB<width*0.77;
             if(!fracture || dx*dx+dz*dz>RADIUS*RADIUS) continue;
             BlockPos pos=new BlockPos(wx,y,wz);
-            if(level.getBlockState(pos).isAir()) continue;
+            BlockState original=level.getBlockState(pos);
+            if(original.isAir() || original.hasBlockEntity()) continue;
             if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),2|16)){
+                CompoundTag snapshot=new CompoundTag();
+                snapshot.putLong("pos",pos.asLong());
+                snapshot.put("state",NbtUtils.writeBlockState(original));
+                s.snapshots.add(snapshot);
                 edits++;s.edits++;
                 if(CI_TEST && s.edits==1) LOGGER.info("BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x={} y={} z={}", wx,y,wz);
             }
