@@ -131,6 +131,28 @@ public final class RiftController {
         }
     }
 
+    /**
+     * Keep the naturally generated recovery beacon out of explosion block lists.
+     * Unlike a player-owned beacon it must never become free explosion loot.
+     * Filtering the affected list leaves the rest of the explosion untouched.
+     */
+    private static boolean protectRecoveryBeaconFromExplosion(List<BlockPos> affected,long beaconPos) {
+        return beaconPos!=Long.MIN_VALUE && affected.removeIf(pos -> pos.asLong()==beaconPos);
+    }
+
+    @SubscribeEvent
+    public void onRecoveryBeaconExplosion(net.minecraftforge.event.level.ExplosionEvent.Detonate event) {
+        if(!(event.getLevel() instanceof ServerLevel level)
+            || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)
+            || event.getAffectedBlocks().isEmpty()) return;
+        State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
+        if(!s.started) return;
+        // No chunk queries or terrain edits: the explosion has already selected
+        // loaded affected blocks, and we only remove the protected beacon.
+        if(protectRecoveryBeaconFromExplosion(event.getAffectedBlocks(),s.naturalBeaconPos)
+            && CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_EXPLOSION_PROTECTED");
+    }
+
     /** Right-click a vanilla beacon within 128 blocks of the fracture anchor. */
     @SubscribeEvent
     public void onBeacon(PlayerInteractEvent.RightClickBlock event) {
@@ -213,6 +235,15 @@ public final class RiftController {
                     }
                     s.naturalBeaconPos=pos.asLong();
                     s.setDirty();
+                    if(CI_TEST) {
+                        // Deterministic list-filter regression. This is not a
+                        // substitute for a live TNT/creeper explosion test.
+                        List<BlockPos> affected=new ArrayList<>(List.of(pos,pos.above()));
+                        if(!protectRecoveryBeaconFromExplosion(affected,s.naturalBeaconPos)
+                            || affected.size()!=1 || !affected.get(0).equals(pos.above()))
+                            throw new IllegalStateException("CI explosion beacon protection failed");
+                        LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_EXPLOSION_FILTER_VERIFIED");
+                    }
                     // In the disposable client test, remove the first beacon to
                     // exercise the same recovery path as a player mining it.
                     if(CI_TEST && Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest")) {
