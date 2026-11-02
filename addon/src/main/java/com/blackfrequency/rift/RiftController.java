@@ -135,36 +135,45 @@ public final class RiftController {
                 s.restoreScan--;
                 continue;
             }
-            // Swap a processed entry with the end of the pending prefix.
-            // This is O(1), unlike removing entries from a 95k-element list,
-            // and keeps all unloaded entries available across server restarts.
+            // Only retire a snapshot after a successful write or a deliberate
+            // preservation decision. A failed setBlock must remain pending so
+            // another tick (or a server restart) can retry without data loss.
+            BlockState current=level.getBlockState(pos);
+            boolean flowingFluid=(current.is(Blocks.WATER) || current.is(Blocks.LAVA))
+                && !current.getFluidState().isSource();
+            if(!current.isAir() && !flowingFluid) {
+                s.skippedOccupied++;
+            } else {
+                BlockState original=NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK),entry.getCompound("state"));
+                if(!original.isAir()) {
+                    // Simulate one rejected write in the disposable integration
+                    // world to prove that the snapshot survives and is retried.
+                    boolean testWriteFailure=CI_TEST
+                        && Boolean.getBoolean("blackfrequency.ciRestoreWriteFailureTest")
+                        && s.restoreTicks==1 && checks==1;
+                    if(testWriteFailure || !level.setBlock(pos,original,2|16)) {
+                        if(testWriteFailure)
+                            LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_WRITE_DEFERRED x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
+                        s.restoreScan--;
+                        continue;
+                    }
+                    restoredThisTick++;s.restoredBlocks++;
+                    if(CI_TEST && flowingFluid)
+                        LOGGER.info("BLACK_FREQUENCY_TEST FLOWING_FLUID_REPLACED x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
+                    if(CI_TEST && Boolean.getBoolean("blackfrequency.ciDeferredChunkTest")
+                        && s.restoredBlocks==1 && s.restoreIndex>=0)
+                        LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_RESTORATION_PROGRESS pending={} restored={}",s.restoreIndex+1,s.restoredBlocks);
+                    if(restoredThisTick%12==0)
+                        level.sendParticles(ParticleTypes.REVERSE_PORTAL,pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5,6,.45,.45,.45,.07);
+                }
+            }
+            // O(1) swap keeps all still-pending entries in [0,restoreIndex].
             if(candidate!=s.restoreIndex) {
                 s.snapshots.set(candidate,s.snapshots.get(s.restoreIndex));
                 s.snapshots.set(s.restoreIndex,entry);
             }
             s.restoreIndex--;
             if(s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
-            // Preserve blocks placed (or moved) into the fissure after damage.
-            // Count them so the UI never claims they were restored by the mod.
-            BlockState current=level.getBlockState(pos);
-            // Flowing water/lava can spill into a fissure after terrain removal.
-            // Restore the saved terrain through flowing fluids, but preserve
-            // player-placed solid blocks and liquid SOURCE blocks.
-            boolean flowingFluid=(current.is(Blocks.WATER) || current.is(Blocks.LAVA))
-                && !current.getFluidState().isSource();
-            if(!current.isAir() && !flowingFluid) {s.skippedOccupied++;continue;}
-            BlockState original=NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK),entry.getCompound("state"));
-            if(original.isAir()) continue;
-            if(level.setBlock(pos,original,2|16)) {
-                restoredThisTick++;s.restoredBlocks++;
-                if(CI_TEST && flowingFluid)
-                    LOGGER.info("BLACK_FREQUENCY_TEST FLOWING_FLUID_REPLACED x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
-                if(CI_TEST && Boolean.getBoolean("blackfrequency.ciDeferredChunkTest")
-                    && s.restoredBlocks==1 && s.restoreIndex>=0)
-                    LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_RESTORATION_PROGRESS pending={} restored={}",s.restoreIndex+1,s.restoredBlocks);
-                if(restoredThisTick%12==0)
-                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5,6,.45,.45,.45,.07);
-            }
         }
         if(s.restoreTicks%4==0) {
             BlockPos beacon=BlockPos.of(s.beaconPos);
