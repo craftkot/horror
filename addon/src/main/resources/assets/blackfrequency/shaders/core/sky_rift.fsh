@@ -48,6 +48,15 @@ void main(){
   branches=max(branches,window*(1.-smoothstep(.010,.029,dist)));
   branchGlow=max(branchGlow,window*exp(-dist*27.));
  }
+ // A separate, high-altitude fracture keeps the catastrophe visible when
+ // the main tear slips behind hills. Angular harmonics stay seamless across
+ // the longitude wrap, and this adds no more Voronoi cell searches.
+ float upperY=.43+.14*sin(3.*longitude-t*.075+1.4)
+             +.045*sin(11.*longitude+t*.17);
+ float upperDistance=abs(n.y-upperY-.016*sin(41.*longitude-t*.39));
+ float upperCore=1.-smoothstep(.014,.040,upperDistance);
+ float upperGlow=exp(-upperDistance*15.);
+ float upperCorona=exp(-upperDistance*6.);
  // Sparse fine filaments, not the previous full-screen Voronoi patchwork.
  // Three 3x3 cell searches instead of nine: 27 vs 81 cell evaluations.
  vec3 weights=pow(abs(n),vec3(4.));
@@ -58,13 +67,14 @@ void main(){
  vec3 background=vec3(.006,.003,.014);
  vec3 violet=vec3(.16,.032,.26);
  vec3 edge=vec3(.72,.24,1.0);
- vec3 color=background+violet*corona*.24;
- color+=edge*(spineGlow*.96+branchGlow*.78+filaments*.07)*pulse;
+ vec3 color=background+violet*(corona*.24+upperCorona*.19);
+ color+=edge*(spineGlow*.96+branchGlow*.78+upperGlow*.80+filaments*.07)*pulse;
  // A near-black interior makes the central fracture read as an opening.
  color=mix(color,vec3(.0003,.00015,.001),spineCore*.98);
  color=mix(color,vec3(.0003,.00015,.001),branches*.90);
+ color=mix(color,vec3(.0003,.00015,.001),upperCore*.96);
  // The green transition is a separate phase, not a persistent tint.
  color=mix(color,vec3(.002,.011,.009),green);
- float opacity=clamp(f*(.87+.06*filaments+.12*spineCore),0.,.99);
+ float opacity=clamp(f*(.87+.06*filaments+.12*max(spineCore,upperCore)),0.,.99);
  fragColor=vec4(color,opacity);
 }
