@@ -163,8 +163,17 @@ public final class RiftController {
                     int y=level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,x,z);
                     if(y<=level.getMinBuildHeight() || y>=level.getMaxBuildHeight()-2) continue;
                     BlockPos pos=new BlockPos(x,y,z);
+                    // Motion-blocking heightmaps can stop at a solid block below
+                    // a thin snow layer. Never replace the snow: put the beacon
+                    // in free air above it, provided the snow rests on solid ground.
+                    if(level.getBlockState(pos).is(Blocks.SNOW)) pos=pos.above();
+                    if(pos.getY()>=level.getMaxBuildHeight()-1) continue;
                     BlockState support=level.getBlockState(pos.below());
-                    if(!support.blocksMotion() || !support.getFluidState().isEmpty()
+                    boolean supportedSnow=support.is(Blocks.SNOW)
+                        && level.getBlockState(pos.below(2)).blocksMotion()
+                        && level.getBlockState(pos.below(2)).getFluidState().isEmpty();
+                    if((!support.blocksMotion() && !supportedSnow)
+                        || !support.getFluidState().isEmpty()
                         || !level.getBlockState(pos).isAir()
                         || !level.getBlockState(pos.above()).isAir()) continue;
                     if(!level.setBlock(pos,Blocks.BEACON.defaultBlockState(),3)) continue;
