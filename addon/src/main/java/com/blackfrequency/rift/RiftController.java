@@ -474,6 +474,9 @@ public final class RiftController {
             else
                 LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED");
         }
+        // The CI server can request recovery before this tick's fracture scan.
+        // Never append more destroyed blocks after the restoration cursor is set.
+        if(s.restoring) { s.setDirty(); return; }
         // The fracture can remain open for days; stop terrain edits once complete,
         // but only after the bounded gravity anomalies above have been processed.
         if(s.finished) {
