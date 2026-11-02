@@ -25,9 +25,11 @@ void main(){
  float spineY=.12+.28*sin(2.*longitude+t*.09)
               +.09*sin(7.*longitude-t*.13)
               +.02*sin(19.*longitude+t*.21);
- float spineDistance=abs(n.y-spineY);
- float spineCore=1.-smoothstep(.011,.028,spineDistance);
- float spineGlow=exp(-spineDistance*23.);
+ float distortion=.018*sin(33.*longitude+4.*n.y+t*.61)
+                 +.010*sin(79.*longitude-19.*n.y-t*.43);
+ float spineDistance=abs(n.y-spineY-distortion);
+ float spineCore=1.-smoothstep(.016,.043,spineDistance);
+ float spineGlow=exp(-spineDistance*17.);
  float corona=exp(-spineDistance*7.);
  // Five finite side fractures grow from the main tear. Wrapped angular
  // distance avoids a discontinuity where longitude changes sign.
@@ -42,9 +44,9 @@ void main(){
              +.09*sin(7.*anchor-t*.13)
              +.02*sin(19.*anchor+t*.21);
   float branchY=root+side*.43*along+.032*sin(along*15.+t*.27+float(i));
-  float dist=abs(n.y-branchY);
-  branches=max(branches,window*(1.-smoothstep(.006,.018,dist)));
-  branchGlow=max(branchGlow,window*exp(-dist*37.));
+  float dist=abs(n.y-branchY-.016*sin(along*39.+t*.5+float(i)*2.));
+  branches=max(branches,window*(1.-smoothstep(.010,.029,dist)));
+  branchGlow=max(branchGlow,window*exp(-dist*27.));
  }
  // Sparse fine filaments, not the previous full-screen Voronoi patchwork.
  // Three 3x3 cell searches instead of nine: 27 vs 81 cell evaluations.
@@ -55,14 +57,14 @@ void main(){
  float pulse=.86+.14*sin(t*2.7+longitude*11.);
  vec3 background=vec3(.006,.003,.014);
  vec3 violet=vec3(.16,.032,.26);
- vec3 edge=vec3(.65,.19,.98);
+ vec3 edge=vec3(.72,.24,1.0);
  vec3 color=background+violet*corona*.24;
- color+=edge*(spineGlow*.78+branchGlow*.52+filaments*.11)*pulse;
+ color+=edge*(spineGlow*.96+branchGlow*.78+filaments*.07)*pulse;
  // A near-black interior makes the central fracture read as an opening.
  color=mix(color,vec3(.0003,.00015,.001),spineCore*.98);
  color=mix(color,vec3(.0003,.00015,.001),branches*.90);
  // The green transition is a separate phase, not a persistent tint.
  color=mix(color,vec3(.002,.011,.009),green);
- float opacity=clamp(f*(.82+.10*filaments+.17*spineCore),0.,.99);
+ float opacity=clamp(f*(.87+.06*filaments+.12*spineCore),0.,.99);
  fragColor=vec4(color,opacity);
 }
