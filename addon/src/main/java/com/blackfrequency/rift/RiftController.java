@@ -376,56 +376,9 @@ public final class RiftController {
                 }
             }
         }
-        // The fracture can remain open for days; stop terrain edits once complete,
-        // but only after the bounded gravity anomalies above have been processed.
-        if(s.finished) return;
-        // Allow the opening, green silence and sudden return to play before terrain removal.
-        if (s.finaleTicks < 190) { if(s.finaleTicks%20==0)s.setDirty(); return; }
-        if(CI_TEST && s.finaleTicks == 190) LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_PHASE_STARTED");
-        int edits=0, checks=0;
-        while(edits<EDIT_BUDGET && checks<2048 && !s.finished) {
-            if(s.edits>=MAX_EDITS || s.cursorX>RADIUS) {s.finished=true;break;}
-            int wx=s.x+s.cursorX,wz=s.z+s.cursorZ;
-            if(!level.hasChunk(wx>>4,wz>>4)) {
-                // Never force-load chunks for destruction. Skip this column and keep advancing.
-                s.cursorY=level.getMinBuildHeight();
-                s.cursorZ++;
-                if(s.cursorZ>RADIUS){s.cursorZ=-RADIUS;s.cursorX++;}
-                checks++;
-                continue;
-            }
-            int y=s.cursorY;
-            // Capture the current column before advancing: otherwise its final block
-            // is evaluated against the NEXT column's fracture coordinates.
-            int dx=s.cursorX,dz=s.cursorZ;
-            s.cursorY++;
-            if(s.cursorY>=level.getMaxBuildHeight()) {
-                s.cursorY=level.getMinBuildHeight();
-                s.cursorZ++;
-                if(s.cursorZ>RADIUS){s.cursorZ=-RADIUS;s.cursorX++;}
-            }
-            checks++;
-            double u=dx/12.0, v=dz/12.0;
-            // Intersecting winding faults, with occasional broad void openings.
-            // Natural bedrock is deliberately included: the fissures reach world bottom.
-            double faultA=Math.abs(Math.sin(u*1.8+Math.sin(v*1.4)*0.65));
-            double faultB=Math.abs(Math.cos(v*1.55-Math.sin(u*1.2)*0.7));
-            double pocket=Math.sin(u*0.61+1.2)*Math.cos(v*0.73-0.8);
-            double width=pocket>0.67 ? 0.72 : 0.32;
-            boolean fracture=faultA<width || faultB<width*0.77;
-            if(!fracture || dx*dx+dz*dz>RADIUS*RADIUS) continue;
-            BlockPos pos=new BlockPos(wx,y,wz);
-            BlockState original=level.getBlockState(pos);
-            if(original.isAir() || original.hasBlockEntity()) continue;
-            if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),2|16)){
-                CompoundTag snapshot=new CompoundTag();
-                snapshot.putLong("pos",pos.asLong());
-                snapshot.put("state",NbtUtils.writeBlockState(original));
-                s.snapshots.add(snapshot);
-                edits++;s.edits++;
-                if(CI_TEST && s.edits==1) LOGGER.info("BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x={} y={} z={}", wx,y,wz);
-            }
-        }
+        // Recovery must remain available after the last terrain edit: a beacon
+        // may not find safe ground until a player returns to a loaded chunk.
+        // These checks never generate or force-load terrain.
         // Production recovery path: spawn a physical beacon in an existing loaded
         // chunk near a player. Never replace terrain or force-generate chunks.
         if(s.edits>=160 && s.naturalBeaconPos==Long.MIN_VALUE
@@ -520,6 +473,59 @@ public final class RiftController {
                 LOGGER.info("BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER x={} y={} z={}",demoPos.getX(),demoPos.getY(),demoPos.getZ());
             else
                 LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED");
+        }
+        // The fracture can remain open for days; stop terrain edits once complete,
+        // but only after the bounded gravity anomalies above have been processed.
+        if(s.finished) {
+            if(s.finaleTicks%20==0)s.setDirty();
+            return;
+        }
+        // Allow the opening, green silence and sudden return to play before terrain removal.
+        if (s.finaleTicks < 190) { if(s.finaleTicks%20==0)s.setDirty(); return; }
+        if(CI_TEST && s.finaleTicks == 190) LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_PHASE_STARTED");
+        int edits=0, checks=0;
+        while(edits<EDIT_BUDGET && checks<2048 && !s.finished) {
+            if(s.edits>=MAX_EDITS || s.cursorX>RADIUS) {s.finished=true;break;}
+            int wx=s.x+s.cursorX,wz=s.z+s.cursorZ;
+            if(!level.hasChunk(wx>>4,wz>>4)) {
+                // Never force-load chunks for destruction. Skip this column and keep advancing.
+                s.cursorY=level.getMinBuildHeight();
+                s.cursorZ++;
+                if(s.cursorZ>RADIUS){s.cursorZ=-RADIUS;s.cursorX++;}
+                checks++;
+                continue;
+            }
+            int y=s.cursorY;
+            // Capture the current column before advancing: otherwise its final block
+            // is evaluated against the NEXT column's fracture coordinates.
+            int dx=s.cursorX,dz=s.cursorZ;
+            s.cursorY++;
+            if(s.cursorY>=level.getMaxBuildHeight()) {
+                s.cursorY=level.getMinBuildHeight();
+                s.cursorZ++;
+                if(s.cursorZ>RADIUS){s.cursorZ=-RADIUS;s.cursorX++;}
+            }
+            checks++;
+            double u=dx/12.0, v=dz/12.0;
+            // Intersecting winding faults, with occasional broad void openings.
+            // Natural bedrock is deliberately included: the fissures reach world bottom.
+            double faultA=Math.abs(Math.sin(u*1.8+Math.sin(v*1.4)*0.65));
+            double faultB=Math.abs(Math.cos(v*1.55-Math.sin(u*1.2)*0.7));
+            double pocket=Math.sin(u*0.61+1.2)*Math.cos(v*0.73-0.8);
+            double width=pocket>0.67 ? 0.72 : 0.32;
+            boolean fracture=faultA<width || faultB<width*0.77;
+            if(!fracture || dx*dx+dz*dz>RADIUS*RADIUS) continue;
+            BlockPos pos=new BlockPos(wx,y,wz);
+            BlockState original=level.getBlockState(pos);
+            if(original.isAir() || original.hasBlockEntity()) continue;
+            if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),2|16)){
+                CompoundTag snapshot=new CompoundTag();
+                snapshot.putLong("pos",pos.asLong());
+                snapshot.put("state",NbtUtils.writeBlockState(original));
+                s.snapshots.add(snapshot);
+                edits++;s.edits++;
+                if(CI_TEST && s.edits==1) LOGGER.info("BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x={} y={} z={}", wx,y,wz);
+            }
         }
         // Persist the cursor every tick; restart must not rewind destructive edits.
         s.setDirty();
