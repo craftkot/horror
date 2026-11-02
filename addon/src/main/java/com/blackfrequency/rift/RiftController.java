@@ -213,20 +213,30 @@ public final class RiftController {
             for (var player : level.players()) {
                 if (player.isCreative() || player.isSpectator()) continue;
                 double px=player.getX(), pz=player.getZ();
+                // Terrain edits are limited to RADIUS. Gravity must not follow
+                // players across the entire Overworld after they leave the rift.
+                double ax=px-s.x, az=pz-s.z;
+                double distanceSquared=ax*ax+az*az;
+                final double outerRadius=RADIUS+16.0;
+                if(distanceSquared>=outerRadius*outerRadius) continue;
+                // Fade impulses over the outer 16 blocks instead of introducing
+                // a sudden velocity discontinuity at the anomaly boundary.
+                double fade=Math.min(1.0,Math.max(0.0,
+                    (outerRadius-Math.sqrt(distanceSquared))/16.0));
                 double zone=Math.sin(px*.115+Math.sin(s.finaleTicks*.011)*1.8)
                             *Math.cos(pz*.125-s.finaleTicks*.008);
                 if(zone > .42) {
                     var v=player.getDeltaMovement();
-                    // Reduced gravity, occasional sideways shear, maximum safe vertical speed.
-                    double lift=Math.max(.045, Math.min(.19, (.11+zone*.07)));
-                    double dx=Math.sin(pz*.14+s.finaleTicks*.022)*.035;
-                    double dz=Math.cos(px*.13-s.finaleTicks*.018)*.035;
+                    double lift=Math.max(.045,Math.min(.19,.11+zone*.07))*fade;
+                    double dx=Math.sin(pz*.14+s.finaleTicks*.022)*.035*fade;
+                    double dz=Math.cos(px*.13-s.finaleTicks*.018)*.035*fade;
                     player.setDeltaMovement(v.x+dx,Math.min(.43,v.y+lift),v.z+dz);
                     player.hurtMarked=true;
-                    player.fallDistance=0;
+                    if(fade>.25) player.fallDistance=0;
                 } else if (zone < -.68) {
                     var v=player.getDeltaMovement();
-                    player.setDeltaMovement(v.x*.94,Math.max(-.55,v.y-.09),v.z*.94);
+                    double drag=1.0-.06*fade;
+                    player.setDeltaMovement(v.x*drag,Math.max(-.55,v.y-.09*fade),v.z*drag);
                     player.hurtMarked=true;
                 }
             }
