@@ -169,9 +169,12 @@ def capture_test_world():
                 # Capture the real sky shader unobstructed by the HUD and treetops.
                 # Do this before beacon teleport/aiming; restore camera and HUD so
                 # the actual player right-click regression remains unaffected.
-                if not sky_shot and stage>=18:
+                if not sky_shot and stage>=12:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-                    if "BLACK_FREQUENCY_RENDER_ACTIVE" in current:
+                    # Never move the camera after the test teleports the player
+                    # toward the beacon: real mouse input must retain its aim.
+                    if ("BLACK_FREQUENCY_RENDER_ACTIVE" in current
+                            and "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in current):
                         key("F1")
                         time.sleep(0.2)
                         try:

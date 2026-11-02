@@ -611,8 +611,11 @@ public final class RiftController {
                         for(int dy=1;dy<=3;dy++)
                             level.setBlock(floor.above(dy),Blocks.AIR.defaultBlockState(),3);
                     }
+                    // Aim the CI player at the beacon centre from a closer,
+                    // unobstructed position. The previous 3-block standoff could
+                    // leave the crosshair just outside its hitbox on random terrain.
                     demoPlayer.teleportTo(level,demoPos.getX()+.5,demoPos.getY(),
-                        demoPos.getZ()-2.5,0f,20f);
+                        demoPos.getZ()-1.75,0f,27f);
                 } else if(playerInteractionTest) {
                     // Legacy fixture for testing a separately placed beacon.
                     int surface=level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,s.x,s.z);
