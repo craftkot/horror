@@ -201,7 +201,8 @@ public final class RiftController {
             float progress=s.restored ? 0f : s.finished ? 1f : Math.max(0f, Math.min(1f,(s.elapsed-3f*DAY)/(7f*DAY)));
             for(var player : level.players()) RiftNetwork.send(player,progress,!s.restored && (s.started || s.finished), s.finaleTicks);
         }
-        if(s.finished) return;
+        // Destruction may be complete while the world is still fractured.
+        // Keep the gravity field alive until a beacon starts restoration.
         if(!s.initialized) {
             s.initialized=true;
             BlockPos spawn=level.getSharedSpawnPos();s.x=spawn.getX();s.z=spawn.getZ();
@@ -280,6 +281,9 @@ public final class RiftController {
                 }
             }
         }
+        // The fracture can remain open for days; stop terrain edits once complete,
+        // but only after the bounded gravity anomalies above have been processed.
+        if(s.finished) return;
         // Allow the opening, green silence and sudden return to play before terrain removal.
         if (s.finaleTicks < 190) { if(s.finaleTicks%20==0)s.setDirty(); return; }
         if(CI_TEST && s.finaleTicks == 190) LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_PHASE_STARTED");
