@@ -335,7 +335,18 @@ public final class RiftController {
                     // Disposable CI world: aim the actual player at a real beacon.
                     // The test client must issue a right mouse click; this server
                     // fixture alone must NOT start restoration.
-                    int surface=level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,s.x,s.z);
+                    int surface=level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,s.x,s.z);
+                    // The old test teleported above foliage and the player
+                    // fell before clicking; the beacon was visibly above the
+                    // crosshair. Keep a level, unobstructed 3x5 platform in the
+                    // disposable CI world so the click ray actually hits it.
+                    for(int dz=0;dz<=4;dz++) for(int dx=-1;dx<=1;dx++) {
+                        BlockPos floor=new BlockPos(s.x+dx,surface,s.z+dz);
+                        if(!level.hasChunk(floor.getX()>>4,floor.getZ()>>4)) continue;
+                        level.setBlock(floor,Blocks.STONE.defaultBlockState(),3);
+                        for(int dy=1;dy<=3;dy++)
+                            level.setBlock(floor.above(dy),Blocks.AIR.defaultBlockState(),3);
+                    }
                     demoPlayer.teleportTo(level,s.x+.5,surface+1,s.z+.5,0f,0f);
                     demoPos=new BlockPos(s.x,surface+2,s.z+3);
                 } else {
