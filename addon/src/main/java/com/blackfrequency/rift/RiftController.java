@@ -534,7 +534,10 @@ public final class RiftController {
                     }
                     // CI-only clear line of sight north of the physical beacon.
                     // Keep the player standing on a stable platform for the real click.
-                    for(int dz=-4;dz<=-2;dz++) for(int dx=-1;dx<=1;dx++) {
+                    // Clear the final line-of-sight block as well: a random
+                    // hillside at dz=-1 can otherwise hide the beacon from
+                    // the real mouse-click test even after teleportation.
+                    for(int dz=-4;dz<=-1;dz++) for(int dx=-1;dx<=1;dx++) {
                         BlockPos floor=demoPos.offset(dx,-1,dz);
                         if(!level.hasChunk(floor.getX()>>4,floor.getZ()>>4)) continue;
                         level.setBlock(floor,Blocks.STONE.defaultBlockState(),3);
