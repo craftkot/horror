@@ -175,9 +175,14 @@ def capture_test_world():
                         key("F1")
                         time.sleep(0.2)
                         try:
-                            subprocess.run(["xdotool","mousemove_relative","--","0","-440"],check=False)
+                            subprocess.run(["xdotool","mousemove_relative","--","0","-200"],check=False)
                             time.sleep(0.5)
                             snap("sky-rift-hudless.png")
+                            # Also capture near the zenith, where a separate fracture
+                            # may be visible beyond the upper treeline.
+                            subprocess.run(["xdotool","mousemove_relative","--","0","-240"],check=False)
+                            time.sleep(0.3)
+                            snap("sky-rift-zenith.png")
                             sky_shot=(shots/"sky-rift-hudless.png").is_file()
                         finally:
                             subprocess.run(["xdotool","mousemove_relative","--","0","440"],check=False)
