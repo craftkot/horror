@@ -222,7 +222,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE: restoration finished in integrated client",flush=True)
             log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
             if os.environ.get("BF_TEST_PLAYER_BEACON")=="1":
-                counts=re.search(r"BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored=(\\d+) destroyed=(\\d+) skippedOccupied=(\\d+)",log_after)
+                counts=re.search(r"BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored=([0-9]+) destroyed=([0-9]+) skippedOccupied=([0-9]+)",log_after)
                 if not counts:
                     print("WORLD_CAPTURE_FAIL: missing final restoration accounting",flush=True)
                     return False
