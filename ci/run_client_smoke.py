@@ -232,12 +232,23 @@ def capture_test_world():
                     return False
                 print("WORLD_CAPTURE: restoration accounting verified",restored_count,skipped_count,damaged_count,flush=True)
             if os.environ.get("BF_TEST_NATURAL_BEACON")=="1":
-                placed=re.search(r"BLACK_FREQUENCY_TEST NATURAL_BEACON_PLACED x=(-?\d+) y=(-?\d+) z=(-?\d+)",log_after)
-                clicked=re.search(r"BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION x=(-?\d+) y=(-?\d+) z=(-?\d+) natural=true",log_after)
-                if not placed or not clicked or placed.groups()!=clicked.groups():
-                    print("WORLD_CAPTURE_FAIL: naturally spawned beacon was not right-clicked",flush=True)
+                markers={
+                    "removed":re.search(r"BLACK_FREQUENCY_TEST NATURAL_BEACON_REMOVED_FOR_TEST x=(-?\d+) y=(-?\d+) z=(-?\d+)",log_after),
+                    "missing":re.search(r"BLACK_FREQUENCY_TEST NATURAL_BEACON_MISSING x=(-?\d+) y=(-?\d+) z=(-?\d+)",log_after),
+                    "replaced":re.search(r"BLACK_FREQUENCY_TEST NATURAL_BEACON_REPLACED x=(-?\d+) y=(-?\d+) z=(-?\d+)",log_after),
+                    "placed":re.search(r"BLACK_FREQUENCY_TEST NATURAL_BEACON_PLACED x=(-?\d+) y=(-?\d+) z=(-?\d+)",log_after),
+                    "clicked":re.search(r"BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION x=(-?\d+) y=(-?\d+) z=(-?\d+) natural=true",log_after),
+                }
+                if (not all(markers.values())
+                        or not (markers["removed"].start()<markers["missing"].start()
+                                <markers["replaced"].start()<markers["placed"].start()
+                                <markers["clicked"].start())
+                        or markers["removed"].groups()!=markers["missing"].groups()
+                        or markers["replaced"].groups()!=markers["placed"].groups()
+                        or markers["placed"].groups()!=markers["clicked"].groups()):
+                    print("WORLD_CAPTURE_FAIL: lost natural beacon was not replaced and clicked",flush=True)
                     return False
-                print("WORLD_CAPTURE: NATURAL_BEACON_CLICK_VERIFIED",*clicked.groups(),flush=True)
+                print("WORLD_CAPTURE: NATURAL_BEACON_RESPAWN_CLICK_VERIFIED",*markers["clicked"].groups(),flush=True)
             if not fracture_seen:
                 print("WORLD_CAPTURE_FAIL: ground fracture never removed a block",flush=True)
                 return False
