@@ -81,10 +81,10 @@ public final class RiftController {
         if(!level.getBlockState(pos).is(Blocks.BEACON)) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
         if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
-        // Normal beacon activation must be accepted only from a real player.
-        // Record it distinctly from the synthetic CI restoration path.
-        if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
         if(pos.distSqr(new BlockPos(s.x,pos.getY(),s.z))>128d*128d) return;
+        // Log only accepted player interactions; rejected distant beacons must
+        // never count as successful activation in the real-client CI test.
+        if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
         s.restoring=true;s.restoreIndex=s.snapshots.size()-1;s.restoreScan=s.restoreIndex;s.restoreTicks=0;s.restoredBlocks=0;s.beaconPos=pos.asLong();s.setDirty();
         for(var player:level.players()) {
             player.connection.send(new ClientboundSetTitlesAnimationPacket(10,100,30));
@@ -313,11 +313,14 @@ public final class RiftController {
         }
         // CI-only rollback exercise; normal gameplay still needs a real beacon.
         if(CI_TEST && Boolean.getBoolean("blackfrequency.ciExerciseRestoration")
-            && !s.restoring && s.edits>=160 && !s.snapshots.isEmpty()) {
-            s.restoring=true;
-            s.restoreIndex=s.snapshots.size()-1;
-            s.restoreScan=s.restoreIndex;
-            s.restoreTicks=0;
+            && !s.restoring && s.beaconPos==0L && s.edits>=160 && !s.snapshots.isEmpty()) {
+            boolean playerInteractionTest=Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest");
+            if(!playerInteractionTest) {
+                s.restoring=true;
+                s.restoreIndex=s.snapshots.size()-1;
+                s.restoreScan=s.restoreIndex;
+                s.restoreTicks=0;
+            }
             if(Boolean.getBoolean("blackfrequency.ciDeferredChunkTest")) {
                 // Disposable CI world only: replace the last snapshot location
                 // with a definitely unloaded chunk to exercise deferred recovery.
@@ -328,16 +331,26 @@ public final class RiftController {
             BlockPos demoPos=new BlockPos(s.x,level.getSeaLevel()+4,s.z);
             if(!level.players().isEmpty()) {
                 var demoPlayer=level.players().get(0);
-                demoPos=demoPlayer.blockPosition().relative(demoPlayer.getDirection(),4).above(1);
-                // Visual-only test fixture in disposable CI worlds: the production
-                // interaction still requires right-clicking a genuine beacon.
+                if(playerInteractionTest) {
+                    // Disposable CI world: aim the actual player at a real beacon.
+                    // The test client must issue a right mouse click; this server
+                    // fixture alone must NOT start restoration.
+                    int surface=level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,s.x,s.z);
+                    demoPlayer.teleportTo(level,s.x+.5,surface+1,s.z+.5,0f,0f);
+                    demoPos=new BlockPos(s.x,surface+2,s.z+3);
+                } else {
+                    demoPos=demoPlayer.blockPosition().relative(demoPlayer.getDirection(),4).above(1);
+                }
                 level.setBlock(demoPos,Blocks.BEACON.defaultBlockState(),3);
                 demoPlayer.connection.send(new ClientboundSetTitlesAnimationPacket(8,75,20));
                 demoPlayer.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§5СТАБИЛИЗАЦИЯ")));
                 demoPlayer.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§dМаяк запечатывает разлом")));
             }
             s.beaconPos=demoPos.asLong();
-            LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED");
+            if(playerInteractionTest)
+                LOGGER.info("BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER x={} y={} z={}",demoPos.getX(),demoPos.getY(),demoPos.getZ());
+            else
+                LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED");
         }
         // Persist the cursor every tick; restart must not rewind destructive edits.
         s.setDirty();
