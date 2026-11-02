@@ -32,6 +32,10 @@ public final class RiftController {
     private static final int RADIUS = 48;
     private static final int EDIT_BUDGET = 160;
     private static final int MAX_EDITS = 95000;
+    // Only disposable CI worlds can stop after a small fracture to test
+    // recovery when fewer than 160 blocks were damaged.
+    private static final int EFFECTIVE_MAX_EDITS = CI_TEST && Boolean.getBoolean("blackfrequency.ciSparseRecoveryTest")
+        ? 80 : MAX_EDITS;
 
     private static final class State extends SavedData {
         long elapsed;
@@ -50,6 +54,7 @@ public final class RiftController {
         boolean ciRestoredGravityGuardLogged;
         // CI-only one-shot beacon removal: exercise recovery after a lost beacon.
         boolean ciNaturalBeaconRemoved, ciNaturalBeaconReplaced;
+        boolean ciSparseRecoveryEligibilityLogged;
         final List<CompoundTag> snapshots = new ArrayList<>();
         static State load(CompoundTag n) {
             State s = new State();
@@ -488,9 +493,20 @@ public final class RiftController {
                 }
             }
         }
-        if(s.edits>=160 && s.naturalBeaconPos==Long.MIN_VALUE
-            && (s.edits==160 || s.finaleTicks%40==0))
+        // Sparse/void worlds may finish the bounded scan with fewer than 160
+        // removed blocks. A fractured world with saved damage must still offer
+        // a physical recovery beacon, even if the early edit threshold was missed.
+        if(s.naturalBeaconPos==Long.MIN_VALUE && !s.snapshots.isEmpty()
+            && (s.edits>=160 || s.finished)
+            && (s.edits==160 || s.finaleTicks%40==0)) {
+            if(CI_TEST && Boolean.getBoolean("blackfrequency.ciSparseRecoveryTest")
+                && s.finished && s.edits<160 && !s.ciSparseRecoveryEligibilityLogged) {
+                LOGGER.info("BLACK_FREQUENCY_TEST SPARSE_RECOVERY_ELIGIBLE edits={} pending={}",
+                    s.edits,s.snapshots.size());
+                s.ciSparseRecoveryEligibilityLogged=true;
+            }
             tryPlaceRecoveryBeacon(level,s);
+        }
         // CI-only rollback exercise; normal gameplay still needs a real beacon.
         if(CI_TEST && Boolean.getBoolean("blackfrequency.ciExerciseRestoration")
             && !s.restoring && s.beaconPos==0L && s.edits>=160 && !s.snapshots.isEmpty()
@@ -587,7 +603,7 @@ public final class RiftController {
         if(CI_TEST && s.finaleTicks == 190) LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_PHASE_STARTED");
         int edits=0, checks=0;
         while(edits<EDIT_BUDGET && checks<2048 && !s.finished) {
-            if(s.edits>=MAX_EDITS || s.cursorX>RADIUS) {s.finished=true;break;}
+            if(s.edits>=EFFECTIVE_MAX_EDITS || s.cursorX>RADIUS) {s.finished=true;break;}
             int wx=s.x+s.cursorX,wz=s.z+s.cursorZ;
             if(!level.hasChunk(wx>>4,wz>>4)) {
                 // Never force-load chunks for destruction. Skip this column and keep advancing.
