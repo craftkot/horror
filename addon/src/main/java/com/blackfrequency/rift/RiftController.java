@@ -41,6 +41,9 @@ public final class RiftController {
         boolean started, finished, initialized, restoring, restored;
         int restoreIndex, restoreScan, restoreTicks, restoredBlocks, skippedOccupied;
         long beaconPos;
+        // A one-time recovery beacon is placed in a loaded, safe air block.
+        // Keep it separate from the beacon that a player actually activates.
+        long naturalBeaconPos=Long.MIN_VALUE;
         // CI diagnostics only; never persisted in production saves.
         long ciRejectedRestorePos=Long.MIN_VALUE;
         int ciFlowingReplaced;
@@ -59,6 +62,7 @@ public final class RiftController {
             // Older worlds have no scan cursor: resume at the last pending snapshot.
             s.restoreScan=n.contains("restoreScan",Tag.TAG_INT)?n.getInt("restoreScan"):s.restoreIndex;
             s.restoreTicks=n.getInt("restoreTicks");s.restoredBlocks=n.getInt("restoredBlocks");s.skippedOccupied=n.getInt("skippedOccupied");s.beaconPos=n.getLong("beaconPos");
+            s.naturalBeaconPos=n.contains("naturalBeaconPos",Tag.TAG_LONG)?n.getLong("naturalBeaconPos"):Long.MIN_VALUE;
             ListTag saved=n.getList("snapshots",Tag.TAG_COMPOUND);
             for(int i=0;i<saved.size();i++) s.snapshots.add(saved.getCompound(i));
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST STATE_LOADED elapsed={} edits={} restored={} restoring={} snapshots={}",s.elapsed,s.edits,s.restored,s.restoring,s.snapshots.size());
@@ -71,6 +75,7 @@ public final class RiftController {
             n.putBoolean("finished",finished);n.putBoolean("initialized",initialized);
             n.putBoolean("restoring",restoring);n.putBoolean("restored",restored);
             n.putInt("restoreIndex",restoreIndex);n.putInt("restoreScan",restoreScan);n.putInt("restoreTicks",restoreTicks);n.putInt("restoredBlocks",restoredBlocks);n.putInt("skippedOccupied",skippedOccupied);n.putLong("beaconPos",beaconPos);
+            n.putLong("naturalBeaconPos",naturalBeaconPos);
             ListTag saved=new ListTag();for(CompoundTag tag:snapshots)saved.add(tag.copy());
             n.put("snapshots",saved);
             return n;
@@ -98,6 +103,49 @@ public final class RiftController {
         event.setCanceled(true);
         event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
         if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED");
+    }
+
+    /** Place a recovery beacon without overwriting terrain or loading chunks.
+     *  The vanilla beacon is a physical block and still requires a real right-click.
+     *  Players may also use their own beacon if the generated one is mined.
+     */
+    private static boolean tryPlaceRecoveryBeacon(ServerLevel level,State s) {
+        for(var player:level.players()) {
+            if(player.isSpectator()) continue;
+            BlockPos playerPos=player.blockPosition();
+            int ax=playerPos.getX()-s.x,az=playerPos.getZ()-s.z;
+            if(ax*ax+az*az>(RADIUS-8)*(RADIUS-8)) continue;
+            var facing=player.getDirection();
+            int forwardX=facing.getStepX(),forwardZ=facing.getStepZ();
+            for(int distance=4;distance<=8;distance++) {
+                for(int side=0;side<=6;side++) {
+                    int offset=side==0?0:(side%2==1?(side+1)/2:-(side/2));
+                    int x=playerPos.getX()+forwardX*distance-forwardZ*offset;
+                    int z=playerPos.getZ()+forwardZ*distance+forwardX*offset;
+                    int dx=x-s.x,dz=z-s.z;
+                    if(dx*dx+dz*dz>(RADIUS-4)*(RADIUS-4)) continue;
+                    if(!level.hasChunk(x>>4,z>>4)) continue;
+                    int y=level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,x,z);
+                    if(y<=level.getMinBuildHeight() || y>=level.getMaxBuildHeight()-2) continue;
+                    BlockPos pos=new BlockPos(x,y,z);
+                    BlockState support=level.getBlockState(pos.below());
+                    if(!support.blocksMotion() || !support.getFluidState().isEmpty()
+                        || !level.getBlockState(pos).isAir()
+                        || !level.getBlockState(pos.above()).isAir()) continue;
+                    if(!level.setBlock(pos,Blocks.BEACON.defaultBlockState(),3)) continue;
+                    s.naturalBeaconPos=pos.asLong();
+                    s.setDirty();
+                    if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_PLACED x={} y={} z={}",x,y,z);
+                    for(var nearby:level.players()) {
+                        if(nearby.blockPosition().distSqr(pos)<128d*128d)
+                            nearby.displayClientMessage(Component.literal(
+                                "§d✦ Маяк стабилизации: §f"+x+" "+y+" "+z+" §7— нажмите ПКМ"),true);
+                    }
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static void restore(ServerLevel level,State s) {
@@ -374,6 +422,21 @@ public final class RiftController {
                 s.snapshots.add(snapshot);
                 edits++;s.edits++;
                 if(CI_TEST && s.edits==1) LOGGER.info("BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x={} y={} z={}", wx,y,wz);
+            }
+        }
+        // Production recovery path: spawn a physical beacon in an existing loaded
+        // chunk near a player. Never replace terrain or force-generate chunks.
+        if(s.edits>=160 && s.naturalBeaconPos==Long.MIN_VALUE
+            && (s.edits==160 || s.finaleTicks%40==0))
+            tryPlaceRecoveryBeacon(level,s);
+        if(s.naturalBeaconPos!=Long.MIN_VALUE && s.finaleTicks%200==0) {
+            BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
+            if(level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)
+                && level.getBlockState(beacon).is(Blocks.BEACON)) {
+                for(var player:level.players())
+                    if(player.blockPosition().distSqr(beacon)<128d*128d)
+                        player.displayClientMessage(Component.literal(
+                            "§d✦ Маяк стабилизации: §f"+beacon.getX()+" "+beacon.getY()+" "+beacon.getZ()+" §7— нажмите ПКМ"),true);
             }
         }
         // CI-only rollback exercise; normal gameplay still needs a real beacon.
