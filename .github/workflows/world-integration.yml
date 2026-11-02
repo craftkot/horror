@@ -96,7 +96,7 @@ jobs:
           # restoration, including after loading the saved world again.
           python3 - <<'PY'
           import pathlib, re
-          pattern=r"BLACK_FREQUENCY_TEST RESTORED_GRAVITY_DISABLED finaleTicks=(\\d+)"
+          pattern=r"BLACK_FREQUENCY_TEST RESTORED_GRAVITY_DISABLED finaleTicks=(\d+)"
           before=pathlib.Path("world-test.log").read_text(errors="replace")
           after=pathlib.Path("world-restart.log").read_text(errors="replace")
           first=re.search(pattern,before)
