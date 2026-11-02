@@ -16,44 +16,53 @@ float cells(vec2 uv,float scale) {
 }
 void main(){
  vec3 n=normalize(direction);
- vec3 w=pow(abs(n),vec3(4.0)); w/=max(dot(w,vec3(1.)),.0001);
  float t=GameTime*.012;
- float a=cells(n.yz+vec2(sin(t)*.012,0.),4.0);
- float b=cells(n.xz+vec2(0.,cos(t)*.012),4.0);
- float c=cells(n.xy,4.0);
- float d=dot(vec3(a,b,c),w);
- float warped=dot(vec3(cells(n.yz*1.33+sin(t+n.x*14.)*.042,6.8),cells(n.xz*1.27+cos(t+n.y*17.)*.045,7.2),cells(n.xy*1.21+sin(t+n.z*11.)*.04,6.3)),w);
- d=min(d,warped*.62);
- float secondary=dot(vec3(cells(n.yz,9.),cells(n.xz,9.),cells(n.xy,9.)),w);
- // A continuous, world-direction-based fracture spine. Integer angular
- // harmonics meet at +/-PI, so the seam cannot split at sky-cube edges.
- float longitude=atan(n.z,n.x);
- float spineHeight=.12+.34*sin(2.*longitude+t*.11)+.12*sin(5.*longitude-t*.08);
- float spineDistance=abs(n.y-spineHeight);
- float spineCore=1.-smoothstep(.014,.046,spineDistance);
- float spineHalo=exp(-spineDistance*14.);
- // Keep the old cellular filaments as secondary damage, not giant patches.
- float jitter=.004*sin(t*2.+n.x*37.+n.z*29.);
- float width=.045+.04*clamp(RiftStrength,0.,1.)+jitter;
- float fissure=1.-smoothstep(width,width+.035,d);
- float branch=(1.-smoothstep(.025,.075,secondary))*.30;
- float crack=max(fissure,branch);
- float voidPocket=smoothstep(.20,.44,hash(floor(n.xz*9.)+floor(n.y*8.)))*smoothstep(.10,.28,crack);
- float halo=exp(-max(d-width,0.)*19.);
  float f=clamp(RiftStrength,0.,1.);
  float green=clamp(GreenPhase,0.,1.);
- // The world beyond the fracture is black, not a bright blue sky.
- vec3 background=vec3(.008,.005,.017);
- vec3 purple=vec3(.16,.035,.27);
- vec3 edge=vec3(.52,.19,.87);
- float pulse=.82+.18*sin(t*3.+n.x*29.);
- vec3 color=background+purple*halo*.27+edge*max(crack-voidPocket,0.)*.94*pulse;
- color=mix(color,vec3(.0003,.0002,.0015),voidPocket*.98);
- // The spine has a violet corona surrounding a nearly lightless interior.
- color+=edge*spineHalo*.64*pulse;
- color=mix(color,vec3(.0002,.0001,.001),spineCore*.98);
+ float longitude=atan(n.z,n.x);
+ // One continuous jagged tear, animated in world direction. Integer
+ // harmonics remain seamless at -PI/PI and across sky-cube faces.
+ float spineY=.12+.28*sin(2.*longitude+t*.09)
+              +.09*sin(7.*longitude-t*.13)
+              +.02*sin(19.*longitude+t*.21);
+ float spineDistance=abs(n.y-spineY);
+ float spineCore=1.-smoothstep(.011,.028,spineDistance);
+ float spineGlow=exp(-spineDistance*23.);
+ float corona=exp(-spineDistance*7.);
+ // Five finite side fractures grow from the main tear. Wrapped angular
+ // distance avoids a discontinuity where longitude changes sign.
+ float branches=0.,branchGlow=0.;
+ for(int i=0;i<5;i++){
+  float anchor=-2.55+float(i)*1.13;
+  float side=(i%2==0)?1.:-1.;
+  float along=atan(sin(longitude-anchor),cos(longitude-anchor))*side;
+  float reach=.54+float(i%3)*.09;
+  float window=smoothstep(0.,.065,along)*(1.-smoothstep(reach-.12,reach,along));
+  float root=.12+.28*sin(2.*anchor+t*.09)
+             +.09*sin(7.*anchor-t*.13)
+             +.02*sin(19.*anchor+t*.21);
+  float branchY=root+side*.43*along+.032*sin(along*15.+t*.27+float(i));
+  float dist=abs(n.y-branchY);
+  branches=max(branches,window*(1.-smoothstep(.006,.018,dist)));
+  branchGlow=max(branchGlow,window*exp(-dist*37.));
+ }
+ // Sparse fine filaments, not the previous full-screen Voronoi patchwork.
+ // Three 3x3 cell searches instead of nine: 27 vs 81 cell evaluations.
+ vec3 weights=pow(abs(n),vec3(4.));
+ weights/=max(dot(weights,vec3(1.)),.0001);
+ float cellDistance=dot(vec3(cells(n.yz,7.),cells(n.xz,7.),cells(n.xy,7.)),weights);
+ float filaments=1.-smoothstep(.008,.023,cellDistance);
+ float pulse=.86+.14*sin(t*2.7+longitude*11.);
+ vec3 background=vec3(.006,.003,.014);
+ vec3 violet=vec3(.16,.032,.26);
+ vec3 edge=vec3(.65,.19,.98);
+ vec3 color=background+violet*corona*.24;
+ color+=edge*(spineGlow*.78+branchGlow*.52+filaments*.11)*pulse;
+ // A near-black interior makes the central fracture read as an opening.
+ color=mix(color,vec3(.0003,.00015,.001),spineCore*.98);
+ color=mix(color,vec3(.0003,.00015,.001),branches*.90);
+ // The green transition is a separate phase, not a persistent tint.
  color=mix(color,vec3(.002,.011,.009),green);
- // The black core stays opaque enough to read as a tear rather than a decal.
- float opacity=clamp(f*(.72+.19*crack+.18*voidPocket+.25*spineCore),0.,.99);
+ float opacity=clamp(f*(.82+.10*filaments+.17*spineCore),0.,.99);
  fragColor=vec4(color,opacity);
 }
