@@ -72,6 +72,21 @@ public final class RiftController {
             s.naturalBeaconPos=n.contains("naturalBeaconPos",Tag.TAG_LONG)?n.getLong("naturalBeaconPos"):Long.MIN_VALUE;
             ListTag saved=n.getList("snapshots",Tag.TAG_COMPOUND);
             for(int i=0;i<saved.size();i++) s.snapshots.add(saved.getCompound(i));
+            // A damaged or older save must not crash the server by indexing past
+            // the persisted snapshot list. Never invent missing terrain data.
+            if(s.restoring) {
+                int last=s.snapshots.size()-1;
+                if(s.restoreIndex < -1 || s.restoreIndex > last) {
+                    LOGGER.warn("BLACK FREQUENCY: invalid restoreIndex={} for {} snapshots; clamping",
+                        s.restoreIndex,s.snapshots.size());
+                    s.restoreIndex=last;
+                }
+                if(s.restoreScan < -1 || s.restoreScan > s.restoreIndex) {
+                    LOGGER.warn("BLACK FREQUENCY: invalid restoreScan={}; resetting to restoreIndex={}",
+                        s.restoreScan,s.restoreIndex);
+                    s.restoreScan=s.restoreIndex;
+                }
+            }
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST STATE_LOADED elapsed={} edits={} restored={} restoring={} snapshots={}",s.elapsed,s.edits,s.restored,s.restoring,s.snapshots.size());
             return s;
         }
