@@ -44,6 +44,7 @@ public final class RiftController {
         // CI diagnostics only; never persisted in production saves.
         long ciRejectedRestorePos=Long.MIN_VALUE;
         int ciFlowingReplaced;
+        boolean ciRestoredGravityGuardLogged;
         final List<CompoundTag> snapshots = new ArrayList<>();
         static State load(CompoundTag n) {
             State s = new State();
@@ -234,6 +235,16 @@ public final class RiftController {
         if(level.getGameTime()%(s.started && !s.finished ? 10L : 100L)==0) {
             float progress=s.restored ? 0f : s.finished ? 1f : Math.max(0f, Math.min(1f,(s.elapsed-3f*DAY)/(7f*DAY)));
             for(var player : level.players()) RiftNetwork.send(player,progress,!s.restored && (s.started || s.finished), s.finaleTicks);
+        }
+        // Once the beacon finishes, do not advance the finale clock or apply
+        // gravity impulses again. "finished" alone is not sufficient: it also
+        // describes a fully fractured world waiting for restoration.
+        if(s.restored) {
+            if(CI_TEST && !s.ciRestoredGravityGuardLogged) {
+                LOGGER.info("BLACK_FREQUENCY_TEST RESTORED_GRAVITY_DISABLED finaleTicks={}",s.finaleTicks);
+                s.ciRestoredGravityGuardLogged=true;
+            }
+            return;
         }
         // Destruction may be complete while the world is still fractured.
         // Keep the gravity field alive until a beacon starts restoration.
