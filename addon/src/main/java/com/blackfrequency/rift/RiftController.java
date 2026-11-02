@@ -201,19 +201,22 @@ public final class RiftController {
                             if(!level.setBlock(pos,Blocks.AIR.defaultBlockState(),3))
                                 throw new IllegalStateException("CI beacon removal failed");
                             s.ciNaturalBeaconRemoved=true;
-                            LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_REMOVED_FOR_TEST x={} y={} z={}",x,y,z);
+                            LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_REMOVED_FOR_TEST x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
                             return true;
                         }
                         s.ciNaturalBeaconReplaced=true;
-                        LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_REPLACED x={} y={} z={}",x,y,z);
+                        LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_REPLACED x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
                     }
+                    // Use the final block position: on snow it can be one block above
+                    // the heightmap Y. Logs, particles and hints must agree with the
+                    // physical beacon that the player can actually right-click.
                     // A visible, bounded violet signal marks the newly spawned beacon.
-                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,x+.5,y+1.2,z+.5,18,.35,.55,.35,.035);
-                    if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_PLACED x={} y={} z={}",x,y,z);
+                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,pos.getX()+.5,pos.getY()+1.2,pos.getZ()+.5,18,.35,.55,.35,.035);
+                    if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_PLACED x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
                     for(var nearby:level.players()) {
                         if(nearby.blockPosition().distSqr(pos)<128d*128d)
                             nearby.displayClientMessage(Component.literal(
-                                "§d✦ Маяк стабилизации: §f"+x+" "+y+" "+z+" §7— нажмите ПКМ"),true);
+                                "§d✦ Маяк стабилизации: §f"+pos.getX()+" "+pos.getY()+" "+pos.getZ()+" §7— нажмите ПКМ"),true);
                     }
                     return true;
                 }
