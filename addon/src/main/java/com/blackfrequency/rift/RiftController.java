@@ -48,6 +48,8 @@ public final class RiftController {
         long ciRejectedRestorePos=Long.MIN_VALUE;
         int ciFlowingReplaced;
         boolean ciRestoredGravityGuardLogged;
+        // CI-only one-shot beacon removal: exercise recovery after a lost beacon.
+        boolean ciNaturalBeaconRemoved, ciNaturalBeaconReplaced;
         final List<CompoundTag> snapshots = new ArrayList<>();
         static State load(CompoundTag n) {
             State s = new State();
@@ -135,6 +137,19 @@ public final class RiftController {
                     if(!level.setBlock(pos,Blocks.BEACON.defaultBlockState(),3)) continue;
                     s.naturalBeaconPos=pos.asLong();
                     s.setDirty();
+                    // In the disposable client test, remove the first beacon to
+                    // exercise the same recovery path as a player mining it.
+                    if(CI_TEST && Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest")) {
+                        if(!s.ciNaturalBeaconRemoved) {
+                            if(!level.setBlock(pos,Blocks.AIR.defaultBlockState(),3))
+                                throw new IllegalStateException("CI beacon removal failed");
+                            s.ciNaturalBeaconRemoved=true;
+                            LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_REMOVED_FOR_TEST x={} y={} z={}",x,y,z);
+                            return true;
+                        }
+                        s.ciNaturalBeaconReplaced=true;
+                        LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_REPLACED x={} y={} z={}",x,y,z);
+                    }
                     // A visible, bounded violet signal marks the newly spawned beacon.
                     level.sendParticles(ParticleTypes.REVERSE_PORTAL,x+.5,y+1.2,z+.5,18,.35,.55,.35,.035);
                     if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_PLACED x={} y={} z={}",x,y,z);
@@ -381,25 +396,33 @@ public final class RiftController {
         // These checks never generate or force-load terrain.
         // Production recovery path: spawn a physical beacon in an existing loaded
         // chunk near a player. Never replace terrain or force-generate chunks.
+        if(s.naturalBeaconPos!=Long.MIN_VALUE && s.finaleTicks%40==0) {
+            BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
+            // Do not inspect or generate an unloaded chunk. A missing beacon in
+            // a loaded chunk can be replaced at another safe location.
+            if(level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)) {
+                if(!level.getBlockState(beacon).is(Blocks.BEACON)) {
+                    s.naturalBeaconPos=Long.MIN_VALUE;
+                    s.setDirty();
+                    if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_MISSING x={} y={} z={}",
+                        beacon.getX(),beacon.getY(),beacon.getZ());
+                } else {
+                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,beacon.getX()+.5,beacon.getY()+1.2,beacon.getZ()+.5,6,.28,.45,.28,.015);
+                    if(s.finaleTicks%200==0) for(var player:level.players())
+                        if(player.blockPosition().distSqr(beacon)<128d*128d)
+                            player.displayClientMessage(Component.literal(
+                                "§d✦ Маяк стабилизации: §f"+beacon.getX()+" "+beacon.getY()+" "+beacon.getZ()+" §7— нажмите ПКМ"),true);
+                }
+            }
+        }
         if(s.edits>=160 && s.naturalBeaconPos==Long.MIN_VALUE
             && (s.edits==160 || s.finaleTicks%40==0))
             tryPlaceRecoveryBeacon(level,s);
-        if(s.naturalBeaconPos!=Long.MIN_VALUE && s.finaleTicks%40==0) {
-            BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
-            if(level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)
-                && level.getBlockState(beacon).is(Blocks.BEACON)) {
-                level.sendParticles(ParticleTypes.REVERSE_PORTAL,beacon.getX()+.5,beacon.getY()+1.2,beacon.getZ()+.5,6,.28,.45,.28,.015);
-                if(s.finaleTicks%200==0) for(var player:level.players())
-                    if(player.blockPosition().distSqr(beacon)<128d*128d)
-                        player.displayClientMessage(Component.literal(
-                            "§d✦ Маяк стабилизации: §f"+beacon.getX()+" "+beacon.getY()+" "+beacon.getZ()+" §7— нажмите ПКМ"),true);
-            }
-        }
         // CI-only rollback exercise; normal gameplay still needs a real beacon.
         if(CI_TEST && Boolean.getBoolean("blackfrequency.ciExerciseRestoration")
             && !s.restoring && s.beaconPos==0L && s.edits>=160 && !s.snapshots.isEmpty()
             && (!Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest")
-                || s.naturalBeaconPos!=Long.MIN_VALUE)) {
+                || (s.naturalBeaconPos!=Long.MIN_VALUE && s.ciNaturalBeaconReplaced))) {
             boolean playerInteractionTest=Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest");
             if(!playerInteractionTest) {
                 s.restoring=true;
