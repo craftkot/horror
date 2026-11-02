@@ -83,6 +83,32 @@ public final class RiftController {
             return n;
         }
     }
+    /**
+     * Recovery beacons are emergency world fixtures, not free survival loot.
+     * Let a player dismantle one, but consume it without vanilla drops; the
+     * existing bounded placement loop can supply a replacement later.
+     * Ordinary player-owned beacons are never intercepted.
+     */
+    @SubscribeEvent
+    public void onRecoveryBeaconBreak(net.minecraftforge.event.level.BlockEvent.BreakEvent event) {
+        if(!(event.getLevel() instanceof ServerLevel level)
+            || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
+        BlockPos pos=event.getPos();
+        if(!level.getBlockState(pos).is(Blocks.BEACON)) return;
+        State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
+        if(!s.started || s.restored || pos.asLong()!=s.naturalBeaconPos) return;
+        // Cancel vanilla harvesting before it creates a valuable beacon item.
+        event.setCanceled(true);
+        if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),3)) {
+            s.naturalBeaconPos=Long.MIN_VALUE;
+            s.setDirty();
+            event.getPlayer().displayClientMessage(Component.literal(
+                "§5✦ Маяк стабилизации рассеялся. Новый появится поблизости."),true);
+            if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_MINED_NO_DROP x={} y={} z={}",
+                pos.getX(),pos.getY(),pos.getZ());
+        }
+    }
+
     /** Right-click a vanilla beacon within 128 blocks of the fracture anchor. */
     @SubscribeEvent
     public void onBeacon(PlayerInteractEvent.RightClickBlock event) {
