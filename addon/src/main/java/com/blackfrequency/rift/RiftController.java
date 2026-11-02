@@ -97,6 +97,17 @@ public final class RiftController {
     }
 
     private static void restore(ServerLevel level,State s) {
+        // Vanilla can open its beacon configuration screen despite the server
+        // interaction being consumed by the rift. Close only the activated
+        // beacon's nearby menu; do not interrupt unrelated inventories.
+        BlockPos activatedBeacon=BlockPos.of(s.beaconPos);
+        for(var player:level.players()) {
+            if(player.containerMenu instanceof net.minecraft.world.inventory.BeaconMenu
+                && player.blockPosition().distSqr(activatedBeacon)<144d) {
+                player.closeContainer();
+                if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_MENU_CLOSED");
+            }
+        }
         s.restoreTicks++;
         if(s.restoreTicks%40==0 && !s.snapshots.isEmpty()) {
             int percent=(int)(100d*(s.snapshots.size()-Math.max(0,s.restoreIndex+1))/(double)s.snapshots.size());
