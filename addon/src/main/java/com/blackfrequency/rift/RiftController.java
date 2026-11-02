@@ -41,6 +41,9 @@ public final class RiftController {
         boolean started, finished, initialized, restoring, restored;
         int restoreIndex, restoreScan, restoreTicks, restoredBlocks, skippedOccupied;
         long beaconPos;
+        // CI diagnostics only; never persisted in production saves.
+        long ciRejectedRestorePos=Long.MIN_VALUE;
+        int ciFlowingReplaced;
         final List<CompoundTag> snapshots = new ArrayList<>();
         static State load(CompoundTag n) {
             State s = new State();
@@ -119,6 +122,9 @@ public final class RiftController {
             for(var player:level.players()) RiftNetwork.send(player,remaining,false,0);
         }
         int restoredThisTick=0,checks=0;
+        // A failed block write must not be attempted repeatedly in one tick.
+        // Other loaded snapshots can still recover; retry this position next tick.
+        java.util.Set<Long> failedWritesThisTick=new java.util.HashSet<>();
         while(s.restoreIndex>=0 && restoredThisTick<12 && checks<48) {
             // A single unloaded chunk must not block recovery in other loaded chunks.
             // Scan at most 48 candidates per tick and retain unloaded snapshots
@@ -128,6 +134,10 @@ public final class RiftController {
             CompoundTag entry=s.snapshots.get(candidate);
             BlockPos pos=BlockPos.of(entry.getLong("pos"));
             checks++;
+            if(failedWritesThisTick.contains(pos.asLong())) {
+                s.restoreScan--;
+                continue;
+            }
             if(!level.hasChunk(pos.getX()>>4,pos.getZ()>>4)) {
                 if(CI_TEST && Boolean.getBoolean("blackfrequency.ciDeferredChunkTest")
                     && s.restoreTicks==1)
@@ -152,13 +162,20 @@ public final class RiftController {
                         && Boolean.getBoolean("blackfrequency.ciRestoreWriteFailureTest")
                         && s.restoreTicks==1 && checks==1;
                     if(testWriteFailure || !level.setBlock(pos,original,2|16)) {
-                        if(testWriteFailure)
-                            LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_WRITE_DEFERRED x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
+                        failedWritesThisTick.add(pos.asLong());
+                        if(testWriteFailure) {
+                            s.ciRejectedRestorePos=pos.asLong();
+                            LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_WRITE_DEFERRED x={} y={} z={} tick={}",pos.getX(),pos.getY(),pos.getZ(),s.restoreTicks);
+                        }
                         s.restoreScan--;
                         continue;
                     }
                     restoredThisTick++;s.restoredBlocks++;
-                    if(CI_TEST && flowingFluid)
+                    if(CI_TEST && pos.asLong()==s.ciRejectedRestorePos) {
+                        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_WRITE_RETRIED x={} y={} z={} tick={}",pos.getX(),pos.getY(),pos.getZ(),s.restoreTicks);
+                        s.ciRejectedRestorePos=Long.MIN_VALUE;
+                    }
+                    if(CI_TEST && flowingFluid && s.ciFlowingReplaced++==0)
                         LOGGER.info("BLACK_FREQUENCY_TEST FLOWING_FLUID_REPLACED x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
                     if(CI_TEST && Boolean.getBoolean("blackfrequency.ciDeferredChunkTest")
                         && s.restoredBlocks==1 && s.restoreIndex>=0)
@@ -195,7 +212,7 @@ public final class RiftController {
         if(s.restoreIndex<0 && s.restoreTicks>=100) {
             s.restoring=false;s.restored=true;s.finished=true;s.snapshots.clear();
             for(var player:level.players()) RiftNetwork.send(player,0f,false,0);
-            if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored={} destroyed={} skippedOccupied={}",s.restoredBlocks,s.edits,s.skippedOccupied);
+            if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored={} destroyed={} skippedOccupied={} flowingReplaced={}",s.restoredBlocks,s.edits,s.skippedOccupied,s.ciFlowingReplaced);
             for(var player:level.players()) {
                 player.displayClientMessage(Component.literal("§d✦ СТАБИЛИЗАЦИЯ 100% §7— восстановлено "+s.restoredBlocks+" блоков; пропущено "+s.skippedOccupied),true);
                 player.connection.send(new ClientboundSetTitleTextPacket(Component.literal(
