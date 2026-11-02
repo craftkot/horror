@@ -43,7 +43,7 @@ public final class RiftController {
         int edits;
         int finaleTicks;
         boolean started, finished, initialized, restoring, restored;
-        int restoreIndex, restoreScan, restoreTicks, restoredBlocks, skippedOccupied;
+        int restoreIndex, restoreScan, restoreTicks, restoredBlocks, skippedOccupied, skippedInvalid;
         long beaconPos;
         // A one-time recovery beacon is placed in a loaded, safe air block.
         // Keep it separate from the beacon that a player actually activates.
@@ -68,7 +68,7 @@ public final class RiftController {
             s.restoreIndex=n.getInt("restoreIndex");
             // Older worlds have no scan cursor: resume at the last pending snapshot.
             s.restoreScan=n.contains("restoreScan",Tag.TAG_INT)?n.getInt("restoreScan"):s.restoreIndex;
-            s.restoreTicks=n.getInt("restoreTicks");s.restoredBlocks=n.getInt("restoredBlocks");s.skippedOccupied=n.getInt("skippedOccupied");s.beaconPos=n.getLong("beaconPos");
+            s.restoreTicks=n.getInt("restoreTicks");s.restoredBlocks=n.getInt("restoredBlocks");s.skippedOccupied=n.getInt("skippedOccupied");s.skippedInvalid=n.getInt("skippedInvalid");s.beaconPos=n.getLong("beaconPos");
             s.naturalBeaconPos=n.contains("naturalBeaconPos",Tag.TAG_LONG)?n.getLong("naturalBeaconPos"):Long.MIN_VALUE;
             ListTag saved=n.getList("snapshots",Tag.TAG_COMPOUND);
             for(int i=0;i<saved.size();i++) s.snapshots.add(saved.getCompound(i));
@@ -96,7 +96,7 @@ public final class RiftController {
             n.putInt("edits",edits);n.putInt("finaleTicks",finaleTicks);n.putBoolean("started",started);
             n.putBoolean("finished",finished);n.putBoolean("initialized",initialized);
             n.putBoolean("restoring",restoring);n.putBoolean("restored",restored);
-            n.putInt("restoreIndex",restoreIndex);n.putInt("restoreScan",restoreScan);n.putInt("restoreTicks",restoreTicks);n.putInt("restoredBlocks",restoredBlocks);n.putInt("skippedOccupied",skippedOccupied);n.putLong("beaconPos",beaconPos);
+            n.putInt("restoreIndex",restoreIndex);n.putInt("restoreScan",restoreScan);n.putInt("restoreTicks",restoreTicks);n.putInt("restoredBlocks",restoredBlocks);n.putInt("skippedOccupied",skippedOccupied);n.putInt("skippedInvalid",skippedInvalid);n.putLong("beaconPos",beaconPos);
             n.putLong("naturalBeaconPos",naturalBeaconPos);
             ListTag saved=new ListTag();for(CompoundTag tag:snapshots)saved.add(tag.copy());
             n.put("snapshots",saved);
@@ -166,7 +166,7 @@ public final class RiftController {
         // Log only accepted player interactions; rejected distant beacons must
         // never count as successful activation in the real-client CI test.
         if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION x={} y={} z={} natural={}",pos.getX(),pos.getY(),pos.getZ(),pos.asLong()==s.naturalBeaconPos);
-        s.restoring=true;s.restoreIndex=s.snapshots.size()-1;s.restoreScan=s.restoreIndex;s.restoreTicks=0;s.restoredBlocks=0;s.skippedOccupied=0;s.beaconPos=pos.asLong();s.setDirty();
+        s.restoring=true;s.restoreIndex=s.snapshots.size()-1;s.restoreScan=s.restoreIndex;s.restoreTicks=0;s.restoredBlocks=0;s.skippedOccupied=0;s.skippedInvalid=0;s.beaconPos=pos.asLong();s.setDirty();
         for(var player:level.players()) {
             player.connection.send(new ClientboundSetTitlesAnimationPacket(10,100,30));
             player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§5СТАБИЛИЗАЦИЯ")));
@@ -312,6 +312,24 @@ public final class RiftController {
             if(s.restoreScan<0 || s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
             int candidate=s.restoreScan;
             CompoundTag entry=s.snapshots.get(candidate);
+            // Never let a truncated NBT entry default to (0,0,0) or silently
+            // claim that an unknown block state was restored. Quarantine the
+            // irrecoverable record without touching terrain or other snapshots.
+            if(!entry.contains("pos",Tag.TAG_LONG)
+                || !entry.contains("state",Tag.TAG_COMPOUND)
+                || !entry.getCompound("state").contains("Name",Tag.TAG_STRING)) {
+                s.skippedInvalid++;
+                LOGGER.warn("BLACK FREQUENCY: malformed recovery snapshot at index {}; no terrain edit",candidate);
+                if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST MALFORMED_SNAPSHOT_SKIPPED index={}",candidate);
+                if(candidate!=s.restoreIndex) {
+                    s.snapshots.set(candidate,s.snapshots.get(s.restoreIndex));
+                    s.snapshots.set(s.restoreIndex,entry);
+                }
+                s.restoreIndex--;
+                if(s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
+                checks++;
+                continue;
+            }
             BlockPos pos=BlockPos.of(entry.getLong("pos"));
             checks++;
             if(failedWritesThisTick.contains(pos.asLong())) {
@@ -362,6 +380,11 @@ public final class RiftController {
                         LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_RESTORATION_PROGRESS pending={} restored={}",s.restoreIndex+1,s.restoredBlocks);
                     if(restoredThisTick%12==0)
                         level.sendParticles(ParticleTypes.REVERSE_PORTAL,pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5,6,.45,.45,.45,.07);
+                } else {
+                    // Fractures never record air. An unknown block id decoded as
+                    // air is corrupt data, not a successfully restored block.
+                    s.skippedInvalid++;
+                    LOGGER.warn("BLACK FREQUENCY: recovery snapshot at {} resolves to air; no terrain edit",pos);
                 }
             }
             // O(1) swap keeps all still-pending entries in [0,restoreIndex].
@@ -390,9 +413,11 @@ public final class RiftController {
         }
         // Hold the final stabilization glow long enough to be visible in-game.
         if(s.restoreIndex<0 && s.restoreTicks>=100) {
+            if(CI_TEST && Boolean.getBoolean("blackfrequency.ciRestoreWriteFailureTest") && s.skippedInvalid!=1)
+                throw new IllegalStateException("CI malformed snapshot quarantine failed: "+s.skippedInvalid);
             s.restoring=false;s.restored=true;s.finished=true;s.snapshots.clear();
             for(var player:level.players()) RiftNetwork.send(player,0f,false,0);
-            if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored={} destroyed={} skippedOccupied={} flowingReplaced={}",s.restoredBlocks,s.edits,s.skippedOccupied,s.ciFlowingReplaced);
+            if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored={} destroyed={} skippedOccupied={} skippedInvalid={} flowingReplaced={}",s.restoredBlocks,s.edits,s.skippedOccupied,s.skippedInvalid,s.ciFlowingReplaced);
             // Disposable client test: dispatch a synthetic BreakEvent after
             // restoration. This verifies cancellation and block consumption,
             // but does not replace a real player-mining/drop integration test.
@@ -415,9 +440,9 @@ public final class RiftController {
             for(var player:level.players()) {
                 player.displayClientMessage(Component.literal("§d✦ СТАБИЛИЗАЦИЯ 100% §7— восстановлено "+s.restoredBlocks+" блоков; пропущено "+s.skippedOccupied),true);
                 player.connection.send(new ClientboundSetTitleTextPacket(Component.literal(
-                    s.skippedOccupied==0 ? "§dМИР ВОССТАНОВЛЕН" : "§dСТАБИЛИЗАЦИЯ ЗАВЕРШЕНА")));
+                    s.skippedOccupied==0 && s.skippedInvalid==0 ? "§dМИР ВОССТАНОВЛЕН" : "§dСТАБИЛИЗАЦИЯ ЗАВЕРШЕНА")));
                 player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal(
-                    s.skippedOccupied==0 ? "§7Разлом закрывается" : "§7Изменённые блоки сохранены: "+s.skippedOccupied)));
+                    s.skippedOccupied==0 && s.skippedInvalid==0 ? "§7Разлом закрывается" : "§7Пропущено занятых: "+s.skippedOccupied+"; повреждённых записей: "+s.skippedInvalid)));
             }
         }
         s.setDirty();
@@ -602,6 +627,7 @@ public final class RiftController {
                 s.restoreTicks=0;
                 s.restoredBlocks=0;
                 s.skippedOccupied=0;
+                s.skippedInvalid=0;
             }
             if(Boolean.getBoolean("blackfrequency.ciFlowingFluidTest") && !playerInteractionTest) {
                 // Disposable CI world: emulate water flowing into a broken block
@@ -618,6 +644,18 @@ public final class RiftController {
                 BlockPos unloaded=new BlockPos(s.x+4096,level.getSeaLevel(),s.z+4096);
                 s.snapshots.get(s.restoreIndex).putLong("pos",unloaded.asLong());
                 LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_CHUNK_INJECTED x={} z={}",unloaded.getX(),unloaded.getZ());
+            }
+            // Add one deliberately truncated record to the disposable server
+            // scenario, after the fluid/write-retry fixtures are prepared.
+            // Valid snapshots must still restore and (0,0,0) must not be edited.
+            if(CI_TEST && Boolean.getBoolean("blackfrequency.ciRestoreWriteFailureTest")
+                && !playerInteractionTest) {
+                CompoundTag malformed=new CompoundTag();
+                malformed.put("state",new CompoundTag()); // missing pos and Name
+                s.snapshots.add(0,malformed);
+                s.restoreIndex=s.snapshots.size()-1;
+                s.restoreScan=s.restoreIndex;
+                LOGGER.info("BLACK_FREQUENCY_TEST MALFORMED_SNAPSHOT_INJECTED");
             }
             BlockPos demoPos=new BlockPos(s.x,level.getSeaLevel()+4,s.z);
             if(!level.players().isEmpty()) {
