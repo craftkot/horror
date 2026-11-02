@@ -22,6 +22,7 @@ jobs:
         recovery: [normal, sparse]
     env:
       BF_TEST_SPARSE_RECOVERY: ${{ matrix.recovery == 'sparse' && '1' || '0' }}
+      BF_TEST_SNOW_BEACON: ${{ matrix.recovery == 'sparse' && '1' || '0' }}
       CF_API_KEY: ${{ secrets.CF_API_KEY }}
       DISPLAY: :99
       BF_ISOLATED_TEST: "1"

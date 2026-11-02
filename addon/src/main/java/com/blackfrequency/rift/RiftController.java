@@ -178,6 +178,17 @@ public final class RiftController {
                     int y=level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,x,z);
                     if(y<=level.getMinBuildHeight() || y>=level.getMaxBuildHeight()-2) continue;
                     BlockPos pos=new BlockPos(x,y,z);
+                    // Disposable sparse-client regression: make the replacement
+                    // beacon stand above a real snow layer, rather than relying
+                    // on a random snowy biome. Never enabled in normal worlds.
+                    boolean snowFixture=CI_TEST && Boolean.getBoolean("blackfrequency.ciSnowBeaconTest")
+                        && s.ciNaturalBeaconRemoved;
+                    if(snowFixture && level.getBlockState(pos).isAir()
+                        && level.getBlockState(pos.above()).isAir()
+                        && level.getBlockState(pos.below()).blocksMotion()
+                        && level.getBlockState(pos.below()).getFluidState().isEmpty()
+                        && !level.setBlock(pos,Blocks.SNOW.defaultBlockState(),3))
+                        throw new IllegalStateException("CI snow support placement failed");
                     // Motion-blocking heightmaps can stop at a solid block below
                     // a thin snow layer. Never replace the snow: put the beacon
                     // in free air above it, provided the snow rests on solid ground.
@@ -190,8 +201,16 @@ public final class RiftController {
                     if((!support.blocksMotion() && !supportedSnow)
                         || !support.getFluidState().isEmpty()
                         || !level.getBlockState(pos).isAir()
-                        || !level.getBlockState(pos.above()).isAir()) continue;
+                        || !level.getBlockState(pos.above()).isAir()
+                        || (snowFixture && !supportedSnow)) continue;
                     if(!level.setBlock(pos,Blocks.BEACON.defaultBlockState(),3)) continue;
+                    if(snowFixture) {
+                        if(!level.getBlockState(pos.below()).is(Blocks.SNOW)
+                            || !level.getBlockState(pos.below(2)).blocksMotion())
+                            throw new IllegalStateException("CI snow support was destroyed");
+                        LOGGER.info("BLACK_FREQUENCY_TEST SNOW_BEACON_SUPPORT_VERIFIED x={} y={} z={} snowY={}",
+                            pos.getX(),pos.getY(),pos.getZ(),pos.getY()-1);
+                    }
                     s.naturalBeaconPos=pos.asLong();
                     s.setDirty();
                     // In the disposable client test, remove the first beacon to
