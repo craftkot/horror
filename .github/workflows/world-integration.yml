@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [fracture, restoration]
+        mode: [fracture, restoration, deferred]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -33,8 +33,11 @@ jobs:
           JAVA_TOOL_OPTIONS: "-Dblackfrequency.ciTestMode=true -Dblackfrequency.ciTickStep=2400 -Dblackfrequency.ciAllowEmptyServer=true -Xmx3G"
           BF_TEST_MODE: ${{ matrix.mode }}
         run: |
-          if [ "$BF_TEST_MODE" = "restoration" ]; then
+          if [ "$BF_TEST_MODE" = "restoration" ] || [ "$BF_TEST_MODE" = "deferred" ]; then
             export JAVA_TOOL_OPTIONS="$JAVA_TOOL_OPTIONS -Dblackfrequency.ciExerciseRestoration=true"
+          fi
+          if [ "$BF_TEST_MODE" = "deferred" ]; then
+            export JAVA_TOOL_OPTIONS="$JAVA_TOOL_OPTIONS -Dblackfrequency.ciDeferredChunkTest=true"
           fi
           mkdir -p run
           printf 'eula=true\n' > run/eula.txt
@@ -49,6 +52,12 @@ jobs:
           grep -q 'BLACK_FREQUENCY_TEST FINALE_STARTED' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST FRACTURE_PHASE_STARTED' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED' world-test.log
+          if [ "$BF_TEST_MODE" = "deferred" ]; then
+            grep -q "BLACK_FREQUENCY_TEST DEFERRED_CHUNK_INJECTED" world-test.log
+            grep -q "BLACK_FREQUENCY_TEST DEFERRED_CHUNK_SKIPPED" world-test.log
+            grep -q "BLACK_FREQUENCY_TEST DEFERRED_RESTORATION_PROGRESS" world-test.log
+            echo "DEFERRED_RESTORATION_VERIFIED: loaded blocks recovered while unloaded snapshot remains pending"
+          fi
           if [ "$BF_TEST_MODE" = "restoration" ]; then
             grep -q 'BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED' world-test.log
