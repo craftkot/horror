@@ -442,6 +442,28 @@ public final class RiftController {
                 }
             }
         }
+        // Lightweight visual signatures of the same drifting gravity field.
+        // Particles only: no extra entities, chunk loads or world edits.
+        if (s.finaleTicks > 85 && s.finaleTicks % 8 == 0) {
+            for (var player : level.players()) {
+                double ax=player.getX()-s.x, az=player.getZ()-s.z;
+                if(ax*ax+az*az>(RADIUS+16.0)*(RADIUS+16.0)) continue;
+                double zone=Math.sin(player.getX()*.19+s.finaleTicks*.035)
+                           *Math.cos(player.getZ()*.17-s.finaleTicks*.026);
+                if(zone>.48) {
+                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                        player.getX(),player.getY()+.5,player.getZ(),
+                        9,2.2,.7,2.2,.11);
+                    level.sendParticles(ParticleTypes.END_ROD,
+                        player.getX(),player.getY()+.3,player.getZ(),
+                        3,1.4,.25,1.4,.04);
+                } else if(zone<-.68) {
+                    level.sendParticles(ParticleTypes.SMOKE,
+                        player.getX(),player.getY()+.15,player.getZ(),
+                        7,1.8,.25,1.8,.018);
+                }
+            }
+        }
         // Recovery must remain available after the last terrain edit: a beacon
         // may not find safe ground until a player returns to a loaded chunk.
         // These checks never generate or force-load terrain.
