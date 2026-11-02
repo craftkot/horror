@@ -67,7 +67,8 @@ jobs:
             grep -q 'BLACK_FREQUENCY_TEST FLOWING_FLUID_INJECTED' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST FLOWING_FLUID_REPLACED' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RESTORE_WRITE_DEFERRED' world-test.log
-            echo 'RESTORE_WRITE_RETRY_VERIFIED: a rejected block write was retained and the world fully recovered'
+            grep -q 'BLACK_FREQUENCY_TEST RESTORE_WRITE_RETRIED' world-test.log
+            echo 'RESTORE_WRITE_RETRY_VERIFIED: a rejected block write was retained and retried on a later tick'
             echo 'FLOWING_FLUID_RESTORATION_VERIFIED'
             python3 - <<'PY'
           import pathlib,re
@@ -77,6 +78,11 @@ jobs:
           restored,destroyed=map(int,match.groups())
           assert destroyed>=160, f"Too little damage exercised: {destroyed}"
           assert restored==destroyed, f"Restoration incomplete: {restored}/{destroyed}"
+          failed=re.search(r"BLACK_FREQUENCY_TEST RESTORE_WRITE_DEFERRED [^\\n]* tick=(\\d+)",log)
+          retried=re.search(r"BLACK_FREQUENCY_TEST RESTORE_WRITE_RETRIED [^\\n]* tick=(\\d+)",log)
+          assert failed and retried, "Missing write-failure and retry markers"
+          assert int(retried.group(1))>int(failed.group(1)), "Rejected write was retried in the same tick"
+          print(f"RESTORE_WRITE_NEXT_TICK_VERIFIED {failed.group(1)} -> {retried.group(1)}")
           print(f"BEACON_RESTORATION_VERIFIED {restored}/{destroyed}")
           PY
           echo 'Restarting disposable server to verify restoration persists'
