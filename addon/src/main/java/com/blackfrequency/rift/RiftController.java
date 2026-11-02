@@ -118,6 +118,9 @@ public final class RiftController {
             BlockPos pos=BlockPos.of(entry.getLong("pos"));
             checks++;
             if(!level.hasChunk(pos.getX()>>4,pos.getZ()>>4)) {
+                if(CI_TEST && Boolean.getBoolean("blackfrequency.ciDeferredChunkTest")
+                    && s.restoreTicks==1)
+                    LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_CHUNK_SKIPPED x={} z={}",pos.getX(),pos.getZ());
                 s.restoreScan--;
                 continue;
             }
@@ -135,6 +138,9 @@ public final class RiftController {
             if(original.isAir()) continue;
             if(level.setBlock(pos,original,2|16)) {
                 restoredThisTick++;s.restoredBlocks++;
+                if(CI_TEST && Boolean.getBoolean("blackfrequency.ciDeferredChunkTest")
+                    && s.restoredBlocks==1 && s.restoreIndex>=0)
+                    LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_RESTORATION_PROGRESS pending={} restored={}",s.restoreIndex+1,s.restoredBlocks);
                 if(restoredThisTick%12==0)
                     level.sendParticles(ParticleTypes.REVERSE_PORTAL,pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5,6,.45,.45,.45,.07);
             }
@@ -312,6 +318,13 @@ public final class RiftController {
             s.restoreIndex=s.snapshots.size()-1;
             s.restoreScan=s.restoreIndex;
             s.restoreTicks=0;
+            if(Boolean.getBoolean("blackfrequency.ciDeferredChunkTest")) {
+                // Disposable CI world only: replace the last snapshot location
+                // with a definitely unloaded chunk to exercise deferred recovery.
+                BlockPos unloaded=new BlockPos(s.x+4096,level.getSeaLevel(),s.z+4096);
+                s.snapshots.get(s.restoreIndex).putLong("pos",unloaded.asLong());
+                LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_CHUNK_INJECTED x={} z={}",unloaded.getX(),unloaded.getZ());
+            }
             BlockPos demoPos=new BlockPos(s.x,level.getSeaLevel()+4,s.z);
             if(!level.players().isEmpty()) {
                 var demoPlayer=level.players().get(0);
