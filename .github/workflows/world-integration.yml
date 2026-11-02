@@ -37,7 +37,7 @@ jobs:
             export JAVA_TOOL_OPTIONS="$JAVA_TOOL_OPTIONS -Dblackfrequency.ciExerciseRestoration=true"
           fi
           if [ "$BF_TEST_MODE" = "restoration" ]; then
-            export JAVA_TOOL_OPTIONS="$JAVA_TOOL_OPTIONS -Dblackfrequency.ciFlowingFluidTest=true"
+            export JAVA_TOOL_OPTIONS="$JAVA_TOOL_OPTIONS -Dblackfrequency.ciFlowingFluidTest=true -Dblackfrequency.ciRestoreWriteFailureTest=true"
           fi
           if [ "$BF_TEST_MODE" = "deferred" ]; then
             export JAVA_TOOL_OPTIONS="$JAVA_TOOL_OPTIONS -Dblackfrequency.ciDeferredChunkTest=true"
@@ -66,6 +66,8 @@ jobs:
             grep -q 'BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST FLOWING_FLUID_INJECTED' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST FLOWING_FLUID_REPLACED' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST RESTORE_WRITE_DEFERRED' world-test.log
+            echo 'RESTORE_WRITE_RETRY_VERIFIED: a rejected block write was retained and the world fully recovered'
             echo 'FLOWING_FLUID_RESTORATION_VERIFIED'
             python3 - <<'PY'
           import pathlib,re
