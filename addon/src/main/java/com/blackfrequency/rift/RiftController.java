@@ -519,6 +519,11 @@ public final class RiftController {
         // gentle bounded impulses allow movement without overriding vanilla physics.
         if (s.finaleTicks > 85 && s.finaleTicks % 5 == 0) {
             for (var player : level.players()) {
+                // The disposable real-click regression needs a stable raycast.
+                // Do not let test-only gravity impulses drift the player away
+                // from the beacon between teleportation and mouse input.
+                if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest")
+                    && s.beaconPos!=0L && !s.restoring) continue;
                 if (player.isCreative() || player.isSpectator()) continue;
                 double px=player.getX(), pz=player.getZ();
                 // Terrain edits are limited to RADIUS. Gravity must not follow
@@ -685,6 +690,7 @@ public final class RiftController {
                     // leave the crosshair just outside its hitbox on random terrain.
                     demoPlayer.teleportTo(level,demoPos.getX()+.5,demoPos.getY(),
                         demoPos.getZ()-1.75,0f,27f);
+                    demoPlayer.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
                 } else if(playerInteractionTest) {
                     // Legacy fixture for testing a separately placed beacon.
                     int surface=level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,s.x,s.z);
