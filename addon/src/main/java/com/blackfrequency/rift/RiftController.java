@@ -216,10 +216,14 @@ public final class RiftController {
             for(var player:level.players()) RiftNetwork.send(player,remaining,false,0);
         }
         int restoredThisTick=0,checks=0;
+        // Never revisit a small pending set dozens of times in one tick.
+        // In particular, a single snapshot in an unloaded chunk costs one
+        // hasChunk check, not the full 48-check scan budget.
+        int scanBudget=Math.min(48,Math.max(0,s.restoreIndex+1));
         // A failed block write must not be attempted repeatedly in one tick.
         // Other loaded snapshots can still recover; retry this position next tick.
         java.util.Set<Long> failedWritesThisTick=new java.util.HashSet<>();
-        while(s.restoreIndex>=0 && restoredThisTick<12 && checks<48) {
+        while(s.restoreIndex>=0 && restoredThisTick<12 && checks<scanBudget) {
             // A single unloaded chunk must not block recovery in other loaded chunks.
             // Scan at most 48 candidates per tick and retain unloaded snapshots
             // in the pending prefix; never load chunks just to restore terrain.
