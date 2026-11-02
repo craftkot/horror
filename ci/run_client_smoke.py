@@ -232,7 +232,7 @@ def capture_test_world():
                     return False
                 print("WORLD_CAPTURE: restoration accounting verified",restored_count,skipped_count,damaged_count,flush=True)
                 if os.environ.get("BF_TEST_SPARSE_RECOVERY")=="1":
-                    sparse=re.search(r"BLACK_FREQUENCY_TEST SPARSE_RECOVERY_ELIGIBLE edits=(\\d+) pending=(\\d+)",log_after)
+                    sparse=re.search(r"BLACK_FREQUENCY_TEST SPARSE_RECOVERY_ELIGIBLE edits=(\d+) pending=(\d+)",log_after)
                     if not sparse:
                         print("WORLD_CAPTURE_FAIL: sparse fracture never reached beacon eligibility",flush=True)
                         return False
