@@ -43,6 +43,8 @@ public final class RiftSkyRenderer {
             if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_SKY || shader==null) return;
             Minecraft mc=Minecraft.getInstance();
             if(mc.level==null || mc.player==null) return;
+            // A stale Overworld packet must not draw the fracture in other dimensions.
+            if(!mc.level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
             float strength=RiftClientState.visibleStrength();
             if(strength<=0) return;
             if(!firstVisibleFrameLogged) {

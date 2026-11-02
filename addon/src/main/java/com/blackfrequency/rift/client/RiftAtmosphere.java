@@ -1,5 +1,7 @@
 package com.blackfrequency.rift.client;
 
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.level.Level;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ViewportEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -10,8 +12,15 @@ import net.minecraftforge.fml.common.Mod;
 public final class RiftAtmosphere {
     private RiftAtmosphere() {}
 
+    // Rift packets can outlive a dimension transfer. Never tint the Nether or End.
+    private static boolean isOverworld() {
+        var level=Minecraft.getInstance().level;
+        return level!=null && level.dimension().equals(Level.OVERWORLD);
+    }
+
     @SubscribeEvent
     public static void onFogColor(ViewportEvent.ComputeFogColor event) {
+        if(!isOverworld()) return;
         float f=RiftClientState.visibleStrength();
         if(f<=0) return;
         float blend=Math.min(.96f,f*.92f);
@@ -22,6 +31,7 @@ public final class RiftAtmosphere {
 
     @SubscribeEvent
     public static void onFogDistance(ViewportEvent.RenderFog event) {
+        if(!isOverworld()) return;
         float f=RiftClientState.visibleStrength();
         if(f<=0) return;
         float far=Math.max(24f,event.getFarPlaneDistance()*(1f-Math.min(.88f,f*.84f)));
