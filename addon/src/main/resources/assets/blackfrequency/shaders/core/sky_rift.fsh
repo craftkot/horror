@@ -25,10 +25,18 @@ void main(){
  float warped=dot(vec3(cells(n.yz*1.33+sin(t+n.x*14.)*.042,6.8),cells(n.xz*1.27+cos(t+n.y*17.)*.045,7.2),cells(n.xy*1.21+sin(t+n.z*11.)*.04,6.3)),w);
  d=min(d,warped*.62);
  float secondary=dot(vec3(cells(n.yz,9.),cells(n.xz,9.),cells(n.xy,9.)),w);
- float jitter=.012*sin(t*2.+n.x*37.+n.z*29.);
- float width=.09+.085*clamp(RiftStrength,0.,1.)+jitter;
- float fissure=1.-smoothstep(width,width+.04,d);
- float branch=(1.-smoothstep(.035,.12,secondary))*.68;
+ // A continuous, world-direction-based fracture spine. Integer angular
+ // harmonics meet at +/-PI, so the seam cannot split at sky-cube edges.
+ float longitude=atan(n.z,n.x);
+ float spineHeight=.12+.34*sin(2.*longitude+t*.11)+.12*sin(5.*longitude-t*.08);
+ float spineDistance=abs(n.y-spineHeight);
+ float spineCore=1.-smoothstep(.014,.046,spineDistance);
+ float spineHalo=exp(-spineDistance*14.);
+ // Keep the old cellular filaments as secondary damage, not giant patches.
+ float jitter=.004*sin(t*2.+n.x*37.+n.z*29.);
+ float width=.045+.04*clamp(RiftStrength,0.,1.)+jitter;
+ float fissure=1.-smoothstep(width,width+.035,d);
+ float branch=(1.-smoothstep(.025,.075,secondary))*.30;
  float crack=max(fissure,branch);
  float voidPocket=smoothstep(.20,.44,hash(floor(n.xz*9.)+floor(n.y*8.)))*smoothstep(.10,.28,crack);
  float halo=exp(-max(d-width,0.)*19.);
@@ -41,8 +49,11 @@ void main(){
  float pulse=.82+.18*sin(t*3.+n.x*29.);
  vec3 color=background+purple*halo*.27+edge*max(crack-voidPocket,0.)*.94*pulse;
  color=mix(color,vec3(.0003,.0002,.0015),voidPocket*.98);
+ // The spine has a violet corona surrounding a nearly lightless interior.
+ color+=edge*spineHalo*.64*pulse;
+ color=mix(color,vec3(.0002,.0001,.001),spineCore*.98);
  color=mix(color,vec3(.002,.011,.009),green);
- // Darken the entire sky while retaining angular fracture boundaries.
- float opacity=clamp(f*(.72+.25*crack+.22*voidPocket),0.,.99);
+ // The black core stays opaque enough to read as a tear rather than a decal.
+ float opacity=clamp(f*(.72+.19*crack+.18*voidPocket+.25*spineCore),0.,.99);
  fragColor=vec4(color,opacity);
 }
