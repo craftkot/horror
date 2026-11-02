@@ -96,14 +96,16 @@ public final class RiftController {
         BlockPos pos=event.getPos();
         if(!level.getBlockState(pos).is(Blocks.BEACON)) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
-        if(!s.started || s.restored || pos.asLong()!=s.naturalBeaconPos) return;
+        if(!s.started || pos.asLong()!=s.naturalBeaconPos) return;
         // Cancel vanilla harvesting before it creates a valuable beacon item.
         event.setCanceled(true);
         if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),3)) {
             s.naturalBeaconPos=Long.MIN_VALUE;
             s.setDirty();
             event.getPlayer().displayClientMessage(Component.literal(
-                "§5✦ Маяк стабилизации рассеялся. Новый появится поблизости."),true);
+                s.restoring || s.restored
+                    ? "§5✦ Маяк стабилизации рассеялся."
+                    : "§5✦ Маяк стабилизации рассеялся. Новый появится поблизости."),true);
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_MINED_NO_DROP x={} y={} z={}",
                 pos.getX(),pos.getY(),pos.getZ());
         }
@@ -305,6 +307,25 @@ public final class RiftController {
             s.restoring=false;s.restored=true;s.finished=true;s.snapshots.clear();
             for(var player:level.players()) RiftNetwork.send(player,0f,false,0);
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored={} destroyed={} skippedOccupied={} flowingReplaced={}",s.restoredBlocks,s.edits,s.skippedOccupied,s.ciFlowingReplaced);
+            // Disposable client test: dispatch a synthetic BreakEvent after
+            // restoration. This verifies cancellation and block consumption,
+            // but does not replace a real player-mining/drop integration test.
+            if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPostRestoreBeaconBreakTest")) {
+                if(s.naturalBeaconPos==Long.MIN_VALUE || level.players().isEmpty())
+                    throw new IllegalStateException("CI recovery beacon missing after restoration");
+                BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
+                if(!level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)
+                    || !level.getBlockState(beacon).is(Blocks.BEACON))
+                    throw new IllegalStateException("CI recovery beacon not loaded after restoration");
+                var testEvent=new net.minecraftforge.event.level.BlockEvent.BreakEvent(
+                    level,beacon,level.getBlockState(beacon),level.players().get(0));
+                new RiftController().onRecoveryBeaconBreak(testEvent);
+                if(!testEvent.isCanceled() || !level.getBlockState(beacon).isAir()
+                    || s.naturalBeaconPos!=Long.MIN_VALUE)
+                    throw new IllegalStateException("CI post-restoration beacon break guard failed");
+                LOGGER.info("BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_CONSUMED x={} y={} z={}",
+                    beacon.getX(),beacon.getY(),beacon.getZ());
+            }
             for(var player:level.players()) {
                 player.displayClientMessage(Component.literal("§d✦ СТАБИЛИЗАЦИЯ 100% §7— восстановлено "+s.restoredBlocks+" блоков; пропущено "+s.skippedOccupied),true);
                 player.connection.send(new ClientboundSetTitleTextPacket(Component.literal(
@@ -513,9 +534,9 @@ public final class RiftController {
                 }
                 if(!Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest"))
                     level.setBlock(demoPos,Blocks.BEACON.defaultBlockState(),3);
-                demoPlayer.connection.send(new ClientboundSetTitlesAnimationPacket(8,75,20));
-                demoPlayer.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§5СТАБИЛИЗАЦИЯ")));
-                demoPlayer.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§dМаяк запечатывает разлом")));
+                // Do not cover the beacon or sky with a huge test-only title.
+                demoPlayer.displayClientMessage(Component.literal(
+                    "§d✦ Маяк готов — нажмите ПКМ для стабилизации"),true);
             }
             s.beaconPos=demoPos.asLong();
             if(playerInteractionTest)
