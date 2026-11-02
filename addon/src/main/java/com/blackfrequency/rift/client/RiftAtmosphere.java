@@ -23,10 +23,13 @@ public final class RiftAtmosphere {
         if(!isOverworld()) return;
         float f=RiftClientState.visibleStrength();
         if(f<=0) return;
-        float blend=Math.min(.96f,f*.92f);
-        event.setRed(event.getRed()*(1f-blend)+.027f*blend);
-        event.setGreen(event.getGreen()*(1f-blend)+.010f*blend);
-        event.setBlue(event.getBlue()*(1f-blend)+.072f*blend);
+        // Slow cold pulses and a subtle violet shimmer make the atmosphere feel alive.
+        float time=Minecraft.getInstance().level.getGameTime();
+        float pulse=.5f+.5f*(float)Math.sin(time*.035f);
+        float blend=Math.min(.96f,f*(.84f+.11f*pulse));
+        event.setRed(event.getRed()*(1f-blend)+(.023f+.006f*pulse)*blend);
+        event.setGreen(event.getGreen()*(1f-blend)+.008f*blend);
+        event.setBlue(event.getBlue()*(1f-blend)+(.065f+.018f*pulse)*blend);
     }
 
     @SubscribeEvent
@@ -34,7 +37,10 @@ public final class RiftAtmosphere {
         if(!isOverworld()) return;
         float f=RiftClientState.visibleStrength();
         if(f<=0) return;
-        float far=Math.max(24f,event.getFarPlaneDistance()*(1f-Math.min(.88f,f*.84f)));
+        float time=Minecraft.getInstance().level.getGameTime();
+        float pulse=.5f+.5f*(float)Math.sin(time*.029f);
+        float contraction=Math.min(.88f,f*(.76f+.10f*pulse));
+        float far=Math.max(24f,event.getFarPlaneDistance()*(1f-contraction));
         event.setFarPlaneDistance(far);
         event.setNearPlaneDistance(Math.min(event.getNearPlaneDistance(),far*.22f));
         event.setCanceled(true);
