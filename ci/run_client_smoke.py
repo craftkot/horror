@@ -1,4 +1,4 @@
-import os, pathlib, subprocess, sys, time, threading
+import os, pathlib, subprocess, sys, time, threading, re
 import minecraft_launcher_lib
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
@@ -221,6 +221,16 @@ def capture_test_world():
                     return False
                 print("WORLD_CAPTURE: restoration finished in integrated client",flush=True)
             log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+            if os.environ.get("BF_TEST_PLAYER_BEACON")=="1":
+                counts=re.search(r"BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored=(\\d+) destroyed=(\\d+) skippedOccupied=(\\d+)",log_after)
+                if not counts:
+                    print("WORLD_CAPTURE_FAIL: missing final restoration accounting",flush=True)
+                    return False
+                restored_count,damaged_count,skipped_count=map(int,counts.groups())
+                if restored_count+skipped_count!=damaged_count:
+                    print("WORLD_CAPTURE_FAIL: unaccounted damaged blocks",restored_count,damaged_count,skipped_count,flush=True)
+                    return False
+                print("WORLD_CAPTURE: restoration accounting verified",restored_count,skipped_count,damaged_count,flush=True)
             if not fracture_seen:
                 print("WORLD_CAPTURE_FAIL: ground fracture never removed a block",flush=True)
                 return False
