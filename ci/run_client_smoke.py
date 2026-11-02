@@ -131,12 +131,20 @@ def capture_test_world():
                 print("WORLD_CAPTURE: JVM thread dump saved",flush=True)
                 return False
             print("WORLD_CAPTURE: player spawn verified in log",flush=True)
-            # Immediately capture after spawn; the green phase is only four seconds.
+            # Capture gameplay immediately: restoration can begin before the
+            # initial frame series ends, so waiting until afterward misses it.
+            restoration_shot=False
             for stage in range(32):
                 if p.poll() is not None:
                     break
-                subprocess.run(["scrot","-a","0,0,1280,720",
-                    str(ROOT/"client-smoke-artifacts"/f"world-stage-{stage:02d}.png")],check=False)
+                snap(f"world-stage-{stage:02d}.png")
+                if os.environ.get("BF_TEST_RESTORATION")=="1" and not restoration_shot:
+                    current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                    if ("BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current
+                            and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" not in current):
+                        snap("beacon-restoration-active.png")
+                        restoration_shot=True
+                        print("WORLD_CAPTURE: active restoration frame captured before completion",flush=True)
                 time.sleep(0.5)
             subprocess.run(["scrot","-a","0,0,1280,720",
                 str(ROOT/"client-smoke-artifacts"/"world.png")],check=False)
@@ -152,7 +160,10 @@ def capture_test_world():
                     break
                 time.sleep(1)
             if fracture_seen:
-                time.sleep(5)
+                # The restoration starts almost immediately after first damage.
+                # Do not wait five seconds and mislabel a completed scene as active.
+                if os.environ.get("BF_TEST_RESTORATION")!="1":
+                    time.sleep(5)
                 snap("terrain-fracture-after-first-block.png")
             else:
                 print("WORLD_CAPTURE: no terrain edit marker during capture window",flush=True)
@@ -160,11 +171,11 @@ def capture_test_world():
             if os.environ.get("BF_TEST_RESTORATION")=="1":
                 deadline_restore=time.time()+80
                 restored=False
-                restoration_shot=False
                 while time.time()<deadline_restore and p.poll() is None:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-                    if not restoration_shot and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current:
-                        time.sleep(1.5)  # allow beacon block and title to reach render thread
+                    if (not restoration_shot
+                            and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current
+                            and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" not in current):
                         snap("beacon-restoration-active.png")
                         restoration_shot=True
                     if "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" in current:
@@ -174,6 +185,9 @@ def capture_test_world():
                 snap("beacon-restoration-finished.png")
                 if not restored:
                     print("WORLD_CAPTURE_FAIL: restoration did not finish in client",flush=True)
+                    return False
+                if not restoration_shot:
+                    print("WORLD_CAPTURE_FAIL: restoration finished without an active gameplay screenshot",flush=True)
                     return False
                 print("WORLD_CAPTURE: restoration finished in integrated client",flush=True)
             log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
