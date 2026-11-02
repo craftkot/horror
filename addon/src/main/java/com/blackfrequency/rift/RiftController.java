@@ -39,7 +39,7 @@ public final class RiftController {
         int edits;
         int finaleTicks;
         boolean started, finished, initialized, restoring, restored;
-        int restoreIndex, restoreTicks, restoredBlocks;
+        int restoreIndex, restoreScan, restoreTicks, restoredBlocks;
         long beaconPos;
         final List<CompoundTag> snapshots = new ArrayList<>();
         static State load(CompoundTag n) {
@@ -51,7 +51,10 @@ public final class RiftController {
             s.started=n.getBoolean("started");s.finished=n.getBoolean("finished");
             s.initialized=n.getBoolean("initialized");
             s.restoring=n.getBoolean("restoring");s.restored=n.getBoolean("restored");
-            s.restoreIndex=n.getInt("restoreIndex");s.restoreTicks=n.getInt("restoreTicks");s.restoredBlocks=n.getInt("restoredBlocks");s.beaconPos=n.getLong("beaconPos");
+            s.restoreIndex=n.getInt("restoreIndex");
+            // Older worlds have no scan cursor: resume at the last pending snapshot.
+            s.restoreScan=n.contains("restoreScan",Tag.TAG_INT)?n.getInt("restoreScan"):s.restoreIndex;
+            s.restoreTicks=n.getInt("restoreTicks");s.restoredBlocks=n.getInt("restoredBlocks");s.beaconPos=n.getLong("beaconPos");
             ListTag saved=n.getList("snapshots",Tag.TAG_COMPOUND);
             for(int i=0;i<saved.size();i++) s.snapshots.add(saved.getCompound(i));
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST STATE_LOADED elapsed={} edits={} restored={} restoring={} snapshots={}",s.elapsed,s.edits,s.restored,s.restoring,s.snapshots.size());
@@ -63,7 +66,7 @@ public final class RiftController {
             n.putInt("edits",edits);n.putInt("finaleTicks",finaleTicks);n.putBoolean("started",started);
             n.putBoolean("finished",finished);n.putBoolean("initialized",initialized);
             n.putBoolean("restoring",restoring);n.putBoolean("restored",restored);
-            n.putInt("restoreIndex",restoreIndex);n.putInt("restoreTicks",restoreTicks);n.putInt("restoredBlocks",restoredBlocks);n.putLong("beaconPos",beaconPos);
+            n.putInt("restoreIndex",restoreIndex);n.putInt("restoreScan",restoreScan);n.putInt("restoreTicks",restoreTicks);n.putInt("restoredBlocks",restoredBlocks);n.putLong("beaconPos",beaconPos);
             ListTag saved=new ListTag();for(CompoundTag tag:snapshots)saved.add(tag.copy());
             n.put("snapshots",saved);
             return n;
@@ -82,7 +85,7 @@ public final class RiftController {
         // Record it distinctly from the synthetic CI restoration path.
         if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
         if(pos.distSqr(new BlockPos(s.x,pos.getY(),s.z))>128d*128d) return;
-        s.restoring=true;s.restoreIndex=s.snapshots.size()-1;s.restoreTicks=0;s.restoredBlocks=0;s.beaconPos=pos.asLong();s.setDirty();
+        s.restoring=true;s.restoreIndex=s.snapshots.size()-1;s.restoreScan=s.restoreIndex;s.restoreTicks=0;s.restoredBlocks=0;s.beaconPos=pos.asLong();s.setDirty();
         for(var player:level.players()) {
             player.connection.send(new ClientboundSetTitlesAnimationPacket(10,100,30));
             player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§5СТАБИЛИЗАЦИЯ")));
@@ -106,13 +109,27 @@ public final class RiftController {
         }
         int restoredThisTick=0,checks=0;
         while(s.restoreIndex>=0 && restoredThisTick<12 && checks<48) {
-            CompoundTag entry=s.snapshots.get(s.restoreIndex);
+            // A single unloaded chunk must not block recovery in other loaded chunks.
+            // Scan at most 48 candidates per tick and retain unloaded snapshots
+            // in the pending prefix; never load chunks just to restore terrain.
+            if(s.restoreScan<0 || s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
+            int candidate=s.restoreScan;
+            CompoundTag entry=s.snapshots.get(candidate);
             BlockPos pos=BlockPos.of(entry.getLong("pos"));
-            // Keep the snapshot queued until its chunk loads. Never silently lose
-            // the original state of blocks in unloaded regions.
-            if(!level.hasChunk(pos.getX()>>4,pos.getZ()>>4)) break;
-            s.restoreIndex--;
             checks++;
+            if(!level.hasChunk(pos.getX()>>4,pos.getZ()>>4)) {
+                s.restoreScan--;
+                continue;
+            }
+            // Swap a processed entry with the end of the pending prefix.
+            // This is O(1), unlike removing entries from a 95k-element list,
+            // and keeps all unloaded entries available across server restarts.
+            if(candidate!=s.restoreIndex) {
+                s.snapshots.set(candidate,s.snapshots.get(s.restoreIndex));
+                s.snapshots.set(s.restoreIndex,entry);
+            }
+            s.restoreIndex--;
+            if(s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
             if(!level.getBlockState(pos).isAir()) continue;
             BlockState original=NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK),entry.getCompound("state"));
             if(original.isAir()) continue;
@@ -293,6 +310,7 @@ public final class RiftController {
             && !s.restoring && s.edits>=160 && !s.snapshots.isEmpty()) {
             s.restoring=true;
             s.restoreIndex=s.snapshots.size()-1;
+            s.restoreScan=s.restoreIndex;
             s.restoreTicks=0;
             BlockPos demoPos=new BlockPos(s.x,level.getSeaLevel()+4,s.z);
             if(!level.players().isEmpty()) {
