@@ -146,11 +146,19 @@ public final class RiftController {
             if(s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
             // Preserve blocks placed (or moved) into the fissure after damage.
             // Count them so the UI never claims they were restored by the mod.
-            if(!level.getBlockState(pos).isAir()) {s.skippedOccupied++;continue;}
+            BlockState current=level.getBlockState(pos);
+            // Flowing water/lava can spill into a fissure after terrain removal.
+            // Restore the saved terrain through flowing fluids, but preserve
+            // player-placed solid blocks and liquid SOURCE blocks.
+            boolean flowingFluid=(current.is(Blocks.WATER) || current.is(Blocks.LAVA))
+                && !current.getFluidState().isSource();
+            if(!current.isAir() && !flowingFluid) {s.skippedOccupied++;continue;}
             BlockState original=NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK),entry.getCompound("state"));
             if(original.isAir()) continue;
             if(level.setBlock(pos,original,2|16)) {
                 restoredThisTick++;s.restoredBlocks++;
+                if(CI_TEST && flowingFluid)
+                    LOGGER.info("BLACK_FREQUENCY_TEST FLOWING_FLUID_REPLACED x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
                 if(CI_TEST && Boolean.getBoolean("blackfrequency.ciDeferredChunkTest")
                     && s.restoredBlocks==1 && s.restoreIndex>=0)
                     LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_RESTORATION_PROGRESS pending={} restored={}",s.restoreIndex+1,s.restoredBlocks);
@@ -342,6 +350,15 @@ public final class RiftController {
                 s.restoreTicks=0;
                 s.restoredBlocks=0;
                 s.skippedOccupied=0;
+            }
+            if(Boolean.getBoolean("blackfrequency.ciFlowingFluidTest") && !playerInteractionTest) {
+                // Disposable CI world: emulate water flowing into a broken block
+                // and prove that recovery does not mistake it for a player build.
+                BlockPos fluidPos=BlockPos.of(s.snapshots.get(s.restoreIndex).getLong("pos"));
+                if(level.hasChunk(fluidPos.getX()>>4,fluidPos.getZ()>>4)
+                    && level.setBlock(fluidPos,Blocks.WATER.defaultBlockState()
+                        .setValue(net.minecraft.world.level.block.LiquidBlock.LEVEL,1),2|16))
+                    LOGGER.info("BLACK_FREQUENCY_TEST FLOWING_FLUID_INJECTED x={} y={} z={}",fluidPos.getX(),fluidPos.getY(),fluidPos.getZ());
             }
             if(Boolean.getBoolean("blackfrequency.ciDeferredChunkTest")) {
                 // Disposable CI world only: replace the last snapshot location
