@@ -161,10 +161,29 @@ def capture_test_world():
             # Capture gameplay immediately: restoration can begin before the
             # initial frame series ends, so waiting until afterward misses it.
             restoration_shot=False
+            sky_shot=False
             for stage in range(32):
                 if p.poll() is not None:
                     break
                 snap(f"world-stage-{stage:02d}.png")
+                # Capture the real sky shader unobstructed by the HUD and treetops.
+                # Do this before beacon teleport/aiming; restore camera and HUD so
+                # the actual player right-click regression remains unaffected.
+                if not sky_shot and stage>=18:
+                    current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                    if "BLACK_FREQUENCY_RENDER_ACTIVE" in current:
+                        key("F1")
+                        time.sleep(0.2)
+                        try:
+                            subprocess.run(["xdotool","mousemove_relative","--","0","-440"],check=False)
+                            time.sleep(0.5)
+                            snap("sky-rift-hudless.png")
+                            sky_shot=(shots/"sky-rift-hudless.png").is_file()
+                        finally:
+                            subprocess.run(["xdotool","mousemove_relative","--","0","440"],check=False)
+                            key("F1")
+                        if sky_shot:
+                            print("WORLD_CAPTURE: SKY_RIFT_HUDLESS_FRAME_CAPTURED",flush=True)
                 if os.environ.get("BF_TEST_RESTORATION")=="1" and not restoration_shot:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     try_beacon_click(current)
