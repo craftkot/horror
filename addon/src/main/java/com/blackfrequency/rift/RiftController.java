@@ -93,7 +93,7 @@ public final class RiftController {
         if(pos.distSqr(new BlockPos(s.x,pos.getY(),s.z))>128d*128d) return;
         // Log only accepted player interactions; rejected distant beacons must
         // never count as successful activation in the real-client CI test.
-        if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
+        if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION x={} y={} z={} natural={}",pos.getX(),pos.getY(),pos.getZ(),pos.asLong()==s.naturalBeaconPos);
         s.restoring=true;s.restoreIndex=s.snapshots.size()-1;s.restoreScan=s.restoreIndex;s.restoreTicks=0;s.restoredBlocks=0;s.skippedOccupied=0;s.beaconPos=pos.asLong();s.setDirty();
         for(var player:level.players()) {
             player.connection.send(new ClientboundSetTitlesAnimationPacket(10,100,30));
@@ -135,6 +135,8 @@ public final class RiftController {
                     if(!level.setBlock(pos,Blocks.BEACON.defaultBlockState(),3)) continue;
                     s.naturalBeaconPos=pos.asLong();
                     s.setDirty();
+                    // A visible, bounded violet signal marks the newly spawned beacon.
+                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,x+.5,y+1.2,z+.5,18,.35,.55,.35,.035);
                     if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_PLACED x={} y={} z={}",x,y,z);
                     for(var nearby:level.players()) {
                         if(nearby.blockPosition().distSqr(pos)<128d*128d)
@@ -429,11 +431,12 @@ public final class RiftController {
         if(s.edits>=160 && s.naturalBeaconPos==Long.MIN_VALUE
             && (s.edits==160 || s.finaleTicks%40==0))
             tryPlaceRecoveryBeacon(level,s);
-        if(s.naturalBeaconPos!=Long.MIN_VALUE && s.finaleTicks%200==0) {
+        if(s.naturalBeaconPos!=Long.MIN_VALUE && s.finaleTicks%40==0) {
             BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
             if(level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)
                 && level.getBlockState(beacon).is(Blocks.BEACON)) {
-                for(var player:level.players())
+                level.sendParticles(ParticleTypes.REVERSE_PORTAL,beacon.getX()+.5,beacon.getY()+1.2,beacon.getZ()+.5,6,.28,.45,.28,.015);
+                if(s.finaleTicks%200==0) for(var player:level.players())
                     if(player.blockPosition().distSqr(beacon)<128d*128d)
                         player.displayClientMessage(Component.literal(
                             "§d✦ Маяк стабилизации: §f"+beacon.getX()+" "+beacon.getY()+" "+beacon.getZ()+" §7— нажмите ПКМ"),true);
@@ -441,7 +444,9 @@ public final class RiftController {
         }
         // CI-only rollback exercise; normal gameplay still needs a real beacon.
         if(CI_TEST && Boolean.getBoolean("blackfrequency.ciExerciseRestoration")
-            && !s.restoring && s.beaconPos==0L && s.edits>=160 && !s.snapshots.isEmpty()) {
+            && !s.restoring && s.beaconPos==0L && s.edits>=160 && !s.snapshots.isEmpty()
+            && (!Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest")
+                || s.naturalBeaconPos!=Long.MIN_VALUE)) {
             boolean playerInteractionTest=Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest");
             if(!playerInteractionTest) {
                 s.restoring=true;
@@ -470,15 +475,28 @@ public final class RiftController {
             BlockPos demoPos=new BlockPos(s.x,level.getSeaLevel()+4,s.z);
             if(!level.players().isEmpty()) {
                 var demoPlayer=level.players().get(0);
-                if(playerInteractionTest) {
-                    // Disposable CI world: aim the actual player at a real beacon.
-                    // The test client must issue a right mouse click; this server
-                    // fixture alone must NOT start restoration.
+                if(playerInteractionTest && Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest")) {
+                    // Exercise the naturally spawned beacon, not an extra test beacon.
+                    demoPos=BlockPos.of(s.naturalBeaconPos);
+                    if(!level.hasChunk(demoPos.getX()>>4,demoPos.getZ()>>4)
+                        || !level.getBlockState(demoPos).is(Blocks.BEACON)) {
+                        LOGGER.warn("BLACK_FREQUENCY_TEST NATURAL_BEACON_UNAVAILABLE");
+                        return;
+                    }
+                    // CI-only clear line of sight north of the physical beacon.
+                    // Keep the player standing on a stable platform for the real click.
+                    for(int dz=-4;dz<=-2;dz++) for(int dx=-1;dx<=1;dx++) {
+                        BlockPos floor=demoPos.offset(dx,-1,dz);
+                        if(!level.hasChunk(floor.getX()>>4,floor.getZ()>>4)) continue;
+                        level.setBlock(floor,Blocks.STONE.defaultBlockState(),3);
+                        for(int dy=1;dy<=3;dy++)
+                            level.setBlock(floor.above(dy),Blocks.AIR.defaultBlockState(),3);
+                    }
+                    demoPlayer.teleportTo(level,demoPos.getX()+.5,demoPos.getY(),
+                        demoPos.getZ()-2.5,0f,20f);
+                } else if(playerInteractionTest) {
+                    // Legacy fixture for testing a separately placed beacon.
                     int surface=level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,s.x,s.z);
-                    // The old test teleported above foliage and the player
-                    // fell before clicking; the beacon was visibly above the
-                    // crosshair. Keep a level, unobstructed 3x5 platform in the
-                    // disposable CI world so the click ray actually hits it.
                     for(int dz=0;dz<=4;dz++) for(int dx=-1;dx<=1;dx++) {
                         BlockPos floor=new BlockPos(s.x+dx,surface,s.z+dz);
                         if(!level.hasChunk(floor.getX()>>4,floor.getZ()>>4)) continue;
@@ -491,7 +509,8 @@ public final class RiftController {
                 } else {
                     demoPos=demoPlayer.blockPosition().relative(demoPlayer.getDirection(),4).above(1);
                 }
-                level.setBlock(demoPos,Blocks.BEACON.defaultBlockState(),3);
+                if(!Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest"))
+                    level.setBlock(demoPos,Blocks.BEACON.defaultBlockState(),3);
                 demoPlayer.connection.send(new ClientboundSetTitlesAnimationPacket(8,75,20));
                 demoPlayer.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§5СТАБИЛИЗАЦИЯ")));
                 demoPlayer.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§dМаяк запечатывает разлом")));

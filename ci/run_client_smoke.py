@@ -29,7 +29,7 @@ opts.update({
     "executablePath":"java",
     "defaultExecutablePath":"java",
     "gameDirectory":str(MC),
-    "jvmArguments":["-Xms1G","-Xmx6G","-Djava.awt.headless=false","-Dblackfrequency.ciTestMode=true","-Dblackfrequency.ciTickStep=2400"] + (["-Dblackfrequency.ciExerciseRestoration=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []) + (["-Dblackfrequency.ciPlayerBeaconTest=true"] if os.environ.get("BF_TEST_PLAYER_BEACON")=="1" else []),
+    "jvmArguments":["-Xms1G","-Xmx6G","-Djava.awt.headless=false","-Dblackfrequency.ciTestMode=true","-Dblackfrequency.ciTickStep=2400"] + (["-Dblackfrequency.ciExerciseRestoration=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []) + (["-Dblackfrequency.ciPlayerBeaconTest=true"] if os.environ.get("BF_TEST_PLAYER_BEACON")=="1" else []) + (["-Dblackfrequency.ciNaturalBeaconTest=true"] if os.environ.get("BF_TEST_NATURAL_BEACON")=="1" else []),
     "customResolution":True,
     "resolutionWidth":"1280",
     "resolutionHeight":"720",
@@ -231,6 +231,13 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: unaccounted damaged blocks",restored_count,damaged_count,skipped_count,flush=True)
                     return False
                 print("WORLD_CAPTURE: restoration accounting verified",restored_count,skipped_count,damaged_count,flush=True)
+            if os.environ.get("BF_TEST_NATURAL_BEACON")=="1":
+                placed=re.search(r"BLACK_FREQUENCY_TEST NATURAL_BEACON_PLACED x=(-?\d+) y=(-?\d+) z=(-?\d+)",log_after)
+                clicked=re.search(r"BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION x=(-?\d+) y=(-?\d+) z=(-?\d+) natural=true",log_after)
+                if not placed or not clicked or placed.groups()!=clicked.groups():
+                    print("WORLD_CAPTURE_FAIL: naturally spawned beacon was not right-clicked",flush=True)
+                    return False
+                print("WORLD_CAPTURE: NATURAL_BEACON_CLICK_VERIFIED",*clicked.groups(),flush=True)
             if not fracture_seen:
                 print("WORLD_CAPTURE_FAIL: ground fracture never removed a block",flush=True)
                 return False
