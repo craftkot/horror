@@ -92,6 +92,19 @@ jobs:
           set -e
           test "$RESTART_CODE" -eq 124 -o "$RESTART_CODE" -eq 0
           grep -Eq 'BLACK_FREQUENCY_TEST STATE_LOADED .*restored=true .*restoring=false .*snapshots=0' world-restart.log
+          # The finale must not resume gravity anomalies after a completed
+          # restoration, including after loading the saved world again.
+          python3 - <<'PY'
+          import pathlib, re
+          pattern=r"BLACK_FREQUENCY_TEST RESTORED_GRAVITY_DISABLED finaleTicks=(\\d+)"
+          before=pathlib.Path("world-test.log").read_text(errors="replace")
+          after=pathlib.Path("world-restart.log").read_text(errors="replace")
+          first=re.search(pattern,before)
+          second=re.search(pattern,after)
+          assert first and second, "Restored-world gravity guard not executed"
+          assert first.group(1)==second.group(1), "Finale clock advanced after restoration or restart"
+          print(f"RESTORED_GRAVITY_DISABLED_VERIFIED finaleTicks={first.group(1)}")
+          PY
           echo 'BEACON_RESTORATION_RESTART_VERIFIED'
           fi
       - name: Upload logs and crash reports
