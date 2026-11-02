@@ -29,7 +29,7 @@ opts.update({
     "executablePath":"java",
     "defaultExecutablePath":"java",
     "gameDirectory":str(MC),
-    "jvmArguments":["-Xms1G","-Xmx6G","-Djava.awt.headless=false","-Dblackfrequency.ciTestMode=true","-Dblackfrequency.ciTickStep=2400"] + (["-Dblackfrequency.ciExerciseRestoration=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []),
+    "jvmArguments":["-Xms1G","-Xmx6G","-Djava.awt.headless=false","-Dblackfrequency.ciTestMode=true","-Dblackfrequency.ciTickStep=2400"] + (["-Dblackfrequency.ciExerciseRestoration=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []) + (["-Dblackfrequency.ciPlayerBeaconTest=true"] if os.environ.get("BF_TEST_PLAYER_BEACON")=="1" else []),
     "customResolution":True,
     "resolutionWidth":"1280",
     "resolutionHeight":"720",
@@ -75,6 +75,33 @@ def capture_test_world():
         subprocess.run(["xdotool","windowmove",window[-1],"0","0"],check=False)
     def snap(name):
         subprocess.run(["scrot","-a","0,0,1280,720",str(shots/name)],check=False)
+    beacon_attempts=0
+    beacon_ready_at=None
+    last_beacon_attempt=0
+    def try_beacon_click(logs):
+        nonlocal beacon_attempts,beacon_ready_at,last_beacon_attempt
+        if os.environ.get("BF_TEST_PLAYER_BEACON")!="1":
+            return
+        if "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in logs:
+            return
+        if "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs:
+            return
+        now=time.monotonic()
+        if beacon_ready_at is None:
+            beacon_ready_at=now
+            print("WORLD_CAPTURE: beacon ready; waiting for client teleport",flush=True)
+        if now-beacon_ready_at<1.5 or now-last_beacon_attempt<2.0 or beacon_attempts>=8:
+            return
+        if beacon_attempts==0:
+            snap("beacon-before-right-click.png")
+        # Actual mouse input, not a synthetic server event.
+        subprocess.run(["xdotool","mousedown","3"],check=False)
+        time.sleep(0.25)
+        subprocess.run(["xdotool","mouseup","3"],check=False)
+        beacon_attempts+=1
+        last_beacon_attempt=now
+        print("WORLD_CAPTURE_INPUT: player right-click attempt",beacon_attempts,flush=True)
+        snap("beacon-after-right-click.png")
     time.sleep(2)
     print("WORLD_CAPTURE_INPUT: active window",
         subprocess.run(["xdotool","getactivewindow","getwindowname"],
@@ -140,6 +167,7 @@ def capture_test_world():
                 snap(f"world-stage-{stage:02d}.png")
                 if os.environ.get("BF_TEST_RESTORATION")=="1" and not restoration_shot:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                    try_beacon_click(current)
                     if ("BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current
                             and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" not in current):
                         snap("beacon-restoration-active.png")
@@ -154,6 +182,7 @@ def capture_test_world():
             fracture_seen=False
             while time.time()<fracture_deadline and p.poll() is None:
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                try_beacon_click(current)
                 if "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in current:
                     fracture_seen=True
                     print("WORLD_CAPTURE: first physical terrain fracture confirmed",flush=True)
@@ -173,6 +202,7 @@ def capture_test_world():
                 restored=False
                 while time.time()<deadline_restore and p.poll() is None:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                    try_beacon_click(current)
                     if (not restoration_shot
                             and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current
                             and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" not in current):
@@ -196,6 +226,9 @@ def capture_test_world():
                 return False
             if "BLACK_FREQUENCY_TEST FINALE_STARTED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: screenshots exist, but accelerated finale not observed",flush=True)
+                return False
+            if os.environ.get("BF_TEST_PLAYER_BEACON")=="1" and "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" not in log_after:
+                print("WORLD_CAPTURE_FAIL: beacon was not activated by actual player right-click",flush=True)
                 return False
             if "BLACK_FREQUENCY_RENDER_ACTIVE" not in log_after:
                 print("WORLD_CAPTURE_FAIL: no actual sky renderer invocation observed",flush=True)
