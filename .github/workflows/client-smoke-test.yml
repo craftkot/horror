@@ -16,7 +16,12 @@ jobs:
   client-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        recovery: [normal, sparse]
     env:
+      BF_TEST_SPARSE_RECOVERY: ${{ matrix.recovery == 'sparse' && '1' || '0' }}
       CF_API_KEY: ${{ secrets.CF_API_KEY }}
       DISPLAY: :99
       BF_ISOLATED_TEST: "1"
@@ -85,7 +90,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: forge-client-smoke
+          name: forge-client-smoke-${{ matrix.recovery }}
           if-no-files-found: ignore
           path: |
             client/logs/**

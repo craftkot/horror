@@ -508,8 +508,13 @@ public final class RiftController {
             tryPlaceRecoveryBeacon(level,s);
         }
         // CI-only rollback exercise; normal gameplay still needs a real beacon.
+        // The sparse CI client must use the same physical beacon and real
+        // player right-click path as a normally fractured world. Keep this
+        // early recovery threshold strictly test-only; production is unchanged.
+        boolean ciSparseReady=CI_TEST && Boolean.getBoolean("blackfrequency.ciSparseRecoveryTest")
+            && s.finished && s.edits>0 && s.edits<160;
         if(CI_TEST && Boolean.getBoolean("blackfrequency.ciExerciseRestoration")
-            && !s.restoring && s.beaconPos==0L && s.edits>=160 && !s.snapshots.isEmpty()
+            && !s.restoring && s.beaconPos==0L && (s.edits>=160 || ciSparseReady) && !s.snapshots.isEmpty()
             && (!Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest")
                 || (s.naturalBeaconPos!=Long.MIN_VALUE && s.ciNaturalBeaconReplaced))) {
             boolean playerInteractionTest=Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest");
