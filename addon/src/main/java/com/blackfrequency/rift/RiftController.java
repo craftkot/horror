@@ -453,8 +453,8 @@ public final class RiftController {
         }
         // Hold the final stabilization glow long enough to be visible in-game.
         if(s.restoreIndex<0 && s.restoreTicks>=100) {
-            if(CI_TEST && Boolean.getBoolean("blackfrequency.ciRestoreWriteFailureTest") && s.skippedInvalid!=1)
-                throw new IllegalStateException("CI malformed snapshot quarantine failed: "+s.skippedInvalid);
+            if(CI_TEST && Boolean.getBoolean("blackfrequency.ciRestoreWriteFailureTest") && s.skippedInvalid!=2)
+                throw new IllegalStateException("CI malformed/out-of-bounds snapshot quarantine failed: "+s.skippedInvalid);
             s.restoring=false;s.restored=true;s.finished=true;s.snapshots.clear();
             for(var player:level.players()) RiftNetwork.send(player,0f,false,0);
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored={} destroyed={} skippedOccupied={} skippedInvalid={} flowingReplaced={}",s.restoredBlocks,s.edits,s.skippedOccupied,s.skippedInvalid,s.ciFlowingReplaced);
@@ -698,9 +698,17 @@ public final class RiftController {
                 CompoundTag malformed=new CompoundTag();
                 malformed.put("state",new CompoundTag()); // missing pos and Name
                 s.snapshots.add(0,malformed);
+                // A second, well-formed snapshot targets an impossible Y in a
+                // loaded anchor chunk. It must be quarantined without reading
+                // or writing that block, not mistaken for an unloaded chunk.
+                CompoundTag outOfBounds=new CompoundTag();
+                outOfBounds.putLong("pos",new BlockPos(s.x,level.getMinBuildHeight()-1,s.z).asLong());
+                outOfBounds.put("state",NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
+                s.snapshots.add(0,outOfBounds);
                 s.restoreIndex=s.snapshots.size()-1;
                 s.restoreScan=s.restoreIndex;
                 LOGGER.info("BLACK_FREQUENCY_TEST MALFORMED_SNAPSHOT_INJECTED");
+                LOGGER.info("BLACK_FREQUENCY_TEST OUT_OF_BOUNDS_SNAPSHOT_INJECTED");
             }
             BlockPos demoPos=new BlockPos(s.x,level.getSeaLevel()+4,s.z);
             if(!level.players().isEmpty()) {
