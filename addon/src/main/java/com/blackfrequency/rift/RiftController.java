@@ -163,7 +163,7 @@ public final class RiftController {
     private static boolean mayActivateBeacon(net.minecraft.world.InteractionHand hand,
             boolean alive, boolean spectator, double distanceSquared) {
         return hand==net.minecraft.world.InteractionHand.MAIN_HAND && alive && !spectator
-            && Double.isFinite(distanceSquared) && distanceSquared<=64.0D;
+            && Double.isFinite(distanceSquared) && distanceSquared>=0.0D && distanceSquared<=64.0D;
     }
 
     private static void verifyBeaconInteractionGuard() {
@@ -175,7 +175,10 @@ public final class RiftController {
             || mayActivateBeacon(main,true,true,0.0D)
             || mayActivateBeacon(main,true,false,64.0001D)
             || mayActivateBeacon(main,true,false,Double.NaN)
-            || mayActivateBeacon(main,true,false,Double.POSITIVE_INFINITY))
+            || mayActivateBeacon(main,true,false,Double.POSITIVE_INFINITY)
+            || mayActivateBeacon(main,true,false,Double.NEGATIVE_INFINITY)
+            || mayActivateBeacon(main,true,false,-0.001D)
+            || !mayActivateBeacon(main,true,false,0.0D))
             throw new IllegalStateException("CI beacon interaction guard regression");
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED");
     }
