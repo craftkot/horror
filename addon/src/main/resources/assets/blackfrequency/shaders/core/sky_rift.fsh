@@ -57,6 +57,15 @@ void main(){
  float upperCore=1.-smoothstep(.014,.040,upperDistance);
  float upperGlow=exp(-upperDistance*15.);
  float upperCorona=exp(-upperDistance*6.);
+ // A lower-hemisphere tear makes the new underside of the sky cube
+ // visibly fractured instead of showing only the upper sky pattern.
+ // It uses periodic angular harmonics and no additional cell searches.
+ float lowerY=-.58+.11*sin(4.*longitude+t*.11+2.1)
+             +.035*sin(13.*longitude-t*.19);
+ float lowerDistance=abs(n.y-lowerY-.012*sin(37.*longitude+t*.31));
+ float lowerCore=1.-smoothstep(.012,.035,lowerDistance);
+ float lowerGlow=exp(-lowerDistance*19.);
+ float lowerCorona=exp(-lowerDistance*8.);
  // Sparse fine filaments, not the previous full-screen Voronoi patchwork.
  // Three 3x3 cell searches instead of nine: 27 vs 81 cell evaluations.
  vec3 weights=pow(abs(n),vec3(4.));
@@ -67,14 +76,15 @@ void main(){
  vec3 background=vec3(.006,.003,.014);
  vec3 violet=vec3(.16,.032,.26);
  vec3 edge=vec3(.72,.24,1.0);
- vec3 color=background+violet*(corona*.24+upperCorona*.19);
- color+=edge*(spineGlow*.96+branchGlow*.78+upperGlow*.80+filaments*.07)*pulse;
+ vec3 color=background+violet*(corona*.24+upperCorona*.19+lowerCorona*.18);
+ color+=edge*(spineGlow*.96+branchGlow*.78+upperGlow*.80+lowerGlow*.72+filaments*.07)*pulse;
  // A near-black interior makes the central fracture read as an opening.
  color=mix(color,vec3(.0003,.00015,.001),spineCore*.98);
  color=mix(color,vec3(.0003,.00015,.001),branches*.90);
  color=mix(color,vec3(.0003,.00015,.001),upperCore*.96);
+ color=mix(color,vec3(.0003,.00015,.001),lowerCore*.96);
  // The green transition is a separate phase, not a persistent tint.
  color=mix(color,vec3(.002,.011,.009),green);
- float opacity=clamp(f*(.87+.06*filaments+.12*max(spineCore,upperCore)),0.,.99);
+ float opacity=clamp(f*(.87+.06*filaments+.12*max(max(spineCore,upperCore),lowerCore)),0.,.99);
  fragColor=vec4(color,opacity);
 }
