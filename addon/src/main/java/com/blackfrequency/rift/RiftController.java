@@ -275,6 +275,18 @@ public final class RiftController {
         return false;
     }
 
+    /**
+     * A saved snapshot is never authority to edit terrain outside the original
+     * circular fracture or beyond build height, even if its NBT was corrupted.
+     * Use long arithmetic: damaged coordinates must not overflow the radius test.
+     */
+    private static boolean isRestorableSnapshotPosition(BlockPos pos, State s, ServerLevel level) {
+        long dx=(long)pos.getX()-s.x, dz=(long)pos.getZ()-s.z;
+        return pos.getY()>=level.getMinBuildHeight()
+            && pos.getY()<level.getMaxBuildHeight()
+            && dx*dx+dz*dz<=(long)RADIUS*RADIUS;
+    }
+
     private static void restore(ServerLevel level,State s) {
         // Vanilla can open its beacon configuration screen despite the server
         // interaction being consumed by the rift. Close only the activated
@@ -288,6 +300,18 @@ public final class RiftController {
             }
         }
         s.restoreTicks++;
+        // Exercise boundary and overflow-safe checks in the disposable
+        // integration world; this does not mutate any terrain.
+        if(CI_TEST && s.restoreTicks==1
+            && Boolean.getBoolean("blackfrequency.ciRestoreWriteFailureTest")) {
+            int y=level.getMinBuildHeight();
+            if(!isRestorableSnapshotPosition(new BlockPos(s.x+RADIUS,y,s.z),s,level)
+                || isRestorableSnapshotPosition(new BlockPos(s.x+RADIUS+1,y,s.z),s,level)
+                || isRestorableSnapshotPosition(new BlockPos(s.x,y-1,s.z),s,level)
+                || isRestorableSnapshotPosition(new BlockPos(Integer.MAX_VALUE,y,Integer.MIN_VALUE),s,level))
+                throw new IllegalStateException("CI restoration bounds guard failed");
+            LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_BOUNDS_GUARD_VERIFIED");
+        }
         if(s.restoreTicks%40==0 && !s.snapshots.isEmpty()) {
             int percent=(int)(100d*(s.snapshots.size()-Math.max(0,s.restoreIndex+1))/(double)s.snapshots.size());
             for(var player:level.players())
@@ -341,6 +365,22 @@ public final class RiftController {
                     && s.restoreTicks==1)
                     LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_CHUNK_SKIPPED x={} z={}",pos.getX(),pos.getZ());
                 s.restoreScan--;
+                continue;
+            }
+            // A loaded but corrupted snapshot must not restore blocks beyond
+            // the circular fracture. Keep unloaded snapshots deferred so the
+            // existing no-force-load recovery contract is preserved.
+            if(!isRestorableSnapshotPosition(pos,s,level)) {
+                s.skippedInvalid++;
+                LOGGER.warn("BLACK FREQUENCY: out-of-bounds recovery snapshot at {}; no terrain edit",pos);
+                if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST OUT_OF_BOUNDS_SNAPSHOT_SKIPPED x={} y={} z={}",
+                    pos.getX(),pos.getY(),pos.getZ());
+                if(candidate!=s.restoreIndex) {
+                    s.snapshots.set(candidate,s.snapshots.get(s.restoreIndex));
+                    s.snapshots.set(s.restoreIndex,entry);
+                }
+                s.restoreIndex--;
+                if(s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
                 continue;
             }
             // Only retire a snapshot after a successful write or a deliberate
