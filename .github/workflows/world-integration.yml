@@ -82,9 +82,9 @@ jobs:
             python3 - <<'PY'
           import pathlib,re
           log=pathlib.Path("world-test.log").read_text(errors="replace")
-          injected=re.search(r"BLACK_FREQUENCY_TEST INVALID_UNLOADED_SNAPSHOT_INJECTED x=(-?\\d+) z=(-?\\d+)",log)
-          skipped=re.search(r"BLACK_FREQUENCY_TEST OUT_OF_BOUNDS_SNAPSHOT_SKIPPED x=(-?\\d+) y=(-?\\d+) z=(-?\\d+)",log)
-          finished=re.search(r"BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored=(\\d+) destroyed=(\\d+)",log)
+          injected=re.search(r"BLACK_FREQUENCY_TEST INVALID_UNLOADED_SNAPSHOT_INJECTED x=(-?\d+) z=(-?\d+)",log)
+          skipped=re.search(r"BLACK_FREQUENCY_TEST OUT_OF_BOUNDS_SNAPSHOT_SKIPPED x=(-?\d+) y=(-?\d+) z=(-?\d+)",log)
+          finished=re.search(r"BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored=(\d+) destroyed=(\d+)",log)
           assert injected and skipped and finished, "Missing corrupt-unloaded-snapshot markers"
           assert (int(injected[1]),int(injected[2]))==(int(skipped[1]),int(skipped[3])), "Wrong snapshot quarantined"
           restored,destroyed=map(int,finished.groups())
