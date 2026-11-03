@@ -386,6 +386,22 @@ public final class RiftController {
                 if(s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
                 continue;
             }
+            // World-border changes after the fracture must never authorize a
+            // recovery write outside the currently playable world. Retire the
+            // snapshot without loading its chunk or touching terrain.
+            if(!level.getWorldBorder().isWithinBounds(pos)) {
+                s.skippedInvalid++;
+                LOGGER.warn("BLACK FREQUENCY: recovery snapshot outside world border at {}; no terrain edit",pos);
+                if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BORDER_SNAPSHOT_SKIPPED x={} y={} z={}",
+                    pos.getX(),pos.getY(),pos.getZ());
+                if(candidate!=s.restoreIndex) {
+                    s.snapshots.set(candidate,s.snapshots.get(s.restoreIndex));
+                    s.snapshots.set(s.restoreIndex,entry);
+                }
+                s.restoreIndex--;
+                if(s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
+                continue;
+            }
             // A failed write is retried next tick, but must never prevent
             // quarantine of an invalid snapshot sharing the same position.
             if(failedWritesThisTick.contains(pos.asLong())) {
