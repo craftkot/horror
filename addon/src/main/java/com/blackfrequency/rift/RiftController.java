@@ -363,16 +363,9 @@ public final class RiftController {
                 s.restoreScan--;
                 continue;
             }
-            if(!level.hasChunk(pos.getX()>>4,pos.getZ()>>4)) {
-                if(CI_TEST && Boolean.getBoolean("blackfrequency.ciDeferredChunkTest")
-                    && s.restoreTicks==1)
-                    LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_CHUNK_SKIPPED x={} z={}",pos.getX(),pos.getZ());
-                s.restoreScan--;
-                continue;
-            }
-            // A loaded but corrupted snapshot must not restore blocks beyond
-            // the circular fracture. Keep unloaded snapshots deferred so the
-            // existing no-force-load recovery contract is preserved.
+            // Validate saved coordinates before querying chunk availability.
+            // Malformed snapshots outside the bounded fracture must be retired
+            // even when their referenced chunk is unloaded; never load it.
             if(!isRestorableSnapshotPosition(pos,s,level)) {
                 s.skippedInvalid++;
                 LOGGER.warn("BLACK FREQUENCY: out-of-bounds recovery snapshot at {}; no terrain edit",pos);
@@ -384,6 +377,13 @@ public final class RiftController {
                 }
                 s.restoreIndex--;
                 if(s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
+                continue;
+            }
+            if(!level.hasChunk(pos.getX()>>4,pos.getZ()>>4)) {
+                if(CI_TEST && Boolean.getBoolean("blackfrequency.ciDeferredChunkTest")
+                    && s.restoreTicks==1)
+                    LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_CHUNK_SKIPPED x={} z={}",pos.getX(),pos.getZ());
+                s.restoreScan--;
                 continue;
             }
             // Only retire a snapshot after a successful write or a deliberate
