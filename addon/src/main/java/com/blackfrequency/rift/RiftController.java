@@ -207,6 +207,10 @@ public final class RiftController {
                     int y=level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,x,z);
                     if(y<=level.getMinBuildHeight() || y>=level.getMaxBuildHeight()-2) continue;
                     BlockPos pos=new BlockPos(x,y,z);
+                    // A beacon beyond the active world border is unusable even
+                    // when its chunk is loaded. Never create an inaccessible
+                    // recovery objective at the edge of a restricted world.
+                    if(!level.getWorldBorder().isWithinBounds(pos)) continue;
                     // Disposable sparse-client regression: make the replacement
                     // beacon stand above a real snow layer, rather than relying
                     // on a random snowy biome. Never enabled in normal worlds.
