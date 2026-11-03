@@ -160,6 +160,9 @@ public final class RiftController {
             || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
         BlockPos pos=event.getPos();
         if(!level.getBlockState(pos).is(Blocks.BEACON)) return;
+        // A player-owned beacon must obey the same active border restriction
+        // as generated recovery beacons; do not start restoration from outside.
+        if(!level.getWorldBorder().isWithinBounds(pos)) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
         if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
         if(pos.distSqr(new BlockPos(s.x,pos.getY(),s.z))>128d*128d) return;
