@@ -282,8 +282,11 @@ public final class RiftController {
      */
     private static boolean isRestorableSnapshotPosition(BlockPos pos, State s, ServerLevel level) {
         long dx=(long)pos.getX()-s.x, dz=(long)pos.getZ()-s.z;
+        // Reject large deltas before squaring: two extreme, malformed
+        // coordinates could otherwise overflow even a signed long sum.
         return pos.getY()>=level.getMinBuildHeight()
             && pos.getY()<level.getMaxBuildHeight()
+            && Math.abs(dx)<=RADIUS && Math.abs(dz)<=RADIUS
             && dx*dx+dz*dz<=(long)RADIUS*RADIUS;
     }
 
