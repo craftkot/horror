@@ -70,7 +70,8 @@ public final class RiftSkyRenderer {
             BufferBuilder bb=Tesselator.getInstance().getBuilder();
             bb.begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.POSITION);
             // Four walls and roof of an inside-facing sky cube.
-            face(bb,stack,r,-r,-r, r,-r,-r, r,r,-r, -r,r,-r);
+            // The first corner must be distinct; a duplicate collapsed this wall into a triangle.
+            face(bb,stack,-r,-r,-r, r,-r,-r, r,r,-r, -r,r,-r);
             face(bb,stack,-r,-r,r, -r,-r,-r, -r,r,-r, -r,r,r);
             face(bb,stack,r,-r,-r, r,-r,r, r,r,r, r,r,-r);
             face(bb,stack,r,-r,r, -r,-r,r, -r,r,r, r,r,r);
