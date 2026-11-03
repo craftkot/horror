@@ -642,7 +642,16 @@ public final class RiftController {
             // Do not inspect or generate an unloaded chunk. A missing beacon in
             // a loaded chunk can be replaced at another safe location.
             if(level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)) {
-                if(!level.getBlockState(beacon).is(Blocks.BEACON)) {
+                // World borders can shrink after placement. An inaccessible
+                // recovery objective must not strand a fractured save forever.
+                // Consume only our own tracked beacon, without drops or chunk loads.
+                if(!level.getWorldBorder().isWithinBounds(beacon)) {
+                    if(level.getBlockState(beacon).is(Blocks.BEACON))
+                        level.setBlock(beacon,Blocks.AIR.defaultBlockState(),3);
+                    s.naturalBeaconPos=Long.MIN_VALUE;
+                    s.setDirty();
+                    if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST OUTSIDE_BORDER_BEACON_RETIRED");
+                } else if(!level.getBlockState(beacon).is(Blocks.BEACON)) {
                     s.naturalBeaconPos=Long.MIN_VALUE;
                     s.setDirty();
                     if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_MISSING x={} y={} z={}",
