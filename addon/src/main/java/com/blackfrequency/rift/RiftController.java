@@ -359,10 +359,6 @@ public final class RiftController {
             }
             BlockPos pos=BlockPos.of(entry.getLong("pos"));
             checks++;
-            if(failedWritesThisTick.contains(pos.asLong())) {
-                s.restoreScan--;
-                continue;
-            }
             // Validate saved coordinates before querying chunk availability.
             // Malformed snapshots outside the bounded fracture must be retired
             // even when their referenced chunk is unloaded; never load it.
@@ -377,6 +373,12 @@ public final class RiftController {
                 }
                 s.restoreIndex--;
                 if(s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
+                continue;
+            }
+            // A failed write is retried next tick, but must never prevent
+            // quarantine of an invalid snapshot sharing the same position.
+            if(failedWritesThisTick.contains(pos.asLong())) {
+                s.restoreScan--;
                 continue;
             }
             if(!level.hasChunk(pos.getX()>>4,pos.getZ()>>4)) {
