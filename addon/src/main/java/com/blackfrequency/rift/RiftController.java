@@ -193,9 +193,14 @@ public final class RiftController {
             for(int distance=4;distance<=8;distance++) {
                 for(int side=0;side<=6;side++) {
                     int offset=side==0?0:(side%2==1?(side+1)/2:-(side/2));
-                    int x=playerPos.getX()+forwardX*distance-forwardZ*offset;
-                    int z=playerPos.getZ()+forwardZ*distance+forwardX*offset;
-                    long dx=(long)x-s.x,dz=(long)z-s.z;
+                    // Calculate in long before narrowing: near the integer world
+                    // boundary an overflow must never wrap a beacon to the other side.
+                    long candidateX=(long)playerPos.getX()+forwardX*distance-forwardZ*offset;
+                    long candidateZ=(long)playerPos.getZ()+forwardZ*distance+forwardX*offset;
+                    if(candidateX<Integer.MIN_VALUE || candidateX>Integer.MAX_VALUE
+                        || candidateZ<Integer.MIN_VALUE || candidateZ>Integer.MAX_VALUE) continue;
+                    int x=(int)candidateX,z=(int)candidateZ;
+                    long dx=candidateX-s.x,dz=candidateZ-s.z;
                     if(Math.abs(dx)>RADIUS-4 || Math.abs(dz)>RADIUS-4
                         || dx*dx+dz*dz>(long)(RADIUS-4)*(RADIUS-4)) continue;
                     if(!level.hasChunk(x>>4,z>>4)) continue;
