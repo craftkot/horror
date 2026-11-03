@@ -163,6 +163,9 @@ public final class RiftController {
         // A player-owned beacon must obey the same active border restriction
         // as generated recovery beacons; do not start restoration from outside.
         if(!level.getWorldBorder().isWithinBounds(pos)) return;
+        // Spectators must not be able to trigger a permanent world-state
+        // transition by interacting with a recovery beacon.
+        if(event.getEntity().isSpectator()) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
         if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
         if(pos.distSqr(new BlockPos(s.x,pos.getY(),s.z))>128d*128d) return;
