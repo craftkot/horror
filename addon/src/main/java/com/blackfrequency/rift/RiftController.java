@@ -185,8 +185,9 @@ public final class RiftController {
         for(var player:level.players()) {
             if(player.isSpectator()) continue;
             BlockPos playerPos=player.blockPosition();
-            int ax=playerPos.getX()-s.x,az=playerPos.getZ()-s.z;
-            if(ax*ax+az*az>(RADIUS-8)*(RADIUS-8)) continue;
+            long ax=(long)playerPos.getX()-s.x,az=(long)playerPos.getZ()-s.z;
+            if(Math.abs(ax)>RADIUS-8 || Math.abs(az)>RADIUS-8
+                || ax*ax+az*az>(long)(RADIUS-8)*(RADIUS-8)) continue;
             var facing=player.getDirection();
             int forwardX=facing.getStepX(),forwardZ=facing.getStepZ();
             for(int distance=4;distance<=8;distance++) {
@@ -194,8 +195,9 @@ public final class RiftController {
                     int offset=side==0?0:(side%2==1?(side+1)/2:-(side/2));
                     int x=playerPos.getX()+forwardX*distance-forwardZ*offset;
                     int z=playerPos.getZ()+forwardZ*distance+forwardX*offset;
-                    int dx=x-s.x,dz=z-s.z;
-                    if(dx*dx+dz*dz>(RADIUS-4)*(RADIUS-4)) continue;
+                    long dx=(long)x-s.x,dz=(long)z-s.z;
+                    if(Math.abs(dx)>RADIUS-4 || Math.abs(dz)>RADIUS-4
+                        || dx*dx+dz*dz>(long)(RADIUS-4)*(RADIUS-4)) continue;
                     if(!level.hasChunk(x>>4,z>>4)) continue;
                     int y=level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,x,z);
                     if(y<=level.getMinBuildHeight() || y>=level.getMaxBuildHeight()-2) continue;
