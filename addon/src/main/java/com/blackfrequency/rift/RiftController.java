@@ -524,8 +524,11 @@ public final class RiftController {
             s.restoreIndex--;
             if(s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
         }
-        if(s.restoreTicks%4==0) {
-            BlockPos beacon=BlockPos.of(s.beaconPos);
+        // Avoid phantom rift rings after a beacon is removed, and never
+        // query or generate an unloaded chunk just for cosmetic particles.
+        if(s.restoreTicks%4==0 && level.hasChunkAt(activatedBeacon)
+            && level.getBlockState(activatedBeacon).is(Blocks.BEACON)) {
+            BlockPos beacon=activatedBeacon;
             double angle=s.restoreTicks*.17;
             for(int k=0;k<8;k++) {
                 double theta=angle+k*Math.PI*.25;
