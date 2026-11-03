@@ -687,11 +687,12 @@ public final class RiftController {
                     LOGGER.info("BLACK_FREQUENCY_TEST FLOWING_FLUID_INJECTED x={} y={} z={}",fluidPos.getX(),fluidPos.getY(),fluidPos.getZ());
             }
             if(Boolean.getBoolean("blackfrequency.ciDeferredChunkTest")) {
-                // Disposable CI world only: replace the last snapshot location
-                // with a definitely unloaded chunk to exercise deferred recovery.
+                // Disposable CI world only: inject an out-of-bounds location
+                // in a definitely unloaded chunk. The bounds guard must retire
+                // it before querying chunk availability, preventing a stuck save.
                 BlockPos unloaded=new BlockPos(s.x+4096,level.getSeaLevel(),s.z+4096);
                 s.snapshots.get(s.restoreIndex).putLong("pos",unloaded.asLong());
-                LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_CHUNK_INJECTED x={} z={}",unloaded.getX(),unloaded.getZ());
+                LOGGER.info("BLACK_FREQUENCY_TEST INVALID_UNLOADED_SNAPSHOT_INJECTED x={} z={}",unloaded.getX(),unloaded.getZ());
             }
             // Add one deliberately truncated record to the disposable server
             // scenario, after the fluid/write-retry fixtures are prepared.
