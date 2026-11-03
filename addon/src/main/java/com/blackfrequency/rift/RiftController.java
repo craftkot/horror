@@ -159,6 +159,27 @@ public final class RiftController {
             && CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_EXPLOSION_PROTECTED");
     }
 
+    /** Pure interaction gate, also exercised by disposable-world CI. */
+    private static boolean mayActivateBeacon(net.minecraft.world.InteractionHand hand,
+            boolean alive, boolean spectator, double distanceSquared) {
+        return hand==net.minecraft.world.InteractionHand.MAIN_HAND && alive && !spectator
+            && Double.isFinite(distanceSquared) && distanceSquared<=64.0D;
+    }
+
+    private static void verifyBeaconInteractionGuard() {
+        var main=net.minecraft.world.InteractionHand.MAIN_HAND;
+        var off=net.minecraft.world.InteractionHand.OFF_HAND;
+        if(!mayActivateBeacon(main,true,false,64.0D)
+            || mayActivateBeacon(off,true,false,0.0D)
+            || mayActivateBeacon(main,false,false,0.0D)
+            || mayActivateBeacon(main,true,true,0.0D)
+            || mayActivateBeacon(main,true,false,64.0001D)
+            || mayActivateBeacon(main,true,false,Double.NaN)
+            || mayActivateBeacon(main,true,false,Double.POSITIVE_INFINITY))
+            throw new IllegalStateException("CI beacon interaction guard regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED");
+    }
+
     /** Right-click a vanilla beacon within 128 blocks of the fracture anchor. */
     @SubscribeEvent
     public void onBeacon(PlayerInteractEvent.RightClickBlock event) {
@@ -171,15 +192,11 @@ public final class RiftController {
         if(!level.getWorldBorder().isWithinBounds(pos)) return;
         // Spectators must not be able to trigger a permanent world-state
         // transition by interacting with a recovery beacon.
-        if(event.getEntity().isSpectator()) return;
-        // A right-click can also be dispatched for the off hand. Only the
-        // main-hand interaction may commit a permanent restoration transition.
-        if(event.getHand()!=net.minecraft.world.InteractionHand.MAIN_HAND) return;
-        // Reject remote or dead-player interactions before touching persistent
-        // recovery state. Eight blocks allows ordinary clicks while bounding
-        // synthetic/modded interaction events to the nearby beacon.
-        if(!event.getEntity().isAlive()
-            || event.getEntity().distanceToSqr(pos.getX()+0.5D,pos.getY()+0.5D,pos.getZ()+0.5D)>64.0D) return;
+        // Reject spectators, off-hand duplicates, dead players and remote
+        // interactions before touching persistent recovery state.
+        if(!mayActivateBeacon(event.getHand(),event.getEntity().isAlive(),
+            event.getEntity().isSpectator(),
+            event.getEntity().distanceToSqr(pos.getX()+0.5D,pos.getY()+0.5D,pos.getZ()+0.5D))) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
         if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
         if(pos.distSqr(new BlockPos(s.x,pos.getY(),s.z))>128d*128d) return;
@@ -334,6 +351,7 @@ public final class RiftController {
             }
         }
         s.restoreTicks++;
+        if(CI_TEST && s.restoreTicks==1) verifyBeaconInteractionGuard();
         // Exercise boundary and overflow-safe checks in the disposable
         // integration world; this does not mutate any terrain.
         if(CI_TEST && s.restoreTicks==1
