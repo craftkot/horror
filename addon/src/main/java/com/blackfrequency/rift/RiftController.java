@@ -146,9 +146,15 @@ public final class RiftController {
             || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)
             || event.getAffectedBlocks().isEmpty()) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
-        if(!s.started) return;
-        // No chunk queries or terrain edits: the explosion has already selected
-        // loaded affected blocks, and we only remove the protected beacon.
+        if(!s.started || s.naturalBeaconPos==Long.MIN_VALUE) return;
+        // A saved beacon coordinate can outlive the actual beacon (e.g. a
+        // different mod replaced the block). Do not shield unrelated blocks
+        // that later occupy its old position from explosion damage.
+        BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
+        if(!event.getAffectedBlocks().contains(beacon)
+            || !level.getBlockState(beacon).is(Blocks.BEACON)) return;
+        // Explosion affected blocks are already loaded; this does not request
+        // additional chunks or modify terrain.
         if(protectRecoveryBeaconFromExplosion(event.getAffectedBlocks(),s.naturalBeaconPos)
             && CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_EXPLOSION_PROTECTED");
     }
