@@ -75,6 +75,9 @@ public final class RiftSkyRenderer {
             face(bb,stack,r,-r,-r, r,-r,r, r,r,r, r,r,-r);
             face(bb,stack,r,-r,r, -r,-r,r, -r,r,r, r,r,r);
             face(bb,stack,-r,r,-r, r,r,-r, r,r,r, -r,r,r);
+            // Close the underside too: the rift should remain visible when the
+            // player looks down into exposed voids, without touching terrain.
+            face(bb,stack,-r,-r,r, r,-r,r, r,-r,-r, -r,-r,-r);
             BufferUploader.drawWithShader(bb.end());
             RenderSystem.depthMask(true);
             RenderSystem.enableDepthTest();
