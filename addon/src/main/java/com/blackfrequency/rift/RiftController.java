@@ -175,6 +175,11 @@ public final class RiftController {
         // A right-click can also be dispatched for the off hand. Only the
         // main-hand interaction may commit a permanent restoration transition.
         if(event.getHand()!=net.minecraft.world.InteractionHand.MAIN_HAND) return;
+        // Reject remote or dead-player interactions before touching persistent
+        // recovery state. Eight blocks allows ordinary clicks while bounding
+        // synthetic/modded interaction events to the nearby beacon.
+        if(!event.getEntity().isAlive()
+            || event.getEntity().distanceToSqr(pos.getX()+0.5D,pos.getY()+0.5D,pos.getZ()+0.5D)>64.0D) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
         if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
         if(pos.distSqr(new BlockPos(s.x,pos.getY(),s.z))>128d*128d) return;
