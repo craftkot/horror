@@ -166,6 +166,9 @@ public final class RiftController {
         // Spectators must not be able to trigger a permanent world-state
         // transition by interacting with a recovery beacon.
         if(event.getEntity().isSpectator()) return;
+        // A right-click can also be dispatched for the off hand. Only the
+        // main-hand interaction may commit a permanent restoration transition.
+        if(event.getHand()!=net.minecraft.world.InteractionHand.MAIN_HAND) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
         if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
         if(pos.distSqr(new BlockPos(s.x,pos.getY(),s.z))>128d*128d) return;
