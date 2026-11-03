@@ -354,6 +354,22 @@ public final class RiftController {
             }
         }
         s.restoreTicks++;
+        // A visible, bounded stabilization pulse at the activated physical beacon.
+        // Only query an already loaded chunk; never resurrect a removed beacon
+        // or force chunk generation during recovery.
+        if(s.restoreTicks%20==0 && level.hasChunkAt(activatedBeacon)
+            && level.getBlockState(activatedBeacon).is(Blocks.BEACON)) {
+            double cx=activatedBeacon.getX()+0.5D, cy=activatedBeacon.getY()+1.1D;
+            double cz=activatedBeacon.getZ()+0.5D;
+            for(int i=0;i<16;i++) {
+                double angle=i*Math.PI/8.0D;
+                level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                    cx+Math.cos(angle)*1.7D,cy,cz+Math.sin(angle)*1.7D,
+                    1,0,0.08D,0,0.015D);
+            }
+            if(CI_TEST && s.restoreTicks==20)
+                LOGGER.info("BLACK_FREQUENCY_TEST BEACON_STABILIZATION_PULSE");
+        }
         if(CI_TEST && s.restoreTicks==1) verifyBeaconInteractionGuard();
         // Exercise boundary and overflow-safe checks in the disposable
         // integration world; this does not mutate any terrain.
