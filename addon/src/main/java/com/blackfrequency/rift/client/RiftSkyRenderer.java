@@ -46,7 +46,9 @@ public final class RiftSkyRenderer {
             // A stale Overworld packet must not draw the fracture in other dimensions.
             if(!mc.level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
             float strength=RiftClientState.visibleStrength();
-            if(strength<=0) return;
+            // Reject corrupted client state before sending it to the GPU.
+            if(!Float.isFinite(strength) || strength<=0f) return;
+            strength=Math.min(strength,1f);
             if(!firstVisibleFrameLogged) {
                 firstVisibleFrameLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info("BLACK_FREQUENCY_RENDER_ACTIVE strength={}",strength);
