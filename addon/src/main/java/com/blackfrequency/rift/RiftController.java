@@ -286,7 +286,12 @@ public final class RiftController {
                         || support.is(Blocks.SOUL_CAMPFIRE) || support.is(Blocks.CACTUS)
                         // Solid but hazardous foundations can destroy the objective
                         // when triggered; do not place an emergency beacon on them.
-                        || support.is(Blocks.TNT) || support.is(Blocks.RESPAWN_ANCHOR)) continue;
+                        || support.is(Blocks.TNT) || support.is(Blocks.RESPAWN_ANCHOR)
+                        // Gravity-affected foundations can fall away after a
+                        // neighboring update, leaving the objective unsupported.
+                        || support.is(Blocks.SAND) || support.is(Blocks.RED_SAND)
+                        || support.is(Blocks.GRAVEL) || support.is(Blocks.WHITE_CONCRETE_POWDER)
+                        || support.getBlock() instanceof net.minecraft.world.level.block.FallingBlock) continue;
                     if((!support.blocksMotion() && !supportedSnow)
                         || !support.getFluidState().isEmpty()
                         || !level.getBlockState(pos).isAir()
