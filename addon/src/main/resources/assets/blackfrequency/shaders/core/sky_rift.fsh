@@ -131,7 +131,14 @@ void main(){
  vec3 violet=vec3(.16,.032,.26);
  vec3 edge=vec3(.72,.24,1.0);
  vec3 color=background+violet*(corona*.24+upperCorona*.19+lowerCorona*.18);
+ // Fast, localized violet lightning travels along the three major tears.
+ // Modulate existing glow masks rather than adding more Voronoi searches.
+ float lightningWave=sin(longitude*43.-t*5.3+sin(longitude*9.+t*.7)*2.);
+ float lightningFlash=pow(max(lightningWave,0.),12.);
+ float majorGlow=max(spineGlow,max(upperGlow,lowerGlow));
+ float lightning=lightningFlash*majorGlow*(1.-green);
  color+=edge*(spineGlow*.96+branchGlow*.78+upperGlow*.80+lowerGlow*.72+filaments*.07)*pulse;
+ color+=vec3(.19,.035,.34)*lightning*.55;
  // A near-black interior makes the central fracture read as an opening.
  color=mix(color,vec3(.0003,.00015,.001),spineCore*.98);
  color=mix(color,vec3(.0003,.00015,.001),branches*.90);
