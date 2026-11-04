@@ -93,6 +93,9 @@ void main(){
  color=mix(color,vec3(.0003,.00015,.001),lowerCore*.96);
  // The green transition is a separate phase, not a persistent tint.
  color=mix(color,vec3(.002,.011,.009),green);
- float opacity=clamp(f*(.87+.06*filaments+.12*max(max(spineCore,upperCore),lowerCore)),0.,.99);
+ // Side fractures must contribute to alpha as well as RGB; otherwise
+ // their glow fades against the unmodified world behind the sky overlay.
+ float fractureCoverage=max(max(spineCore,upperCore),max(lowerCore,branches));
+ float opacity=clamp(f*(.87+.06*filaments+.12*fractureCoverage),0.,.99);
  fragColor=vec4(color,opacity);
 }
