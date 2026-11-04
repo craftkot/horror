@@ -68,8 +68,12 @@ void main(){
  float upperY=.43+.14*sin(3.*longitude-t*.075+1.4)
              +.045*sin(11.*longitude+t*.17);
  float upperDistance=abs(n.y-upperY-.016*sin(41.*longitude-t*.39));
- float upperCore=1.-smoothstep(.014,.040,upperDistance);
- float upperGlow=exp(-upperDistance*15.);
+ // The upper fracture pulses independently, so the horizon does not
+ // brighten in lockstep with the main and underside tears.
+ float upperSurge=.5+.5*sin(t*.43+2.4*sin(3.*longitude+t*.12));
+ float upperWidth=mix(.014,.024,upperSurge);
+ float upperCore=1.-smoothstep(upperWidth,upperWidth+.026,upperDistance);
+ float upperGlow=exp(-upperDistance*mix(15.,11.,upperSurge));
  float upperCorona=exp(-upperDistance*6.);
  // A lower-hemisphere tear makes the new underside of the sky cube
  // visibly fractured instead of showing only the upper sky pattern.
