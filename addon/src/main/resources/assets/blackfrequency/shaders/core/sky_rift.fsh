@@ -16,9 +16,14 @@ float cells(vec2 uv,float scale) {
 }
 void main(){
  vec3 n=normalize(direction);
- float t=GameTime*.012;
- float f=clamp(RiftStrength,0.,1.);
- float green=clamp(GreenPhase,0.,1.);
+ // Invalid client uniforms must not poison the entire fragment with NaNs.
+ // Preserve normal values exactly; fall back only for non-finite inputs.
+ float safeTime=(isnan(GameTime)||isinf(GameTime))?0.:GameTime;
+ float safeStrength=(isnan(RiftStrength)||isinf(RiftStrength))?0.:RiftStrength;
+ float safeGreen=(isnan(GreenPhase)||isinf(GreenPhase))?0.:GreenPhase;
+ float t=safeTime*.012;
+ float f=clamp(safeStrength,0.,1.);
+ float green=clamp(safeGreen,0.,1.);
  // Avoid all fracture and Voronoi work while the catastrophe is inactive.
  // A transparent pixel preserves the underlying vanilla sky exactly.
  if(f<=0.0001){
