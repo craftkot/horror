@@ -19,6 +19,12 @@ void main(){
  float t=GameTime*.012;
  float f=clamp(RiftStrength,0.,1.);
  float green=clamp(GreenPhase,0.,1.);
+ // Avoid all fracture and Voronoi work while the catastrophe is inactive.
+ // A transparent pixel preserves the underlying vanilla sky exactly.
+ if(f<=0.0001){
+  fragColor=vec4(0.0);
+  return;
+ }
  float longitude=atan(n.z,n.x);
  // One continuous jagged tear, animated in world direction. Integer
  // harmonics remain seamless at -PI/PI and across sky-cube faces.
