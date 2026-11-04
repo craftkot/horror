@@ -277,6 +277,10 @@ public final class RiftController {
                     boolean supportedSnow=support.is(Blocks.SNOW)
                         && level.getBlockState(pos.below(2)).blocksMotion()
                         && level.getBlockState(pos.below(2)).getFluidState().isEmpty();
+                    // Do not put the recovery objective on a damaging floor: players
+                    // must be able to stand beside and interact with it safely.
+                    if(support.is(Blocks.MAGMA_BLOCK) || support.is(Blocks.CAMPFIRE)
+                        || support.is(Blocks.SOUL_CAMPFIRE) || support.is(Blocks.CACTUS)) continue;
                     if((!support.blocksMotion() && !supportedSnow)
                         || !support.getFluidState().isEmpty()
                         || !level.getBlockState(pos).isAir()
