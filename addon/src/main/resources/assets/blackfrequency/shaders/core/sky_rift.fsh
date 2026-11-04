@@ -10,9 +10,14 @@ float cells(vec2 uv,float scale) {
  vec2 p=uv*scale,g=floor(p); float a=1e6,b=1e6;
  for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){
   vec2 c=g+vec2(x,y),s=c+.2+.6*seed(c);
-  float d=length(p-s); if(d<a){b=a;a=d;}else if(d<b)b=d;
+  // Compare squared distances: ordering is unchanged, but avoids
+  // a square root for every candidate in all three Voronoi searches.
+  vec2 delta=p-s;
+  float d=dot(delta,delta);
+  if(d<a){b=a;a=d;}else if(d<b)b=d;
  }
- return b-a;
+ // Only the two winning distances need square roots (6 vs 27 per pixel).
+ return sqrt(b)-sqrt(a);
 }
 void main(){
  // A zero-length or non-finite interpolated direction must not generate
