@@ -53,7 +53,12 @@ void main(){
   float root=.12+.28*sin(2.*anchor+t*.09)
              +.09*sin(7.*anchor-t*.13)
              +.02*sin(19.*anchor+t*.21);
-  float branchY=root+side*.43*along+.032*sin(along*15.+t*.27+float(i));
+  // Match the main tear's jagged distortion at the branch origin.
+  // Without this offset, side cracks visibly detach as the spine moves.
+  float rootDistortion=.018*sin(33.*anchor+4.*root+t*.61)
+                      +.010*sin(79.*anchor-19.*root-t*.43);
+  float branchY=root+rootDistortion+side*.43*along
+                +.032*sin(along*15.+t*.27+float(i));
   float dist=abs(n.y-branchY-.016*sin(along*39.+t*.5+float(i)*2.));
   // Offset each branch's pulse so the fractures do not brighten in unison.
   // Preserve a nonzero core width and avoid extra cell searches.
