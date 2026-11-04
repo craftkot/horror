@@ -54,7 +54,9 @@ void main(){
   float side=(i%2==0)?1.:-1.;
   float along=atan(sin(longitude-anchor),cos(longitude-anchor))*side;
   float reach=.54+float(i%3)*.09;
-  float window=smoothstep(0.,.065,along)*(1.-smoothstep(reach-.12,reach,along));
+  // Include the branch root in its mask: smoothstep(0,...) previously
+  // erased the first pixels and left a visible gap at the attachment.
+  float window=smoothstep(-.045,0.,along)*(1.-smoothstep(reach-.12,reach,along));
   float root=.12+.28*sin(2.*anchor+t*.09)
              +.09*sin(7.*anchor-t*.13)
              +.02*sin(19.*anchor+t*.21);
