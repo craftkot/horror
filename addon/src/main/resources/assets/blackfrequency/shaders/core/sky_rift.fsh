@@ -57,9 +57,12 @@ void main(){
   // Without this offset, side cracks visibly detach as the spine moves.
   float rootDistortion=.018*sin(33.*anchor+4.*root+t*.61)
                       +.010*sin(79.*anchor-19.*root-t*.43);
+  // Fade branch-only oscillations in at the root. Otherwise their
+  // nonzero phase offsets make the branch miss the main tear at along=0.
+  float bendIn=smoothstep(0.,.12,along);
   float branchY=root+rootDistortion+side*.43*along
-                +.032*sin(along*15.+t*.27+float(i));
-  float dist=abs(n.y-branchY-.016*sin(along*39.+t*.5+float(i)*2.));
+                +bendIn*.032*sin(along*15.+t*.27+float(i));
+  float dist=abs(n.y-branchY-bendIn*.016*sin(along*39.+t*.5+float(i)*2.));
   // Offset each branch's pulse so the fractures do not brighten in unison.
   // Preserve a nonzero core width and avoid extra cell searches.
   float branchSurge=.5+.5*sin(t*(.49+.07*float(i))+along*8.+float(i)*2.3);
