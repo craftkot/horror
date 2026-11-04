@@ -723,8 +723,10 @@ public final class RiftController {
                 // recovery objective must not strand a fractured save forever.
                 // Consume only our own tracked beacon, without drops or chunk loads.
                 if(!level.getWorldBorder().isWithinBounds(beacon)) {
-                    if(level.getBlockState(beacon).is(Blocks.BEACON))
-                        level.setBlock(beacon,Blocks.AIR.defaultBlockState(),3);
+                    // A saved position does not prove that the block is still ours:
+                    // another mod or player may have replaced the original beacon.
+                    // Untrack the inaccessible fixture instead of deleting a
+                    // potentially player-owned block after the border shrinks.
                     s.naturalBeaconPos=Long.MIN_VALUE;
                     s.setDirty();
                     if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST OUTSIDE_BORDER_BEACON_RETIRED");
