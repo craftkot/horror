@@ -153,6 +153,9 @@ public final class RiftController {
         BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
         if(!event.getAffectedBlocks().contains(beacon)
             || !level.hasChunkAt(beacon)
+            // A border shrink retires the generated fixture. Do not keep
+            // shielding a block at an inaccessible, stale coordinate.
+            || !level.getWorldBorder().isWithinBounds(beacon)
             || !level.getBlockState(beacon).is(Blocks.BEACON)) return;
         // Explosion affected blocks are already loaded; this does not request
         // additional chunks or modify terrain.
