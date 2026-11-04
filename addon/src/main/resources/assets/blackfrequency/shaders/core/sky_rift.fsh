@@ -15,7 +15,14 @@ float cells(vec2 uv,float scale) {
  return b-a;
 }
 void main(){
- vec3 n=normalize(direction);
+ // A zero-length or non-finite interpolated direction must not generate
+ // NaNs in atan(), Voronoi coordinates, or the final sky color.
+ float directionLength=length(direction);
+ if(isnan(directionLength)||isinf(directionLength)||directionLength<0.000001){
+  fragColor=vec4(0.0);
+  return;
+ }
+ vec3 n=direction/directionLength;
  // Invalid client uniforms must not poison the entire fragment with NaNs.
  // Preserve normal values exactly; fall back only for non-finite inputs.
  float safeTime=(isnan(GameTime)||isinf(GameTime))?0.:GameTime;
