@@ -201,6 +201,9 @@ public final class RiftController {
         // transition by interacting with a recovery beacon.
         // Reject spectators, off-hand duplicates, dead players and remote
         // interactions before touching persistent recovery state.
+        // Removed player entities can still surface through queued interaction events.
+        // Never let a stale entity commit a permanent restoration transition.
+        if(event.getEntity().isRemoved()) return;
         if(!mayActivateBeacon(event.getHand(),event.getEntity().isAlive(),
             event.getEntity().isSpectator(),
             event.getEntity().distanceToSqr(pos.getX()+0.5D,pos.getY()+0.5D,pos.getZ()+0.5D))) return;
