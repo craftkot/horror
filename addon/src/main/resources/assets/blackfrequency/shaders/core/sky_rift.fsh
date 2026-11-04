@@ -28,8 +28,12 @@ void main(){
  float distortion=.018*sin(33.*longitude+4.*n.y+t*.61)
                  +.010*sin(79.*longitude-19.*n.y-t*.43);
  float spineDistance=abs(n.y-spineY-distortion);
- float spineCore=1.-smoothstep(.016,.043,spineDistance);
- float spineGlow=exp(-spineDistance*17.);
+ // A slow irregular surge widens the tear without extra texture lookups.
+ // Keep the minimum width positive to avoid flickering or inverted edges.
+ float surge=.5+.5*sin(t*.73+2.*sin(longitude*3.+t*.17));
+ float coreWidth=mix(.014,.027,surge);
+ float spineCore=1.-smoothstep(coreWidth,coreWidth+.027,spineDistance);
+ float spineGlow=exp(-spineDistance*mix(19.,13.,surge));
  float corona=exp(-spineDistance*7.);
  // Five finite side fractures grow from the main tear. Wrapped angular
  // distance avoids a discontinuity where longitude changes sign.
