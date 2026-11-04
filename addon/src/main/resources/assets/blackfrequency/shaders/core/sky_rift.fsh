@@ -49,8 +49,12 @@ void main(){
              +.02*sin(19.*anchor+t*.21);
   float branchY=root+side*.43*along+.032*sin(along*15.+t*.27+float(i));
   float dist=abs(n.y-branchY-.016*sin(along*39.+t*.5+float(i)*2.));
-  branches=max(branches,window*(1.-smoothstep(.010,.029,dist)));
-  branchGlow=max(branchGlow,window*exp(-dist*27.));
+  // Offset each branch's pulse so the fractures do not brighten in unison.
+  // Preserve a nonzero core width and avoid extra cell searches.
+  float branchSurge=.5+.5*sin(t*(.49+.07*float(i))+along*8.+float(i)*2.3);
+  float branchWidth=mix(.008,.016,branchSurge);
+  branches=max(branches,window*(1.-smoothstep(branchWidth,branchWidth+.019,dist)));
+  branchGlow=max(branchGlow,window*exp(-dist*mix(32.,21.,branchSurge)));
  }
  // A separate, high-altitude fracture keeps the catastrophe visible when
  // the main tear slips behind hills. Angular harmonics stay seamless across
