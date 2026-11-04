@@ -227,7 +227,9 @@ public final class RiftController {
      */
     private static boolean tryPlaceRecoveryBeacon(ServerLevel level,State s) {
         for(var player:level.players()) {
-            if(player.isSpectator()) continue;
+            // Dead or removed players are not valid anchors for a physical
+            // recovery objective; wait for a living player in a loaded area.
+            if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
             BlockPos playerPos=player.blockPosition();
             long ax=(long)playerPos.getX()-s.x,az=(long)playerPos.getZ()-s.z;
             if(Math.abs(ax)>RADIUS-8 || Math.abs(az)>RADIUS-8
