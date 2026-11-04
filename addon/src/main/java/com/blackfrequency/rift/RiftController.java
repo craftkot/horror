@@ -719,13 +719,10 @@ public final class RiftController {
         // chunk near a player. Never replace terrain or force-generate chunks.
         if(s.naturalBeaconPos!=Long.MIN_VALUE && s.finaleTicks%40==0) {
             BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
-            // Do not inspect or generate an unloaded chunk. A missing beacon in
-            // a loaded chunk can be replaced at another safe location.
-            if(level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)) {
-                // World borders can shrink after placement. An inaccessible
-                // recovery objective must not strand a fractured save forever.
-                // Consume only our own tracked beacon, without drops or chunk loads.
-                if(!level.getWorldBorder().isWithinBounds(beacon)) {
+            // Border membership does not require a loaded chunk. Retire an
+            // inaccessible objective even when its old chunk is unloaded, so
+            // restoration can offer a new beacon near an active player.
+            if(!level.getWorldBorder().isWithinBounds(beacon)) {
                     // A saved position does not prove that the block is still ours:
                     // another mod or player may have replaced the original beacon.
                     // Untrack the inaccessible fixture instead of deleting a
@@ -733,7 +730,9 @@ public final class RiftController {
                     s.naturalBeaconPos=Long.MIN_VALUE;
                     s.setDirty();
                     if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST OUTSIDE_BORDER_BEACON_RETIRED");
-                } else if(!level.getBlockState(beacon).is(Blocks.BEACON)) {
+            // Only inspect block state when the chunk is already loaded.
+            } else if(level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)) {
+                if(!level.getBlockState(beacon).is(Blocks.BEACON)) {
                     s.naturalBeaconPos=Long.MIN_VALUE;
                     s.setDirty();
                     if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_MISSING x={} y={} z={}",
