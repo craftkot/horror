@@ -55,8 +55,13 @@ void main(){
              +.02*sin(19.*anchor+t*.21);
   // Match the main tear's jagged distortion at the branch origin.
   // Without this offset, side cracks visibly detach as the spine moves.
+  // The spine distortion depends on its own Y coordinate. Refine the
+  // branch attachment point to follow that implicit curve more closely.
   float rootDistortion=.018*sin(33.*anchor+4.*root+t*.61)
                       +.010*sin(79.*anchor-19.*root-t*.43);
+  float refinedY=root+rootDistortion;
+  rootDistortion=.018*sin(33.*anchor+4.*refinedY+t*.61)
+                +.010*sin(79.*anchor-19.*refinedY-t*.43);
   // Fade branch-only oscillations in at the root. Otherwise their
   // nonzero phase offsets make the branch miss the main tear at along=0.
   float bendIn=smoothstep(0.,.12,along);
