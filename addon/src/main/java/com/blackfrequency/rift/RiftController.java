@@ -283,7 +283,10 @@ public final class RiftController {
                     // Do not put the recovery objective on a damaging floor: players
                     // must be able to stand beside and interact with it safely.
                     if(support.is(Blocks.MAGMA_BLOCK) || support.is(Blocks.CAMPFIRE)
-                        || support.is(Blocks.SOUL_CAMPFIRE) || support.is(Blocks.CACTUS)) continue;
+                        || support.is(Blocks.SOUL_CAMPFIRE) || support.is(Blocks.CACTUS)
+                        // Solid but hazardous foundations can destroy the objective
+                        // when triggered; do not place an emergency beacon on them.
+                        || support.is(Blocks.TNT) || support.is(Blocks.RESPAWN_ANCHOR)) continue;
                     if((!support.blocksMotion() && !supportedSnow)
                         || !support.getFluidState().isEmpty()
                         || !level.getBlockState(pos).isAir()
