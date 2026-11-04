@@ -77,8 +77,12 @@ void main(){
  float lowerY=-.58+.11*sin(4.*longitude+t*.11+2.1)
              +.035*sin(13.*longitude-t*.19);
  float lowerDistance=abs(n.y-lowerY-.012*sin(37.*longitude+t*.31));
- float lowerCore=1.-smoothstep(.012,.035,lowerDistance);
- float lowerGlow=exp(-lowerDistance*19.);
+ // Let the underside fracture breathe out of phase with the upper tear.
+ // The strictly positive width prevents inverted smoothstep edges.
+ float lowerSurge=.5+.5*sin(t*.57+3.*sin(2.*longitude-t*.13));
+ float lowerWidth=mix(.012,.023,lowerSurge);
+ float lowerCore=1.-smoothstep(lowerWidth,lowerWidth+.023,lowerDistance);
+ float lowerGlow=exp(-lowerDistance*mix(19.,14.,lowerSurge));
  float lowerCorona=exp(-lowerDistance*8.);
  // Sparse fine filaments, not the previous full-screen Voronoi patchwork.
  // Three 3x3 cell searches instead of nine: 27 vs 81 cell evaluations.
