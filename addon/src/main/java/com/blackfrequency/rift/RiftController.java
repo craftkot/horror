@@ -152,6 +152,7 @@ public final class RiftController {
         // that later occupy its old position from explosion damage.
         BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
         if(!event.getAffectedBlocks().contains(beacon)
+            || !level.hasChunkAt(beacon)
             || !level.getBlockState(beacon).is(Blocks.BEACON)) return;
         // Explosion affected blocks are already loaded; this does not request
         // additional chunks or modify terrain.
