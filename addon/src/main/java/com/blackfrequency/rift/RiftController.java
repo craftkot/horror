@@ -285,6 +285,9 @@ public final class RiftController {
                         && snowFoundation.getFluidState().isEmpty()
                         && !(snowFoundation.getBlock() instanceof net.minecraft.world.level.block.FallingBlock)
                         && !snowFoundation.is(Blocks.MAGMA_BLOCK)
+                        && !snowFoundation.is(Blocks.CAMPFIRE)
+                        && !snowFoundation.is(Blocks.SOUL_CAMPFIRE)
+                        && !snowFoundation.is(Blocks.CACTUS)
                         && !snowFoundation.is(Blocks.TNT)
                         && !snowFoundation.is(Blocks.RESPAWN_ANCHOR);
                     // Do not put the recovery objective on a damaging floor: players
