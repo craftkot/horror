@@ -599,7 +599,13 @@ public final class RiftController {
         // Avoid phantom rift rings after a beacon is removed, and never
         // query or generate an unloaded chunk just for cosmetic particles.
         if(s.restoreTicks%4==0 && level.hasChunkAt(activatedBeacon)
-            && level.getBlockState(activatedBeacon).is(Blocks.BEACON)) {
+            && level.getBlockState(activatedBeacon).is(Blocks.BEACON)
+            // Skip cosmetic work when nobody can see the recovery beacon.
+            // This reads only player positions and never requests a chunk.
+            && level.players().stream().anyMatch(player -> player.isAlive()
+                && !player.isRemoved() && !player.isSpectator()
+                && player.distanceToSqr(activatedBeacon.getX()+0.5D,
+                    activatedBeacon.getY()+0.5D,activatedBeacon.getZ()+0.5D)<=128.0D*128.0D)) {
             BlockPos beacon=activatedBeacon;
             double angle=s.restoreTicks*.17;
             for(int k=0;k<8;k++) {
