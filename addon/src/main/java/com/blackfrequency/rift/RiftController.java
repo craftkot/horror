@@ -116,7 +116,8 @@ public final class RiftController {
         BlockPos pos=event.getPos();
         if(!level.getBlockState(pos).is(Blocks.BEACON)) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
-        if(!s.started || pos.asLong()!=s.naturalBeaconPos) return;
+        if(!s.started || pos.asLong()!=s.naturalBeaconPos
+            || !level.getWorldBorder().isWithinBounds(pos)) return;
         // Cancel vanilla harvesting before it creates a valuable beacon item.
         event.setCanceled(true);
         if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),3)) {
