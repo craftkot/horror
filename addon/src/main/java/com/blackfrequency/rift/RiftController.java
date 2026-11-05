@@ -637,7 +637,10 @@ public final class RiftController {
                 double theta=angle+k*Math.PI*.25;
                 double x=beacon.getX()+.5+Math.cos(theta)*3.4;
                 double z=beacon.getZ()+.5+Math.sin(theta)*3.4;
-                level.sendParticles(ParticleTypes.REVERSE_PORTAL,x,beacon.getY()+.3+(s.restoreTicks%80)*.14,z,2,.12,.15,.12,.025);
+                // Alternate purple portal wisps and darker witch sparks without
+                // increasing the existing two-particles-per-point budget.
+                var particle=(k&1)==0 ? ParticleTypes.REVERSE_PORTAL : ParticleTypes.WITCH;
+                level.sendParticles(particle,x,beacon.getY()+.3+(s.restoreTicks%80)*.14,z,2,.12,.15,.12,.025);
             }
         }
         if(s.restoreTicks%10==0) {
