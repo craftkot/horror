@@ -298,7 +298,9 @@ public final class RiftController {
                         // Snow does not stabilize foliage that decays or ice that melts.
                         // Check the actual ground, not only the snow layer above it.
                         && !snowFoundation.is(net.minecraft.tags.BlockTags.LEAVES)
-                        && !snowFoundation.is(Blocks.ICE);
+                        && !snowFoundation.is(Blocks.ICE)
+                        // Frosted ice melts naturally even without a nearby heat source.
+                        && !snowFoundation.is(Blocks.FROSTED_ICE);
                     // Do not put the recovery objective on a damaging floor: players
                     // must be able to stand beside and interact with it safely.
                     if(support.is(Blocks.MAGMA_BLOCK) || support.is(Blocks.CAMPFIRE)
@@ -309,7 +311,7 @@ public final class RiftController {
                         // Leaves can decay and ordinary ice can melt, leaving the
                         // recovery objective without a reliable foundation.
                         || support.is(net.minecraft.tags.BlockTags.LEAVES)
-                        || support.is(Blocks.ICE)
+                        || support.is(Blocks.ICE) || support.is(Blocks.FROSTED_ICE)
                         // Gravity-affected foundations can fall away after a
                         // neighboring update, leaving the objective unsupported.
                         || support.is(Blocks.SAND) || support.is(Blocks.RED_SAND)
