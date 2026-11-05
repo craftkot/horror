@@ -219,7 +219,12 @@ public final class RiftController {
         // never count as successful activation in the real-client CI test.
         if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION x={} y={} z={} natural={}",pos.getX(),pos.getY(),pos.getZ(),pos.asLong()==s.naturalBeaconPos);
         s.restoring=true;s.restoreIndex=s.snapshots.size()-1;s.restoreScan=s.restoreIndex;s.restoreTicks=0;s.restoredBlocks=0;s.skippedOccupied=0;s.skippedInvalid=0;s.beaconPos=pos.asLong();s.setDirty();
+        // Only nearby, active players should see the stabilization title.
+        // A distant player must not receive a misleading world-local event.
         for(var player:level.players()) {
+            if(!player.isAlive() || player.isRemoved() || player.isSpectator()
+                || player.distanceToSqr(pos.getX()+0.5D,pos.getY()+0.5D,pos.getZ()+0.5D)>128.0D*128.0D)
+                continue;
             player.connection.send(new ClientboundSetTitlesAnimationPacket(10,100,30));
             player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§5СТАБИЛИЗАЦИЯ")));
             player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§dМаяк возвращает миру его форму")));
