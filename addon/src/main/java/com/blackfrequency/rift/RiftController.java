@@ -603,8 +603,13 @@ public final class RiftController {
             }
         }
         if(s.restoreTicks%10==0) {
+            // The recovery glow belongs to the fracture, not every player in
+            // the dimension. Avoid particle traffic for distant or inactive players.
             for(var player:level.players()) {
+                if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
                 BlockPos p=player.blockPosition();
+                long dx=(long)p.getX()-s.x, dz=(long)p.getZ()-s.z;
+                if(Math.abs(dx)>128 || Math.abs(dz)>128 || dx*dx+dz*dz>128L*128L) continue;
                 level.sendParticles(ParticleTypes.END_ROD,p.getX()+.5,p.getY()+1.5,p.getZ()+.5,12,3,2,3,.03);
             }
         }
