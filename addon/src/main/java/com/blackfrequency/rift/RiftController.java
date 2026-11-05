@@ -407,10 +407,10 @@ public final class RiftController {
             && level.getBlockState(activatedBeacon).is(Blocks.BEACON)) {
             double cx=activatedBeacon.getX()+0.5D, cy=activatedBeacon.getY()+1.1D;
             double cz=activatedBeacon.getZ()+0.5D;
-            // Two staggered violet rings make stabilization readable at a glance.
+            // Counter-rotating violet rings show stabilization progressing over time.
             // Only 24 particles per second; no terrain edits or chunk loads.
             for(int i=0;i<24;i++) {
-                double angle=i*Math.PI/12.0D;
+                double angle=i*Math.PI/12.0D + (i%2==0 ? 1.0D : -1.0D)*s.restoreTicks*0.045D;
                 double radius=(i%2==0)?1.3D:2.1D;
                 double height=(i%2==0)?0.0D:0.45D;
                 level.sendParticles(ParticleTypes.REVERSE_PORTAL,
