@@ -706,7 +706,8 @@ public final class RiftController {
                 // from the beacon between teleportation and mouse input.
                 if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest")
                     && s.beaconPos!=0L && !s.restoring) continue;
-                if (player.isCreative() || player.isSpectator()) continue;
+                // Never apply rift impulses to dead or removed player entities.
+                if (!player.isAlive() || player.isRemoved() || player.isCreative() || player.isSpectator()) continue;
                 double px=player.getX(), pz=player.getZ();
                 // Terrain edits are limited to RADIUS. Gravity must not follow
                 // players across the entire Overworld after they leave the rift.
@@ -740,6 +741,8 @@ public final class RiftController {
         // Particles only: no extra entities, chunk loads or world edits.
         if (s.finaleTicks > 85 && s.finaleTicks % 8 == 0) {
             for (var player : level.players()) {
+                // Particle effects must not follow invalid or spectator entities.
+                if (!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
                 double ax=player.getX()-s.x, az=player.getZ()-s.z;
                 if(ax*ax+az*az>(RADIUS+16.0)*(RADIUS+16.0)) continue;
                 double zone=Math.sin(player.getX()*.19+s.finaleTicks*.035)
