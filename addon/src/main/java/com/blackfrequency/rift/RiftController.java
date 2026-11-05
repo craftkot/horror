@@ -113,6 +113,10 @@ public final class RiftController {
     public void onRecoveryBeaconBreak(net.minecraftforge.event.level.BlockEvent.BreakEvent event) {
         if(!(event.getLevel() instanceof ServerLevel level)
             || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
+        // Removed or spectator players must not dismantle a recovery objective
+        // through synthetic break events from other mods.
+        if(!event.getPlayer().isAlive() || event.getPlayer().isRemoved()
+            || event.getPlayer().isSpectator()) return;
         BlockPos pos=event.getPos();
         // Ignore unloaded positions before querying block state: an event from
         // another mod must not cause recovery logic to load a chunk.
