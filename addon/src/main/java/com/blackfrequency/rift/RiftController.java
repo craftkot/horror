@@ -166,6 +166,12 @@ public final class RiftController {
             && CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_EXPLOSION_PROTECTED");
     }
 
+    /** Horizontal anchor check with overflow-safe coordinates, independent of beacon height. */
+    private static boolean beaconWithinAnchor(int x,int z,int anchorX,int anchorZ) {
+        long dx=(long)x-anchorX,dz=(long)z-anchorZ;
+        return Math.abs(dx)<=128L && Math.abs(dz)<=128L && dx*dx+dz*dz<=128L*128L;
+    }
+
     /** Pure interaction gate, also exercised by disposable-world CI. */
     private static boolean mayActivateBeacon(net.minecraft.world.InteractionHand hand,
             boolean alive, boolean spectator, double distanceSquared) {
@@ -187,6 +193,14 @@ public final class RiftController {
             || mayActivateBeacon(main,true,false,-0.001D)
             || !mayActivateBeacon(main,true,false,0.0D))
             throw new IllegalStateException("CI beacon interaction guard regression");
+        // A high-altitude beacon remains usable when horizontally close;
+        // extreme opposite-sign coordinates must never wrap into range.
+        if(!beaconWithinAnchor(128,0,0,0)
+            || beaconWithinAnchor(129,0,0,0)
+            || beaconWithinAnchor(128,1,0,0)
+            || !beaconWithinAnchor(-128,0,0,0)
+            || beaconWithinAnchor(Integer.MAX_VALUE,0,Integer.MIN_VALUE,0))
+            throw new IllegalStateException("CI beacon anchor radius regression");
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED");
     }
 
@@ -214,7 +228,7 @@ public final class RiftController {
             event.getEntity().distanceToSqr(pos.getX()+0.5D,pos.getY()+0.5D,pos.getZ()+0.5D))) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
         if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
-        if(pos.distSqr(new BlockPos(s.x,pos.getY(),s.z))>128d*128d) return;
+        if(!beaconWithinAnchor(pos.getX(),pos.getZ(),s.x,s.z)) return;
         // Log only accepted player interactions; rejected distant beacons must
         // never count as successful activation in the real-client CI test.
         if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION x={} y={} z={} natural={}",pos.getX(),pos.getY(),pos.getZ(),pos.asLong()==s.naturalBeaconPos);
