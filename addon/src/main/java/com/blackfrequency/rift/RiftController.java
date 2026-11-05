@@ -277,9 +277,16 @@ public final class RiftController {
                     if(level.getBlockState(pos).is(Blocks.SNOW)) pos=pos.above();
                     if(pos.getY()>=level.getMaxBuildHeight()-1) continue;
                     BlockState support=level.getBlockState(pos.below());
+                    BlockState snowFoundation=level.getBlockState(pos.below(2));
+                    // Snow is not a safe platform when the block underneath can
+                    // fall away or destroy the objective after an update.
                     boolean supportedSnow=support.is(Blocks.SNOW)
-                        && level.getBlockState(pos.below(2)).blocksMotion()
-                        && level.getBlockState(pos.below(2)).getFluidState().isEmpty();
+                        && snowFoundation.blocksMotion()
+                        && snowFoundation.getFluidState().isEmpty()
+                        && !(snowFoundation.getBlock() instanceof net.minecraft.world.level.block.FallingBlock)
+                        && !snowFoundation.is(Blocks.MAGMA_BLOCK)
+                        && !snowFoundation.is(Blocks.TNT)
+                        && !snowFoundation.is(Blocks.RESPAWN_ANCHOR);
                     // Do not put the recovery objective on a damaging floor: players
                     // must be able to stand beside and interact with it safely.
                     if(support.is(Blocks.MAGMA_BLOCK) || support.is(Blocks.CAMPFIRE)
