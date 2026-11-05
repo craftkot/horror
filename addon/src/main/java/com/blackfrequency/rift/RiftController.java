@@ -581,7 +581,11 @@ public final class RiftController {
                     boolean testWriteFailure=CI_TEST
                         && Boolean.getBoolean("blackfrequency.ciRestoreWriteFailureTest")
                         && s.restoreTicks==1 && checks==1;
-                    if(testWriteFailure || !level.setBlock(pos,original,2|16)) {
+                    if(testWriteFailure || !level.setBlock(pos,original,2|16)
+                        // A mod may intercept the write and report success while
+                        // replacing the block. Keep the snapshot pending until
+                        // the actual terrain matches the saved state.
+                        || !level.getBlockState(pos).equals(original)) {
                         failedWritesThisTick.add(pos.asLong());
                         if(testWriteFailure) {
                             s.ciRejectedRestorePos=pos.asLong();
