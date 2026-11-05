@@ -298,6 +298,10 @@ public final class RiftController {
                         // Solid but hazardous foundations can destroy the objective
                         // when triggered; do not place an emergency beacon on them.
                         || support.is(Blocks.TNT) || support.is(Blocks.RESPAWN_ANCHOR)
+                        // Leaves can decay and ordinary ice can melt, leaving the
+                        // recovery objective without a reliable foundation.
+                        || support.is(net.minecraft.tags.BlockTags.LEAVES)
+                        || support.is(Blocks.ICE)
                         // Gravity-affected foundations can fall away after a
                         // neighboring update, leaving the objective unsupported.
                         || support.is(Blocks.SAND) || support.is(Blocks.RED_SAND)
