@@ -435,8 +435,15 @@ public final class RiftController {
         }
         if(s.restoreTicks%40==0 && !s.snapshots.isEmpty()) {
             int percent=(int)(100d*(s.snapshots.size()-Math.max(0,s.restoreIndex+1))/(double)s.snapshots.size());
-            for(var player:level.players())
-                player.displayClientMessage(Component.literal("§5✦ §dСТАБИЛИЗАЦИЯ §f"+percent+"% §7— восстановлено "+s.restoredBlocks+" блоков"),true);
+            // Restoration is local to the fracture. Do not spam action-bar
+            // updates to players exploring distant parts of the Overworld.
+            for(var player:level.players()) {
+                long dx=(long)player.blockPosition().getX()-s.x;
+                long dz=(long)player.blockPosition().getZ()-s.z;
+                if(player.isAlive() && !player.isRemoved() && !player.isSpectator()
+                    && Math.abs(dx)<=128 && Math.abs(dz)<=128 && dx*dx+dz*dz<=128L*128L)
+                    player.displayClientMessage(Component.literal("§5✦ §dСТАБИЛИЗАЦИЯ §f"+percent+"% §7— восстановлено "+s.restoredBlocks+" блоков"),true);
+            }
         }
         if(s.restoreTicks%10==0) {
             float remaining=s.snapshots.isEmpty()?0f:Math.max(0f,(s.restoreIndex+1f)/s.snapshots.size());
