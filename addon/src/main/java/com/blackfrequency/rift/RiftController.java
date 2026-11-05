@@ -328,6 +328,9 @@ public final class RiftController {
                         || !level.getBlockState(pos.above()).isAir()
                         || (snowFixture && !supportedSnow)) continue;
                     if(!level.setBlock(pos,Blocks.BEACON.defaultBlockState(),3)) continue;
+                    // Other mods may intercept or replace the placement. Do not
+                    // persist a recovery objective unless a beacon really exists.
+                    if(!level.getBlockState(pos).is(Blocks.BEACON)) continue;
                     if(snowFixture) {
                         if(!level.getBlockState(pos.below()).is(Blocks.SNOW)
                             || !level.getBlockState(pos.below(2)).blocksMotion())
