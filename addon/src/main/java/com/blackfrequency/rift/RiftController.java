@@ -126,7 +126,8 @@ public final class RiftController {
             || !level.getWorldBorder().isWithinBounds(pos)) return;
         // Cancel vanilla harvesting before it creates a valuable beacon item.
         event.setCanceled(true);
-        if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),3)) {
+        if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),3)
+            && level.getBlockState(pos).isAir()) {
             s.naturalBeaconPos=Long.MIN_VALUE;
             s.setDirty();
             event.getPlayer().displayClientMessage(Component.literal(
