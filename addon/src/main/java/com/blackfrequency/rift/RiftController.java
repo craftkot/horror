@@ -366,9 +366,16 @@ public final class RiftController {
                     level.sendParticles(ParticleTypes.REVERSE_PORTAL,pos.getX()+.5,pos.getY()+1.2,pos.getZ()+.5,18,.35,.55,.35,.035);
                     if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_PLACED x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
                     for(var nearby:level.players()) {
-                        if(nearby.blockPosition().distSqr(pos)<128d*128d)
-                            nearby.displayClientMessage(Component.literal(
-                                "§d✦ Маяк стабилизации: §f"+pos.getX()+" "+pos.getY()+" "+pos.getZ()+" §7— нажмите ПКМ"),true);
+                        // Only active players inside the local fracture area
+                        // should receive coordinates for the recovery objective.
+                        // Use long arithmetic to avoid overflow near world limits.
+                        if(!nearby.isAlive() || nearby.isRemoved() || nearby.isSpectator()) continue;
+                        long hintDx=(long)nearby.blockPosition().getX()-pos.getX();
+                        long hintDz=(long)nearby.blockPosition().getZ()-pos.getZ();
+                        if(Math.abs(hintDx)>128 || Math.abs(hintDz)>128
+                            || hintDx*hintDx+hintDz*hintDz>128L*128L) continue;
+                        nearby.displayClientMessage(Component.literal(
+                            "§d✦ Маяк стабилизации: §f"+pos.getX()+" "+pos.getY()+" "+pos.getZ()+" §7— нажмите ПКМ"),true);
                     }
                     return true;
                 }
