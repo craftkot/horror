@@ -822,7 +822,11 @@ public final class RiftController {
                 } else {
                     level.sendParticles(ParticleTypes.REVERSE_PORTAL,beacon.getX()+.5,beacon.getY()+1.2,beacon.getZ()+.5,6,.28,.45,.28,.015);
                     if(s.finaleTicks%200==0) for(var player:level.players())
-                        if(player.blockPosition().distSqr(beacon)<128d*128d)
+                        if(player.isAlive() && !player.isRemoved() && !player.isSpectator()
+                            && Math.abs((long)player.blockPosition().getX()-beacon.getX())<=128L
+                            && Math.abs((long)player.blockPosition().getZ()-beacon.getZ())<=128L
+                            && ((long)player.blockPosition().getX()-beacon.getX())*((long)player.blockPosition().getX()-beacon.getX())
+                                + ((long)player.blockPosition().getZ()-beacon.getZ())*((long)player.blockPosition().getZ()-beacon.getZ())<128L*128L)
                             player.displayClientMessage(Component.literal(
                                 "§d✦ Маяк стабилизации: §f"+beacon.getX()+" "+beacon.getY()+" "+beacon.getZ()+" §7— нажмите ПКМ"),true);
                 }
