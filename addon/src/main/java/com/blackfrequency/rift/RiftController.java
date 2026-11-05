@@ -290,7 +290,11 @@ public final class RiftController {
                         && !snowFoundation.is(Blocks.SOUL_CAMPFIRE)
                         && !snowFoundation.is(Blocks.CACTUS)
                         && !snowFoundation.is(Blocks.TNT)
-                        && !snowFoundation.is(Blocks.RESPAWN_ANCHOR);
+                        && !snowFoundation.is(Blocks.RESPAWN_ANCHOR)
+                        // Snow does not stabilize foliage that decays or ice that melts.
+                        // Check the actual ground, not only the snow layer above it.
+                        && !snowFoundation.is(net.minecraft.tags.BlockTags.LEAVES)
+                        && !snowFoundation.is(Blocks.ICE);
                     // Do not put the recovery objective on a damaging floor: players
                     // must be able to stand beside and interact with it safely.
                     if(support.is(Blocks.MAGMA_BLOCK) || support.is(Blocks.CAMPFIRE)
