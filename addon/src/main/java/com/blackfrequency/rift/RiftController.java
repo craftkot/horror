@@ -177,6 +177,26 @@ public final class RiftController {
             && CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_EXPLOSION_PROTECTED");
     }
 
+    /** Reject overflowing fracture columns before narrowing coordinates to int. */
+    private static boolean validFractureColumn(int anchorX,int anchorZ,int offsetX,int offsetZ) {
+        long x=(long)anchorX+offsetX,z=(long)anchorZ+offsetZ;
+        return x>=Integer.MIN_VALUE && x<=Integer.MAX_VALUE
+            && z>=Integer.MIN_VALUE && z<=Integer.MAX_VALUE;
+    }
+
+    private static void verifyFractureColumnBounds() {
+        if(!validFractureColumn(0,0,RADIUS,-RADIUS)
+            || !validFractureColumn(Integer.MAX_VALUE, Integer.MIN_VALUE,0,0)
+            || validFractureColumn(Integer.MAX_VALUE,0,1,0)
+            || validFractureColumn(Integer.MIN_VALUE,0,-1,0)
+            || validFractureColumn(0,Integer.MAX_VALUE,0,1)
+            || validFractureColumn(0,Integer.MIN_VALUE,0,-1)
+            || !validFractureColumn(Integer.MAX_VALUE,0,-RADIUS,0)
+            || !validFractureColumn(0,Integer.MIN_VALUE,0,RADIUS))
+            throw new IllegalStateException("CI fracture column overflow regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_COLUMN_BOUNDS_VERIFIED");
+    }
+
     /** Horizontal anchor check with overflow-safe coordinates, independent of beacon height. */
     private static boolean beaconWithinAnchor(int x,int z,int anchorX,int anchorZ) {
         long dx=(long)x-anchorX,dz=(long)z-anchorZ;
@@ -221,6 +241,7 @@ public final class RiftController {
             || !beaconWithinAnchor(-128,0,0,0)
             || beaconWithinAnchor(Integer.MAX_VALUE,0,Integer.MIN_VALUE,0))
             throw new IllegalStateException("CI beacon anchor radius regression");
+        verifyFractureColumnBounds();
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED");
     }
 
@@ -1064,8 +1085,7 @@ public final class RiftController {
             // An anchor near the integer coordinate limits must not wrap around
             // and destroy unrelated terrain on the opposite side of the world.
             long worldX=(long)s.x+s.cursorX,worldZ=(long)s.z+s.cursorZ;
-            if(worldX<Integer.MIN_VALUE || worldX>Integer.MAX_VALUE
-                || worldZ<Integer.MIN_VALUE || worldZ>Integer.MAX_VALUE) {
+            if(!validFractureColumn(s.x,s.z,s.cursorX,s.cursorZ)) {
                 s.cursorY=level.getMinBuildHeight();
                 s.cursorZ++;
                 if(s.cursorZ>RADIUS){s.cursorZ=-RADIUS;s.cursorX++;}
