@@ -438,7 +438,11 @@ public final class RiftController {
         // Only query an already loaded chunk; never resurrect a removed beacon
         // or force chunk generation during recovery.
         if(s.restoreTicks%20==0 && level.hasChunkAt(activatedBeacon)
-            && level.getBlockState(activatedBeacon).is(Blocks.BEACON)) {
+            && level.getBlockState(activatedBeacon).is(Blocks.BEACON)
+            && level.players().stream().anyMatch(player -> player.isAlive()
+                && !player.isRemoved() && !player.isSpectator()
+                && player.distanceToSqr(activatedBeacon.getX()+0.5D,
+                    activatedBeacon.getY()+1.1D,activatedBeacon.getZ()+0.5D)<=128.0D*128.0D)) {
             double cx=activatedBeacon.getX()+0.5D, cy=activatedBeacon.getY()+1.1D;
             double cz=activatedBeacon.getZ()+0.5D;
             // Counter-rotating violet rings show stabilization progressing over time.
