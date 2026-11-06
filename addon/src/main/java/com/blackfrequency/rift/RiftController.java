@@ -109,7 +109,8 @@ public final class RiftController {
      * existing bounded placement loop can supply a replacement later.
      * Ordinary player-owned beacons are never intercepted.
      */
-    @SubscribeEvent
+    // Run after ordinary protection handlers so their cancellation is visible.
+    @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.LOWEST)
     public void onRecoveryBeaconBreak(net.minecraftforge.event.level.BlockEvent.BreakEvent event) {
         if(!(event.getLevel() instanceof ServerLevel level)
             || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
@@ -222,7 +223,8 @@ public final class RiftController {
     }
 
     /** Right-click a vanilla beacon within 128 blocks of the fracture anchor. */
-    @SubscribeEvent
+    // Respect earlier protection handlers before committing recovery state.
+    @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.LOWEST)
     public void onBeacon(PlayerInteractEvent.RightClickBlock event) {
         if(!(event.getLevel() instanceof ServerLevel level)
             || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
