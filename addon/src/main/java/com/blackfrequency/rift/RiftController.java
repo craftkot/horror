@@ -183,8 +183,10 @@ public final class RiftController {
     /** Pure interaction gate, also exercised by disposable-world CI. */
     private static boolean mayActivateBeacon(net.minecraft.world.InteractionHand hand,
             boolean alive, boolean spectator, double distanceSquared,
-            boolean canceled, net.minecraftforge.eventbus.api.Event.Result useBlock) {
+            boolean canceled, net.minecraftforge.eventbus.api.Event.Result useBlock,
+            net.minecraftforge.eventbus.api.Event.Result useItem) {
         return !canceled && useBlock!=net.minecraftforge.eventbus.api.Event.Result.DENY
+            && useItem!=net.minecraftforge.eventbus.api.Event.Result.DENY
             && hand==net.minecraft.world.InteractionHand.MAIN_HAND && alive && !spectator
             && Double.isFinite(distanceSquared) && distanceSquared>=0.0D && distanceSquared<=64.0D;
     }
@@ -192,20 +194,21 @@ public final class RiftController {
     private static void verifyBeaconInteractionGuard() {
         var main=net.minecraft.world.InteractionHand.MAIN_HAND;
         var off=net.minecraft.world.InteractionHand.OFF_HAND;
-        if(!mayActivateBeacon(main,true,false,64.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
-            || mayActivateBeacon(off,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
-            || mayActivateBeacon(main,false,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
-            || mayActivateBeacon(main,true,true,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
-            || mayActivateBeacon(main,true,false,64.0001D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
-            || mayActivateBeacon(main,true,false,Double.NaN,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
-            || mayActivateBeacon(main,true,false,Double.POSITIVE_INFINITY,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
-            || mayActivateBeacon(main,true,false,Double.NEGATIVE_INFINITY,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
-            || mayActivateBeacon(main,true,false,-0.001D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
-            || !mayActivateBeacon(main,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT))
+        if(!mayActivateBeacon(main,true,false,64.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(off,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,false,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,true,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,false,64.0001D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,false,Double.NaN,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,false,Double.POSITIVE_INFINITY,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,false,Double.NEGATIVE_INFINITY,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,false,-0.001D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || !mayActivateBeacon(main,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT))
             throw new IllegalStateException("CI beacon interaction guard regression");
-        if(mayActivateBeacon(main,true,false,0.0D,true,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
-            || mayActivateBeacon(main,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DENY)
-            || !mayActivateBeacon(main,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.ALLOW))
+        if(mayActivateBeacon(main,true,false,0.0D,true,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DENY,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || !mayActivateBeacon(main,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.ALLOW,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DENY))
             throw new IllegalStateException("CI beacon protection-mod denial regression");
         // A high-altitude beacon remains usable when horizontally close;
         // extreme opposite-sign coordinates must never wrap into range.
@@ -241,7 +244,7 @@ public final class RiftController {
         if(!mayActivateBeacon(event.getHand(),event.getEntity().isAlive(),
             event.getEntity().isSpectator(),
             event.getEntity().distanceToSqr(pos.getX()+0.5D,pos.getY()+0.5D,pos.getZ()+0.5D),
-            event.isCanceled(),event.getUseBlock())) return;
+            event.isCanceled(),event.getUseBlock(),event.getUseItem())) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
         if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
         if(!beaconWithinAnchor(pos.getX(),pos.getZ(),s.x,s.z)) return;
