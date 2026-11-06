@@ -488,7 +488,16 @@ public final class RiftController {
         }
         if(s.restoreTicks%10==0) {
             float remaining=s.snapshots.isEmpty()?0f:Math.max(0f,(s.restoreIndex+1f)/s.snapshots.size());
-            for(var player:level.players()) RiftNetwork.send(player,remaining,false,0);
+            // The recovery overlay is local to the fracture. Do not send
+            // recovery packets to distant, dead, removed or spectator players.
+            for(var player:level.players()) {
+                if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
+                long dx=(long)player.blockPosition().getX()-s.x;
+                long dz=(long)player.blockPosition().getZ()-s.z;
+                if(Math.abs(dx)<=128L && Math.abs(dz)<=128L
+                    && dx*dx+dz*dz<=128L*128L)
+                    RiftNetwork.send(player,remaining,false,0);
+            }
         }
         int restoredThisTick=0,checks=0;
         // Never revisit a small pending set dozens of times in one tick.
