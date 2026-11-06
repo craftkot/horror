@@ -696,6 +696,17 @@ public final class RiftController {
                 if(!level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)
                     || !level.getBlockState(beacon).is(Blocks.BEACON))
                     throw new IllegalStateException("CI recovery beacon not loaded after restoration");
+                // A protection mod may have canceled the break before our handler.
+                // It must leave both the physical beacon and its saved anchor intact.
+                var deniedEvent=new net.minecraftforge.event.level.BlockEvent.BreakEvent(
+                    level,beacon,level.getBlockState(beacon),level.players().get(0));
+                deniedEvent.setCanceled(true);
+                new RiftController().onRecoveryBeaconBreak(deniedEvent);
+                if(!deniedEvent.isCanceled() || !level.getBlockState(beacon).is(Blocks.BEACON)
+                    || s.naturalBeaconPos!=beacon.asLong())
+                    throw new IllegalStateException("CI canceled beacon break mutated recovery fixture");
+                LOGGER.info("BLACK_FREQUENCY_TEST CANCELED_BEACON_BREAK_PRESERVED x={} y={} z={}",
+                    beacon.getX(),beacon.getY(),beacon.getZ());
                 var testEvent=new net.minecraftforge.event.level.BlockEvent.BreakEvent(
                     level,beacon,level.getBlockState(beacon),level.players().get(0));
                 new RiftController().onRecoveryBeaconBreak(testEvent);
