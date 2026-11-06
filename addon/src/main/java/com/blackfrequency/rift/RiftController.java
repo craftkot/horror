@@ -117,6 +117,9 @@ public final class RiftController {
         // through synthetic break events from other mods.
         if(event.getPlayer()==null || !event.getPlayer().isAlive()
             || event.getPlayer().isRemoved() || event.getPlayer().isSpectator()) return;
+        // Respect protection mods and other handlers that explicitly deny block use.
+        // Recovery must not bypass an already-cancelled interaction or a DENY result.
+        if(event.isCanceled() || event.getUseBlock()==net.minecraftforge.eventbus.api.Event.Result.DENY) return;
         BlockPos pos=event.getPos();
         // Ignore unloaded positions before querying block state: an event from
         // another mod must not cause recovery logic to load a chunk.
