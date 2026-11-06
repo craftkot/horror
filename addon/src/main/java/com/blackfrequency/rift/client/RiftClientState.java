@@ -9,6 +9,12 @@ public final class RiftClientState {
     private static net.minecraft.client.multiplayer.ClientLevel lastLevel;
     private RiftClientState() {}
     public static void update(float value, boolean collapsing, int ticks) {
+        // Packets may arrive before the first client tick after joining a world.
+        // Bind the state to that world immediately, rather than carrying it across sessions.
+        net.minecraft.client.multiplayer.ClientLevel level=net.minecraft.client.Minecraft.getInstance().level;
+        if(level==null) { reset(); lastLevel=null; return; }
+        if(lastLevel!=null && lastLevel!=level) reset();
+        lastLevel=level;
         ticksSincePacket=0;
         // Network data must never feed NaN or infinity into sky and overlay shaders.
         progress=Float.isFinite(value) ? Math.max(0f,Math.min(1f,value)) : 0f;
