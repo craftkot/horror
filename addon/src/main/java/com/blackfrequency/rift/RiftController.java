@@ -1097,13 +1097,18 @@ public final class RiftController {
             if(!level.getWorldBorder().isWithinBounds(pos)) continue;
             BlockState original=level.getBlockState(pos);
             if(original.isAir() || original.hasBlockEntity()) continue;
+            // Stage the original state before editing. A failed setBlock must not
+            // leave a phantom recovery entry; a successful edit must have a
+            // snapshot available immediately, before advancing the cursor.
+            CompoundTag snapshot=new CompoundTag();
+            snapshot.putLong("pos",pos.asLong());
+            snapshot.put("state",NbtUtils.writeBlockState(original));
+            s.snapshots.add(snapshot);
             if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),2|16)){
-                CompoundTag snapshot=new CompoundTag();
-                snapshot.putLong("pos",pos.asLong());
-                snapshot.put("state",NbtUtils.writeBlockState(original));
-                s.snapshots.add(snapshot);
                 edits++;s.edits++;
                 if(CI_TEST && s.edits==1) LOGGER.info("BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x={} y={} z={}", wx,y,wz);
+            } else {
+                s.snapshots.remove(s.snapshots.size()-1);
             }
         }
         // Persist the cursor every tick; restart must not rewind destructive edits.
