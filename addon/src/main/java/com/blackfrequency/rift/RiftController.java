@@ -197,6 +197,31 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_COLUMN_BOUNDS_VERIFIED");
     }
 
+    /** Verify that a pending terrain snapshot survives a SavedData round trip. */
+    private static void verifyPendingSnapshotPersistence() {
+        State original=new State();
+        original.started=true;
+        original.restoring=true;
+        original.x=12;
+        original.z=-7;
+        original.edits=1;
+        original.restoreIndex=0;
+        original.restoreScan=0;
+        BlockPos pos=new BlockPos(12,64,-7);
+        CompoundTag snapshot=new CompoundTag();
+        snapshot.putLong("pos",pos.asLong());
+        snapshot.put("state",NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
+        original.snapshots.add(snapshot);
+        State loaded=State.load(original.save(new CompoundTag()));
+        if(!loaded.started || !loaded.restoring || loaded.edits!=1
+            || loaded.restoreIndex!=0 || loaded.restoreScan!=0
+            || loaded.snapshots.size()!=1
+            || loaded.snapshots.get(0).getLong("pos")!=pos.asLong()
+            || !loaded.snapshots.get(0).getCompound("state").equals(snapshot.getCompound("state")))
+            throw new IllegalStateException("CI pending terrain snapshot persistence regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST PENDING_SNAPSHOT_PERSISTENCE_VERIFIED");
+    }
+
     /** Horizontal anchor check with overflow-safe coordinates, independent of beacon height. */
     private static boolean beaconWithinAnchor(int x,int z,int anchorX,int anchorZ) {
         long dx=(long)x-anchorX,dz=(long)z-anchorZ;
@@ -242,6 +267,7 @@ public final class RiftController {
             || beaconWithinAnchor(Integer.MAX_VALUE,0,Integer.MIN_VALUE,0))
             throw new IllegalStateException("CI beacon anchor radius regression");
         verifyFractureColumnBounds();
+        verifyPendingSnapshotPersistence();
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED");
     }
 
