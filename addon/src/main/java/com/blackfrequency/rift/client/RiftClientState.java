@@ -8,7 +8,8 @@ public final class RiftClientState {
     private RiftClientState() {}
     public static void update(float value, boolean collapsing, int ticks) {
         ticksSincePacket=0;
-        progress=Math.max(0f,Math.min(1f,value));
+        // Network data must never feed NaN or infinity into sky and overlay shaders.
+        progress=Float.isFinite(value) ? Math.max(0f,Math.min(1f,value)) : 0f;
         collapse=collapsing;
         finaleTicks=Math.max(0,ticks);
     }
