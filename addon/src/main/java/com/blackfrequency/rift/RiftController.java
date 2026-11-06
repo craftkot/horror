@@ -152,7 +152,9 @@ public final class RiftController {
         return beaconPos!=Long.MIN_VALUE && affected.removeIf(pos -> pos.asLong()==beaconPos);
     }
 
-    @SubscribeEvent
+    // Run after ordinary explosion modifiers: protect the fixture even when
+    // another handler added its position to the affected-block list.
+    @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.LOWEST)
     public void onRecoveryBeaconExplosion(net.minecraftforge.event.level.ExplosionEvent.Detonate event) {
         if(!(event.getLevel() instanceof ServerLevel level)
             || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)
