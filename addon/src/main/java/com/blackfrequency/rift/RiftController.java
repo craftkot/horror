@@ -387,6 +387,13 @@ public final class RiftController {
                             || affected.size()!=1 || !affected.get(0).equals(pos.above())
                             || protectRecoveryBeaconFromExplosion(affected,Long.MIN_VALUE))
                             throw new IllegalStateException("CI explosion beacon protection failed");
+                        // An unrelated (player-owned) beacon and ordinary blocks
+                        // must remain destructible; only the tracked fixture is protected.
+                        List<BlockPos> unrelated=new ArrayList<>(List.of(pos.above(),pos.above(2)));
+                        if(protectRecoveryBeaconFromExplosion(unrelated,s.naturalBeaconPos)
+                            || unrelated.size()!=2 || !unrelated.get(0).equals(pos.above())
+                            || !unrelated.get(1).equals(pos.above(2)))
+                            throw new IllegalStateException("CI explosion filter damaged unrelated blocks");
                         LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_EXPLOSION_FILTER_VERIFIED");
                     }
                     // In the disposable client test, remove the first beacon to
