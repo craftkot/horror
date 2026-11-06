@@ -5,6 +5,7 @@ public final class RiftClientState {
     private static boolean collapse;
     private static int finaleTicks;
     private static int ticksSincePacket;
+    private static net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> lastDimension;
     private RiftClientState() {}
     public static void update(float value, boolean collapsing, int ticks) {
         ticksSincePacket=0;
@@ -23,8 +24,17 @@ public final class RiftClientState {
     @net.minecraftforge.eventbus.api.SubscribeEvent
     public static void onClientTick(net.minecraftforge.event.TickEvent.ClientTickEvent event) {
         if(event.phase!=net.minecraftforge.event.TickEvent.Phase.END) return;
+        net.minecraft.client.multiplayer.ClientLevel level=net.minecraft.client.Minecraft.getInstance().level;
+        if(level==null) {
+            reset();
+            lastDimension=null;
+            return;
+        }
+        net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension=level.dimension();
+        if(lastDimension!=null && !lastDimension.equals(dimension)) reset();
+        lastDimension=dimension;
         if((progress>0f || collapse || finaleTicks>0) && ++ticksSincePacket>100) reset();
     }
     @net.minecraftforge.eventbus.api.SubscribeEvent
-    public static void onLogout(net.minecraftforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) { reset(); }
+    public static void onLogout(net.minecraftforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) { reset(); lastDimension=null; }
 }
