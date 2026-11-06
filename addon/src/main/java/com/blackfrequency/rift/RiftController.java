@@ -1079,6 +1079,10 @@ public final class RiftController {
             boolean fracture=faultA<width || faultB<width*0.77;
             if(!fracture || dx*dx+dz*dz>RADIUS*RADIUS) continue;
             BlockPos pos=new BlockPos(wx,y,wz);
+            // A shrinking world border must never let the catastrophe erase
+            // inaccessible terrain, even inside the original fracture radius.
+            // This is a border check only: no chunk loading or extra edits.
+            if(!level.getWorldBorder().isWithinBounds(pos)) continue;
             BlockState original=level.getBlockState(pos);
             if(original.isAir() || original.hasBlockEntity()) continue;
             if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),2|16)){
