@@ -5,7 +5,8 @@ public final class RiftClientState {
     private static boolean collapse;
     private static int finaleTicks;
     private static int ticksSincePacket;
-    private static net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> lastDimension;
+    // World identity also changes when reconnecting to a different server in the same dimension.
+    private static net.minecraft.client.multiplayer.ClientLevel lastLevel;
     private RiftClientState() {}
     public static void update(float value, boolean collapsing, int ticks) {
         ticksSincePacket=0;
@@ -27,14 +28,13 @@ public final class RiftClientState {
         net.minecraft.client.multiplayer.ClientLevel level=net.minecraft.client.Minecraft.getInstance().level;
         if(level==null) {
             reset();
-            lastDimension=null;
+            lastLevel=null;
             return;
         }
-        net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension=level.dimension();
-        if(lastDimension!=null && !lastDimension.equals(dimension)) reset();
-        lastDimension=dimension;
+        if(lastLevel!=null && lastLevel!=level) reset();
+        lastLevel=level;
         if((progress>0f || collapse || finaleTicks>0) && ++ticksSincePacket>100) reset();
     }
     @net.minecraftforge.eventbus.api.SubscribeEvent
-    public static void onLogout(net.minecraftforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) { reset(); lastDimension=null; }
+    public static void onLogout(net.minecraftforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) { reset(); lastLevel=null; }
 }
