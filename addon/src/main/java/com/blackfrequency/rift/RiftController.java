@@ -1061,7 +1061,18 @@ public final class RiftController {
         int edits=0, checks=0;
         while(edits<EDIT_BUDGET && checks<2048 && !s.finished) {
             if(s.edits>=EFFECTIVE_MAX_EDITS || s.cursorX>RADIUS) {s.finished=true;break;}
-            int wx=s.x+s.cursorX,wz=s.z+s.cursorZ;
+            // An anchor near the integer coordinate limits must not wrap around
+            // and destroy unrelated terrain on the opposite side of the world.
+            long worldX=(long)s.x+s.cursorX,worldZ=(long)s.z+s.cursorZ;
+            if(worldX<Integer.MIN_VALUE || worldX>Integer.MAX_VALUE
+                || worldZ<Integer.MIN_VALUE || worldZ>Integer.MAX_VALUE) {
+                s.cursorY=level.getMinBuildHeight();
+                s.cursorZ++;
+                if(s.cursorZ>RADIUS){s.cursorZ=-RADIUS;s.cursorX++;}
+                checks++;
+                continue;
+            }
+            int wx=(int)worldX,wz=(int)worldZ;
             if(!level.hasChunk(wx>>4,wz>>4)) {
                 // Never force-load chunks for destruction. Skip this column and keep advancing.
                 s.cursorY=level.getMinBuildHeight();
