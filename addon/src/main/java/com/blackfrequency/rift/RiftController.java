@@ -219,6 +219,17 @@ public final class RiftController {
             || loaded.snapshots.get(0).getLong("pos")!=pos.asLong()
             || !loaded.snapshots.get(0).getCompound("state").equals(snapshot.getCompound("state")))
             throw new IllegalStateException("CI pending terrain snapshot persistence regression");
+        // A damaged save may contain cursors beyond the serialized list.
+        // Recovery must clamp them without discarding the only terrain snapshot.
+        CompoundTag damaged=original.save(new CompoundTag());
+        damaged.putInt("restoreIndex",Integer.MAX_VALUE);
+        damaged.putInt("restoreScan",Integer.MIN_VALUE);
+        State repaired=State.load(damaged);
+        if(repaired.restoreIndex!=0 || repaired.restoreScan!=0
+            || repaired.snapshots.size()!=1
+            || repaired.snapshots.get(0).getLong("pos")!=pos.asLong())
+            throw new IllegalStateException("CI damaged recovery cursor persistence regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST DAMAGED_RECOVERY_CURSOR_REPAIRED");
         LOGGER.info("BLACK_FREQUENCY_TEST PENDING_SNAPSHOT_PERSISTENCE_VERIFIED");
     }
 
