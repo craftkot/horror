@@ -33,6 +33,9 @@ public final class RiftClientState {
         }
         if(lastLevel!=null && lastLevel!=level) reset();
         lastLevel=level;
+        // Integrated singleplayer pauses server packets too. Do not expire the
+        // fracture overlay while the simulation is paused in a menu.
+        if(net.minecraft.client.Minecraft.getInstance().isPaused()) return;
         if((progress>0f || collapse || finaleTicks>0) && ++ticksSincePacket>100) reset();
     }
     @net.minecraftforge.eventbus.api.SubscribeEvent
