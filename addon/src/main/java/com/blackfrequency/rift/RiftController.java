@@ -380,9 +380,12 @@ public final class RiftController {
                     if(CI_TEST) {
                         // Deterministic list-filter regression. This is not a
                         // substitute for a live TNT/creeper explosion test.
-                        List<BlockPos> affected=new ArrayList<>(List.of(pos,pos.above()));
+                        List<BlockPos> affected=new ArrayList<>(List.of(pos,pos.above(),pos));
+                        // Explosions may contain repeated positions after other mods
+                        // modify the affected list. Remove every beacon occurrence.
                         if(!protectRecoveryBeaconFromExplosion(affected,s.naturalBeaconPos)
-                            || affected.size()!=1 || !affected.get(0).equals(pos.above()))
+                            || affected.size()!=1 || !affected.get(0).equals(pos.above())
+                            || protectRecoveryBeaconFromExplosion(affected,Long.MIN_VALUE))
                             throw new IllegalStateException("CI explosion beacon protection failed");
                         LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_EXPLOSION_FILTER_VERIFIED");
                     }
