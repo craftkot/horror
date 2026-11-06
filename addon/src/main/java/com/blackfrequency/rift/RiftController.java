@@ -115,6 +115,9 @@ public final class RiftController {
             || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
         // Removed or spectator players must not dismantle a recovery objective
         // through synthetic break events from other mods.
+        // Respect prior protection-mod cancellation: a denied break must not
+        // remove the recovery fixture or mutate its persisted position.
+        if(event.isCanceled()) return;
         if(event.getPlayer()==null || !event.getPlayer().isAlive()
             || event.getPlayer().isRemoved() || event.getPlayer().isSpectator()) return;
         BlockPos pos=event.getPos();
