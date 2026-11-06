@@ -295,8 +295,10 @@ def capture_test_world():
                         print("WORLD_CAPTURE_FAIL: snow-supported replacement beacon was not physically clicked",flush=True)
                         return False
                     print("WORLD_CAPTURE: SNOW_BEACON_CLICK_VERIFIED",*snow.groups(),flush=True)
-                if "BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_CONSUMED" not in log_after:
-                    print("WORLD_CAPTURE_FAIL: post-restoration beacon break was not consumed",flush=True)
+                preserved=log_after.find("BLACK_FREQUENCY_TEST CANCELED_BEACON_BREAK_PRESERVED")
+                consumed=log_after.find("BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_CONSUMED")
+                if preserved<0 or consumed<=preserved:
+                    print("WORLD_CAPTURE_FAIL: canceled beacon break must preserve the fixture before permitted break consumes it",flush=True)
                     return False
                 print("WORLD_CAPTURE: POST_RESTORE_BEACON_BREAK_GUARD_VERIFIED (synthetic event)",flush=True)
             if not fracture_seen:
