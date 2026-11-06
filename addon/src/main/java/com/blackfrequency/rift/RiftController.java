@@ -179,25 +179,31 @@ public final class RiftController {
 
     /** Pure interaction gate, also exercised by disposable-world CI. */
     private static boolean mayActivateBeacon(net.minecraft.world.InteractionHand hand,
-            boolean alive, boolean spectator, double distanceSquared) {
-        return hand==net.minecraft.world.InteractionHand.MAIN_HAND && alive && !spectator
+            boolean alive, boolean spectator, double distanceSquared,
+            boolean canceled, net.minecraftforge.eventbus.api.Event.Result useBlock) {
+        return !canceled && useBlock!=net.minecraftforge.eventbus.api.Event.Result.DENY
+            && hand==net.minecraft.world.InteractionHand.MAIN_HAND && alive && !spectator
             && Double.isFinite(distanceSquared) && distanceSquared>=0.0D && distanceSquared<=64.0D;
     }
 
     private static void verifyBeaconInteractionGuard() {
         var main=net.minecraft.world.InteractionHand.MAIN_HAND;
         var off=net.minecraft.world.InteractionHand.OFF_HAND;
-        if(!mayActivateBeacon(main,true,false,64.0D)
-            || mayActivateBeacon(off,true,false,0.0D)
-            || mayActivateBeacon(main,false,false,0.0D)
-            || mayActivateBeacon(main,true,true,0.0D)
-            || mayActivateBeacon(main,true,false,64.0001D)
-            || mayActivateBeacon(main,true,false,Double.NaN)
-            || mayActivateBeacon(main,true,false,Double.POSITIVE_INFINITY)
-            || mayActivateBeacon(main,true,false,Double.NEGATIVE_INFINITY)
-            || mayActivateBeacon(main,true,false,-0.001D)
-            || !mayActivateBeacon(main,true,false,0.0D))
+        if(!mayActivateBeacon(main,true,false,64.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(off,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,false,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,true,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,false,64.0001D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,false,Double.NaN,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,false,Double.POSITIVE_INFINITY,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,false,Double.NEGATIVE_INFINITY,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,false,-0.001D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || !mayActivateBeacon(main,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT))
             throw new IllegalStateException("CI beacon interaction guard regression");
+        if(mayActivateBeacon(main,true,false,0.0D,true,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DENY)
+            || !mayActivateBeacon(main,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.ALLOW))
+            throw new IllegalStateException("CI beacon protection-mod denial regression");
         // A high-altitude beacon remains usable when horizontally close;
         // extreme opposite-sign coordinates must never wrap into range.
         if(!beaconWithinAnchor(128,0,0,0)
@@ -214,9 +220,7 @@ public final class RiftController {
     public void onBeacon(PlayerInteractEvent.RightClickBlock event) {
         if(!(event.getLevel() instanceof ServerLevel level)
             || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
-        // Respect protection mods and other handlers that explicitly deny block use.
-        // Recovery must not bypass an already-cancelled interaction or a DENY result.
-        if(event.isCanceled() || event.getUseBlock()==net.minecraftforge.eventbus.api.Event.Result.DENY) return;
+        // Protection-mod cancellation and DENY are enforced by the tested activation gate.
         BlockPos pos=event.getPos();
         // Ignore unloaded positions before querying block state: an event from
         // another mod must not cause recovery logic to load a chunk.
@@ -233,7 +237,8 @@ public final class RiftController {
         if(event.getEntity().isRemoved()) return;
         if(!mayActivateBeacon(event.getHand(),event.getEntity().isAlive(),
             event.getEntity().isSpectator(),
-            event.getEntity().distanceToSqr(pos.getX()+0.5D,pos.getY()+0.5D,pos.getZ()+0.5D))) return;
+            event.getEntity().distanceToSqr(pos.getX()+0.5D,pos.getY()+0.5D,pos.getZ()+0.5D),
+            event.isCanceled(),event.getUseBlock())) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
         if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
         if(!beaconWithinAnchor(pos.getX(),pos.getZ(),s.x,s.z)) return;
