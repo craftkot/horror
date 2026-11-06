@@ -344,8 +344,11 @@ public final class RiftController {
                 || ax*ax+az*az>(long)(RADIUS-8)*(RADIUS-8)) continue;
             var facing=player.getDirection();
             int forwardX=facing.getStepX(),forwardZ=facing.getStepZ();
-            for(int distance=4;distance<=8;distance++) {
-                for(int side=0;side<=6;side++) {
+            // Search a few additional nearby loaded positions when rough terrain
+            // leaves the original 4..8 block corridor without a safe support.
+            // All candidates still pass the fracture radius, border and chunk guards.
+            for(int distance=3;distance<=10;distance++) {
+                for(int side=0;side<=10;side++) {
                     int offset=side==0?0:(side%2==1?(side+1)/2:-(side/2));
                     // Calculate in long before narrowing: near the integer world
                     // boundary an overflow must never wrap a beacon to the other side.
