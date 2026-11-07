@@ -55,7 +55,12 @@ public final class RiftController {
     private static double boundedLiftVelocity(double current, double lift) {
         if(!Double.isFinite(current)) current=0.0D;
         if(!Double.isFinite(lift)) lift=0.0D;
-        return Math.min(.43D,current+lift);
+        // Saturate before adding: two finite doubles can overflow to Infinity.
+        // Do not erase externally supplied upward knockback above the lift cap.
+        if(lift>0.0D && current>Double.MAX_VALUE-lift) return Math.max(.43D,current);
+        if(lift<0.0D && current< -Double.MAX_VALUE-lift) return -Double.MAX_VALUE;
+        double next=current+lift;
+        return current>.43D ? Math.min(current,next) : Math.min(.43D,next);
     }
 
     private static void verifyBoundedLiftVelocity() {
@@ -65,7 +70,11 @@ public final class RiftController {
             {-0.3D,0.05D,-0.25D},
             {Double.NaN,0.05D,0.05D},
             {Double.POSITIVE_INFINITY,0.05D,0.05D},
-            {0.2D,Double.NEGATIVE_INFINITY,0.2D}
+            {0.2D,Double.NEGATIVE_INFINITY,0.2D},
+            {0.8D,0.05D,0.8D},
+            {0.8D,-0.05D,0.75D},
+            {Double.MAX_VALUE,Double.MAX_VALUE,Double.MAX_VALUE},
+            {-Double.MAX_VALUE,-Double.MAX_VALUE,-Double.MAX_VALUE}
         };
         for(double[] sample:cases) {
             double actual=boundedLiftVelocity(sample[0],sample[1]);
