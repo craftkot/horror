@@ -47,6 +47,28 @@ public final class RiftController {
         return Math.max(-cap,Math.min(cap,next));
     }
 
+    /** CI regression: anomaly drift must not overwrite sprint or knockback velocity. */
+    private static void verifyBoundedAnomalyVelocity() {
+        final double epsilon=1.0E-9D;
+        double[][] cases={
+            {0.0D,0.035D,0.035D},
+            {0.34D,0.035D,0.35D},
+            {-0.34D,-0.035D,-0.35D},
+            {0.8D,0.035D,0.8D},
+            {0.8D,-0.035D,0.765D},
+            {-0.8D,-0.035D,-0.8D},
+            {-0.8D,0.035D,-0.765D},
+            {0.0D,0.0D,0.0D}
+        };
+        for(double[] sample:cases) {
+            double actual=boundedAnomalyVelocity(sample[0],sample[1]);
+            if(!Double.isFinite(actual) || Math.abs(actual-sample[2])>epsilon)
+                throw new IllegalStateException("CI anomaly drift velocity regression: "
+                    +sample[0]+" + "+sample[1]+" => "+actual);
+        }
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_VELOCITY_BOUNDS_VERIFIED");
+    }
+
     private static final class State extends SavedData {
         long elapsed;
         int x, z, cursorX=-RADIUS, cursorZ=-RADIUS, cursorY;
@@ -288,6 +310,7 @@ public final class RiftController {
             || beaconWithinAnchor(Integer.MAX_VALUE,0,Integer.MIN_VALUE,0))
             throw new IllegalStateException("CI beacon anchor radius regression");
         verifyFractureColumnBounds();
+        verifyBoundedAnomalyVelocity();
         verifyPendingSnapshotPersistence();
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED");
     }
