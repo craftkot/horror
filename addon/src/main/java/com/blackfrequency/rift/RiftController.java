@@ -1012,7 +1012,14 @@ public final class RiftController {
                     break;
                 }
                 for(var player : level.players()) RiftNetwork.send(player,1f,true,0);
+                // The fracture is local: do not interrupt distant players or
+                // spectators with a full-screen finale announcement.
                 for(var player : level.players()) {
+                    if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
+                    long dx=(long)player.blockPosition().getX()-s.x;
+                    long dz=(long)player.blockPosition().getZ()-s.z;
+                    if(Math.abs(dx)>128L || Math.abs(dz)>128L
+                        || dx*dx+dz*dz>128L*128L) continue;
                     player.connection.send(new ClientboundSetTitlesAnimationPacket(5, 120, 25));
                     player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§2ВЫСВОБОЖДЕНИЕ")));
                     player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§7Мир больше не цел.")));
