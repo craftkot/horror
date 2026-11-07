@@ -904,7 +904,9 @@ public final class RiftController {
                 BlockPos p=player.blockPosition();
                 // Bound all three axes before squaring: distant players (including
                 // those high above the rift) should not receive recovery particles.
-                long dx=(long)p.getX()-s.x, dy=(long)p.getY()-s.y, dz=(long)p.getZ()-s.z;
+                // State stores only horizontal rift coordinates; the activated
+                // physical beacon supplies the vertical recovery anchor.
+                long dx=(long)p.getX()-s.x, dy=(long)p.getY()-activatedBeacon.getY(), dz=(long)p.getZ()-s.z;
                 if(Math.abs(dx)>128 || Math.abs(dy)>128 || Math.abs(dz)>128
                     || dx*dx+dy*dy+dz*dz>128L*128L) continue;
                 level.sendParticles(ParticleTypes.END_ROD,p.getX()+.5,p.getY()+1.5,p.getZ()+.5,12,3,2,3,.03);
