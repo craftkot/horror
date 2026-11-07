@@ -1024,8 +1024,8 @@ public final class RiftController {
                     if(Math.abs(dx)>128L || Math.abs(dz)>128L
                         || dx*dx+dz*dz>128L*128L) continue;
                     player.connection.send(new ClientboundSetTitlesAnimationPacket(5, 120, 25));
-                    player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§2ВЫСВОБОЖДЕНИЕ")));
-                    player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§7Мир больше не цел.")));
+                    player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§5§lВЫСВОБОЖДЕНИЕ")));
+                    player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§dМир больше не цел.")));
                 }
             }
             if(level.getGameTime()%20L==0)s.setDirty();
