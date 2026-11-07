@@ -993,6 +993,9 @@ public final class RiftController {
                     ? "Граница мира становится тоньше."
                     : "Оно больше не удерживает то, что снаружи.";
                 for(var player : level.players()) {
+                    // Narrative titles are for active participants only. A dead,
+                    // removed or spectator client must not receive a forced overlay.
+                    if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
                     player.connection.send(new ClientboundSetTitlesAnimationPacket(20, 90, 35));
                     player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§8BLACK FREQUENCY")));
                     player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§7"+subtitle)));
