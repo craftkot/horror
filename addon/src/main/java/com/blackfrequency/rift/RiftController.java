@@ -917,7 +917,10 @@ public final class RiftController {
                 level.sendParticles(particle,x,y,z,2,.12,.15,.12,.025);
             }
         }
-        if(s.restoreTicks%10==0) {
+        // A destroyed or unloaded beacon must not leave a phantom recovery glow.
+        // hasChunkAt only inspects loaded chunks; it never forces chunk generation.
+        if(s.restoreTicks%10==0 && level.hasChunkAt(activatedBeacon)
+            && level.getBlockState(activatedBeacon).is(Blocks.BEACON)) {
             // The recovery glow belongs to the fracture, not every player in
             // the dimension. Avoid particle traffic for distant or inactive players.
             for(var player:level.players()) {
