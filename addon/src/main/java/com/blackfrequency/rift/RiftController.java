@@ -1111,7 +1111,16 @@ public final class RiftController {
                     if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_MISSING x={} y={} z={}",
                         beacon.getX(),beacon.getY(),beacon.getZ());
                 } else {
-                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,beacon.getX()+.5,beacon.getY()+1.2,beacon.getZ()+.5,6,.28,.45,.28,.015);
+                    // The idle beacon is visible only locally. Avoid broadcasting
+                    // six particles every server tick when nobody is nearby.
+                    // Do not load chunks or create entities for cosmetic effects.
+                    if(s.finaleTicks%4==0 && level.players().stream().anyMatch(player ->
+                        player.isAlive() && !player.isRemoved() && !player.isSpectator()
+                        && player.distanceToSqr(beacon.getX()+.5D,beacon.getY()+1.2D,
+                            beacon.getZ()+.5D)<=64.0D*64.0D))
+                        level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                            beacon.getX()+.5,beacon.getY()+1.2,beacon.getZ()+.5,
+                            6,.28,.45,.28,.015);
                     if(s.finaleTicks%200==0) for(var player:level.players())
                         if(player.isAlive() && !player.isRemoved() && !player.isSpectator()
                             && Math.abs((long)player.blockPosition().getX()-beacon.getX())<=128L
