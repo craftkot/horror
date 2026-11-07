@@ -953,9 +953,13 @@ public final class RiftController {
                 // Completion is a local event. Do not interrupt distant players
                 // or spectators with an unrelated full-screen title.
                 long dx=(long)player.blockPosition().getX()-s.x;
+                long dy=(long)player.blockPosition().getY()-activatedBeacon.getY();
                 long dz=(long)player.blockPosition().getZ()-s.z;
+                // Completion titles use the same bounded 3D audience as
+                // recovery particles; players far above or below cannot see it.
                 if(!player.isAlive() || player.isRemoved() || player.isSpectator()
-                    || Math.abs(dx)>128 || Math.abs(dz)>128 || dx*dx+dz*dz>128L*128L) continue;
+                    || Math.abs(dx)>128 || Math.abs(dy)>128 || Math.abs(dz)>128
+                    || dx*dx+dy*dy+dz*dz>128L*128L) continue;
                 player.displayClientMessage(Component.literal("§d✦ СТАБИЛИЗАЦИЯ 100% §7— восстановлено "+s.restoredBlocks+" блоков; пропущено "+s.skippedOccupied),true);
                 player.connection.send(new ClientboundSetTitleTextPacket(Component.literal(
                     s.skippedOccupied==0 && s.skippedInvalid==0 ? "§dМИР ВОССТАНОВЛЕН" : "§dСТАБИЛИЗАЦИЯ ЗАВЕРШЕНА")));
