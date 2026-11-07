@@ -1001,10 +1001,15 @@ public final class RiftController {
             if(s.elapsed >= DAY*10) {
                 s.started=true;s.setDirty();
                 if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST FINALE_STARTED");
-                // Anchor the fracture near a living player, not an abandoned world spawn.
-                if (!level.players().isEmpty()) {
-                    BlockPos anchor=level.players().get(0).blockPosition();
+                // Spectators and dead/disconnecting players must not choose
+                // the fracture location for everyone else in the world.
+                // Iterate existing player entities only; never load chunks.
+                for(var player : level.players()) {
+                    if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
+                    BlockPos anchor=player.blockPosition();
                     s.x=anchor.getX();s.z=anchor.getZ();
+                    if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST FINALE_ANCHOR_VALID x={} z={}",s.x,s.z);
+                    break;
                 }
                 for(var player : level.players()) RiftNetwork.send(player,1f,true,0);
                 for(var player : level.players()) {
