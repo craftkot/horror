@@ -907,7 +907,11 @@ public final class RiftController {
                     double lift=Math.max(.045,Math.min(.19,.11+zone*.07))*fade;
                     double dx=Math.sin(pz*.14+s.finaleTicks*.022)*.035*fade;
                     double dz=Math.cos(px*.13-s.finaleTicks*.018)*.035*fade;
-                    player.setDeltaMovement(v.x+dx,Math.min(.43,v.y+lift),v.z+dz);
+                    // Bound horizontal drift as well as lift: repeated impulses
+                    // must not accumulate unlimited speed in the anomaly field.
+                    double nextX=Math.max(-.35D,Math.min(.35D,v.x+dx));
+                    double nextZ=Math.max(-.35D,Math.min(.35D,v.z+dz));
+                    player.setDeltaMovement(nextX,Math.min(.43,v.y+lift),nextZ);
                     player.hurtMarked=true;
                     if(fade>.25) player.fallDistance=0;
                 } else if (zone < -.68) {
