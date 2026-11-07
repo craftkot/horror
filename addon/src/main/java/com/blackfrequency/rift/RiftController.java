@@ -63,6 +63,36 @@ public final class RiftController {
         return current>.43D ? Math.min(current,next) : Math.min(.43D,next);
     }
 
+    /** Downward anomaly drag must not propagate invalid motion from other mods. */
+    private static double boundedSinkVelocity(double current, double impulse) {
+        if(!Double.isFinite(current)) current=0.0D;
+        if(!Double.isFinite(impulse)) return current;
+        // Negative impulse is bounded by the sink's terminal speed; preserve
+        // pre-existing faster falls rather than artificially braking them.
+        if(impulse<0.0D && current< -Double.MAX_VALUE-impulse) return -Double.MAX_VALUE;
+        double next=current+impulse;
+        return current<-.55D ? Math.min(current,next) : Math.max(-.55D,next);
+    }
+
+    private static void verifyBoundedSinkVelocity() {
+        double[][] cases={
+            {0.0D,-0.09D,-0.09D},
+            {-0.53D,-0.09D,-0.55D},
+            {-0.8D,-0.09D,-0.89D},
+            {0.2D,-0.09D,0.11D},
+            {Double.NaN,-0.09D,-0.09D},
+            {Double.NEGATIVE_INFINITY,-0.09D,-0.09D},
+            {0.2D,Double.NaN,0.2D},
+            {-Double.MAX_VALUE,-Double.MAX_VALUE,-Double.MAX_VALUE}
+        };
+        for(double[] sample:cases) {
+            double actual=boundedSinkVelocity(sample[0],sample[1]);
+            if(!Double.isFinite(actual) || Math.abs(actual-sample[2])>1.0E-9D)
+                throw new IllegalStateException("CI sink velocity regression: "+actual);
+        }
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_SINK_BOUNDS_VERIFIED");
+    }
+
     private static void verifyBoundedLiftVelocity() {
         double[][] cases={
             {0.1D,0.05D,0.15D},
@@ -353,6 +383,7 @@ public final class RiftController {
         verifyFractureColumnBounds();
         verifyBoundedAnomalyVelocity();
         verifyBoundedLiftVelocity();
+        verifyBoundedSinkVelocity();
         verifyPendingSnapshotPersistence();
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED");
     }
@@ -992,7 +1023,7 @@ public final class RiftController {
                 } else if (zone < -.68) {
                     var v=player.getDeltaMovement();
                     double drag=1.0-.06*fade;
-                    player.setDeltaMovement(v.x*drag,Math.max(-.55,v.y-.09*fade),v.z*drag);
+                    player.setDeltaMovement(v.x*drag,boundedSinkVelocity(v.y,-.09*fade),v.z*drag);
                     player.hurtMarked=true;
                 }
             }
