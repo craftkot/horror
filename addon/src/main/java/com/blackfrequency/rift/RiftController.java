@@ -51,6 +51,30 @@ public final class RiftController {
         return Math.max(-cap,Math.min(cap,next));
     }
 
+    /** Keep corrupted vertical motion from propagating through lift anomalies. */
+    private static double boundedLiftVelocity(double current, double lift) {
+        if(!Double.isFinite(current)) current=0.0D;
+        if(!Double.isFinite(lift)) lift=0.0D;
+        return Math.min(.43D,current+lift);
+    }
+
+    private static void verifyBoundedLiftVelocity() {
+        double[][] cases={
+            {0.1D,0.05D,0.15D},
+            {0.42D,0.05D,0.43D},
+            {-0.3D,0.05D,-0.25D},
+            {Double.NaN,0.05D,0.05D},
+            {Double.POSITIVE_INFINITY,0.05D,0.05D},
+            {0.2D,Double.NEGATIVE_INFINITY,0.2D}
+        };
+        for(double[] sample:cases) {
+            double actual=boundedLiftVelocity(sample[0],sample[1]);
+            if(!Double.isFinite(actual) || Math.abs(actual-sample[2])>1.0E-9D)
+                throw new IllegalStateException("CI lift velocity regression: "+actual);
+        }
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_LIFT_BOUNDS_VERIFIED");
+    }
+
     /** CI regression: anomaly drift must not overwrite sprint or knockback velocity. */
     private static void verifyBoundedAnomalyVelocity() {
         final double epsilon=1.0E-9D;
@@ -319,6 +343,7 @@ public final class RiftController {
             throw new IllegalStateException("CI beacon anchor radius regression");
         verifyFractureColumnBounds();
         verifyBoundedAnomalyVelocity();
+        verifyBoundedLiftVelocity();
         verifyPendingSnapshotPersistence();
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED");
     }
@@ -952,7 +977,7 @@ public final class RiftController {
                     // existing sprint, knockback or mod-provided velocity.
                     double nextX=boundedAnomalyVelocity(v.x,dx);
                     double nextZ=boundedAnomalyVelocity(v.z,dz);
-                    player.setDeltaMovement(nextX,Math.min(.43,v.y+lift),nextZ);
+                    player.setDeltaMovement(nextX,boundedLiftVelocity(v.y,lift),nextZ);
                     player.hurtMarked=true;
                     if(fade>.25) player.fallDistance=0;
                 } else if (zone < -.68) {
