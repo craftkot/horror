@@ -374,6 +374,26 @@ public final class RiftController {
         return Math.abs(dx)<=128L && Math.abs(dz)<=128L && dx*dx+dz*dz<=128L*128L;
     }
 
+    /** Overflow-safe 3D audience filter shared by recovery effects and titles. */
+    private static boolean withinRecoveryAudience(BlockPos player, int anchorX, int anchorY, int anchorZ) {
+        long dx=(long)player.getX()-anchorX;
+        long dy=(long)player.getY()-anchorY;
+        long dz=(long)player.getZ()-anchorZ;
+        if(Math.abs(dx)>128L || Math.abs(dy)>128L || Math.abs(dz)>128L) return false;
+        return dx*dx+dy*dy+dz*dz<=128L*128L;
+    }
+
+    private static void verifyRecoveryAudienceBounds() {
+        if(!withinRecoveryAudience(BlockPos.ZERO,0,0,0)
+            || !withinRecoveryAudience(new BlockPos(128,0,0),0,0,0)
+            || withinRecoveryAudience(new BlockPos(128,1,0),0,0,0)
+            || withinRecoveryAudience(new BlockPos(0,129,0),0,0,0)
+            || withinRecoveryAudience(new BlockPos(0,0,-129),0,0,0)
+            || withinRecoveryAudience(new BlockPos(Integer.MAX_VALUE,0,0),Integer.MIN_VALUE,0,0))
+            throw new IllegalStateException("CI recovery audience 3D radius regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_AUDIENCE_BOUNDS_VERIFIED");
+    }
+
     /** Pure interaction gate, also exercised by disposable-world CI. */
     private static boolean mayActivateBeacon(net.minecraft.world.InteractionHand hand,
             boolean alive, boolean spectator, double distanceSquared,
@@ -412,6 +432,7 @@ public final class RiftController {
             || !beaconWithinAnchor(-128,0,0,0)
             || beaconWithinAnchor(Integer.MAX_VALUE,0,Integer.MIN_VALUE,0))
             throw new IllegalStateException("CI beacon anchor radius regression");
+        verifyRecoveryAudienceBounds();
         verifyFractureColumnBounds();
         verifyBoundedAnomalyVelocity();
         verifyBoundedLiftVelocity();
@@ -906,9 +927,7 @@ public final class RiftController {
                 // those high above the rift) should not receive recovery particles.
                 // State stores only horizontal rift coordinates; the activated
                 // physical beacon supplies the vertical recovery anchor.
-                long dx=(long)p.getX()-s.x, dy=(long)p.getY()-activatedBeacon.getY(), dz=(long)p.getZ()-s.z;
-                if(Math.abs(dx)>128 || Math.abs(dy)>128 || Math.abs(dz)>128
-                    || dx*dx+dy*dy+dz*dz>128L*128L) continue;
+                if(!withinRecoveryAudience(p,s.x,activatedBeacon.getY(),s.z)) continue;
                 level.sendParticles(ParticleTypes.END_ROD,p.getX()+.5,p.getY()+1.5,p.getZ()+.5,12,3,2,3,.03);
             }
         }
@@ -952,14 +971,9 @@ public final class RiftController {
             for(var player:level.players()) {
                 // Completion is a local event. Do not interrupt distant players
                 // or spectators with an unrelated full-screen title.
-                long dx=(long)player.blockPosition().getX()-s.x;
-                long dy=(long)player.blockPosition().getY()-activatedBeacon.getY();
-                long dz=(long)player.blockPosition().getZ()-s.z;
-                // Completion titles use the same bounded 3D audience as
-                // recovery particles; players far above or below cannot see it.
+                // Completion titles share the tested 3D radius with recovery particles.
                 if(!player.isAlive() || player.isRemoved() || player.isSpectator()
-                    || Math.abs(dx)>128 || Math.abs(dy)>128 || Math.abs(dz)>128
-                    || dx*dx+dy*dy+dz*dz>128L*128L) continue;
+                    || !withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z)) continue;
                 player.displayClientMessage(Component.literal("§d✦ СТАБИЛИЗАЦИЯ 100% §7— восстановлено "+s.restoredBlocks+" блоков; пропущено "+s.skippedOccupied),true);
                 player.connection.send(new ClientboundSetTitleTextPacket(Component.literal(
                     s.skippedOccupied==0 && s.skippedInvalid==0 ? "§dМИР ВОССТАНОВЛЕН" : "§dСТАБИЛИЗАЦИЯ ЗАВЕРШЕНА")));
