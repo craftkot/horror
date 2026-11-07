@@ -41,6 +41,10 @@ public final class RiftController {
     // accelerate it farther outward. Preserve external movement unchanged.
     private static double boundedAnomalyVelocity(double current, double impulse) {
         final double cap=.35D;
+        // Malformed motion from another mod must not spread NaN/Infinity into
+        // player physics; ignore an invalid impulse or reset invalid motion.
+        if(!Double.isFinite(current)) return 0.0D;
+        if(!Double.isFinite(impulse)) return current;
         double next=current+impulse;
         if(current>cap) return Math.min(current,next);
         if(current< -cap) return Math.max(current,next);
@@ -58,7 +62,11 @@ public final class RiftController {
             {0.8D,-0.035D,0.765D},
             {-0.8D,-0.035D,-0.8D},
             {-0.8D,0.035D,-0.765D},
-            {0.0D,0.0D,0.0D}
+            {0.0D,0.0D,0.0D},
+            {Double.NaN,0.035D,0.0D},
+            {Double.POSITIVE_INFINITY,-0.035D,0.0D},
+            {0.2D,Double.NaN,0.2D},
+            {0.2D,Double.NEGATIVE_INFINITY,0.2D}
         };
         for(double[] sample:cases) {
             double actual=boundedAnomalyVelocity(sample[0],sample[1]);
