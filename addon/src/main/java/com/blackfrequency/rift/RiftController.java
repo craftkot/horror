@@ -875,10 +875,13 @@ public final class RiftController {
                     activatedBeacon.getY()+0.5D,activatedBeacon.getZ()+0.5D)<=128.0D*128.0D)) {
             BlockPos beacon=activatedBeacon;
             double angle=s.restoreTicks*.17;
+            // A slow breathing ring makes recovery visibly alive without
+            // adding particles, world edits, or forced chunk loads.
+            double radius=3.4+0.45*Math.sin(s.restoreTicks*.055);
             for(int k=0;k<8;k++) {
                 double theta=angle+k*Math.PI*.25;
-                double x=beacon.getX()+.5+Math.cos(theta)*3.4;
-                double z=beacon.getZ()+.5+Math.sin(theta)*3.4;
+                double x=beacon.getX()+.5+Math.cos(theta)*radius;
+                double z=beacon.getZ()+.5+Math.sin(theta)*radius;
                 // Alternate purple portal wisps and darker witch sparks without
                 // increasing the existing two-particles-per-point budget.
                 var particle=(k&1)==0 ? ParticleTypes.REVERSE_PORTAL : ParticleTypes.WITCH;
