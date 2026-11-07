@@ -37,6 +37,16 @@ public final class RiftController {
     private static final int EFFECTIVE_MAX_EDITS = CI_TEST && Boolean.getBoolean("blackfrequency.ciSparseRecoveryTest")
         ? 80 : MAX_EDITS;
 
+    // Outside the drift cap, an anomaly may slow existing motion but cannot
+    // accelerate it farther outward. Preserve external movement unchanged.
+    private static double boundedAnomalyVelocity(double current, double impulse) {
+        final double cap=.35D;
+        double next=current+impulse;
+        if(current>cap) return Math.min(current,next);
+        if(current< -cap) return Math.max(current,next);
+        return Math.max(-cap,Math.min(cap,next));
+    }
+
     private static final class State extends SavedData {
         long elapsed;
         int x, z, cursorX=-RADIUS, cursorZ=-RADIUS, cursorY;
@@ -907,10 +917,10 @@ public final class RiftController {
                     double lift=Math.max(.045,Math.min(.19,.11+zone*.07))*fade;
                     double dx=Math.sin(pz*.14+s.finaleTicks*.022)*.035*fade;
                     double dz=Math.cos(px*.13-s.finaleTicks*.018)*.035*fade;
-                    // Bound horizontal drift as well as lift: repeated impulses
-                    // must not accumulate unlimited speed in the anomaly field.
-                    double nextX=Math.max(-.35D,Math.min(.35D,v.x+dx));
-                    double nextZ=Math.max(-.35D,Math.min(.35D,v.z+dz));
+                    // Limit only the anomaly's additional drift. Never clamp
+                    // existing sprint, knockback or mod-provided velocity.
+                    double nextX=boundedAnomalyVelocity(v.x,dx);
+                    double nextZ=boundedAnomalyVelocity(v.z,dz);
                     player.setDeltaMovement(nextX,Math.min(.43,v.y+lift),nextZ);
                     player.hurtMarked=true;
                     if(fade>.25) player.fallDistance=0;
