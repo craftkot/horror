@@ -1105,7 +1105,7 @@ public final class RiftController {
         // These checks never generate or force-load terrain.
         // Production recovery path: spawn a physical beacon in an existing loaded
         // chunk near a player. Never replace terrain or force-generate chunks.
-        if(s.naturalBeaconPos!=Long.MIN_VALUE && s.finaleTicks%40==0) {
+        if(s.naturalBeaconPos!=Long.MIN_VALUE && s.finaleTicks%4==0) {
             BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
             // Border membership does not require a loaded chunk. Retire an
             // inaccessible objective even when its old chunk is unloaded, so
@@ -1129,7 +1129,7 @@ public final class RiftController {
                     // The idle beacon is visible only locally. Avoid broadcasting
                     // six particles every server tick when nobody is nearby.
                     // Do not load chunks or create entities for cosmetic effects.
-                    if(s.finaleTicks%4==0 && level.players().stream().anyMatch(player ->
+                    if(level.players().stream().anyMatch(player ->
                         player.isAlive() && !player.isRemoved() && !player.isSpectator()
                         && player.distanceToSqr(beacon.getX()+.5D,beacon.getY()+1.2D,
                             beacon.getZ()+.5D)<=64.0D*64.0D))
