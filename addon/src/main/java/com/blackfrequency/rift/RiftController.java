@@ -74,6 +74,32 @@ public final class RiftController {
         return current<-.55D ? Math.min(current,next) : Math.max(-.55D,next);
     }
 
+    /** Apply sink-zone horizontal drag without propagating invalid motion. */
+    private static double boundedSinkDrag(double current, double drag) {
+        if(!Double.isFinite(current)) return 0.0D;
+        if(!Double.isFinite(drag)) return current;
+        // Drag is damping, never a source of extra speed or a direction flip.
+        return current*Math.max(0.0D,Math.min(1.0D,drag));
+    }
+
+    private static void verifyBoundedSinkDrag() {
+        double[][] cases={
+            {0.4D,0.94D,0.376D},
+            {-0.4D,0.94D,-0.376D},
+            {0.4D,1.5D,0.4D},
+            {0.4D,-0.5D,0.0D},
+            {Double.NaN,0.94D,0.0D},
+            {Double.POSITIVE_INFINITY,0.94D,0.0D},
+            {0.4D,Double.NaN,0.4D}
+        };
+        for(double[] sample:cases) {
+            double actual=boundedSinkDrag(sample[0],sample[1]);
+            if(!Double.isFinite(actual) || Math.abs(actual-sample[2])>1.0E-9D)
+                throw new IllegalStateException("CI sink drag regression: "+actual);
+        }
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_SINK_DRAG_VERIFIED");
+    }
+
     private static void verifyBoundedSinkVelocity() {
         double[][] cases={
             {0.0D,-0.09D,-0.09D},
@@ -384,6 +410,7 @@ public final class RiftController {
         verifyBoundedAnomalyVelocity();
         verifyBoundedLiftVelocity();
         verifyBoundedSinkVelocity();
+        verifyBoundedSinkDrag();
         verifyPendingSnapshotPersistence();
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED");
     }
@@ -1023,7 +1050,7 @@ public final class RiftController {
                 } else if (zone < -.68) {
                     var v=player.getDeltaMovement();
                     double drag=1.0-.06*fade;
-                    player.setDeltaMovement(v.x*drag,boundedSinkVelocity(v.y,-.09*fade),v.z*drag);
+                    player.setDeltaMovement(boundedSinkDrag(v.x,drag),boundedSinkVelocity(v.y,-.09*fade),boundedSinkDrag(v.z,drag));
                     player.hurtMarked=true;
                 }
             }
