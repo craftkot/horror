@@ -885,7 +885,10 @@ public final class RiftController {
                 // Stagger each wisp vertically into a rotating double helix.
                 // Keep the same 16 particles per pulse; avoid the old synchronized
                 // height reset that made the entire ring jump every 80 ticks.
-                double phase=(s.restoreTicks*.045D + k*Math.PI*.25D)%(Math.PI*2.0D);
+                // Opposite angular travel for the two alternating strands; the old
+                // shared phase made both wisps climb and descend in lockstep.
+                double phase=(s.restoreTicks*.045D*(k%2==0 ? 1.0D : -1.0D)
+                    + k*Math.PI*.25D)%(Math.PI*2.0D);
                 double y=beacon.getY()+.5D+1.1D*(1.0D+Math.sin(phase));
                 var particle=(k&1)==0 ? ParticleTypes.REVERSE_PORTAL : ParticleTypes.WITCH;
                 level.sendParticles(particle,x,y,z,2,.12,.15,.12,.025);
