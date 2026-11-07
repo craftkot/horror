@@ -45,6 +45,10 @@ public final class RiftController {
         // player physics; ignore an invalid impulse or reset invalid motion.
         if(!Double.isFinite(current)) return 0.0D;
         if(!Double.isFinite(impulse)) return current;
+        // A finite sum can still overflow. Keep external knockback intact,
+        // while never feeding infinite motion back to the Minecraft client.
+        if(impulse>0.0D && current>Double.MAX_VALUE-impulse) return current;
+        if(impulse<0.0D && current< -Double.MAX_VALUE-impulse) return current;
         double next=current+impulse;
         if(current>cap) return Math.min(current,next);
         if(current< -cap) return Math.max(current,next);
@@ -155,7 +159,9 @@ public final class RiftController {
             {Double.NaN,0.035D,0.0D},
             {Double.POSITIVE_INFINITY,-0.035D,0.0D},
             {0.2D,Double.NaN,0.2D},
-            {0.2D,Double.NEGATIVE_INFINITY,0.2D}
+            {0.2D,Double.NEGATIVE_INFINITY,0.2D},
+            {Double.MAX_VALUE,Double.MAX_VALUE,Double.MAX_VALUE},
+            {-Double.MAX_VALUE,-Double.MAX_VALUE,-Double.MAX_VALUE}
         };
         for(double[] sample:cases) {
             double actual=boundedAnomalyVelocity(sample[0],sample[1]);
