@@ -879,7 +879,9 @@ public final class RiftController {
             // adding particles, world edits, or forced chunk loads.
             double radius=3.4+0.45*Math.sin(s.restoreTicks*.055);
             for(int k=0;k<8;k++) {
-                double theta=angle+k*Math.PI*.25;
+                // Counter-rotate the two alternating strands in the horizontal plane too.
+                // Their vertical phases already travel in opposite directions.
+                double theta=angle*(k%2==0 ? 1.0D : -1.0D)+k*Math.PI*.25;
                 double x=beacon.getX()+.5+Math.cos(theta)*radius;
                 double z=beacon.getZ()+.5+Math.sin(theta)*radius;
                 // Stagger each wisp vertically into a rotating double helix.
