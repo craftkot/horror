@@ -1133,8 +1133,10 @@ public final class RiftController {
                 if (!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
                 double ax=player.getX()-s.x, ay=player.getY()-s.y, az=player.getZ()-s.z;
                 if(ax*ax+ay*ay+az*az>(RADIUS+16.0)*(RADIUS+16.0)) continue;
-                double zone=Math.sin(player.getX()*.19+s.finaleTicks*.035)
-                           *Math.cos(player.getZ()*.17-s.finaleTicks*.026);
+                // Match the server-side gravity field so particles mark actual
+                // lift/sink zones instead of an unrelated moving pattern.
+                double zone=Math.sin(player.getX()*.115+Math.sin(s.finaleTicks*.011)*1.8)
+                           *Math.cos(player.getZ()*.125-s.finaleTicks*.008);
                 if(zone>.48) {
                     level.sendParticles(ParticleTypes.REVERSE_PORTAL,
                         player.getX(),player.getY()+.5,player.getZ(),
