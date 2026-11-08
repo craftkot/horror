@@ -1137,7 +1137,7 @@ public final class RiftController {
                 // lift/sink zones instead of an unrelated moving pattern.
                 double zone=Math.sin(player.getX()*.115+Math.sin(s.finaleTicks*.011)*1.8)
                            *Math.cos(player.getZ()*.125-s.finaleTicks*.008);
-                if(zone>.48) {
+                if(zone>.42) {
                     level.sendParticles(ParticleTypes.REVERSE_PORTAL,
                         player.getX(),player.getY()+.5,player.getZ(),
                         9,2.2,.7,2.2,.11);
