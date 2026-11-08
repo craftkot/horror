@@ -598,6 +598,11 @@ public final class RiftController {
                         || !level.getBlockState(pos).isAir()
                         || !level.getBlockState(pos.above()).isAir()
                         || (snowFixture && !supportedSnow)) continue;
+                    // In multiplayer, another player may stand on an otherwise
+                    // valid candidate. Never materialize the solid objective inside
+                    // their hitbox; keep searching already-loaded positions.
+                    if(!level.getEntitiesOfClass(net.minecraft.world.entity.player.Player.class,
+                        new net.minecraft.world.phys.AABB(pos)).isEmpty()) continue;
                     if(!level.setBlock(pos,Blocks.BEACON.defaultBlockState(),3)) continue;
                     // Other mods may intercept or replace the placement. Do not
                     // persist a recovery objective unless a beacon really exists.
