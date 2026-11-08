@@ -644,7 +644,8 @@ public final class RiftController {
                     for(var nearby:level.players()) {
                         // Only active players inside the local fracture area
                         // should receive coordinates for the recovery objective.
-                        // Use long arithmetic to avoid overflow near world limits.
+                        // Use a full 3D distance so players far above or below
+                        // the objective do not receive misleading coordinates.
                         if(!nearby.isAlive() || nearby.isRemoved() || nearby.isSpectator()) continue;
                         // The hint belongs to the physical beacon, not an
                         // infinitely tall column above its X/Z coordinates.
