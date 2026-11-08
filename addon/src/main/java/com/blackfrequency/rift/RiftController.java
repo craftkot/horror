@@ -701,7 +701,8 @@ public final class RiftController {
                     activatedBeacon.getY()+1.1D,activatedBeacon.getZ()+0.5D)<=128.0D*128.0D)) {
             double cx=activatedBeacon.getX()+0.5D, cy=activatedBeacon.getY()+1.1D;
             double cz=activatedBeacon.getZ()+0.5D;
-            // Counter-rotating violet rings show stabilization progressing over time.
+            // Two contrasting violet particle types distinguish the counter-rotating
+            // inner and outer rings without increasing particle count or chunk work.
             // Only 24 particles per second; no terrain edits or chunk loads.
             for(int i=0;i<24;i++) {
                 double angle=i*Math.PI/12.0D + (i%2==0 ? 1.0D : -1.0D)*s.restoreTicks*0.045D;
@@ -710,7 +711,8 @@ public final class RiftController {
                 // increasing particle count or modifying nearby blocks.
                 double height=(i%2==0?0.0D:0.45D)
                     +0.18D*Math.sin(angle*2.0D+s.restoreTicks*0.035D);
-                level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                var ringParticle=(i&1)==0 ? ParticleTypes.REVERSE_PORTAL : ParticleTypes.WITCH;
+                level.sendParticles(ringParticle,
                     cx+Math.cos(angle)*radius,cy+height,cz+Math.sin(angle)*radius,
                     1,0,0.08D,0,0.015D);
             }
