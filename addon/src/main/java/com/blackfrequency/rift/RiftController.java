@@ -646,10 +646,11 @@ public final class RiftController {
                         // should receive coordinates for the recovery objective.
                         // Use long arithmetic to avoid overflow near world limits.
                         if(!nearby.isAlive() || nearby.isRemoved() || nearby.isSpectator()) continue;
-                        long hintDx=(long)nearby.blockPosition().getX()-pos.getX();
-                        long hintDz=(long)nearby.blockPosition().getZ()-pos.getZ();
-                        if(Math.abs(hintDx)>128 || Math.abs(hintDz)>128
-                            || hintDx*hintDx+hintDz*hintDz>128L*128L) continue;
+                        // The hint belongs to the physical beacon, not an
+                        // infinitely tall column above its X/Z coordinates.
+                        // Squared double distance is safe across world limits.
+                        if(nearby.distanceToSqr(pos.getX()+0.5D,
+                            pos.getY()+0.5D,pos.getZ()+0.5D)>128.0D*128.0D) continue;
                         nearby.displayClientMessage(Component.literal(
                             "§d✦ Маяк стабилизации: §f"+pos.getX()+" "+pos.getY()+" "+pos.getZ()+" §7— нажмите ПКМ"),true);
                     }
