@@ -1139,7 +1139,14 @@ public final class RiftController {
                 if (!player.isAlive() || player.isRemoved() || player.isCreative()
                     || player.isSpectator() || player.getAbilities().flying) continue;
                 double ax=player.getX()-s.x, ay=player.getY()-level.getSeaLevel(), az=player.getZ()-s.z;
-                if(ax*ax+ay*ay+az*az>(RADIUS+16.0)*(RADIUS+16.0)) continue;
+                // Mirror the impulse falloff at the outer boundary. Avoid
+                // sending a full particle burst where gravity is almost zero.
+                final double outerRadius=RADIUS+16.0;
+                double distanceSquared=ax*ax+ay*ay+az*az;
+                if(distanceSquared>=outerRadius*outerRadius) continue;
+                double fade=Math.min(1.0,Math.max(0.0,
+                    (outerRadius-Math.sqrt(distanceSquared))/16.0));
+                if(fade<.125) continue;
                 // Match the server-side gravity field so particles mark actual
                 // lift/sink zones instead of an unrelated moving pattern.
                 double zone=Math.sin(player.getX()*.115+Math.sin(s.finaleTicks*.011)*1.8)
@@ -1147,14 +1154,14 @@ public final class RiftController {
                 if(zone>.42) {
                     level.sendParticles(ParticleTypes.REVERSE_PORTAL,
                         player.getX(),player.getY()+.5,player.getZ(),
-                        9,2.2,.7,2.2,.11);
+                        Math.max(1,(int)Math.ceil(9*fade)),2.2,.7,2.2,.11);
                     level.sendParticles(ParticleTypes.END_ROD,
                         player.getX(),player.getY()+.3,player.getZ(),
-                        3,1.4,.25,1.4,.04);
+                        Math.max(1,(int)Math.ceil(3*fade)),1.4,.25,1.4,.04);
                 } else if(zone<-.68) {
                     level.sendParticles(ParticleTypes.SMOKE,
                         player.getX(),player.getY()+.15,player.getZ(),
-                        7,1.8,.25,1.8,.018);
+                        Math.max(1,(int)Math.ceil(7*fade)),1.8,.25,1.8,.018);
                 }
             }
         }
