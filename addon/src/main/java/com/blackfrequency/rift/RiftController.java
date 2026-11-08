@@ -1093,10 +1093,10 @@ public final class RiftController {
                 if (!player.isAlive() || player.isRemoved() || player.isCreative()
                     || player.isSpectator() || player.getAbilities().flying) continue;
                 double px=player.getX(), pz=player.getZ();
-                // Terrain edits are limited to RADIUS. Gravity must not follow
-                // players across the entire Overworld after they leave the rift.
-                double ax=px-s.x, az=pz-s.z;
-                double distanceSquared=ax*ax+az*az;
+                // Keep gravity local in all three dimensions: a player high
+                // above or deep below the rift must not be pulled sideways.
+                double ax=px-s.x, ay=player.getY()-s.y, az=pz-s.z;
+                double distanceSquared=ax*ax+ay*ay+az*az;
                 final double outerRadius=RADIUS+16.0;
                 if(distanceSquared>=outerRadius*outerRadius) continue;
                 // Fade impulses over the outer 16 blocks instead of introducing
@@ -1131,8 +1131,8 @@ public final class RiftController {
             for (var player : level.players()) {
                 // Particle effects must not follow invalid or spectator entities.
                 if (!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
-                double ax=player.getX()-s.x, az=player.getZ()-s.z;
-                if(ax*ax+az*az>(RADIUS+16.0)*(RADIUS+16.0)) continue;
+                double ax=player.getX()-s.x, ay=player.getY()-s.y, az=player.getZ()-s.z;
+                if(ax*ax+ay*ay+az*az>(RADIUS+16.0)*(RADIUS+16.0)) continue;
                 double zone=Math.sin(player.getX()*.19+s.finaleTicks*.035)
                            *Math.cos(player.getZ()*.17-s.finaleTicks*.026);
                 if(zone>.48) {
