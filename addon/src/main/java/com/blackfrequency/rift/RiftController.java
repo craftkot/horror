@@ -1088,7 +1088,10 @@ public final class RiftController {
                 if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest")
                     && s.beaconPos!=0L && !s.restoring) continue;
                 // Never apply rift impulses to dead or removed player entities.
-                if (!player.isAlive() || player.isRemoved() || player.isCreative() || player.isSpectator()) continue;
+                // Respect active flight from other mods or server-granted abilities.
+                // Rift gravity must not unexpectedly drag a flying player.
+                if (!player.isAlive() || player.isRemoved() || player.isCreative()
+                    || player.isSpectator() || player.getAbilities().flying) continue;
                 double px=player.getX(), pz=player.getZ();
                 // Terrain edits are limited to RADIUS. Gravity must not follow
                 // players across the entire Overworld after they leave the rift.
