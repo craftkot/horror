@@ -1080,7 +1080,7 @@ public final class RiftController {
         s.finaleTicks++;
         // Spatial gravity anomalies drift through the rift field. Server-side only;
         // gentle bounded impulses allow movement without overriding vanilla physics.
-        if (s.finaleTicks > 85 && s.finaleTicks % 5 == 0) {
+        if (!s.restoring && s.finaleTicks > 85 && s.finaleTicks % 5 == 0) {
             for (var player : level.players()) {
                 // The disposable real-click regression needs a stable raycast.
                 // Do not let test-only gravity impulses drift the player away
@@ -1124,7 +1124,7 @@ public final class RiftController {
         }
         // Lightweight visual signatures of the same drifting gravity field.
         // Particles only: no extra entities, chunk loads or world edits.
-        if (s.finaleTicks > 85 && s.finaleTicks % 8 == 0) {
+        if (!s.restoring && s.finaleTicks > 85 && s.finaleTicks % 8 == 0) {
             for (var player : level.players()) {
                 // Particle effects must not follow invalid or spectator entities.
                 if (!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
