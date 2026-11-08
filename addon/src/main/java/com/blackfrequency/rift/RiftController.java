@@ -1129,6 +1129,10 @@ public final class RiftController {
         // Particles only: no extra entities, chunk loads or world edits.
         if (!s.restoring && s.finaleTicks > 85 && s.finaleTicks % 8 == 0) {
             for (var player : level.players()) {
+                // Keep the real-click beacon regression free of misleading
+                // gravity cues, just as the impulse loop above is disabled.
+                if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest")
+                    && s.beaconPos!=0L) continue;
                 // Only mark players actually affected by gravity impulses.
                 // Creative and flying players are immune, so avoid misleading
                 // particle cues and unnecessary network traffic for them.
