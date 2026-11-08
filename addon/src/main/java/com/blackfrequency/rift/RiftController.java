@@ -603,15 +603,18 @@ public final class RiftController {
                         || !level.getBlockState(pos).isAir()
                         || !level.getBlockState(pos.above()).isAir()
                         || (snowFixture && !supportedSnow)) continue;
-                    // A solid beacon must not materialize inside players, mobs,
-                    // boats or minecarts. Dropped items and experience orbs do not
-                    // obstruct placement; excluding them avoids needless retries.
-                    // This query only examines entities in the already-loaded area.
+                    // Never materialize the recovery objective inside a solid or
+                    // dangerous entity. Falling blocks can settle into the beacon
+                    // and end crystals can explode when struck. Dropped items and
+                    // experience orbs must not block the search.
+                    // The query only examines entities in already-loaded chunks.
                     if(!level.getEntitiesOfClass(net.minecraft.world.entity.Entity.class,
                         new net.minecraft.world.phys.AABB(pos),
                         entity -> entity instanceof net.minecraft.world.entity.LivingEntity
                             || entity instanceof net.minecraft.world.entity.vehicle.Boat
-                            || entity instanceof net.minecraft.world.entity.vehicle.AbstractMinecart).isEmpty()) continue;
+                            || entity instanceof net.minecraft.world.entity.vehicle.AbstractMinecart
+                            || entity instanceof net.minecraft.world.entity.item.FallingBlockEntity
+                            || entity instanceof net.minecraft.world.entity.boss.enderdragon.EndCrystal).isEmpty()) continue;
                     if(!level.setBlock(pos,Blocks.BEACON.defaultBlockState(),3)) continue;
                     // Other mods may intercept or replace the placement. Do not
                     // persist a recovery objective unless a beacon really exists.
