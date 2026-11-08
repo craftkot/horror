@@ -682,11 +682,16 @@ public final class RiftController {
         // interaction being consumed by the rift. Close only the activated
         // beacon's nearby menu; do not interrupt unrelated inventories.
         BlockPos activatedBeacon=BlockPos.of(s.beaconPos);
-        for(var player:level.players()) {
-            if(player.containerMenu instanceof net.minecraft.world.inventory.BeaconMenu
-                && player.blockPosition().distSqr(activatedBeacon)<144d) {
-                player.closeContainer();
-                if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_MENU_CLOSED");
+        // Do not close an unrelated beacon menu after the activated beacon
+        // has been broken or its chunk unloaded. Neither check loads chunks.
+        if(level.hasChunkAt(activatedBeacon)
+            && level.getBlockState(activatedBeacon).is(Blocks.BEACON)) {
+            for(var player:level.players()) {
+                if(player.containerMenu instanceof net.minecraft.world.inventory.BeaconMenu
+                    && player.blockPosition().distSqr(activatedBeacon)<144d) {
+                    player.closeContainer();
+                    if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_MENU_CLOSED");
+                }
             }
         }
         s.restoreTicks++;
