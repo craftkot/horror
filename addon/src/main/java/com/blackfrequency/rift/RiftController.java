@@ -389,6 +389,11 @@ public final class RiftController {
             || withinRecoveryAudience(new BlockPos(128,1,0),0,0,0)
             || withinRecoveryAudience(new BlockPos(0,129,0),0,0,0)
             || withinRecoveryAudience(new BlockPos(0,0,-129),0,0,0)
+            // Diagonal corners outside the sphere must not pass the axis checks.
+            || withinRecoveryAudience(new BlockPos(100,100,0),0,0,0)
+            || !withinRecoveryAudience(new BlockPos(64,64,64),0,0,0)
+            // Extreme vertical separation must not overflow or wrap into range.
+            || withinRecoveryAudience(new BlockPos(0,Integer.MAX_VALUE,0),0,Integer.MIN_VALUE,0)
             || withinRecoveryAudience(new BlockPos(Integer.MAX_VALUE,0,0),Integer.MIN_VALUE,0,0))
             throw new IllegalStateException("CI recovery audience 3D radius regression");
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_AUDIENCE_BOUNDS_VERIFIED");
