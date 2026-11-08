@@ -1129,8 +1129,11 @@ public final class RiftController {
         // Particles only: no extra entities, chunk loads or world edits.
         if (!s.restoring && s.finaleTicks > 85 && s.finaleTicks % 8 == 0) {
             for (var player : level.players()) {
-                // Particle effects must not follow invalid or spectator entities.
-                if (!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
+                // Only mark players actually affected by gravity impulses.
+                // Creative and flying players are immune, so avoid misleading
+                // particle cues and unnecessary network traffic for them.
+                if (!player.isAlive() || player.isRemoved() || player.isCreative()
+                    || player.isSpectator() || player.getAbilities().flying) continue;
                 double ax=player.getX()-s.x, ay=player.getY()-level.getSeaLevel(), az=player.getZ()-s.z;
                 if(ax*ax+ay*ay+az*az>(RADIUS+16.0)*(RADIUS+16.0)) continue;
                 // Match the server-side gravity field so particles mark actual
