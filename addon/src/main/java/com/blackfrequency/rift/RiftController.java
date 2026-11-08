@@ -1095,7 +1095,7 @@ public final class RiftController {
                 double px=player.getX(), pz=player.getZ();
                 // Keep gravity local in all three dimensions: a player high
                 // above or deep below the rift must not be pulled sideways.
-                double ax=px-s.x, ay=player.getY()-s.y, az=pz-s.z;
+                double ax=px-s.x, ay=player.getY()-level.getSeaLevel(), az=pz-s.z;
                 double distanceSquared=ax*ax+ay*ay+az*az;
                 final double outerRadius=RADIUS+16.0;
                 if(distanceSquared>=outerRadius*outerRadius) continue;
@@ -1131,7 +1131,7 @@ public final class RiftController {
             for (var player : level.players()) {
                 // Particle effects must not follow invalid or spectator entities.
                 if (!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
-                double ax=player.getX()-s.x, ay=player.getY()-s.y, az=player.getZ()-s.z;
+                double ax=player.getX()-s.x, ay=player.getY()-level.getSeaLevel(), az=player.getZ()-s.z;
                 if(ax*ax+ay*ay+az*az>(RADIUS+16.0)*(RADIUS+16.0)) continue;
                 // Match the server-side gravity field so particles mark actual
                 // lift/sink zones instead of an unrelated moving pattern.
