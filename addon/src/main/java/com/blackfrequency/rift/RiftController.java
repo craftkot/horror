@@ -512,7 +512,11 @@ public final class RiftController {
             // Search a few additional nearby loaded positions when rough terrain
             // leaves the original 4..8 block corridor without a safe support.
             // All candidates still pass the fracture radius, border and chunk guards.
-            for(int distance=3;distance<=10;distance++) {
+            // Search in front first, then behind the player. In sparse fractured
+            // terrain the forward corridor may be entirely void while a safe
+            // loaded platform survives behind them. Never place at their feet.
+            for(int step=3;step<=20;step++) {
+                int distance=step<=10?step:-(step-7);
                 for(int side=0;side<=10;side++) {
                     int offset=side==0?0:(side%2==1?(side+1)/2:-(side/2));
                     // Calculate in long before narrowing: near the integer world
