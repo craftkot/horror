@@ -572,7 +572,10 @@ public final class RiftController {
                         && !snowFoundation.is(net.minecraft.tags.BlockTags.LEAVES)
                         && !snowFoundation.is(Blocks.ICE)
                         // Frosted ice melts naturally even without a nearby heat source.
-                        && !snowFoundation.is(Blocks.FROSTED_ICE);
+                        && !snowFoundation.is(Blocks.FROSTED_ICE)
+                        // Brushable archaeology blocks can collapse when disturbed.
+                        && !snowFoundation.is(Blocks.SUSPICIOUS_SAND)
+                        && !snowFoundation.is(Blocks.SUSPICIOUS_GRAVEL);
                     // Do not put the recovery objective on a damaging floor: players
                     // must be able to stand beside and interact with it safely.
                     if(support.is(Blocks.MAGMA_BLOCK) || support.is(Blocks.CAMPFIRE)
@@ -584,6 +587,7 @@ public final class RiftController {
                         // recovery objective without a reliable foundation.
                         || support.is(net.minecraft.tags.BlockTags.LEAVES)
                         || support.is(Blocks.ICE) || support.is(Blocks.FROSTED_ICE)
+                        || support.is(Blocks.SUSPICIOUS_SAND) || support.is(Blocks.SUSPICIOUS_GRAVEL)
                         // Gravity-affected foundations can fall away after a
                         // neighboring update, leaving the objective unsupported.
                         || support.is(Blocks.SAND) || support.is(Blocks.RED_SAND)
