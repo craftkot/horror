@@ -1180,7 +1180,7 @@ public final class RiftController {
                     if(s.finaleTicks%200==0) for(var player:level.players())
                         if(player.isAlive() && !player.isRemoved() && !player.isSpectator()
                             && withinRecoveryAudience(player.blockPosition(),
-                                beacon.getX(),beacon.getY(),beacon.getZ())
+                                beacon.getX(),beacon.getY(),beacon.getZ()))
                             player.displayClientMessage(Component.literal(
                                 "§d✦ Маяк стабилизации: §f"+beacon.getX()+" "+beacon.getY()+" "+beacon.getZ()+" §7— нажмите ПКМ"),true);
                 }
