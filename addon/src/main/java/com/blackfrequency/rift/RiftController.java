@@ -728,10 +728,8 @@ public final class RiftController {
             // Restoration is local to the fracture. Do not spam action-bar
             // updates to players exploring distant parts of the Overworld.
             for(var player:level.players()) {
-                long dx=(long)player.blockPosition().getX()-s.x;
-                long dz=(long)player.blockPosition().getZ()-s.z;
                 if(player.isAlive() && !player.isRemoved() && !player.isSpectator()
-                    && Math.abs(dx)<=128 && Math.abs(dz)<=128 && dx*dx+dz*dz<=128L*128L)
+                    && withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z))
                     player.displayClientMessage(Component.literal("§5✦ §dСТАБИЛИЗАЦИЯ §f"+percent+"% §7— восстановлено "+s.restoredBlocks+" блоков"),true);
             }
         }
@@ -741,10 +739,7 @@ public final class RiftController {
             // recovery packets to distant, dead, removed or spectator players.
             for(var player:level.players()) {
                 if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
-                long dx=(long)player.blockPosition().getX()-s.x;
-                long dz=(long)player.blockPosition().getZ()-s.z;
-                if(Math.abs(dx)<=128L && Math.abs(dz)<=128L
-                    && dx*dx+dz*dz<=128L*128L)
+                if(withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z))
                     RiftNetwork.send(player,remaining,false,0);
             }
         }
