@@ -573,6 +573,9 @@ public final class RiftController {
                         && !snowFoundation.is(Blocks.ICE)
                         // Frosted ice melts naturally even without a nearby heat source.
                         && !snowFoundation.is(Blocks.FROSTED_ICE)
+                        // A moving piston or its head is temporary support, not terrain.
+                        && !snowFoundation.is(Blocks.MOVING_PISTON)
+                        && !snowFoundation.is(Blocks.PISTON_HEAD)
                         // Brushable archaeology blocks can collapse when disturbed.
                         && !snowFoundation.is(Blocks.SUSPICIOUS_SAND)
                         && !snowFoundation.is(Blocks.SUSPICIOUS_GRAVEL);
@@ -587,6 +590,8 @@ public final class RiftController {
                         // recovery objective without a reliable foundation.
                         || support.is(net.minecraft.tags.BlockTags.LEAVES)
                         || support.is(Blocks.ICE) || support.is(Blocks.FROSTED_ICE)
+                        // Piston heads and moving piston blocks can disappear on the next tick.
+                        || support.is(Blocks.MOVING_PISTON) || support.is(Blocks.PISTON_HEAD)
                         || support.is(Blocks.SUSPICIOUS_SAND) || support.is(Blocks.SUSPICIOUS_GRAVEL)
                         // Gravity-affected foundations can fall away after a
                         // neighboring update, leaving the objective unsupported.
