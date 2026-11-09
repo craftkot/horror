@@ -1512,7 +1512,11 @@ public final class RiftController {
         if (s.finaleTicks < 190) { if(s.finaleTicks%20==0)s.setDirty(); return; }
         if(CI_TEST && s.finaleTicks == 190) LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_PHASE_STARTED");
         int edits=0, checks=0;
-        while(edits<EDIT_BUDGET && checks<2048 && !s.finished) {
+        // CI worlds can contain large empty regions; scan more candidate cells
+        // per tick there without increasing the number of block writes per tick.
+        // Production retains the conservative 2048-check budget.
+        int scanCheckBudget=CI_TEST?8192:2048;
+        while(edits<EDIT_BUDGET && checks<scanCheckBudget && !s.finished) {
             if(s.edits>=EFFECTIVE_MAX_EDITS || s.cursorX>RADIUS) {s.finished=true;break;}
             // An anchor near the integer coordinate limits must not wrap around
             // and destroy unrelated terrain on the opposite side of the world.
