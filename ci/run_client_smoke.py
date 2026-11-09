@@ -183,11 +183,6 @@ def capture_test_world():
             return
         if beacon_attempts==0:
             snap("beacon-before-right-click.png")
-            if ("BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in logs
-                    and not (shots/"terrain-fracture-after-first-block.png").exists()):
-                if not (shots/"terrain-fracture-after-first-block.png").exists():
-                    snap("terrain-fracture-after-first-block.png")
-                print("WORLD_CAPTURE: ground fracture captured before camera pitch change",flush=True)
         # Capture the active rift while the physical beacon is ready but before
         # the right-click starts restoration. Sparse recovery can finish in only
         # a few seconds, much faster than two llvmpipe screenshots can be saved.
@@ -264,8 +259,21 @@ def capture_test_world():
             # Capture gameplay immediately: restoration can begin before the
             # initial frame series ends, so waiting until afterward misses it.
             restoration_shot=False
+            terrain_shot=False
             sky_shot=False
             sky_capture_attempted=False
+            def capture_terrain_fracture(logs):
+                nonlocal terrain_shot
+                # This image must be captured while the player is still at the
+                # fracture anchor. A screenshot taken after beacon placement is
+                # recovery context, not evidence of the first ground edit.
+                if (terrain_shot
+                        or "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" not in logs
+                        or "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" in logs):
+                    return
+                snap("terrain-fracture-after-first-block.png")
+                terrain_shot=True
+                print("WORLD_CAPTURE: first surface fracture captured before beacon teleport",flush=True)
             def capture_sky_before_beacon():
                 nonlocal sky_shot,sky_capture_attempted
                 if sky_capture_attempted:
@@ -320,6 +328,7 @@ def capture_test_world():
                 snap(f"world-stage-{stage:02d}.png")
                 if os.environ.get("BF_TEST_RESTORATION")=="1" and not restoration_shot:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                    capture_terrain_fracture(current)
                     try_beacon_click(current)
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     if ("BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current
@@ -327,8 +336,9 @@ def capture_test_world():
                         snap("beacon-restoration-active.png")
                         restoration_shot=True
                         print("WORLD_CAPTURE: active restoration frame captured before completion",flush=True)
+                capture_terrain_fracture(latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else "")
                 capture_sky_before_beacon()
-                time.sleep(0.5)
+                time.sleep(0.1)
             subprocess.run(["scrot","-a","0,0,1280,720",
                 str(ROOT/"client-smoke-artifacts"/"world.png")],check=False)
             # Ground fracture starts after finale tick 260. Early 16-second frames
@@ -337,27 +347,29 @@ def capture_test_world():
             fracture_seen=False
             while time.time()<fracture_deadline and p.poll() is None:
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                capture_terrain_fracture(current)
                 try_beacon_click(current)
                 capture_sky_before_beacon()
                 if "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in current:
                     fracture_seen=True
                     print("WORLD_CAPTURE: first physical terrain fracture confirmed",flush=True)
                     break
-                time.sleep(1)
+                time.sleep(0.1)
             if fracture_seen:
-                # The restoration starts almost immediately after first damage.
-                # Do not wait five seconds and mislabel a completed scene as active.
-                if os.environ.get("BF_TEST_RESTORATION")!="1":
-                    time.sleep(5)
-                snap("terrain-fracture-after-first-block.png")
+                # If the first edit arrived in the same log poll as beacon placement,
+                # do not mislabel a recovery-beacon screenshot as terrain damage.
+                if not terrain_shot:
+                    snap("recovery-beacon-ground-context.png")
+                    print("WORLD_CAPTURE: first-edit frame missed before beacon placement; saved recovery context instead",flush=True)
             else:
                 print("WORLD_CAPTURE: no terrain edit marker during capture window",flush=True)
                 snap("terrain-fracture-not-seen.png")
             if os.environ.get("BF_TEST_RESTORATION")=="1":
-                # A normal fracture can contain tens of thousands of snapshots.
-                # Keep the conservative per-tick restore budget; give it enough
-                # wall time instead of forcing chunks or increasing server load.
-                deadline_restore=time.time()+180
+                # A full fracture can reach 95,000 snapshots. Recovery restores at
+                # most 12 blocks per 20 TPS tick (~396s at the cap); leave headroom
+                # for client capture and the final stabilization hold. Do not raise
+                # the gameplay restore budget or force-load chunks to satisfy CI.
+                deadline_restore=time.time()+480
                 restored=False
                 while time.time()<deadline_restore and p.poll() is None:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
