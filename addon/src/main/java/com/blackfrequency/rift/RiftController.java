@@ -732,6 +732,12 @@ public final class RiftController {
                     activatedBeacon.getY()+1.1D,activatedBeacon.getZ()+0.5D)<=128.0D*128.0D)) {
             double cx=activatedBeacon.getX()+0.5D, cy=activatedBeacon.getY()+1.1D;
             double cz=activatedBeacon.getZ()+0.5D;
+            // Contract the recovery vortex as the saved terrain is restored.
+            // Clamp corrupt/out-of-range indices so the effect stays bounded.
+            double restoredFraction=s.snapshots.isEmpty()?1.0D
+                :1.0D-Math.max(0.0D,Math.min(1.0D,
+                    (s.restoreIndex+1.0D)/s.snapshots.size()));
+            double contraction=1.0D-0.25D*restoredFraction;
             // Two contrasting violet particle types distinguish the counter-rotating
             // inner and outer rings without increasing particle count or chunk work.
             // Only 24 particles per second; no terrain edits or chunk loads.
@@ -741,6 +747,7 @@ public final class RiftController {
                 // inner and outer rings separated even at maximum contraction.
                 double radius=(i%2==0?1.3D:2.1D)
                     +0.16D*Math.sin(s.restoreTicks*0.025D);
+                radius*=contraction;
                 // A slow vertical wave makes the rings visibly breathe without
                 // increasing particle count or modifying nearby blocks.
                 double height=(i%2==0?0.0D:0.45D)
@@ -757,7 +764,8 @@ public final class RiftController {
                 double phase=s.restoreTicks*0.055D+i*Math.PI/2.0D;
                 double height=0.25D+((s.restoreTicks*0.04D+i*0.25D)%2.5D);
                 level.sendParticles(ParticleTypes.REVERSE_PORTAL,
-                    cx+Math.cos(phase)*0.75D,cy+height,cz+Math.sin(phase)*0.75D,
+                    cx+Math.cos(phase)*0.75D*contraction,cy+height,
+                    cz+Math.sin(phase)*0.75D*contraction,
                     1,0,0,0,0);
             }
             if(CI_TEST && s.restoreTicks==20)
