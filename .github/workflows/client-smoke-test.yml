@@ -51,7 +51,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb xdotool scrot mesa-utils libgl1-mesa-dri libx11-6 libxext6 libxrender1 libxtst6 libxi6 libxrandr2 libxcursor1 libxinerama1 libxxf86vm1
           python -m pip install --upgrade pip
-          python -m pip install minecraft-launcher-lib
+          python -m pip install minecraft-launcher-lib pillow
 
       - name: Start virtual display
         run: |

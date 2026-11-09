@@ -75,6 +75,25 @@ def capture_test_world():
         subprocess.run(["xdotool","windowmove",window[-1],"0","0"],check=False)
     def snap(name):
         subprocess.run(["scrot","-a","0,0,1280,720",str(shots/name)],check=False)
+    def verify_sky_pixels(name, region, minimum):
+        from PIL import Image
+        path=shots/name
+        if not path.is_file():
+            print("WORLD_CAPTURE_FAIL: missing sky frame",name,flush=True)
+            return False
+        with Image.open(path) as source:
+            frame=source.convert("RGB")
+        width,height=frame.size
+        if region=="upper":
+            crop=frame.crop((0,0,width,int(height*.65)))
+        else:
+            crop=frame.crop((int(width*.2),int(height*.2),int(width*.8),int(height*.8)))
+        pixels=crop.getdata()
+        purple=sum(1 for r,g,b in pixels
+                   if r>35 and b>45 and b>g*1.25 and r>g*1.35 and b-r<150)
+        coverage=purple/(crop.width*crop.height)
+        print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} required={minimum:.4f}",flush=True)
+        return coverage>=minimum
     beacon_attempts=0
     beacon_ready_at=None
     last_beacon_attempt=0
@@ -186,12 +205,14 @@ def capture_test_world():
                             subprocess.run(["xdotool","mousemove_relative","--","0","-240"],check=False)
                             time.sleep(0.3)
                             snap("sky-rift-zenith.png")
-                            sky_shot=(shots/"sky-rift-hudless.png").is_file()
+                            horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.05)
+                            zenith_visible=verify_sky_pixels("sky-rift-zenith.png","center",.0045)
+                            sky_shot=horizon_visible and zenith_visible
                         finally:
                             subprocess.run(["xdotool","mousemove_relative","--","0","440"],check=False)
                             key("F1")
                         if sky_shot:
-                            print("WORLD_CAPTURE: SKY_RIFT_HUDLESS_FRAME_CAPTURED",flush=True)
+                            print("WORLD_CAPTURE: SKY_RIFT_HORIZON_AND_ZENITH_VERIFIED",flush=True)
                 if os.environ.get("BF_TEST_RESTORATION")=="1" and not restoration_shot:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     try_beacon_click(current)
@@ -309,6 +330,9 @@ def capture_test_world():
                 return False
             if os.environ.get("BF_TEST_PLAYER_BEACON")=="1" and "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" not in log_after:
                 print("WORLD_CAPTURE_FAIL: beacon was not activated by actual player right-click",flush=True)
+                return False
+            if not sky_shot:
+                print("WORLD_CAPTURE_FAIL: sky shader pixels were not visible in both horizon and zenith frames",flush=True)
                 return False
             if "BLACK_FREQUENCY_RENDER_ACTIVE" not in log_after:
                 print("WORLD_CAPTURE_FAIL: no actual sky renderer invocation observed",flush=True)

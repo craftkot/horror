@@ -125,6 +125,22 @@ void main(){
  float crownCore=1.-smoothstep(crownWidth,crownWidth+.022,crownDistance);
  float crownGlow=exp(-crownDistance*mix(20.,14.,crownSurge));
  float crownCorona=exp(-crownDistance*7.5);
+ // A radial scar opens directly above the player. The old crown stopped
+ // below the pole, leaving the exact-zenith view almost completely empty.
+ // Six jagged spokes share the existing sky direction; no extra samplers,
+ // Voronoi searches, world queries, or chunk work are introduced.
+ float zenithRadius=length(n.xz);
+ float zenithAngle=zenithRadius<.0001?0.:atan(n.z,n.x);
+ float zenithSpokes=abs(sin(zenithAngle*6.
+                   +.22*sin(zenithAngle*3.-t*.18)
+                   +.12*sin(zenithRadius*42.-t*.7)));
+ float zenithDistance=zenithSpokes*zenithRadius;
+ float zenithWindow=1.-smoothstep(.27,.46,zenithRadius);
+ float zenithWidth=mix(.006,.012,crownSurge);
+ float zenithCore=zenithWindow*(1.-smoothstep(zenithWidth,zenithWidth+.014,zenithDistance));
+ float zenithGlow=zenithWindow*exp(-zenithDistance*24.);
+ float zenithCorona=zenithWindow*exp(-zenithRadius*5.5);
+ float zenithPulse=.82+.18*sin(t*2.1+zenithAngle*7.);
  // A lower-hemisphere tear makes the new underside of the sky cube
  // visibly fractured instead of showing only the upper sky pattern.
  // It uses periodic angular harmonics and no additional cell searches.
@@ -149,17 +165,18 @@ void main(){
  float upperRim=fractureRim(upperDistance,upperWidth);
  float lowerRim=fractureRim(lowerDistance,lowerWidth);
  float crownRim=fractureRim(crownDistance,crownWidth);
+ float zenithRim=zenithWindow*fractureRim(zenithDistance,zenithWidth);
  vec3 background=vec3(.006,.003,.014);
  vec3 violet=vec3(.16,.032,.26);
  vec3 edge=vec3(.72,.24,1.0);
- vec3 color=background+violet*(corona*.24+upperCorona*.19+lowerCorona*.18+crownCorona*.16);
+ vec3 color=background+violet*(corona*.24+upperCorona*.19+lowerCorona*.18+crownCorona*.16+zenithCorona*.11);
  // Fast, localized violet lightning travels along the three major tears.
  // Modulate existing glow masks rather than adding more Voronoi searches.
  float lightningWave=sin(longitude*43.-t*5.3+sin(longitude*9.+t*.7)*2.);
  float lightningFlash=pow(max(lightningWave,0.),12.);
  float majorGlow=max(spineGlow,max(branchGlow,max(upperGlow,max(lowerGlow,crownGlow))));
  float lightning=lightningFlash*majorGlow*(1.-green);
- color+=edge*(spineGlow*.96+branchGlow*.78+upperGlow*.80+lowerGlow*.72+crownGlow*.74+filaments*.07)*pulse;
+ color+=edge*(spineGlow*.96+branchGlow*.78+upperGlow*.80+lowerGlow*.72+crownGlow*.74+zenithGlow*.62+filaments*.07)*pulse;
  color+=vec3(.19,.035,.34)*lightning*.55;
  // A near-black interior makes the central fracture read as an opening.
  color=mix(color,vec3(.0003,.00015,.001),spineCore*.98);
@@ -167,16 +184,17 @@ void main(){
  color=mix(color,vec3(.0003,.00015,.001),upperCore*.96);
  color=mix(color,vec3(.0003,.00015,.001),lowerCore*.96);
  color=mix(color,vec3(.0003,.00015,.001),crownCore*.93);
+ color=mix(color,vec3(.0003,.00015,.001),zenithCore*.94);
  // A moving violet rim restores edge contrast around the dark openings.
  // It adds no texture reads or Voronoi searches and keeps the tear cores dark.
  float rimPulse=.78+.22*sin(t*3.1+longitude*23.+.8*sin(longitude*5.-t*.4));
- float rimLight=spineRim*.92+branchRim*.76+upperRim*.84+lowerRim*.72+crownRim*.88;
+ float rimLight=spineRim*.92+branchRim*.76+upperRim*.84+lowerRim*.72+crownRim*.88+zenithRim*.94*zenithPulse;
  color+=edge*rimLight*(1.08*rimPulse);
  // The green transition is a separate phase, not a persistent tint.
  color=mix(color,vec3(.002,.011,.009),green);
  // Side fractures must contribute to alpha as well as RGB; otherwise
  // their glow fades against the unmodified world behind the sky overlay.
- float fractureCoverage=max(max(spineCore,upperCore),max(lowerCore,max(branches,crownCore)));
+ float fractureCoverage=max(zenithCore,max(max(spineCore,upperCore),max(lowerCore,max(branches,crownCore))));
  float opacity=clamp(f*(.87+.06*filaments+.12*fractureCoverage),0.,.99);
  fragColor=vec4(color,opacity);
 }
