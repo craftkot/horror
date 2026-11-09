@@ -214,45 +214,45 @@ def capture_test_world():
                 if p.poll() is not None:
                     break
                 snap(f"world-stage-{stage:02d}.png")
-                # Capture the real sky shader unobstructed by the HUD and treetops.
-                # Do this before beacon teleport/aiming; restore camera and HUD so
-                # the actual player right-click regression remains unaffected.
-                if not sky_capture_attempted and stage>=12:
-                    current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-                    # Never move the camera after the test teleports the player
-                    # toward the beacon: real mouse input must retain its aim.
-                    if ("BLACK_FREQUENCY_RENDER_ACTIVE" in current
-                            and "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in current):
-                        sky_capture_attempted=True
-                        key("F1")
-                        subprocess.run(["xdotool","mousemove","--sync","640","360"],check=False)
-                        time.sleep(0.1)
-                        time.sleep(0.2)
-                        try:
-                            move_camera(-200)
-                            time.sleep(0.5)
-                            snap("sky-rift-hudless.png")
-                            # Also capture near the zenith, where a separate fracture
-                            # may be visible beyond the upper treeline.
-                            move_camera(-240)
-                            time.sleep(0.3)
-                            snap("sky-rift-zenith.png")
-                            horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.02,.30)
-                            zenith_visible=verify_sky_pixels("sky-rift-zenith.png","center",.02,.05)
-                            sky_shot=horizon_visible and zenith_visible
-                        finally:
-                            move_camera(440)
-                            key("F1")
-                        if sky_shot:
-                            print("WORLD_CAPTURE: SKY_RIFT_HORIZON_AND_ZENITH_VERIFIED",flush=True)
                 if os.environ.get("BF_TEST_RESTORATION")=="1" and not restoration_shot:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     try_beacon_click(current)
+                    current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     if ("BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current
                             and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" not in current):
                         snap("beacon-restoration-active.png")
                         restoration_shot=True
                         print("WORLD_CAPTURE: active restoration frame captured before completion",flush=True)
+                # Do not steer the camera until the real beacon click has been
+                # accepted by the server. The earlier capture raced the server-side
+                # teleport and its +440px "restore" could hit Minecraft's pitch clamp,
+                # leaving the crosshair pointed at the platform instead of the beacon.
+                current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                if (not sky_capture_attempted
+                        and "BLACK_FREQUENCY_RENDER_ACTIVE" in current
+                        and "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in current
+                        and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current):
+                    sky_capture_attempted=True
+                    key("F1")
+                    subprocess.run(["xdotool","mousemove","--sync","640","360"],check=False)
+                    time.sleep(0.2)
+                    try:
+                        # The player no longer needs to aim at the beacon. Capture
+                        # the horizon and zenith now; do not try to reverse a pitch
+                        # sweep through the +/-90 degree camera clamp.
+                        move_camera(-200)
+                        time.sleep(0.5)
+                        snap("sky-rift-hudless.png")
+                        move_camera(-240)
+                        time.sleep(0.4)
+                        snap("sky-rift-zenith.png")
+                        horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.02,.45)
+                        zenith_visible=verify_sky_pixels("sky-rift-zenith.png","center",.02,.05)
+                        sky_shot=horizon_visible and zenith_visible
+                    finally:
+                        key("F1")
+                    if sky_shot:
+                        print("WORLD_CAPTURE: SKY_RIFT_HORIZON_AND_ZENITH_VERIFIED",flush=True)
                 time.sleep(0.5)
             subprocess.run(["scrot","-a","0,0,1280,720",
                 str(ROOT/"client-smoke-artifacts"/"world.png")],check=False)
