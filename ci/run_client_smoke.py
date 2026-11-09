@@ -123,7 +123,7 @@ def capture_test_world():
         window_height=max(1,int(height*.18))
         step_x=max(1,int(width*.05))
         step_y=max(1,int(height*.05))
-        search_bottom=int(height*.62)
+        search_bottom=int(height*.42)
         best=None
         for top in range(0,max(1,search_bottom-window_height+1),step_y):
             for left in range(0,max(1,width-window_width+1),step_x):
@@ -264,16 +264,21 @@ def capture_test_world():
             sky_capture_attempted=False
             def capture_terrain_fracture(logs):
                 nonlocal terrain_shot
-                # This image must be captured while the player is still at the
-                # fracture anchor. A screenshot taken after beacon placement is
-                # recovery context, not evidence of the first ground edit.
+                # Capture only after the server emits a surface-break cue near an
+                # active player. The first edit can be dozens of blocks away and
+                # is not visual evidence from the player's actual viewpoint.
                 if (terrain_shot
-                        or "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" not in logs
-                        or "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" in logs):
+                        or "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in logs):
                     return
-                snap("terrain-fracture-after-first-block.png")
+                marker=re.search(
+                    r"BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_EMITTED x=(-?\d+) y=(-?\d+) z=(-?\d+)",
+                    logs)
+                if not marker:
+                    return
+                snap("terrain-fracture-near-player.png")
                 terrain_shot=True
-                print("WORLD_CAPTURE: first surface fracture captured before beacon teleport",flush=True)
+                print("WORLD_CAPTURE: player-visible surface fracture captured",
+                      *marker.groups(),flush=True)
             def capture_sky_before_beacon():
                 nonlocal sky_shot,sky_capture_attempted
                 if sky_capture_attempted:
@@ -296,13 +301,15 @@ def capture_test_world():
                     # Capture both sky angles before the player's real right-click.
                     # The beacon is already placed and waiting, so the restoration
                     # clock has not started while llvmpipe writes the screenshots.
-                    camera_delta+=move_camera(-200)
-                    time.sleep(0.35)
+                    # The player starts with a slight downward beacon aim. Move farther
+                    # upward before calling the first frame a sky/horizon capture.
+                    camera_delta+=move_camera(-320)
+                    time.sleep(0.45)
                     snap("sky-rift-hudless.png")
-                    camera_delta+=move_camera(-240)
-                    time.sleep(0.35)
+                    camera_delta+=move_camera(-120)
+                    time.sleep(0.45)
                     snap("sky-rift-zenith.png")
-                    horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.08,.35)
+                    horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.08,.20)
                     zenith_visible=verify_sky_pixels("sky-rift-zenith.png","zenith",.08,.15)
                     sky_shot=horizon_visible and zenith_visible
                 finally:
@@ -392,6 +399,9 @@ def capture_test_world():
                     return False
                 if not restoration_shot:
                     print("WORLD_CAPTURE_FAIL: restoration finished without an active gameplay screenshot",flush=True)
+                    return False
+                if (os.environ.get("BF_TEST_SPARSE_RECOVERY")!="1" and not terrain_shot):
+                    print("WORLD_CAPTURE_FAIL: no player-visible surface fracture cue was captured",flush=True)
                     return False
                 print("WORLD_CAPTURE: restoration finished in integrated client",flush=True)
             log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""

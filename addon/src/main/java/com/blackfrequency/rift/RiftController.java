@@ -11,6 +11,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import java.util.ArrayList;
@@ -330,6 +331,31 @@ public final class RiftController {
         return Math.max(minY,Math.min(maxY-1,surfaceY-1));
     }
 
+    // Emit a small ground-level cue only when an actual top-surface block is removed.
+    // The edit cadence and per-tick guard keep particle traffic bounded.
+    private static boolean shouldEmitSurfaceFractureCue(int y,int surfaceY,int edits,boolean sentThisTick) {
+        return !sentThisTick && surfaceY>Integer.MIN_VALUE && (edits&3)==0 && y==surfaceY-1;
+    }
+
+    private static boolean hasNearbySurfaceFractureViewer(ServerLevel level,BlockPos pos) {
+        for(var player:level.players()) {
+            if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
+            if(player.distanceToSqr(pos.getX()+.5D,pos.getY()+.5D,pos.getZ()+.5D)<=32.0D*32.0D)
+                return true;
+        }
+        return false;
+    }
+
+    private static void verifySurfaceFractureCue() {
+        if(!shouldEmitSurfaceFractureCue(63,64,0,false)
+            || shouldEmitSurfaceFractureCue(62,64,0,false)
+            || shouldEmitSurfaceFractureCue(63,64,1,false)
+            || shouldEmitSurfaceFractureCue(63,64,4,true)
+            || !shouldEmitSurfaceFractureCue(63,64,4,false))
+            throw new IllegalStateException("CI surface fracture cue regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_RULE_VERIFIED");
+    }
+
     private static void verifySurfaceFirstScanMigration() {
         int[][] samples={
             {64,-64,320,63},
@@ -357,6 +383,7 @@ public final class RiftController {
         if(!modernReloaded.surfaceFirstScan || modernReloaded.cursorY!=Integer.MIN_VALUE)
             throw new IllegalStateException("CI surface-first cursor persistence regression");
         LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_SCAN_ORDER_MIGRATION_VERIFIED");
+        verifySurfaceFractureCue();
     }
 
     private static void verifyFractureColumnBounds() {
@@ -1558,6 +1585,7 @@ public final class RiftController {
         if (s.finaleTicks < 190) { if(s.finaleTicks%20==0)s.setDirty(); return; }
         if(CI_TEST && s.finaleTicks == 190) LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_PHASE_STARTED");
         int edits=0, checks=0;
+        boolean surfaceCueSentThisTick=false;
         // CI worlds can contain large empty regions; scan more candidate cells
         // per tick there without increasing the number of block writes per tick.
         // Production retains the conservative 2048-check budget.
@@ -1624,10 +1652,16 @@ public final class RiftController {
             if(!level.getWorldBorder().isWithinBounds(pos)) continue;
             BlockState original=level.getBlockState(pos);
             if(original.isAir() || original.hasBlockEntity()) continue;
-            // The CI assertion needs the pre-edit heightmap only for the first
-            // successful edit; do not query it for every scanned candidate.
+            // Heightmap work is limited to the first CI edit and every fourth
+            // successful edit candidate until one nearby surface cue is sent this tick.
             int surfaceYForFirstEdit=CI_TEST && s.edits==0
                 ? level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,wx,wz)
+                : Integer.MIN_VALUE;
+            int editsBefore=s.edits;
+            boolean inspectSurfaceCue=!surfaceCueSentThisTick && (editsBefore&3)==0;
+            int surfaceYForCue=inspectSurfaceCue
+                ? (surfaceYForFirstEdit!=Integer.MIN_VALUE ? surfaceYForFirstEdit
+                    : level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,wx,wz))
                 : Integer.MIN_VALUE;
             // Stage the original state before editing. A failed setBlock must not
             // leave a phantom recovery entry; a successful edit must have a
@@ -1644,6 +1678,19 @@ public final class RiftController {
                             +y+" surfaceY="+surfaceYForFirstEdit);
                     LOGGER.info("BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x={} y={} z={} surfaceY={} scanOrder={}",
                         wx,y,wz,surfaceYForFirstEdit,s.surfaceFirstScan?"surface-first":"legacy-bottom-up");
+                }
+                if(inspectSurfaceCue
+                    && shouldEmitSurfaceFractureCue(y,surfaceYForCue,editsBefore,surfaceCueSentThisTick)
+                    && hasNearbySurfaceFractureViewer(level,pos)) {
+                    level.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK,original),
+                        pos.getX()+.5D,pos.getY()+.82D,pos.getZ()+.5D,
+                        4,.22D,.12D,.22D,.035D);
+                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                        pos.getX()+.5D,pos.getY()+.72D,pos.getZ()+.5D,
+                        3,.16D,.08D,.16D,.012D);
+                    surfaceCueSentThisTick=true;
+                    if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_EMITTED x={} y={} z={}",
+                        pos.getX(),pos.getY(),pos.getZ());
                 }
             } else {
                 s.snapshots.remove(s.snapshots.size()-1);
