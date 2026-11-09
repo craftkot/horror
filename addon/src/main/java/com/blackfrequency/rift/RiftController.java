@@ -1196,6 +1196,35 @@ public final class RiftController {
                 }
             }
         }
+        // A compact violet fracture plume marks the actual ground-rift center.
+        // Only emit while an active player can see it; never query or load terrain.
+        if (!s.restoring && s.finaleTicks > 85 && s.finaleTicks % 10 == 0
+            && level.hasChunk(s.x >> 4, s.z >> 4)) {
+            double plumeY = level.getSeaLevel() + 1.0;
+            boolean witnessed = false;
+            for (var viewer : level.players()) {
+                if (!viewer.isAlive() || viewer.isRemoved() || viewer.isSpectator()) continue;
+                double dx = viewer.getX() - s.x;
+                double dy = viewer.getY() - plumeY;
+                double dz = viewer.getZ() - s.z;
+                if (dx * dx + dy * dy + dz * dz <= 48.0 * 48.0) {
+                    witnessed = true;
+                    break;
+                }
+            }
+            if (witnessed) {
+                double phase = s.finaleTicks * .055;
+                // Four rising strands, bounded to a two-block footprint.
+                for (int strand = 0; strand < 4; strand++) {
+                    double angle = phase + strand * Math.PI / 2.0;
+                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                        s.x + .5 + Math.cos(angle) * 1.5,
+                        plumeY + 1.0 + Math.sin(phase * .7 + strand) * .6,
+                        s.z + .5 + Math.sin(angle) * 1.5,
+                        2, .12, .65, .12, .035);
+                }
+            }
+        }
         // Lightweight visual signatures of the same drifting gravity field.
         // Particles only: no extra entities, chunk loads or world edits.
         if (!s.restoring && s.finaleTicks > 85 && s.finaleTicks % 8 == 0) {
