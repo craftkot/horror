@@ -577,6 +577,20 @@ public final class RiftController {
                     // when its chunk is loaded. Never create an inaccessible
                     // recovery objective at the edge of a restricted world.
                     if(!level.getWorldBorder().isWithinBounds(pos)) continue;
+                    // The natural-beacon client fixture needs an unobstructed sky
+                    // column so the sky-rift capture is not hidden under tree canopies.
+                    // This is CI-only, reads the already-loaded candidate chunk, and
+                    // never requests another chunk or edits the surrounding terrain.
+                    if(CI_TEST && Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest")) {
+                        boolean clearSkyColumn=true;
+                        for(int dy=1;dy<=12;dy++) {
+                            if(!level.getBlockState(pos.above(dy)).isAir()) {
+                                clearSkyColumn=false;
+                                break;
+                            }
+                        }
+                        if(!clearSkyColumn) continue;
+                    }
                     // The disposable sparse client may land in a desert: sand is
                     // motion-blocking but falls away, so the old water/air-only
                     // fixture never created a safe beacon base there. Stabilize
@@ -730,6 +744,8 @@ public final class RiftController {
                     // physical beacon that the player can actually right-click.
                     // A visible, bounded violet signal marks the newly spawned beacon.
                     level.sendParticles(ParticleTypes.REVERSE_PORTAL,pos.getX()+.5,pos.getY()+1.2,pos.getZ()+.5,18,.35,.55,.35,.035);
+                    if(CI_TEST && Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest"))
+                        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_SKY_CLEARANCE_VERIFIED x={} y={} z={} verticalBlocks=12",pos.getX(),pos.getY(),pos.getZ());
                     if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_PLACED x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
                     for(var nearby:level.players()) {
                         // Only active players inside the local fracture area

@@ -172,6 +172,9 @@ def capture_test_world():
             return
         if "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs:
             return
+        if (os.environ.get("BF_TEST_NATURAL_BEACON")=="1"
+                and "BLACK_FREQUENCY_TEST BEACON_SKY_CLEARANCE_VERIFIED" not in logs):
+            return
         now=time.monotonic()
         if beacon_ready_at is None:
             beacon_ready_at=now
