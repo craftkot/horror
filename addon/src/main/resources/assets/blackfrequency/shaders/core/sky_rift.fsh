@@ -107,6 +107,17 @@ void main(){
  float upperCore=1.-smoothstep(upperWidth,upperWidth+.026,upperDistance);
  float upperGlow=exp(-upperDistance*mix(15.,11.,upperSurge));
  float upperCorona=exp(-upperDistance*6.);
+ // A third, high-altitude tear gives the catastrophe a visible crown when
+ // the player looks above the horizon. It reuses angular harmonics and adds
+ // no Voronoi searches or world/chunk work.
+ float crownY=.78+.09*sin(5.*longitude+t*.06+.7)
+             +.025*sin(17.*longitude-t*.17);
+ float crownDistance=abs(n.y-crownY-.010*sin(47.*longitude+t*.37));
+ float crownSurge=.5+.5*sin(t*.51+2.1*sin(4.*longitude-t*.11));
+ float crownWidth=mix(.009,.018,crownSurge);
+ float crownCore=1.-smoothstep(crownWidth,crownWidth+.022,crownDistance);
+ float crownGlow=exp(-crownDistance*mix(20.,14.,crownSurge));
+ float crownCorona=exp(-crownDistance*7.5);
  // A lower-hemisphere tear makes the new underside of the sky cube
  // visibly fractured instead of showing only the upper sky pattern.
  // It uses periodic angular harmonics and no additional cell searches.
@@ -130,25 +141,26 @@ void main(){
  vec3 background=vec3(.006,.003,.014);
  vec3 violet=vec3(.16,.032,.26);
  vec3 edge=vec3(.72,.24,1.0);
- vec3 color=background+violet*(corona*.24+upperCorona*.19+lowerCorona*.18);
+ vec3 color=background+violet*(corona*.24+upperCorona*.19+lowerCorona*.18+crownCorona*.16);
  // Fast, localized violet lightning travels along the three major tears.
  // Modulate existing glow masks rather than adding more Voronoi searches.
  float lightningWave=sin(longitude*43.-t*5.3+sin(longitude*9.+t*.7)*2.);
  float lightningFlash=pow(max(lightningWave,0.),12.);
- float majorGlow=max(spineGlow,max(upperGlow,lowerGlow));
+ float majorGlow=max(spineGlow,max(branchGlow,max(upperGlow,max(lowerGlow,crownGlow))));
  float lightning=lightningFlash*majorGlow*(1.-green);
- color+=edge*(spineGlow*.96+branchGlow*.78+upperGlow*.80+lowerGlow*.72+filaments*.07)*pulse;
+ color+=edge*(spineGlow*.96+branchGlow*.78+upperGlow*.80+lowerGlow*.72+crownGlow*.74+filaments*.07)*pulse;
  color+=vec3(.19,.035,.34)*lightning*.55;
  // A near-black interior makes the central fracture read as an opening.
  color=mix(color,vec3(.0003,.00015,.001),spineCore*.98);
  color=mix(color,vec3(.0003,.00015,.001),branches*.90);
  color=mix(color,vec3(.0003,.00015,.001),upperCore*.96);
  color=mix(color,vec3(.0003,.00015,.001),lowerCore*.96);
+ color=mix(color,vec3(.0003,.00015,.001),crownCore*.93);
  // The green transition is a separate phase, not a persistent tint.
  color=mix(color,vec3(.002,.011,.009),green);
  // Side fractures must contribute to alpha as well as RGB; otherwise
  // their glow fades against the unmodified world behind the sky overlay.
- float fractureCoverage=max(max(spineCore,upperCore),max(lowerCore,branches));
+ float fractureCoverage=max(max(spineCore,upperCore),max(lowerCore,max(branches,crownCore)));
  float opacity=clamp(f*(.87+.06*filaments+.12*fractureCoverage),0.,.99);
  fragColor=vec4(color,opacity);
 }
