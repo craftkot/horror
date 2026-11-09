@@ -135,7 +135,7 @@ void main(){
                    +.22*sin(zenithAngle*3.-t*.18)
                    +.12*sin(zenithRadius*42.-t*.7)));
  float zenithDistance=zenithSpokes*zenithRadius;
- float zenithWindow=1.-smoothstep(.27,.46,zenithRadius);
+ float zenithWindow=(1.-smoothstep(.27,.46,zenithRadius))*smoothstep(.72,.9,n.y);
  float zenithWidth=mix(.006,.012,crownSurge);
  float zenithCore=zenithWindow*(1.-smoothstep(zenithWidth,zenithWidth+.014,zenithDistance));
  float zenithGlow=zenithWindow*exp(-zenithDistance*24.);
