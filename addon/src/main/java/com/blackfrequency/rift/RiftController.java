@@ -190,6 +190,8 @@ public final class RiftController {
         // CI diagnostics only; never persisted in production saves.
         long ciRejectedRestorePos=Long.MIN_VALUE;
         int ciFlowingReplaced;
+        // Cosmetic-only cooldown; deliberately not persisted across world restarts.
+        int surfaceCueCooldownTicks;
         boolean ciRestoredGravityGuardLogged;
         // CI-only one-shot beacon removal: exercise recovery after a lost beacon.
         boolean ciNaturalBeaconRemoved, ciNaturalBeaconReplaced;
@@ -333,8 +335,9 @@ public final class RiftController {
 
     // Emit a small ground-level cue only when an actual top-surface block is removed.
     // The edit cadence and per-tick guard keep particle traffic bounded.
-    private static boolean shouldEmitSurfaceFractureCue(int y,int surfaceY,int edits,boolean sentThisTick) {
-        return !sentThisTick && surfaceY>Integer.MIN_VALUE && (edits&3)==0 && y==surfaceY-1;
+    private static boolean shouldEmitSurfaceFractureCue(int y,int surfaceY,int edits,boolean sentThisTick,int cooldownTicks) {
+        return !sentThisTick && cooldownTicks<=0 && surfaceY>Integer.MIN_VALUE
+            && (edits&3)==0 && y==surfaceY-1;
     }
 
     private static boolean hasNearbySurfaceFractureViewer(ServerLevel level,BlockPos pos) {
@@ -347,11 +350,12 @@ public final class RiftController {
     }
 
     private static void verifySurfaceFractureCue() {
-        if(!shouldEmitSurfaceFractureCue(63,64,0,false)
-            || shouldEmitSurfaceFractureCue(62,64,0,false)
-            || shouldEmitSurfaceFractureCue(63,64,1,false)
-            || shouldEmitSurfaceFractureCue(63,64,4,true)
-            || !shouldEmitSurfaceFractureCue(63,64,4,false))
+        if(!shouldEmitSurfaceFractureCue(63,64,0,false,0)
+            || shouldEmitSurfaceFractureCue(62,64,0,false,0)
+            || shouldEmitSurfaceFractureCue(63,64,1,false,0)
+            || shouldEmitSurfaceFractureCue(63,64,4,true,0)
+            || shouldEmitSurfaceFractureCue(63,64,4,false,1)
+            || !shouldEmitSurfaceFractureCue(63,64,4,false,0))
             throw new IllegalStateException("CI surface fracture cue regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_RULE_VERIFIED");
     }
@@ -1196,6 +1200,7 @@ public final class RiftController {
         if(event.phase != TickEvent.Phase.END || !(event.level instanceof ServerLevel level)
            || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
         State s = level.getDataStorage().computeIfAbsent(State::load, State::new, "blackfrequency_finale");
+        if(s.surfaceCueCooldownTicks>0) s.surfaceCueCooldownTicks--;
         if(s.restoring) { restore(level,s); return; }
         // Keep clients synchronized even on old worlds or after the finale.
         if(level.getGameTime()%(s.started && !s.finished ? 10L : 100L)==0) {
@@ -1543,8 +1548,18 @@ public final class RiftController {
                     // unobstructed position. The previous 3-block standoff could
                     // leave the crosshair just outside its hitbox on random terrain.
                     demoPlayer.teleportTo(level,demoPos.getX()+.5,demoPos.getY(),
-                        demoPos.getZ()-1.75,0f,27f);
+                        demoPos.getZ()-1.75,0f,0f);
+                    // Aim from the player's eyes at the actual beacon hitbox instead of
+                    // relying on a fixed pitch that misses on different terrain heights.
+                    demoPlayer.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,
+                        net.minecraft.world.phys.Vec3.atCenterOf(demoPos));
+                    // The client must receive the post-lookAt rotation before XTest sends
+                    // the real right-click; teleportTo's earlier packet used the old angle.
+                    demoPlayer.connection.teleport(demoPlayer.getX(),demoPlayer.getY(),demoPlayer.getZ(),
+                        demoPlayer.getYRot(),demoPlayer.getXRot());
                     demoPlayer.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+                    if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw={} pitch={}",
+                        demoPlayer.getYRot(),demoPlayer.getXRot());
                 } else if(playerInteractionTest) {
                     // Legacy fixture for testing a separately placed beacon.
                     int surface=level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,s.x,s.z);
@@ -1658,7 +1673,8 @@ public final class RiftController {
                 ? level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,wx,wz)
                 : Integer.MIN_VALUE;
             int editsBefore=s.edits;
-            boolean inspectSurfaceCue=!surfaceCueSentThisTick && (editsBefore&3)==0;
+            boolean inspectSurfaceCue=!surfaceCueSentThisTick && s.surfaceCueCooldownTicks==0
+                && (editsBefore&3)==0;
             int surfaceYForCue=inspectSurfaceCue
                 ? (surfaceYForFirstEdit!=Integer.MIN_VALUE ? surfaceYForFirstEdit
                     : level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,wx,wz))
@@ -1689,6 +1705,7 @@ public final class RiftController {
                         pos.getX()+.5D,pos.getY()+.72D,pos.getZ()+.5D,
                         3,.16D,.08D,.16D,.012D);
                     surfaceCueSentThisTick=true;
+                    s.surfaceCueCooldownTicks=4;
                     if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_EMITTED x={} y={} z={}",
                         pos.getX(),pos.getY(),pos.getZ());
                 }
