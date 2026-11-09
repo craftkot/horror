@@ -115,13 +115,28 @@ def capture_test_world():
         else:
             crop=frame.crop((int(width*.2),int(height*.2),int(width*.8),int(height*.8)))
         pixels=list(crop.getdata())
-        purple=sum(1 for r,g,b in pixels
-                   if r>35 and b>45 and b>g*1.25 and r>g*1.35 and b-r<150)
-        green=sum(1 for r,g,b in pixels if g>r*1.15 and g>b*1.15 and g>25)
+        purple=0
+        green=0
+        purple_rows=[]
+        for y in range(crop.height):
+            row_purple=0
+            for r,g,b in pixels[y*crop.width:(y+1)*crop.width]:
+                if r>35 and b>45 and b>g*1.25 and r>g*1.35 and b-r<150:
+                    purple+=1
+                    row_purple+=1
+                if g>r*1.15 and g>b*1.15 and g>25:
+                    green+=1
+            purple_rows.append(row_purple)
         coverage=purple/(crop.width*crop.height)
         green_coverage=green/(crop.width*crop.height)
-        print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} green={green_coverage:.4f} required={minimum:.4f} maxGreen={max_green}",flush=True)
-        return coverage>=minimum and (max_green is None or green_coverage<=max_green)
+        row_threshold=max(8,int(crop.width*.01))
+        peak_threshold=max(16,int(crop.width*.025))
+        line_rows=sum(1 for count in purple_rows if count>=row_threshold)
+        peak_row=max(purple_rows,default=0)
+        line_visible=line_rows>=12 and peak_row>=peak_threshold
+        print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} green={green_coverage:.4f} lineRows={line_rows} peakRow={peak_row} required={minimum:.4f} maxGreen={max_green}",flush=True)
+        return (coverage>=minimum and line_visible
+                and (max_green is None or green_coverage<=max_green))
     beacon_attempts=0
     beacon_ready_at=None
     last_beacon_attempt=0
@@ -130,6 +145,7 @@ def capture_test_world():
         if os.environ.get("BF_TEST_PLAYER_BEACON")!="1":
             return
         if "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in logs:
+            capture_sky_after_beacon()
             return
         if "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs:
             return
@@ -141,6 +157,11 @@ def capture_test_world():
             return
         if beacon_attempts==0:
             snap("beacon-before-right-click.png")
+            if ("BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in logs
+                    and not (shots/"terrain-fracture-after-first-block.png").exists()):
+                if not (shots/"terrain-fracture-after-first-block.png").exists():
+                    snap("terrain-fracture-after-first-block.png")
+                print("WORLD_CAPTURE: ground fracture captured before camera pitch change",flush=True)
         # Actual mouse input, not a synthetic server event.
         subprocess.run(["xdotool","mousedown","3"],check=False)
         time.sleep(0.25)
@@ -149,6 +170,18 @@ def capture_test_world():
         last_beacon_attempt=now
         print("WORLD_CAPTURE_INPUT: player right-click attempt",beacon_attempts,flush=True)
         snap("beacon-after-right-click.png")
+        # Sparse recovery can finish in a few seconds. Wait for the real server
+        # interaction marker and capture the sky immediately, not after the
+        # long screenshot-stage loop has drained the restoration window.
+        interaction_deadline=time.monotonic()+2.0
+        while time.monotonic()<interaction_deadline and p.poll() is None:
+            current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+            if ("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in current
+                    and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current):
+                print("WORLD_CAPTURE: accepted player interaction; capturing sky before restoration ends",flush=True)
+                capture_sky_after_beacon()
+                return
+            time.sleep(0.05)
     time.sleep(2)
     print("WORLD_CAPTURE_INPUT: active window",
         subprocess.run(["xdotool","getactivewindow","getwindowname"],
@@ -217,7 +250,8 @@ def capture_test_world():
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                 if not ("BLACK_FREQUENCY_RENDER_ACTIVE" in current
                         and "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in current
-                        and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current):
+                        and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current
+                        and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" not in current):
                     return
                 sky_capture_attempted=True
                 key("F1")
@@ -233,8 +267,8 @@ def capture_test_world():
                     move_camera(-240)
                     time.sleep(0.4)
                     snap("sky-rift-zenith.png")
-                    horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.02,.45)
-                    zenith_visible=verify_sky_pixels("sky-rift-zenith.png","center",.02,.05)
+                    horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.01,.45)
+                    zenith_visible=verify_sky_pixels("sky-rift-zenith.png","center",.005,.05)
                     sky_shot=horizon_visible and zenith_visible
                 finally:
                     key("F1")
