@@ -6,6 +6,12 @@ uniform float GreenPhase;
 out vec4 fragColor;
 float hash(vec2 p) { return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
 vec2 seed(vec2 p) { return vec2(hash(p),hash(p+19.37)); }
+float fractureRim(float distance,float coreWidth) {
+ // Keep a narrow luminous border just outside the near-black fracture core.
+ float inner=smoothstep(coreWidth-.004,coreWidth+.002,distance);
+ float outer=1.-smoothstep(coreWidth+.006,coreWidth+.022,distance);
+ return inner*outer;
+}
 float cells(vec2 uv,float scale) {
  vec2 p=uv*scale,g=floor(p); float a=1e6,b=1e6;
  for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){
@@ -60,7 +66,7 @@ void main(){
  float corona=exp(-spineDistance*7.);
  // Five finite side fractures grow from the main tear. Wrapped angular
  // distance avoids a discontinuity where longitude changes sign.
- float branches=0.,branchGlow=0.;
+ float branches=0.,branchGlow=0.,branchRim=0.;
  for(int i=0;i<5;i++){
   float anchor=-2.55+float(i)*1.13;
   float side=(i%2==0)?1.:-1.;
@@ -93,6 +99,7 @@ void main(){
   float branchWidth=mix(.008,.016,branchSurge);
   branches=max(branches,window*(1.-smoothstep(branchWidth,branchWidth+.019,dist)));
   branchGlow=max(branchGlow,window*exp(-dist*mix(32.,21.,branchSurge)));
+  branchRim=max(branchRim,window*fractureRim(dist,branchWidth));
  }
  // A separate, high-altitude fracture keeps the catastrophe visible when
  // the main tear slips behind hills. Angular harmonics stay seamless across
@@ -138,6 +145,10 @@ void main(){
  float cellDistance=dot(vec3(cells(n.yz,7.),cells(n.xz,7.),cells(n.xy,7.)),weights);
  float filaments=1.-smoothstep(.008,.023,cellDistance);
  float pulse=.86+.14*sin(t*2.7+longitude*11.);
+ float spineRim=fractureRim(spineDistance,coreWidth);
+ float upperRim=fractureRim(upperDistance,upperWidth);
+ float lowerRim=fractureRim(lowerDistance,lowerWidth);
+ float crownRim=fractureRim(crownDistance,crownWidth);
  vec3 background=vec3(.006,.003,.014);
  vec3 violet=vec3(.16,.032,.26);
  vec3 edge=vec3(.72,.24,1.0);
@@ -156,6 +167,11 @@ void main(){
  color=mix(color,vec3(.0003,.00015,.001),upperCore*.96);
  color=mix(color,vec3(.0003,.00015,.001),lowerCore*.96);
  color=mix(color,vec3(.0003,.00015,.001),crownCore*.93);
+ // A moving violet rim restores edge contrast around the dark openings.
+ // It adds no texture reads or Voronoi searches and keeps the tear cores dark.
+ float rimPulse=.78+.22*sin(t*3.1+longitude*23.+.8*sin(longitude*5.-t*.4));
+ float rimLight=spineRim*.92+branchRim*.76+upperRim*.84+lowerRim*.72+crownRim*.88;
+ color+=edge*rimLight*(1.08*rimPulse);
  // The green transition is a separate phase, not a persistent tint.
  color=mix(color,vec3(.002,.011,.009),green);
  // Side fractures must contribute to alpha as well as RGB; otherwise
