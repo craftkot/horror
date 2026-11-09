@@ -90,20 +90,28 @@ def capture_test_world():
         subprocess.run(["xdotool","windowmove",window[-1],"0","0"],check=False)
     def snap(name):
         subprocess.run(["scrot","-a","0,0,1280,720",str(shots/name)],check=False)
+    def pointer_y():
+        result=subprocess.run(["xdotool","getmouselocation","--shell"],
+                              capture_output=True,text=True,check=False)
+        match=re.search(r"(?m)^Y=(\d+)$",result.stdout)
+        return int(match.group(1)) if match else None
     def move_camera(delta_y):
-        # Split motion into small XTest events; report the amount actually moved
-        # so the beacon view can be restored even if one X11 event fails.
+        # X11 clamps the cursor at the screen edge. Measure the actual pointer
+        # displacement so the inverse move restores the camera even after a clamp.
         direction=1 if delta_y>0 else -1
         remaining=abs(delta_y)
         moved=0
         while remaining:
             step=min(80,remaining)*direction
+            before=pointer_y()
             result=subprocess.run(["xdotool","mousemove_relative","--sync","--","0",str(step)],check=False)
             if result.returncode!=0:
                 break
-            moved+=step
-            remaining-=abs(step)
             time.sleep(0.08)
+            after=pointer_y()
+            actual=step if before is None or after is None else after-before
+            moved+=actual
+            remaining-=abs(step)
         print("WORLD_CAPTURE_INPUT: camera pitch mouse delta",delta_y,"moved",moved,flush=True)
         return moved
     def verify_sky_pixels(name, region, minimum, max_green=None):
@@ -116,12 +124,12 @@ def capture_test_world():
             frame=source.convert("RGB")
         width,height=frame.size
         if region=="upper":
-            # Keep the HUD/title overlay out of the sky-only horizon sample.
-            crop=frame.crop((0,0,width,int(height*.30)))
+            # The beacon camera sits in a forest/desert clearing. Sample the
+            # unobstructed upper-right sky strip instead of counting tree crowns.
+            crop=frame.crop((int(width*.45),0,int(width*.75),int(height*.18)))
         elif region=="zenith":
-            # Trees can enter the lower corners even when the camera points up.
-            # Sample the upper-centre sky, not foliage at the edge of the frame.
-            crop=frame.crop((int(width*.30),int(height*.05),int(width*.70),int(height*.55)))
+            # Keep both side canopies outside the zenith sample.
+            crop=frame.crop((int(width*.45),int(height*.05),int(width*.65),int(height*.40)))
         else:
             crop=frame.crop((int(width*.2),int(height*.2),int(width*.8),int(height*.8)))
         pixels=list(crop.get_flattened_data())
@@ -261,8 +269,12 @@ def capture_test_world():
                     return
                 sky_capture_attempted=True
                 key("F1")
-                subprocess.run(["xdotool","mousemove","--sync","640","360"],check=False)
+                # Leave enough vertical pointer travel for the full -440/+440
+                # camera sweep. Starting at screen centre made X11 clamp the
+                # upward move at y=0, so the inverse move overshot by 80 pixels.
+                subprocess.run(["xdotool","mousemove","--sync","640","640"],check=False)
                 time.sleep(0.2)
+                pointer_start=pointer_y()
                 camera_delta=0
                 try:
                     # Capture both sky angles before the player's real right-click.
@@ -274,15 +286,23 @@ def capture_test_world():
                     camera_delta+=move_camera(-240)
                     time.sleep(0.35)
                     snap("sky-rift-zenith.png")
-                    horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.01,.45)
+                    horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.01,.05)
                     zenith_visible=verify_sky_pixels("sky-rift-zenith.png","zenith",.005,.03)
                     sky_shot=horizon_visible and zenith_visible
                 finally:
-                    # Restore the exact successful mouse delta before the
-                    # physical beacon click; the server marker remains the proof.
+                    # Restore the measured pointer displacement before the
+                    # physical beacon click; never assume X11 accepted a full step.
                     if camera_delta:
                         move_camera(-camera_delta)
                         time.sleep(0.25)
+                    pointer_end=pointer_y()
+                    if pointer_start is not None and pointer_end is not None:
+                        if pointer_end!=pointer_start:
+                            sky_shot=False
+                            print("WORLD_CAPTURE_FAIL: camera pointer restore mismatch",
+                                  pointer_start,pointer_end,flush=True)
+                        else:
+                            print("WORLD_CAPTURE: camera pointer restored",pointer_end,flush=True)
                     key("F1")
                 if sky_shot:
                     print("WORLD_CAPTURE: SKY_RIFT_HORIZON_AND_ZENITH_VERIFIED_BEFORE_BEACON_CLICK",flush=True)

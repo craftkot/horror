@@ -467,6 +467,7 @@ public final class RiftController {
         verifyBoundedSinkVelocity();
         verifyBoundedSinkDrag();
         verifyPendingSnapshotPersistence();
+        verifySparseBeaconSupport();
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED");
     }
 
@@ -517,6 +518,22 @@ public final class RiftController {
         if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED");
     }
 
+    /** Only the disposable sparse-client fixture may replace unstable supports. */
+    private static boolean needsSparseBeaconSupport(BlockState support) {
+        return (!support.blocksMotion() && (support.isAir() || !support.getFluidState().isEmpty()))
+            || support.getBlock() instanceof net.minecraft.world.level.block.FallingBlock;
+    }
+
+    private static void verifySparseBeaconSupport() {
+        if(!needsSparseBeaconSupport(Blocks.AIR.defaultBlockState())
+            || !needsSparseBeaconSupport(Blocks.WATER.defaultBlockState())
+            || !needsSparseBeaconSupport(Blocks.SAND.defaultBlockState())
+            || !needsSparseBeaconSupport(Blocks.GRAVEL.defaultBlockState())
+            || needsSparseBeaconSupport(Blocks.STONE.defaultBlockState()))
+            throw new IllegalStateException("CI sparse beacon support regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST SPARSE_BEACON_SUPPORT_RULE_VERIFIED");
+    }
+
     /** Place a recovery beacon without overwriting terrain or loading chunks.
      *  The vanilla beacon is a physical block and still requires a real right-click.
      *  Players may also use their own beacon if the generated one is mined.
@@ -560,6 +577,29 @@ public final class RiftController {
                     // when its chunk is loaded. Never create an inaccessible
                     // recovery objective at the edge of a restricted world.
                     if(!level.getWorldBorder().isWithinBounds(pos)) continue;
+                    // The disposable sparse client may land in a desert: sand is
+                    // motion-blocking but falls away, so the old water/air-only
+                    // fixture never created a safe beacon base there. Stabilize
+                    // only this loaded, in-radius CI candidate before adding snow.
+                    boolean sparseBeaconFixture=CI_TEST
+                        && Boolean.getBoolean("blackfrequency.ciSparseRecoveryTest")
+                        && Boolean.getBoolean("blackfrequency.ciSnowBeaconTest")
+                        && s.finished && s.edits>0 && s.edits<160;
+                    boolean existingSnow=level.getBlockState(pos).is(Blocks.SNOW);
+                    BlockPos fixtureSupportPos=pos.below();
+                    if(sparseBeaconFixture && (existingSnow || level.getBlockState(pos).isAir())
+                        && level.getBlockState(pos.above()).isAir()
+                        && level.hasChunkAt(fixtureSupportPos)
+                        && fixtureSupportPos.getY()>=level.getMinBuildHeight()
+                        && level.getWorldBorder().isWithinBounds(fixtureSupportPos)) {
+                        BlockState candidateSupport=level.getBlockState(fixtureSupportPos);
+                        if(needsSparseBeaconSupport(candidateSupport)) {
+                            if(!level.setBlock(fixtureSupportPos,Blocks.STONE.defaultBlockState(),3)) continue;
+                            LOGGER.info("BLACK_FREQUENCY_TEST SPARSE_BEACON_SUPPORT_PREPARED x={} y={} z={} previous={}",
+                                fixtureSupportPos.getX(),fixtureSupportPos.getY(),fixtureSupportPos.getZ(),
+                                candidateSupport.getBlock().getDescriptionId());
+                        }
+                    }
                     // Disposable sparse-client regression: make the replacement
                     // beacon stand above a real snow layer, rather than relying
                     // on a random snowy biome. Never enabled in normal worlds.
@@ -578,26 +618,7 @@ public final class RiftController {
                     if(pos.getY()>=level.getMaxBuildHeight()-1) continue;
                     BlockState support=level.getBlockState(pos.below());
                     BlockState snowFoundation=level.getBlockState(pos.below(2));
-                    // The sparse client regression can spawn over open water after
-                    // removing fewer than 160 blocks. In that disposable CI world,
-                    // provide one bounded support block so the test still exercises
-                    // the real physical beacon and right-click recovery path.
-                    // Production worlds never enter this branch.
-                    boolean sparseBeaconFixture=CI_TEST
-                        && Boolean.getBoolean("blackfrequency.ciSparseRecoveryTest")
-                        && Boolean.getBoolean("blackfrequency.ciSnowBeaconTest")
-                        && s.finished && s.edits>0 && s.edits<160;
-                    if(sparseBeaconFixture && !support.blocksMotion()
-                        && (support.isAir() || !support.getFluidState().isEmpty())
-                        && level.getBlockState(pos).isAir()
-                        && level.getBlockState(pos.above()).isAir()) {
-                        // The candidate has already passed the loaded-chunk,
-                        // world-border and fracture-radius guards above.
-                        if(!level.setBlock(pos.below(),Blocks.STONE.defaultBlockState(),3)) continue;
-                        support=level.getBlockState(pos.below());
-                        LOGGER.info("BLACK_FREQUENCY_TEST SPARSE_BEACON_SUPPORT_PREPARED x={} y={} z={}",
-                            pos.getX(),pos.getY(),pos.getZ());
-                    }
+                    // Sparse CI support was stabilized before the optional snow layer.
                     // Snow is not a safe platform when the block underneath can
                     // fall away or destroy the objective after an update.
                     boolean supportedSnow=support.is(Blocks.SNOW)
