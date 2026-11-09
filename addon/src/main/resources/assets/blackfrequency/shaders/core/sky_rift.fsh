@@ -166,7 +166,7 @@ void main(){
  float lowerRim=fractureRim(lowerDistance,lowerWidth);
  float crownRim=fractureRim(crownDistance,crownWidth);
  float zenithRim=zenithWindow*fractureRim(zenithDistance,zenithWidth);
- vec3 background=vec3(.006,.003,.014);
+ vec3 background=vec3(.010,.002,.022);
  vec3 violet=vec3(.16,.032,.26);
  vec3 edge=vec3(.72,.24,1.0);
  vec3 color=background+violet*(corona*.24+upperCorona*.19+lowerCorona*.18+crownCorona*.16+zenithCorona*.11);
@@ -195,6 +195,9 @@ void main(){
  // Side fractures must contribute to alpha as well as RGB; otherwise
  // their glow fades against the unmodified world behind the sky overlay.
  float fractureCoverage=max(zenithCore,max(max(spineCore,upperCore),max(lowerCore,max(branches,crownCore))));
- float opacity=clamp(f*(.87+.06*filaments+.12*fractureCoverage),0.,.99);
+ // Fade the world sky almost completely behind the active catastrophe.
+ // This keeps the blue vanilla sky from washing out the near-black violet void.
+ // The overlay still fades with RiftStrength and is fully transparent when inactive.
+ float opacity=clamp(f*(1.04+.05*filaments+.08*fractureCoverage),0.,.995);
  fragColor=vec4(color,opacity);
 }
