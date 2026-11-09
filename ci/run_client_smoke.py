@@ -90,28 +90,22 @@ def capture_test_world():
         subprocess.run(["xdotool","windowmove",window[-1],"0","0"],check=False)
     def snap(name):
         subprocess.run(["scrot","-a","0,0,1280,720",str(shots/name)],check=False)
-    def pointer_y():
-        result=subprocess.run(["xdotool","getmouselocation","--shell"],
-                              capture_output=True,text=True,check=False)
-        match=re.search(r"(?m)^Y=(\d+)$",result.stdout)
-        return int(match.group(1)) if match else None
     def move_camera(delta_y):
-        # X11 clamps the cursor at the screen edge. Measure the actual pointer
-        # displacement so the inverse move restores the camera even after a clamp.
+        # GLFW recenters the hidden cursor while the game has mouse capture.
+        # getmouselocation then reports the warp, not the XTest motion delivered
+        # to Minecraft. Track successful relative-input requests and undo that
+        # exact sum; the real beacon interaction remains the final aim check.
         direction=1 if delta_y>0 else -1
         remaining=abs(delta_y)
         moved=0
         while remaining:
             step=min(80,remaining)*direction
-            before=pointer_y()
             result=subprocess.run(["xdotool","mousemove_relative","--sync","--","0",str(step)],check=False)
             if result.returncode!=0:
                 break
-            time.sleep(0.08)
-            after=pointer_y()
-            actual=step if before is None or after is None else after-before
-            moved+=actual
+            moved+=step
             remaining-=abs(step)
+            time.sleep(0.08)
         print("WORLD_CAPTURE_INPUT: camera pitch mouse delta",delta_y,"moved",moved,flush=True)
         return moved
     def verify_sky_pixels(name, region, minimum, max_green=None):
@@ -123,38 +117,50 @@ def capture_test_world():
         with Image.open(path) as source:
             frame=source.convert("RGB")
         width,height=frame.size
-        if region=="upper":
-            # The beacon camera sits in a forest/desert clearing. Sample the
-            # unobstructed upper-right sky strip instead of counting tree crowns.
-            crop=frame.crop((int(width*.45),0,int(width*.75),int(height*.18)))
-        elif region=="zenith":
-            # Keep both side canopies outside the zenith sample.
-            crop=frame.crop((int(width*.45),int(height*.05),int(width*.65),int(height*.40)))
-        else:
-            crop=frame.crop((int(width*.2),int(height*.2),int(width*.8),int(height*.8)))
-        pixels=list(crop.get_flattened_data())
-        purple=0
-        green=0
-        purple_rows=[]
-        for y in range(crop.height):
-            row_purple=0
-            for r,g,b in pixels[y*crop.width:(y+1)*crop.width]:
-                if r>35 and b>45 and b>g*1.25 and r>g*1.35 and b-r<150:
-                    purple+=1
-                    row_purple+=1
-                if g>r*1.15 and g>b*1.15 and g>25:
-                    green+=1
-            purple_rows.append(row_purple)
-        coverage=purple/(crop.width*crop.height)
-        green_coverage=green/(crop.width*crop.height)
-        row_threshold=max(8,int(crop.width*.01))
-        peak_threshold=max(16,int(crop.width*.025))
-        line_rows=sum(1 for count in purple_rows if count>=row_threshold)
-        peak_row=max(purple_rows,default=0)
-        line_visible=line_rows>=12 and peak_row>=peak_threshold
-        print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} green={green_coverage:.4f} lineRows={line_rows} peakRow={peak_row} required={minimum:.4f} maxGreen={max_green}",flush=True)
-        return (coverage>=minimum and line_visible
-                and (max_green is None or green_coverage<=max_green))
+        # Spawn terrain and tree crowns vary between Normal and Sparse worlds.
+        # Search overlapping sky windows instead of hard-coding one screen strip.
+        window_width=max(1,int(width*.22))
+        window_height=max(1,int(height*.18))
+        step_x=max(1,int(width*.05))
+        step_y=max(1,int(height*.05))
+        search_bottom=int(height*.62)
+        best=None
+        for top in range(0,max(1,search_bottom-window_height+1),step_y):
+            for left in range(0,max(1,width-window_width+1),step_x):
+                crop=frame.crop((left,top,left+window_width,top+window_height))
+                pixels=list(crop.get_flattened_data())
+                purple=0
+                green=0
+                purple_rows=[]
+                for y in range(crop.height):
+                    row_purple=0
+                    start=y*crop.width
+                    for r,g,b in pixels[start:start+crop.width]:
+                        if r>35 and b>45 and b>g*1.25 and r>g*1.35 and b-r<150:
+                            purple+=1
+                            row_purple+=1
+                        if g>r*1.15 and g>b*1.15 and g>25:
+                            green+=1
+                    purple_rows.append(row_purple)
+                coverage=purple/(crop.width*crop.height)
+                green_coverage=green/(crop.width*crop.height)
+                score=coverage-.35*green_coverage
+                row_threshold=max(6,int(crop.width*.01))
+                peak_threshold=max(12,int(crop.width*.025))
+                line_rows=sum(1 for count in purple_rows if count>=row_threshold)
+                peak_row=max(purple_rows,default=0)
+                candidate=(score,coverage,green_coverage,line_rows,peak_row,left,top,peak_threshold)
+                if best is None or candidate[0]>best[0]:
+                    best=candidate
+        if best is None:
+            print("WORLD_CAPTURE_FAIL: no sky sample window",name,flush=True)
+            return False
+        score,coverage,green_coverage,line_rows,peak_row,left,top,peak_threshold=best
+        line_visible=line_rows>=8 and peak_row>=peak_threshold
+        visible=(coverage>=minimum and line_visible
+                 and (max_green is None or green_coverage<=max_green))
+        print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} green={green_coverage:.4f} lineRows={line_rows} peakRow={peak_row} window={left},{top} required={minimum:.4f} maxGreen={max_green} visible={visible}",flush=True)
+        return visible
     beacon_attempts=0
     beacon_ready_at=None
     last_beacon_attempt=0
@@ -274,7 +280,6 @@ def capture_test_world():
                 # upward move at y=0, so the inverse move overshot by 80 pixels.
                 subprocess.run(["xdotool","mousemove","--sync","640","640"],check=False)
                 time.sleep(0.2)
-                pointer_start=pointer_y()
                 camera_delta=0
                 try:
                     # Capture both sky angles before the player's real right-click.
@@ -286,23 +291,21 @@ def capture_test_world():
                     camera_delta+=move_camera(-240)
                     time.sleep(0.35)
                     snap("sky-rift-zenith.png")
-                    horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.01,.05)
-                    zenith_visible=verify_sky_pixels("sky-rift-zenith.png","zenith",.005,.03)
+                    horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.08,.35)
+                    zenith_visible=verify_sky_pixels("sky-rift-zenith.png","zenith",.08,.15)
                     sky_shot=horizon_visible and zenith_visible
                 finally:
-                    # Restore the measured pointer displacement before the
-                    # physical beacon click; never assume X11 accepted a full step.
+                    # Restore the exact sum of successful XTest relative motions.
+                    # GLFW's cursor warp is not a reliable measure of camera movement.
                     if camera_delta:
-                        move_camera(-camera_delta)
+                        restored_delta=move_camera(-camera_delta)
                         time.sleep(0.25)
-                    pointer_end=pointer_y()
-                    if pointer_start is not None and pointer_end is not None:
-                        if pointer_end!=pointer_start:
+                        if restored_delta!=-camera_delta:
                             sky_shot=False
-                            print("WORLD_CAPTURE_FAIL: camera pointer restore mismatch",
-                                  pointer_start,pointer_end,flush=True)
+                            print("WORLD_CAPTURE_FAIL: camera inverse input incomplete",
+                                  camera_delta,restored_delta,flush=True)
                         else:
-                            print("WORLD_CAPTURE: camera pointer restored",pointer_end,flush=True)
+                            print("WORLD_CAPTURE: camera inverse input sent",restored_delta,flush=True)
                     key("F1")
                 if sky_shot:
                     print("WORLD_CAPTURE: SKY_RIFT_HORIZON_AND_ZENITH_VERIFIED_BEFORE_BEACON_CLICK",flush=True)
