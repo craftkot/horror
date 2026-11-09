@@ -750,6 +750,16 @@ public final class RiftController {
                     cx+Math.cos(angle)*radius,cy+height,cz+Math.sin(angle)*radius,
                     1,0,0.08D,0,0.015D);
             }
+            // Four rising violet sparks connect the ground-level rings to the
+            // beacon beam. Deterministic positions avoid per-tick random work;
+            // the effect stays inside a 2.3-block radius and 3-block height.
+            for(int i=0;i<4;i++) {
+                double phase=s.restoreTicks*0.055D+i*Math.PI/2.0D;
+                double height=0.25D+((s.restoreTicks*0.04D+i*0.25D)%2.5D);
+                level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                    cx+Math.cos(phase)*0.75D,cy+height,cz+Math.sin(phase)*0.75D,
+                    1,0,0,0,0);
+            }
             if(CI_TEST && s.restoreTicks==20)
                 LOGGER.info("BLACK_FREQUENCY_TEST BEACON_STABILIZATION_PULSE");
         }
