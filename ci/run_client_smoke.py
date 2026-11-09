@@ -91,15 +91,21 @@ def capture_test_world():
     def snap(name):
         subprocess.run(["scrot","-a","0,0,1280,720",str(shots/name)],check=False)
     def move_camera(delta_y):
-        # Split motion into small XTest events; GLFW can coalesce a single large warp.
+        # Split motion into small XTest events; report the amount actually moved
+        # so the beacon view can be restored even if one X11 event fails.
         direction=1 if delta_y>0 else -1
         remaining=abs(delta_y)
+        moved=0
         while remaining:
             step=min(80,remaining)*direction
-            subprocess.run(["xdotool","mousemove_relative","--sync","--","0",str(step)],check=False)
+            result=subprocess.run(["xdotool","mousemove_relative","--sync","--","0",str(step)],check=False)
+            if result.returncode!=0:
+                break
+            moved+=step
             remaining-=abs(step)
             time.sleep(0.08)
-        print("WORLD_CAPTURE_INPUT: camera pitch mouse delta",delta_y,flush=True)
+        print("WORLD_CAPTURE_INPUT: camera pitch mouse delta",delta_y,"moved",moved,flush=True)
+        return moved
     def verify_sky_pixels(name, region, minimum, max_green=None):
         from PIL import Image
         path=shots/name
@@ -112,9 +118,13 @@ def capture_test_world():
         if region=="upper":
             # Keep the HUD/title overlay out of the sky-only horizon sample.
             crop=frame.crop((0,0,width,int(height*.30)))
+        elif region=="zenith":
+            # Trees can enter the lower corners even when the camera points up.
+            # Sample the upper-centre sky, not foliage at the edge of the frame.
+            crop=frame.crop((int(width*.30),int(height*.05),int(width*.70),int(height*.55)))
         else:
             crop=frame.crop((int(width*.2),int(height*.2),int(width*.8),int(height*.8)))
-        pixels=list(crop.getdata())
+        pixels=list(crop.get_flattened_data())
         purple=0
         green=0
         purple_rows=[]
@@ -145,7 +155,6 @@ def capture_test_world():
         if os.environ.get("BF_TEST_PLAYER_BEACON")!="1":
             return
         if "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in logs:
-            capture_sky_after_beacon()
             return
         if "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs:
             return
@@ -162,6 +171,12 @@ def capture_test_world():
                 if not (shots/"terrain-fracture-after-first-block.png").exists():
                     snap("terrain-fracture-after-first-block.png")
                 print("WORLD_CAPTURE: ground fracture captured before camera pitch change",flush=True)
+        # Capture the active rift while the physical beacon is ready but before
+        # the right-click starts restoration. Sparse recovery can finish in only
+        # a few seconds, much faster than two llvmpipe screenshots can be saved.
+        if not sky_capture_attempted:
+            capture_sky_before_beacon()
+            snap("beacon-aim-restored.png")
         # Actual mouse input, not a synthetic server event.
         subprocess.run(["xdotool","mousedown","3"],check=False)
         time.sleep(0.25)
@@ -170,18 +185,9 @@ def capture_test_world():
         last_beacon_attempt=now
         print("WORLD_CAPTURE_INPUT: player right-click attempt",beacon_attempts,flush=True)
         snap("beacon-after-right-click.png")
-        # Sparse recovery can finish in a few seconds. Wait for the real server
-        # interaction marker and capture the sky immediately, not after the
-        # long screenshot-stage loop has drained the restoration window.
-        interaction_deadline=time.monotonic()+2.0
-        while time.monotonic()<interaction_deadline and p.poll() is None:
-            current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-            if ("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in current
-                    and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current):
-                print("WORLD_CAPTURE: accepted player interaction; capturing sky before restoration ends",flush=True)
-                capture_sky_after_beacon()
-                return
-            time.sleep(0.05)
+        # The following loop still requires the server's real interaction marker.
+        # Sky capture is already complete; do not spend the short recovery window
+        # waiting for a second camera pass.
     time.sleep(2)
     print("WORLD_CAPTURE_INPUT: active window",
         subprocess.run(["xdotool","getactivewindow","getwindowname"],
@@ -243,37 +249,45 @@ def capture_test_world():
             restoration_shot=False
             sky_shot=False
             sky_capture_attempted=False
-            def capture_sky_after_beacon():
+            def capture_sky_before_beacon():
                 nonlocal sky_shot,sky_capture_attempted
                 if sky_capture_attempted:
                     return
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                 if not ("BLACK_FREQUENCY_RENDER_ACTIVE" in current
-                        and "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in current
-                        and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current
-                        and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" not in current):
+                        and "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in current
+                        and "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" in current
+                        and "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" not in current):
                     return
                 sky_capture_attempted=True
                 key("F1")
                 subprocess.run(["xdotool","mousemove","--sync","640","360"],check=False)
                 time.sleep(0.2)
+                camera_delta=0
                 try:
-                    # The real beacon interaction has already been accepted.
-                    # Capture the sky now, rather than disturbing the player's aim
-                    # while the server is placing or replacing the physical beacon.
-                    move_camera(-200)
-                    time.sleep(0.5)
+                    # Capture both sky angles before the player's real right-click.
+                    # The beacon is already placed and waiting, so the restoration
+                    # clock has not started while llvmpipe writes the screenshots.
+                    camera_delta+=move_camera(-200)
+                    time.sleep(0.35)
                     snap("sky-rift-hudless.png")
-                    move_camera(-240)
-                    time.sleep(0.4)
+                    camera_delta+=move_camera(-240)
+                    time.sleep(0.35)
                     snap("sky-rift-zenith.png")
                     horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.01,.45)
-                    zenith_visible=verify_sky_pixels("sky-rift-zenith.png","center",.005,.05)
+                    zenith_visible=verify_sky_pixels("sky-rift-zenith.png","zenith",.005,.03)
                     sky_shot=horizon_visible and zenith_visible
                 finally:
+                    # Restore the exact successful mouse delta before the
+                    # physical beacon click; the server marker remains the proof.
+                    if camera_delta:
+                        move_camera(-camera_delta)
+                        time.sleep(0.25)
                     key("F1")
                 if sky_shot:
-                    print("WORLD_CAPTURE: SKY_RIFT_HORIZON_AND_ZENITH_VERIFIED",flush=True)
+                    print("WORLD_CAPTURE: SKY_RIFT_HORIZON_AND_ZENITH_VERIFIED_BEFORE_BEACON_CLICK",flush=True)
+                else:
+                    print("WORLD_CAPTURE_FAIL: sky capture failed before beacon click; still attempting real interaction",flush=True)
             for stage in range(32):
                 if p.poll() is not None:
                     break
@@ -287,7 +301,7 @@ def capture_test_world():
                         snap("beacon-restoration-active.png")
                         restoration_shot=True
                         print("WORLD_CAPTURE: active restoration frame captured before completion",flush=True)
-                capture_sky_after_beacon()
+                capture_sky_before_beacon()
                 time.sleep(0.5)
             subprocess.run(["scrot","-a","0,0,1280,720",
                 str(ROOT/"client-smoke-artifacts"/"world.png")],check=False)
@@ -298,7 +312,7 @@ def capture_test_world():
             while time.time()<fracture_deadline and p.poll() is None:
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                 try_beacon_click(current)
-                capture_sky_after_beacon()
+                capture_sky_before_beacon()
                 if "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in current:
                     fracture_seen=True
                     print("WORLD_CAPTURE: first physical terrain fracture confirmed",flush=True)
@@ -319,7 +333,7 @@ def capture_test_world():
                 while time.time()<deadline_restore and p.poll() is None:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     try_beacon_click(current)
-                    capture_sky_after_beacon()
+                    capture_sky_before_beacon()
                     if (not restoration_shot
                             and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current
                             and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" not in current):
