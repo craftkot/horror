@@ -735,7 +735,7 @@ public final class RiftController {
             // Contract the recovery vortex as the saved terrain is restored.
             // Clamp corrupt/out-of-range indices so the effect stays bounded.
             double restoredFraction=s.snapshots.isEmpty()?1.0D
-                :Math.max(0.0D,Math.min(1.0D,
+                :1.0D-Math.max(0.0D,Math.min(1.0D,
                     (s.restoreIndex+1.0D)/s.snapshots.size()));
             double contraction=1.0D-0.25D*restoredFraction;
             // Two contrasting violet particle types distinguish the counter-rotating
