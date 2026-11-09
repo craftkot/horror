@@ -255,18 +255,6 @@ def capture_test_world():
                         print("WORLD_CAPTURE: active restoration frame captured before completion",flush=True)
                 capture_sky_after_beacon()
                 time.sleep(0.5)
-                        snap("sky-rift-hudless.png")
-                        move_camera(-240)
-                        time.sleep(0.4)
-                        snap("sky-rift-zenith.png")
-                        horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.02,.45)
-                        zenith_visible=verify_sky_pixels("sky-rift-zenith.png","center",.02,.05)
-                        sky_shot=horizon_visible and zenith_visible
-                    finally:
-                        key("F1")
-                    if sky_shot:
-                        print("WORLD_CAPTURE: SKY_RIFT_HORIZON_AND_ZENITH_VERIFIED",flush=True)
-                time.sleep(0.5)
             subprocess.run(["scrot","-a","0,0,1280,720",
                 str(ROOT/"client-smoke-artifacts"/"world.png")],check=False)
             # Ground fracture starts after finale tick 260. Early 16-second frames
