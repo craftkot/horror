@@ -210,6 +210,36 @@ def capture_test_world():
             restoration_shot=False
             sky_shot=False
             sky_capture_attempted=False
+            def capture_sky_after_beacon():
+                nonlocal sky_shot,sky_capture_attempted
+                if sky_capture_attempted:
+                    return
+                current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                if not ("BLACK_FREQUENCY_RENDER_ACTIVE" in current
+                        and "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in current
+                        and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current):
+                    return
+                sky_capture_attempted=True
+                key("F1")
+                subprocess.run(["xdotool","mousemove","--sync","640","360"],check=False)
+                time.sleep(0.2)
+                try:
+                    # The real beacon interaction has already been accepted.
+                    # Capture the sky now, rather than disturbing the player's aim
+                    # while the server is placing or replacing the physical beacon.
+                    move_camera(-200)
+                    time.sleep(0.5)
+                    snap("sky-rift-hudless.png")
+                    move_camera(-240)
+                    time.sleep(0.4)
+                    snap("sky-rift-zenith.png")
+                    horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.02,.45)
+                    zenith_visible=verify_sky_pixels("sky-rift-zenith.png","center",.02,.05)
+                    sky_shot=horizon_visible and zenith_visible
+                finally:
+                    key("F1")
+                if sky_shot:
+                    print("WORLD_CAPTURE: SKY_RIFT_HORIZON_AND_ZENITH_VERIFIED",flush=True)
             for stage in range(32):
                 if p.poll() is not None:
                     break
@@ -223,25 +253,8 @@ def capture_test_world():
                         snap("beacon-restoration-active.png")
                         restoration_shot=True
                         print("WORLD_CAPTURE: active restoration frame captured before completion",flush=True)
-                # Do not steer the camera until the real beacon click has been
-                # accepted by the server. The earlier capture raced the server-side
-                # teleport and its +440px "restore" could hit Minecraft's pitch clamp,
-                # leaving the crosshair pointed at the platform instead of the beacon.
-                current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-                if (not sky_capture_attempted
-                        and "BLACK_FREQUENCY_RENDER_ACTIVE" in current
-                        and "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in current
-                        and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current):
-                    sky_capture_attempted=True
-                    key("F1")
-                    subprocess.run(["xdotool","mousemove","--sync","640","360"],check=False)
-                    time.sleep(0.2)
-                    try:
-                        # The player no longer needs to aim at the beacon. Capture
-                        # the horizon and zenith now; do not try to reverse a pitch
-                        # sweep through the +/-90 degree camera clamp.
-                        move_camera(-200)
-                        time.sleep(0.5)
+                capture_sky_after_beacon()
+                time.sleep(0.5)
                         snap("sky-rift-hudless.png")
                         move_camera(-240)
                         time.sleep(0.4)
@@ -263,6 +276,7 @@ def capture_test_world():
             while time.time()<fracture_deadline and p.poll() is None:
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                 try_beacon_click(current)
+                capture_sky_after_beacon()
                 if "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in current:
                     fracture_seen=True
                     print("WORLD_CAPTURE: first physical terrain fracture confirmed",flush=True)
@@ -283,6 +297,7 @@ def capture_test_world():
                 while time.time()<deadline_restore and p.poll() is None:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     try_beacon_click(current)
+                    capture_sky_after_beacon()
                     if (not restoration_shot
                             and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current
                             and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" not in current):
