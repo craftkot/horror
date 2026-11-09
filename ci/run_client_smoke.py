@@ -179,6 +179,10 @@ def capture_test_world():
         if beacon_ready_at is None:
             beacon_ready_at=now
             print("WORLD_CAPTURE: beacon ready; waiting for client teleport",flush=True)
+        # In the full Normal scenario, prove the player-visible ground fracture
+        # before consuming the recovery beacon. Sparse keeps its short path.
+        if os.environ.get("BF_TEST_SPARSE_RECOVERY")!="1" and not terrain_shot:
+            return
         if now-beacon_ready_at<1.5 or now-last_beacon_attempt<2.0 or beacon_attempts>=8:
             return
         if beacon_attempts==0:
@@ -291,7 +295,7 @@ def capture_test_world():
                     return
                 sky_capture_attempted=True
                 key("F1")
-                # Leave enough vertical pointer travel for the full -440/+440
+                # Leave enough vertical pointer travel for the full -460/+460
                 # camera sweep. Starting at screen centre made X11 clamp the
                 # upward move at y=0, so the inverse move overshot by 80 pixels.
                 subprocess.run(["xdotool","mousemove","--sync","640","640"],check=False)
@@ -303,10 +307,10 @@ def capture_test_world():
                     # clock has not started while llvmpipe writes the screenshots.
                     # The player starts with a slight downward beacon aim. Move farther
                     # upward before calling the first frame a sky/horizon capture.
-                    camera_delta+=move_camera(-320)
+                    camera_delta+=move_camera(-380)
                     time.sleep(0.45)
                     snap("sky-rift-hudless.png")
-                    camera_delta+=move_camera(-120)
+                    camera_delta+=move_camera(-80)
                     time.sleep(0.45)
                     snap("sky-rift-zenith.png")
                     horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.08,.20)
@@ -352,25 +356,28 @@ def capture_test_world():
             # mostly show the sky; wait for actual terrain edits before final proof.
             fracture_deadline=time.time()+90
             fracture_seen=False
+            sparse_test=os.environ.get("BF_TEST_SPARSE_RECOVERY")=="1"
             while time.time()<fracture_deadline and p.poll() is None:
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                 capture_terrain_fracture(current)
                 try_beacon_click(current)
                 capture_sky_before_beacon()
-                if "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in current:
+                if "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in current and not fracture_seen:
                     fracture_seen=True
                     print("WORLD_CAPTURE: first physical terrain fracture confirmed",flush=True)
+                # Normal must keep observing until the local surface cue is on-screen;
+                # Sparse has no nearby-cue requirement and can proceed after its first edit.
+                if fracture_seen and (sparse_test or terrain_shot):
                     break
                 time.sleep(0.1)
-            if fracture_seen:
-                # If the first edit arrived in the same log poll as beacon placement,
-                # do not mislabel a recovery-beacon screenshot as terrain damage.
-                if not terrain_shot:
-                    snap("recovery-beacon-ground-context.png")
-                    print("WORLD_CAPTURE: first-edit frame missed before beacon placement; saved recovery context instead",flush=True)
-            else:
-                print("WORLD_CAPTURE: no terrain edit marker during capture window",flush=True)
+            if not fracture_seen:
+                print("WORLD_CAPTURE_FAIL: no terrain edit marker during capture window",flush=True)
                 snap("terrain-fracture-not-seen.png")
+                return False
+            if not sparse_test and not terrain_shot:
+                print("WORLD_CAPTURE_FAIL: no player-visible surface fracture cue was captured",flush=True)
+                snap("recovery-beacon-ground-context.png")
+                return False
             if os.environ.get("BF_TEST_RESTORATION")=="1":
                 # A full fracture can reach 95,000 snapshots. Recovery restores at
                 # most 12 blocks per 20 TPS tick (~396s at the cap); leave headroom
