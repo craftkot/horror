@@ -605,8 +605,8 @@ public final class RiftController {
                         || (snowFixture && !supportedSnow)) continue;
                     // Never materialize the recovery objective inside a solid or
                     // dangerous entity. Falling blocks can settle into the beacon
-                    // and end crystals can explode when struck. Dropped items and
-                    // experience orbs must not block the search.
+                    // and end crystals can explode when struck. Hanging decorations
+                    // must not be displaced; dropped items and XP do not obstruct.
                     // The query only examines entities in already-loaded chunks.
                     if(!level.getEntitiesOfClass(net.minecraft.world.entity.Entity.class,
                         new net.minecraft.world.phys.AABB(pos),
@@ -614,6 +614,7 @@ public final class RiftController {
                             || entity instanceof net.minecraft.world.entity.vehicle.Boat
                             || entity instanceof net.minecraft.world.entity.vehicle.AbstractMinecart
                             || entity instanceof net.minecraft.world.entity.item.FallingBlockEntity
+                            || entity instanceof net.minecraft.world.entity.decoration.HangingEntity
                             || entity instanceof net.minecraft.world.entity.boss.enderdragon.EndCrystal).isEmpty()) continue;
                     if(!level.setBlock(pos,Blocks.BEACON.defaultBlockState(),3)) continue;
                     // Other mods may intercept or replace the placement. Do not
