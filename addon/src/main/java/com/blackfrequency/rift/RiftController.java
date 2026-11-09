@@ -1226,11 +1226,15 @@ public final class RiftController {
                     level.sendParticles(ParticleTypes.REVERSE_PORTAL,
                         player.getX(),player.getY()+.5,player.getZ(),
                         Math.max(1,(int)Math.ceil(9*fade)),2.2,.7,2.2,.11);
-                    level.sendParticles(ParticleTypes.END_ROD,
+                    // Violet sparks keep the lift field in the catastrophe palette
+                    // instead of introducing bright white END_ROD flashes.
+                    level.sendParticles(ParticleTypes.DRAGON_BREATH,
                         player.getX(),player.getY()+.3,player.getZ(),
                         Math.max(1,(int)Math.ceil(3*fade)),1.4,.25,1.4,.04);
                 } else if(zone<-.68) {
-                    level.sendParticles(ParticleTypes.SMOKE,
+                    // Sinking anomalies now read as purple distortion, not
+                    // ordinary grey fire smoke; keep the same particle budget.
+                    level.sendParticles(ParticleTypes.DRAGON_BREATH,
                         player.getX(),player.getY()+.15,player.getZ(),
                         Math.max(1,(int)Math.ceil(7*fade)),1.8,.25,1.8,.018);
                 }
