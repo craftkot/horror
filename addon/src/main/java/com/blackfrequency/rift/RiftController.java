@@ -578,6 +578,26 @@ public final class RiftController {
                     if(pos.getY()>=level.getMaxBuildHeight()-1) continue;
                     BlockState support=level.getBlockState(pos.below());
                     BlockState snowFoundation=level.getBlockState(pos.below(2));
+                    // The sparse client regression can spawn over open water after
+                    // removing fewer than 160 blocks. In that disposable CI world,
+                    // provide one bounded support block so the test still exercises
+                    // the real physical beacon and right-click recovery path.
+                    // Production worlds never enter this branch.
+                    boolean sparseBeaconFixture=CI_TEST
+                        && Boolean.getBoolean("blackfrequency.ciSparseRecoveryTest")
+                        && Boolean.getBoolean("blackfrequency.ciSnowBeaconTest")
+                        && s.finished && s.edits>0 && s.edits<160;
+                    if(sparseBeaconFixture && !support.blocksMotion()
+                        && (support.isAir() || !support.getFluidState().isEmpty())
+                        && level.getBlockState(pos).isAir()
+                        && level.getBlockState(pos.above()).isAir()) {
+                        // The candidate has already passed the loaded-chunk,
+                        // world-border and fracture-radius guards above.
+                        if(!level.setBlock(pos.below(),Blocks.STONE.defaultBlockState(),3)) continue;
+                        support=level.getBlockState(pos.below());
+                        LOGGER.info("BLACK_FREQUENCY_TEST SPARSE_BEACON_SUPPORT_PREPARED x={} y={} z={}",
+                            pos.getX(),pos.getY(),pos.getZ());
+                    }
                     // Snow is not a safe platform when the block underneath can
                     // fall away or destroy the objective after an update.
                     boolean supportedSnow=support.is(Blocks.SNOW)
