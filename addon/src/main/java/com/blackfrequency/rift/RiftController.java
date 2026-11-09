@@ -1197,10 +1197,11 @@ public final class RiftController {
             }
         }
         // A compact violet fracture plume marks the actual ground-rift center.
-        // Only emit while an active player can see it; never query or load terrain.
+        // Query the surface only after confirming the center chunk is loaded.
+        // Sea-level placement hid the effect beneath mountains and above deep valleys.
         if (!s.restoring && s.finaleTicks > 85 && s.finaleTicks % 10 == 0
             && level.hasChunk(s.x >> 4, s.z >> 4)) {
-            double plumeY = level.getSeaLevel() + 1.0;
+            double plumeY = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, s.x, s.z) + 1.0;
             boolean witnessed = false;
             for (var viewer : level.players()) {
                 if (!viewer.isAlive() || viewer.isRemoved() || viewer.isSpectator()) continue;
