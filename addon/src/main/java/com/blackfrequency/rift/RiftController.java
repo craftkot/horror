@@ -737,12 +737,15 @@ public final class RiftController {
             // Only 24 particles per second; no terrain edits or chunk loads.
             for(int i=0;i<24;i++) {
                 double angle=i*Math.PI/12.0D + (i%2==0 ? 1.0D : -1.0D)*s.restoreTicks*0.045D;
-                double radius=(i%2==0)?1.3D:2.1D;
+                // The fracture closes in a slow, bounded violet heartbeat. Keep the
+                // inner and outer rings separated even at maximum contraction.
+                double radius=(i%2==0?1.3D:2.1D)
+                    +0.16D*Math.sin(s.restoreTicks*0.025D);
                 // A slow vertical wave makes the rings visibly breathe without
                 // increasing particle count or modifying nearby blocks.
                 double height=(i%2==0?0.0D:0.45D)
                     +0.18D*Math.sin(angle*2.0D+s.restoreTicks*0.035D);
-                var ringParticle=(i&1)==0 ? ParticleTypes.REVERSE_PORTAL : ParticleTypes.WITCH;
+                var ringParticle=(i&1)==0 ? ParticleTypes.REVERSE_PORTAL : ParticleTypes.DRAGON_BREATH;
                 level.sendParticles(ringParticle,
                     cx+Math.cos(angle)*radius,cy+height,cz+Math.sin(angle)*radius,
                     1,0,0.08D,0,0.015D);
