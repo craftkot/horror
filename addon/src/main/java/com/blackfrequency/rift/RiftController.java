@@ -399,6 +399,28 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_AUDIENCE_BOUNDS_VERIFIED");
     }
 
+    /** Recovery vortex shrinks monotonically as pending terrain snapshots decrease. */
+    private static double recoveryVortexContraction(int restoreIndex, int snapshotCount) {
+        if(snapshotCount<=0) return 0.75D;
+        double remaining=Math.max(0.0D,Math.min(1.0D,
+            ((double)restoreIndex+1.0D)/snapshotCount));
+        return 0.75D+0.25D*remaining;
+    }
+
+    private static void verifyRecoveryVortexContraction() {
+        double[][] cases={
+            {9,10,1.0D}, {4,10,0.875D}, {-1,10,0.75D},
+            {Integer.MAX_VALUE,10,1.0D}, {Integer.MIN_VALUE,10,0.75D},
+            {-1,0,0.75D}
+        };
+        for(double[] sample:cases) {
+            double actual=recoveryVortexContraction((int)sample[0],(int)sample[1]);
+            if(!Double.isFinite(actual) || Math.abs(actual-sample[2])>1.0E-9D)
+                throw new IllegalStateException("CI recovery vortex contraction regression: "+actual);
+        }
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_VORTEX_CONTRACTION_VERIFIED");
+    }
+
     /** Pure interaction gate, also exercised by disposable-world CI. */
     private static boolean mayActivateBeacon(net.minecraft.world.InteractionHand hand,
             boolean alive, boolean spectator, double distanceSquared,
@@ -438,6 +460,7 @@ public final class RiftController {
             || beaconWithinAnchor(Integer.MAX_VALUE,0,Integer.MIN_VALUE,0))
             throw new IllegalStateException("CI beacon anchor radius regression");
         verifyRecoveryAudienceBounds();
+        verifyRecoveryVortexContraction();
         verifyFractureColumnBounds();
         verifyBoundedAnomalyVelocity();
         verifyBoundedLiftVelocity();
@@ -734,10 +757,7 @@ public final class RiftController {
             double cz=activatedBeacon.getZ()+0.5D;
             // Contract the recovery vortex as the saved terrain is restored.
             // Clamp corrupt/out-of-range indices so the effect stays bounded.
-            double restoredFraction=s.snapshots.isEmpty()?1.0D
-                :1.0D-Math.max(0.0D,Math.min(1.0D,
-                    (s.restoreIndex+1.0D)/s.snapshots.size()));
-            double contraction=1.0D-0.25D*restoredFraction;
+            double contraction=recoveryVortexContraction(s.restoreIndex,s.snapshots.size());
             // Two contrasting violet particle types distinguish the counter-rotating
             // inner and outer rings without increasing particle count or chunk work.
             // Only 24 particles per second; no terrain edits or chunk loads.
