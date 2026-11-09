@@ -974,7 +974,10 @@ public final class RiftController {
             double angle=s.restoreTicks*.17;
             // A slow breathing ring makes recovery visibly alive without
             // adding particles, world edits, or forced chunk loads.
-            double radius=3.4+0.45*Math.sin(s.restoreTicks*.055);
+            // Keep the outer recovery helix synchronized with the shrinking inner vortex.
+            // This is cosmetic only: no terrain edits or extra particle packets.
+            double radius=(3.4D+0.45D*Math.sin(s.restoreTicks*.055D))
+                * recoveryVortexContraction(s.restoreIndex,s.snapshots.size());
             for(int k=0;k<8;k++) {
                 // Counter-rotate the two alternating strands in the horizontal plane too.
                 // Their vertical phases already travel in opposite directions.
