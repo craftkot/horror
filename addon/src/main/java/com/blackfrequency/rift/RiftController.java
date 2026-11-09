@@ -1591,9 +1591,6 @@ public final class RiftController {
             // Capture the current column before advancing: otherwise its final block
             // is evaluated against the NEXT column's fracture coordinates.
             int dx=s.cursorX,dz=s.cursorZ;
-            int surfaceYForFirstEdit=CI_TEST && s.edits==0
-                ? level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,wx,wz)
-                : Integer.MIN_VALUE;
             if(s.surfaceFirstScan) {
                 s.cursorY--;
                 if(s.cursorY<level.getMinBuildHeight()) {
@@ -1627,6 +1624,11 @@ public final class RiftController {
             if(!level.getWorldBorder().isWithinBounds(pos)) continue;
             BlockState original=level.getBlockState(pos);
             if(original.isAir() || original.hasBlockEntity()) continue;
+            // The CI assertion needs the pre-edit heightmap only for the first
+            // successful edit; do not query it for every scanned candidate.
+            int surfaceYForFirstEdit=CI_TEST && s.edits==0
+                ? level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,wx,wz)
+                : Integer.MIN_VALUE;
             // Stage the original state before editing. A failed setBlock must not
             // leave a phantom recovery entry; a successful edit must have a
             // snapshot available immediately, before advancing the cursor.
