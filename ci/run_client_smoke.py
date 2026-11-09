@@ -36,6 +36,21 @@ opts.update({
     "launcherName":"EHTID-GitHub-Client-Smoke",
     "launcherVersion":"1.0",
 })
+# X11/XTest cannot steer GLFW while raw mouse input is enabled. This is a
+# disposable CI client, so use the regular cursor path for deterministic camera capture.
+options_file=MC/"options.txt"
+option_lines=options_file.read_text(encoding="utf-8",errors="replace").splitlines() if options_file.exists() else []
+for option,value in (("rawMouseInput","false"),("mouseSensitivity","0.6")):
+    prefix=option+":"
+    for index,line in enumerate(option_lines):
+        if line.startswith(prefix):
+            option_lines[index]=prefix+value
+            break
+    else:
+        option_lines.append(prefix+value)
+options_file.write_text("\n".join(option_lines)+"\n",encoding="utf-8")
+print("WORLD_CAPTURE: raw mouse input disabled for deterministic X11 camera control",flush=True)
+
 cmd=minecraft_launcher_lib.command.get_minecraft_command(version_id,str(MC),opts)
 print("Command built; starting client under DISPLAY="+os.environ.get("DISPLAY",""),flush=True)
 
@@ -75,7 +90,17 @@ def capture_test_world():
         subprocess.run(["xdotool","windowmove",window[-1],"0","0"],check=False)
     def snap(name):
         subprocess.run(["scrot","-a","0,0,1280,720",str(shots/name)],check=False)
-    def verify_sky_pixels(name, region, minimum):
+    def move_camera(delta_y):
+        # Split motion into small XTest events; GLFW can coalesce a single large warp.
+        direction=1 if delta_y>0 else -1
+        remaining=abs(delta_y)
+        while remaining:
+            step=min(80,remaining)*direction
+            subprocess.run(["xdotool","mousemove_relative","--sync","--","0",str(step)],check=False)
+            remaining-=abs(step)
+            time.sleep(0.08)
+        print("WORLD_CAPTURE_INPUT: camera pitch mouse delta",delta_y,flush=True)
+    def verify_sky_pixels(name, region, minimum, max_green=None):
         from PIL import Image
         path=shots/name
         if not path.is_file():
@@ -85,15 +110,18 @@ def capture_test_world():
             frame=source.convert("RGB")
         width,height=frame.size
         if region=="upper":
-            crop=frame.crop((0,0,width,int(height*.65)))
+            # Keep the HUD/title overlay out of the sky-only horizon sample.
+            crop=frame.crop((0,0,width,int(height*.30)))
         else:
             crop=frame.crop((int(width*.2),int(height*.2),int(width*.8),int(height*.8)))
-        pixels=crop.getdata()
+        pixels=list(crop.getdata())
         purple=sum(1 for r,g,b in pixels
                    if r>35 and b>45 and b>g*1.25 and r>g*1.35 and b-r<150)
+        green=sum(1 for r,g,b in pixels if g>r*1.15 and g>b*1.15 and g>25)
         coverage=purple/(crop.width*crop.height)
-        print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} required={minimum:.4f}",flush=True)
-        return coverage>=minimum
+        green_coverage=green/(crop.width*crop.height)
+        print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} green={green_coverage:.4f} required={minimum:.4f} maxGreen={max_green}",flush=True)
+        return coverage>=minimum and (max_green is None or green_coverage<=max_green)
     beacon_attempts=0
     beacon_ready_at=None
     last_beacon_attempt=0
@@ -181,6 +209,7 @@ def capture_test_world():
             # initial frame series ends, so waiting until afterward misses it.
             restoration_shot=False
             sky_shot=False
+            sky_capture_attempted=False
             for stage in range(32):
                 if p.poll() is not None:
                     break
@@ -188,28 +217,31 @@ def capture_test_world():
                 # Capture the real sky shader unobstructed by the HUD and treetops.
                 # Do this before beacon teleport/aiming; restore camera and HUD so
                 # the actual player right-click regression remains unaffected.
-                if not sky_shot and stage>=12:
+                if not sky_capture_attempted and stage>=12:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     # Never move the camera after the test teleports the player
                     # toward the beacon: real mouse input must retain its aim.
                     if ("BLACK_FREQUENCY_RENDER_ACTIVE" in current
                             and "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in current):
+                        sky_capture_attempted=True
                         key("F1")
+                        subprocess.run(["xdotool","mousemove","--sync","640","360"],check=False)
+                        time.sleep(0.1)
                         time.sleep(0.2)
                         try:
-                            subprocess.run(["xdotool","mousemove_relative","--","0","-200"],check=False)
+                            move_camera(-200)
                             time.sleep(0.5)
                             snap("sky-rift-hudless.png")
                             # Also capture near the zenith, where a separate fracture
                             # may be visible beyond the upper treeline.
-                            subprocess.run(["xdotool","mousemove_relative","--","0","-240"],check=False)
+                            move_camera(-240)
                             time.sleep(0.3)
                             snap("sky-rift-zenith.png")
-                            horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.05)
-                            zenith_visible=verify_sky_pixels("sky-rift-zenith.png","center",.0045)
+                            horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.02,.30)
+                            zenith_visible=verify_sky_pixels("sky-rift-zenith.png","center",.02,.05)
                             sky_shot=horizon_visible and zenith_visible
                         finally:
-                            subprocess.run(["xdotool","mousemove_relative","--","0","440"],check=False)
+                            move_camera(440)
                             key("F1")
                         if sky_shot:
                             print("WORLD_CAPTURE: SKY_RIFT_HORIZON_AND_ZENITH_VERIFIED",flush=True)
