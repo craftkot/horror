@@ -351,7 +351,10 @@ def capture_test_world():
                 print("WORLD_CAPTURE: no terrain edit marker during capture window",flush=True)
                 snap("terrain-fracture-not-seen.png")
             if os.environ.get("BF_TEST_RESTORATION")=="1":
-                deadline_restore=time.time()+80
+                # A normal fracture can contain tens of thousands of snapshots.
+                # Keep the conservative per-tick restore budget; give it enough
+                # wall time instead of forcing chunks or increasing server load.
+                deadline_restore=time.time()+180
                 restored=False
                 while time.time()<deadline_restore and p.poll() is None:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
@@ -366,8 +369,10 @@ def capture_test_world():
                         restored=True
                         break
                     time.sleep(2)
-                snap("beacon-restoration-finished.png")
-                if not restored:
+                if restored:
+                    snap("beacon-restoration-finished.png")
+                else:
+                    snap("beacon-restoration-timeout.png")
                     print("WORLD_CAPTURE_FAIL: restoration did not finish in client",flush=True)
                     return False
                 if not restoration_shot:
