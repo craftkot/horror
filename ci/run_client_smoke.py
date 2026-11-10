@@ -53,8 +53,12 @@ options_file.write_text("\n".join(option_lines)+"\n",encoding="utf-8")
 print("WORLD_CAPTURE: raw mouse input disabled for deterministic X11 camera control",flush=True)
 # Xvfb pointer acceleration makes inverse relative moves drift away from the
 # server-aimed beacon. Disable acceleration so the same pixel delta is reversible.
-xset_result=subprocess.run(["xset","m","0","0"],check=False)
-print("WORLD_CAPTURE: X11 pointer acceleration disabled",xset_result.returncode==0,flush=True)
+xset_path=shutil.which("xset")
+xset_disabled=False
+if xset_path:
+    xset_result=subprocess.run([xset_path,"m","0","0"],check=False)
+    xset_disabled=xset_result.returncode==0
+print("WORLD_CAPTURE: X11 pointer acceleration disabled",xset_disabled,flush=True)
 
 cmd=minecraft_launcher_lib.command.get_minecraft_command(version_id,str(MC),opts)
 print("Command built; starting client under DISPLAY="+os.environ.get("DISPLAY",""),flush=True)
