@@ -772,7 +772,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: client did not render a bounded ground fissure mesh",flush=True)
                 return False
             continuity=re.search(
-                r"BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_STATS maxStep=([-+0-9.eE]+) steepStepsSkipped=(\\d+)",
+                r"BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_STATS maxStep=([-+0-9.eE]+) steepStepsSkipped=(\d+)",
                 log_after)
             if ("BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_VERIFIED maxStep=1.25" not in log_after
                     or not continuity or abs(float(continuity.group(1))-1.25)>1.0E-9):
