@@ -315,21 +315,33 @@ def capture_test_world():
             sky_capture_attempted=False
             def capture_terrain_fracture(logs):
                 nonlocal terrain_shot
-                # Capture only after the server emits a surface-break cue near an
-                # active player. The first edit can be dozens of blocks away and
-                # is not visual evidence from the player's actual viewpoint.
+                # Require the actual ground-fissure particle pass, not just the
+                # older vertical plume marker. The geometry helper rejects leaves,
+                # out-of-radius samples and chunks that are not already loaded.
                 if (terrain_shot
                         or "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in logs):
                     return
                 marker=re.search(
-                    r"BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_EMITTED x=(-?\d+) y=(-?\d+) z=(-?\d+)",
+                    r"BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_EMITTED x=(-?\\d+) y=(-?\\d+) z=(-?\\d+)",
                     logs)
-                if not marker:
+                geometry=re.search(
+                    r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples=(\\d+) heightmap=motion-blocking-no-leaves",
+                    logs)
+                if not marker or not geometry:
                     return
-                snap("terrain-fracture-near-player.png")
+                samples=int(geometry.group(1))
+                if samples<6:
+                    print("WORLD_CAPTURE_FAIL: too few loaded ground-fissure samples",samples,flush=True)
+                    return
+                key("F1")
+                try:
+                    time.sleep(0.15)
+                    snap("terrain-fracture-near-player.png")
+                finally:
+                    key("F1")
                 terrain_shot=True
-                print("WORLD_CAPTURE: player-visible surface fracture captured",
-                      *marker.groups(),flush=True)
+                print("WORLD_CAPTURE: player-visible ground fissure captured",
+                      *marker.groups(),"samples",samples,flush=True)
             def capture_sky_before_beacon():
                 nonlocal sky_shot,sky_capture_attempted
                 if sky_capture_attempted:
@@ -467,8 +479,8 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: no terrain edit marker during capture window",flush=True)
                 snap("terrain-fracture-not-seen.png")
                 return False
-            if not sparse_test and not terrain_shot:
-                print("WORLD_CAPTURE_FAIL: no player-visible surface fracture cue was captured",flush=True)
+            if not terrain_shot:
+                print("WORLD_CAPTURE_FAIL: no player-visible ground fissure was captured",flush=True)
                 snap("recovery-beacon-ground-context.png")
                 return False
             if os.environ.get("BF_TEST_RESTORATION")=="1":
@@ -500,8 +512,8 @@ def capture_test_world():
                 if not restoration_shot:
                     print("WORLD_CAPTURE_FAIL: restoration finished without an active gameplay screenshot",flush=True)
                     return False
-                if (os.environ.get("BF_TEST_SPARSE_RECOVERY")!="1" and not terrain_shot):
-                    print("WORLD_CAPTURE_FAIL: no player-visible surface fracture cue was captured",flush=True)
+                if not terrain_shot:
+                    print("WORLD_CAPTURE_FAIL: no player-visible ground fissure was captured",flush=True)
                     return False
                 print("WORLD_CAPTURE: restoration finished in integrated client",flush=True)
             log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
@@ -558,6 +570,13 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: canceled beacon break must preserve the fixture before permitted break consumes it",flush=True)
                     return False
                 print("WORLD_CAPTURE: POST_RESTORE_BEACON_BREAK_GUARD_VERIFIED (synthetic event)",flush=True)
+            fissure=re.search(
+                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples=(\\d+) heightmap=motion-blocking-no-leaves",
+                log_after)
+            if not fissure or int(fissure.group(1))<6:
+                print("WORLD_CAPTURE_FAIL: ground fissure geometry was not emitted with enough loaded samples",flush=True)
+                return False
+            print("WORLD_CAPTURE: bounded ground fissure geometry verified",fissure.group(1),flush=True)
             if not fracture_seen:
                 print("WORLD_CAPTURE_FAIL: ground fracture never removed a block",flush=True)
                 return False
