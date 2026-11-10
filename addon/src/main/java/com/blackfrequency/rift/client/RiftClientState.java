@@ -1,7 +1,9 @@
 package com.blackfrequency.rift.client;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
@@ -99,6 +101,8 @@ public final class RiftClientState {
         private static int cachedAnchorSurfaceY;
         private static List<GroundSegment> cachedSegments=List.of();
         private static int cachedArmCount;
+        private static int cachedSampledColumns;
+        private static int cachedColumnCacheHits;
         private static final int MIN_RENDERED_SEGMENTS=8;
         private static final int MIN_RENDERED_ARMS=2;
         private static boolean firstRenderLogged;
@@ -113,7 +117,7 @@ public final class RiftClientState {
         private record GroundPoint(double x,double y,double z) {}
         private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,
                 double phase,double taperA,double taperB) {}
-        private record GroundMesh(List<GroundSegment> segments,int activeArms) {}
+        private record GroundMesh(List<GroundSegment> segments,int activeArms,int sampledColumns,int cacheHits) {}
 
         private GroundRenderer() {}
 
@@ -177,11 +181,11 @@ public final class RiftClientState {
                 && !state.is(net.minecraft.world.level.block.Blocks.POWDER_SNOW);
         }
 
-        private static GroundPoint sampleGround(net.minecraft.client.multiplayer.ClientLevel level,
-                int blockX,int blockZ,double x,double z,int referenceY) {
+        private static double sampleGroundY(net.minecraft.client.multiplayer.ClientLevel level,
+                int blockX,int blockZ,int referenceY) {
             if(!level.getWorldBorder().isWithinBounds(
                     new BlockPos(blockX,level.getMinBuildHeight(),blockZ))
-                || !level.hasChunk(blockX>>4,blockZ>>4)) return null;
+                || !level.hasChunk(blockX>>4,blockZ>>4)) return Double.NaN;
 
             // A no-leaves heightmap can still select the top of a tall tree trunk.
             // Search a bounded window around the nearby player's actual height instead:
@@ -211,9 +215,13 @@ public final class RiftClientState {
                     ? Double.NaN
                     : coverCollision.max(Direction.Axis.Y);
                 double surfaceOffset=groundSurfaceOffset(supportHeight,coverHeight);
-                return new GroundPoint(x,candidateY-1+surfaceOffset+.035D,z);
+                return candidateY-1+surfaceOffset+.035D;
             }
-            return null;
+            return Double.NaN;
+        }
+
+        private static long columnKey(int blockX,int blockZ) {
+            return ((long)blockX<<32) | (blockZ & 0xffffffffL);
         }
 
         private static GroundMesh buildSegments(
@@ -221,6 +229,8 @@ public final class RiftClientState {
                 int referenceY) {
             verifyTaperProfile();
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
+            Map<Long,Double> surfaceYByColumn=new HashMap<>(ARM_COUNT*SEGMENTS_PER_ARM);
+            int cacheHits=0;
             int activeArms=0;
             for(int arm=0;arm<ARM_COUNT;arm++) {
                 int armStart=result.size();
@@ -239,7 +249,17 @@ public final class RiftClientState {
                         previous=null;
                         continue;
                     }
-                    GroundPoint current=sampleGround(level,blockX,blockZ,x,z,referenceY);
+                    long key=columnKey(blockX,blockZ);
+                    Double sampledY=surfaceYByColumn.get(key);
+                    if(sampledY==null) {
+                        sampledY=sampleGroundY(level,blockX,blockZ,referenceY);
+                        surfaceYByColumn.put(key,sampledY);
+                    } else {
+                        cacheHits++;
+                    }
+                    GroundPoint current=Double.isFinite(sampledY)
+                        ? new GroundPoint(x,sampledY,z)
+                        : null;
                     if(current==null) {
                         // Never bridge a visual seam across an unloaded chunk,
                         // unsupported column, liquid, or obstructed headroom.
@@ -260,7 +280,7 @@ public final class RiftClientState {
                 }
                 if(result.size()>armStart) activeArms++;
             }
-            return new GroundMesh(List.copyOf(result),activeArms);
+            return new GroundMesh(List.copyOf(result),activeArms,surfaceYByColumn.size(),cacheHits);
         }
 
         // Use the nearest actually sampled surface point for vertical culling.
@@ -331,6 +351,8 @@ public final class RiftClientState {
             cachedAnchorSurfaceY=0;
             cachedSegments=List.of();
             cachedArmCount=0;
+            cachedSampledColumns=0;
+            cachedColumnCacheHits=0;
             firstRenderLogged=false;
             pendingRenderLogged=false;
             renderEventLogged=false;
@@ -376,13 +398,15 @@ public final class RiftClientState {
                 GroundMesh mesh=buildSegments(level,worldAnchorX,worldAnchorZ,surfaceReferenceY);
                 cachedSegments=mesh.segments();
                 cachedArmCount=mesh.activeArms();
+                cachedSampledColumns=mesh.sampledColumns();
+                cachedColumnCacheHits=mesh.cacheHits();
                 cachedAnchorSurfaceY=estimateAnchorSurfaceY(cachedSegments,
                     worldAnchorX,worldAnchorZ,surfaceReferenceY);
                 if(!surfaceWindowLogged) {
                     surfaceWindowLogged=true;
                     com.mojang.logging.LogUtils.getLogger().info(
-                        "BLACK_FREQUENCY_GROUND_MESH_SURFACE_WINDOW referenceY={} topOffset=8 bottomOffset=32 segments={} arms={}",
-                        surfaceReferenceY,cachedSegments.size(),cachedArmCount);
+                        "BLACK_FREQUENCY_GROUND_MESH_SURFACE_WINDOW referenceY={} topOffset=8 bottomOffset=32 segments={} arms={} sampledColumns={} cacheHits={}",
+                        surfaceReferenceY,cachedSegments.size(),cachedArmCount,cachedSampledColumns,cachedColumnCacheHits);
                 }
                 cachedLevel=level;
                 cachedAnchorX=worldAnchorX;
@@ -465,8 +489,8 @@ public final class RiftClientState {
                 && cachedArmCount>=MIN_RENDERED_ARMS) {
                 firstRenderLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_GROUND_MESH_RENDERED segments={} arms={} anchorX={} anchorZ={}",
-                    cachedSegments.size(),cachedArmCount,worldAnchorX,worldAnchorZ);
+                    "BLACK_FREQUENCY_GROUND_MESH_RENDERED segments={} arms={} anchorX={} anchorZ={} sampledColumns={} cacheHits={}",
+                    cachedSegments.size(),cachedArmCount,worldAnchorX,worldAnchorZ,cachedSampledColumns,cachedColumnCacheHits);
             }
         }
     }
