@@ -504,7 +504,7 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: test-only rift impulse suppression was not observed",flush=True)
                     return False
                 if not re.search(
-                        r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=-?\\d+ y=-?\\d+ z=-?\\d+ support=solid fallDistance=0\\.0",
+                        r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=-?\d+ y=-?\d+ z=-?\d+ support=solid fallDistance=0\.0",
                         log_after):
                     print("WORLD_CAPTURE_FAIL: player was not reset onto a verified safe beacon pad",flush=True)
                     return False
