@@ -430,6 +430,17 @@ public final class RiftController {
 
     private record FissureTarget(double x,double y,double z,double distanceSquared) {}
 
+    private static boolean fissureRayChunksLoaded(ServerLevel level,BlockPos from,BlockPos to) {
+        int minChunkX=Math.min(from.getX(),to.getX())>>4;
+        int maxChunkX=Math.max(from.getX(),to.getX())>>4;
+        int minChunkZ=Math.min(from.getZ(),to.getZ())>>4;
+        int maxChunkZ=Math.max(from.getZ(),to.getZ())>>4;
+        for(int chunkX=minChunkX;chunkX<=maxChunkX;chunkX++)
+            for(int chunkZ=minChunkZ;chunkZ<=maxChunkZ;chunkZ++)
+                if(!level.hasChunk(chunkX,chunkZ)) return false;
+        return true;
+    }
+
     /**
      * Pick a real emitted fissure sample that the test player can see from the
      * verified beacon pad. A nearby surface hidden behind a cliff is not a
@@ -457,6 +468,8 @@ public final class RiftController {
                 if(surfaceY==Integer.MIN_VALUE || surfaceY>=level.getMaxBuildHeight()
                     || !isFissureGroundSupport(level.getBlockState(new BlockPos(blockX,surfaceY-1,blockZ))))
                     continue;
+                BlockPos rayTarget=new BlockPos(blockX,surfaceY,blockZ);
+                if(!fissureRayChunksLoaded(level,viewer.blockPosition(),rayTarget)) continue;
                 net.minecraft.world.phys.Vec3 target=new net.minecraft.world.phys.Vec3(
                     px,surfaceY+.10D,pz);
                 double vx=target.x-eye.x,vy=target.y-eye.y,vz=target.z-eye.z;
