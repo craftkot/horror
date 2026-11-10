@@ -366,9 +366,9 @@ def capture_test_world():
                     return
                 samples=int(geometry.group(1))
                 terrain_capture_attempted=True
-                if samples<6:
+                if samples<32:
                     terrain_capture_failed=True
-                    print("WORLD_CAPTURE_FAIL: too few loaded ground-fissure samples",samples,flush=True)
+                    print("WORLD_CAPTURE_FAIL: fewer than 32 of 48 loaded ground-fissure samples",samples,flush=True)
                     return
                 # The server log is emitted before the client necessarily applies
                 # its teleport packet. Wait for several client ticks before steering.
@@ -683,7 +683,7 @@ def capture_test_world():
             fissure=re.search(
                 r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples=(\d+) heightmap=motion-blocking-no-leaves",
                 log_after)
-            if not fissure or int(fissure.group(1))<6:
+            if not fissure or int(fissure.group(1))<32:
                 print("WORLD_CAPTURE_FAIL: ground fissure geometry was not emitted with enough loaded samples",flush=True)
                 return False
             print("WORLD_CAPTURE: bounded ground fissure geometry verified",fissure.group(1),flush=True)

@@ -38,6 +38,10 @@ public final class RiftController {
     private static final long TEST_STEP = Boolean.getBoolean("blackfrequency.ciTestMode")
         ? Math.max(1L, Math.min(2400L, Long.getLong("blackfrequency.ciTickStep", 2400L))) : 1L;
     private static final int RADIUS = 48;
+    // Double fissure sampling resolution without increasing motes per pass.
+    private static final int FISSURE_ARM_COUNT = 4;
+    private static final int FISSURE_SEGMENTS_PER_ARM = 12;
+    private static final double FISSURE_SAMPLE_SPACING = .39D;
     private static final int EDIT_BUDGET = 160;
     private static final int MAX_EDITS = 95000;
     // Only disposable CI worlds can stop after a small fracture to test
@@ -450,11 +454,11 @@ public final class RiftController {
     private static FissureEmission emitSurfaceFissure(ServerLevel level,State s,double phase) {
         int samples=0;
         double surfaceYTotal=0.0D;
-        for(int arm=0;arm<4;arm++) {
+        for(int arm=0;arm<FISSURE_ARM_COUNT;arm++) {
             double angle=arm*Math.PI/2.0;
-            for(int segment=1;segment<=6;segment++) {
-                double distance=segment*.78;
-                double bend=Math.sin(segment*1.7+arm*1.1)*.18;
+            for(int segment=1;segment<=FISSURE_SEGMENTS_PER_ARM;segment++) {
+                double distance=segment*FISSURE_SAMPLE_SPACING;
+                double bend=Math.sin(segment*.85D+arm*1.1D)*.18D;
                 double px=s.x+.5+Math.cos(angle)*distance-Math.sin(angle)*bend;
                 double pz=s.z+.5+Math.sin(angle)*distance+Math.cos(angle)*bend;
                 int blockX=(int)Math.floor(px);
@@ -508,11 +512,11 @@ public final class RiftController {
         if(viewer==null || !viewer.isAlive() || viewer.isRemoved()) return null;
         net.minecraft.world.phys.Vec3 eye=viewer.getEyePosition();
         FissureTarget best=null;
-        for(int arm=0;arm<4;arm++) {
+        for(int arm=0;arm<FISSURE_ARM_COUNT;arm++) {
             double angle=arm*Math.PI/2.0D;
-            for(int segment=1;segment<=6;segment++) {
-                double distance=segment*.78D;
-                double bend=Math.sin(segment*1.7D+arm*1.1D)*.18D;
+            for(int segment=1;segment<=FISSURE_SEGMENTS_PER_ARM;segment++) {
+                double distance=segment*FISSURE_SAMPLE_SPACING;
+                double bend=Math.sin(segment*.85D+arm*1.1D)*.18D;
                 double px=s.x+.5D+Math.cos(angle)*distance-Math.sin(angle)*bend;
                 double pz=s.z+.5D+Math.sin(angle)*distance+Math.cos(angle)*bend;
                 int blockX=(int)Math.floor(px),blockZ=(int)Math.floor(pz);
@@ -538,7 +542,7 @@ public final class RiftController {
                     net.minecraft.world.level.ClipContext.Fluid.NONE,viewer));
                 if(hit.getType()!=net.minecraft.world.phys.HitResult.Type.MISS) continue;
                 double distanceSquared=vx*vx+vy*vy+vz*vz;
-                if(best==null || distanceSquared<best.distanceSquared())
+                if(best==null || distanceSquared>best.distanceSquared())
                     best=new FissureTarget(px,target.y,pz,distanceSquared);
             }
         }
@@ -635,6 +639,18 @@ public final class RiftController {
         return false;
     }
 
+    private static void verifyFissureSamplingDensity() {
+        int samples=FISSURE_ARM_COUNT*FISSURE_SEGMENTS_PER_ARM;
+        double extent=FISSURE_SEGMENTS_PER_ARM*FISSURE_SAMPLE_SPACING;
+        if(FISSURE_ARM_COUNT!=4 || samples!=48
+            || !Double.isFinite(FISSURE_SAMPLE_SPACING)
+            || FISSURE_SAMPLE_SPACING<=0.0D || FISSURE_SAMPLE_SPACING>0.5D
+            || Math.abs(extent-4.68D)>1.0E-9D || extent>=RADIUS)
+            throw new IllegalStateException("CI fissure sampling density/radius regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples={} spacing={} extent={}",
+            samples,FISSURE_SAMPLE_SPACING,extent);
+    }
+
     private static void verifySurfaceFractureCue() {
         if(!shouldEmitSurfaceFractureCue(63,64,0,false,0)
             || shouldEmitSurfaceFractureCue(62,64,0,false,0)
@@ -650,6 +666,7 @@ public final class RiftController {
             || !isFissureGroundSupport(Blocks.DIRT.defaultBlockState()))
             throw new IllegalStateException("CI fissure ground filter regression");
         verifyFissureSurfaceParticleHeight();
+        verifyFissureSamplingDensity();
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_GROUND_FILTER_VERIFIED");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_RULE_VERIFIED");
     }
@@ -2052,7 +2069,7 @@ public final class RiftController {
                             ciFissureTargetUnavailableLogged=true;
                         }
                     } else {
-                        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x={} y={} z={} distanceSquared={}",
+                        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x={} y={} z={} distanceSquared={} selection=farthest",
                             visibleFissure.x(),visibleFissure.y(),visibleFissure.z(),visibleFissure.distanceSquared());
                     }
                     // Restore ordinary vanilla gravity only after the player is
