@@ -661,6 +661,10 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: no player-visible ground fissure was captured",flush=True)
                 snap("recovery-beacon-ground-context.png")
                 return False
+            final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+            if "BLACK_FREQUENCY_GROUND_MESH_SURFACE_HEIGHT_VERIFIED" not in final_log:
+                print("WORLD_CAPTURE_FAIL: collision-based ground surface self-check was not executed",flush=True)
+                return False
             if os.environ.get("BF_TEST_RESTORATION")=="1":
                 # A full fracture can reach 95,000 snapshots. Recovery restores at
                 # most 12 blocks per 20 TPS tick (~396s at the cap); leave headroom
