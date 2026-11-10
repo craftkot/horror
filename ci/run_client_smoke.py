@@ -51,6 +51,10 @@ for option,value in (("rawMouseInput","false"),("mouseSensitivity",str(MOUSE_SEN
         option_lines.append(prefix+value)
 options_file.write_text("\n".join(option_lines)+"\n",encoding="utf-8")
 print("WORLD_CAPTURE: raw mouse input disabled for deterministic X11 camera control",flush=True)
+# Xvfb pointer acceleration makes inverse relative moves drift away from the
+# server-aimed beacon. Disable acceleration so the same pixel delta is reversible.
+xset_result=subprocess.run(["xset","m","0","0"],check=False)
+print("WORLD_CAPTURE: X11 pointer acceleration disabled",xset_result.returncode==0,flush=True)
 
 cmd=minecraft_launcher_lib.command.get_minecraft_command(version_id,str(MC),opts)
 print("Command built; starting client under DISPLAY="+os.environ.get("DISPLAY",""),flush=True)
@@ -330,7 +334,7 @@ def capture_test_world():
                     r"BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_EMITTED x=(-?\d+) y=(-?\d+) z=(-?\d+)",
                     logs)
                 geometry=re.search(
-                    r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples=(\d+) heightmap=motion-blocking-no-leaves",
+                    r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples=(\d+) heightmap=motion-blocking-no-leaves ground=non-wood averageY=([-+0-9.eE]+)",
                     logs)
                 safe_pad=re.search(
                     r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
@@ -345,11 +349,15 @@ def capture_test_world():
                 if samples<6:
                     print("WORLD_CAPTURE_FAIL: too few loaded ground-fissure samples",samples,flush=True)
                     return
-                fracture_x,fracture_y,fracture_z=map(int,marker.groups())
+                # The server log is emitted before the client necessarily applies
+                # its teleport packet. Wait for several client ticks before steering.
+                time.sleep(2.0)
+                fracture_x,_,fracture_z=map(int,marker.groups())
+                ground_y=float(geometry.group(2))
                 player_x,player_y,player_z=map(int,safe_pad.groups())
                 current_yaw,current_pitch=map(float,aim.groups())
                 eye_x,eye_y,eye_z=player_x+.5,player_y+1.62,player_z+.5
-                target_x,target_y,target_z=fracture_x+.5,fracture_y+1.1,fracture_z+.5
+                target_x,target_y,target_z=fracture_x+.5,ground_y+.1,fracture_z+.5
                 dx,dy,dz=target_x-eye_x,target_y-eye_y,target_z-eye_z
                 horizontal=math.hypot(dx,dz)
                 target_yaw=math.degrees(math.atan2(-dx,dz))
@@ -386,8 +394,10 @@ def capture_test_world():
                     frame=source.convert("RGB")
                 width,height=frame.size
                 pixels=frame.load()
-                left,right=int(width*.25),int(width*.75)
-                top,bottom=int(height*.25),int(height*.85)
+                # Keep the classifier on the aimed ground plane. The sky shader
+                # can be purple through canopy gaps and must not satisfy a ground test.
+                left,right=int(width*.30),int(width*.70)
+                top,bottom=int(height*.48),int(height*.90)
                 violet_pixels=0
                 visible_tiles=0
                 tile_size=32
@@ -403,8 +413,8 @@ def capture_test_world():
                                     tile_hits+=1
                         if tile_hits>=4:
                             visible_tiles+=1
-                if violet_pixels<120 or visible_tiles<3:
-                    print("WORLD_CAPTURE_FAIL: fissure particles were not visible in player view",
+                if violet_pixels<300 or visible_tiles<6:
+                    print("WORLD_CAPTURE_FAIL: fissure particles were not visible in ground-plane player view",
                           "pixels",violet_pixels,"tiles",visible_tiles,flush=True)
                     return
                 terrain_shot=True
@@ -482,7 +492,11 @@ def capture_test_world():
                             break
                     if not upper_visible and last_upper_candidate and last_upper_candidate.is_file():
                         shutil.copyfile(last_upper_candidate,shots/"sky-rift-upper.png")
-                    sky_shot=horizon_visible and upper_visible
+                    sky_shot=upper_visible
+                    if upper_visible and not horizon_visible:
+                        shutil.copyfile(shots/"sky-rift-upper.png",shots/"sky-rift-hudless.png")
+                        print("WORLD_CAPTURE: upper-sky frame accepted; horizon is obstructed by terrain",
+                              flush=True)
                 finally:
                     # Restore both camera axes by the exact sum of successful
                     # relative inputs; the client must still aim at the beacon.

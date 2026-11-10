@@ -364,12 +364,36 @@ public final class RiftController {
         return beaconPos!=Long.MIN_VALUE && affected.removeIf(pos -> pos.asLong()==beaconPos);
     }
 
+    private record FissureEmission(int samples,double averageSurfaceY) {}
+
+    // A no-leaves heightmap can still stop on a tree trunk. Walk down a bounded
+    // distance to the first natural terrain support so the fissure is not drawn
+    // across the top of a canopy or wooden structure.
+    private static boolean isFissureGroundSupport(BlockState state) {
+        return state.blocksMotion()
+            && !state.is(net.minecraft.tags.BlockTags.LOGS)
+            && !state.is(net.minecraft.tags.BlockTags.LEAVES)
+            && !state.is(net.minecraft.tags.BlockTags.PLANKS);
+    }
+
+    private static int findFissureGroundY(ServerLevel level,int x,int z) {
+        if(!level.hasChunk(x>>4,z>>4)) return Integer.MIN_VALUE;
+        int y=level.getHeight(
+            net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,x,z);
+        int min=level.getMinBuildHeight();
+        for(int depth=0;depth<32 && y>min+1;depth++,y--) {
+            if(isFissureGroundSupport(level.getBlockState(new BlockPos(x,y-1,z)))) return y;
+        }
+        return Integer.MIN_VALUE;
+    }
+
     /**
      * Draw a denser six-segment, four-armed surface fissure without changing terrain.
      * Every sample is restricted to the rift radius and an already loaded chunk.
      */
-    private static int emitSurfaceFissure(ServerLevel level,State s,double phase) {
+    private static FissureEmission emitSurfaceFissure(ServerLevel level,State s,double phase) {
         int samples=0;
+        double surfaceYTotal=0.0D;
         for(int arm=0;arm<4;arm++) {
             double angle=arm*Math.PI/2.0;
             for(int segment=1;segment<=6;segment++) {
@@ -385,23 +409,22 @@ public final class RiftController {
                     || !level.getWorldBorder().isWithinBounds(
                         new BlockPos(blockX,level.getMinBuildHeight(),blockZ))
                     || !level.hasChunk(blockX>>4,blockZ>>4)) continue;
-                int surfaceY=level.getHeight(
-                    net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                    blockX,blockZ);
-                if(surfaceY<=level.getMinBuildHeight() || surfaceY>=level.getMaxBuildHeight()) continue;
+                int surfaceY=findFissureGroundY(level,blockX,blockZ);
+                if(surfaceY==Integer.MIN_VALUE || surfaceY>=level.getMaxBuildHeight()) continue;
                 BlockPos support=new BlockPos(blockX,surfaceY-1,blockZ);
-                if(!level.getBlockState(support).blocksMotion()) continue;
+                if(!isFissureGroundSupport(level.getBlockState(support))) continue;
                 double pulse=Math.sin(phase+segment*.8+arm*.6)*.05;
                 // Two close violet motes per point make the four arms read as a
-                // connected fissure instead of twelve isolated sparks.
+                // connected fissure instead of isolated sparks.
                 level.sendParticles(ParticleTypes.DRAGON_BREATH,
                     px,surfaceY+.10+pulse,pz,2,.045,.025,.045,.003);
                 if(segment==3 || segment==6) level.sendParticles(ParticleTypes.REVERSE_PORTAL,
                     px,surfaceY+.14+pulse,pz,1,.025,.02,.025,.004);
+                surfaceYTotal+=surfaceY;
                 samples++;
             }
         }
-        return samples;
+        return new FissureEmission(samples,samples==0?Double.NaN:surfaceYTotal/samples);
     }
 
     // Run after ordinary explosion modifiers: protect the fixture even when
@@ -502,6 +525,13 @@ public final class RiftController {
             || shouldEmitSurfaceFractureCue(63,64,4,false,1)
             || !shouldEmitSurfaceFractureCue(63,64,4,false,0))
             throw new IllegalStateException("CI surface fracture cue regression");
+        if(isFissureGroundSupport(Blocks.OAK_LOG.defaultBlockState())
+            || isFissureGroundSupport(Blocks.OAK_LEAVES.defaultBlockState())
+            || isFissureGroundSupport(Blocks.OAK_PLANKS.defaultBlockState())
+            || !isFissureGroundSupport(Blocks.STONE.defaultBlockState())
+            || !isFissureGroundSupport(Blocks.DIRT.defaultBlockState()))
+            throw new IllegalStateException("CI fissure ground filter regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_GROUND_FILTER_VERIFIED");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_RULE_VERIFIED");
     }
 
@@ -1569,10 +1599,10 @@ public final class RiftController {
                 // A low, jagged cross of violet particles reads as a ground crack.
                 // It is cosmetic only and samples terrain only in already loaded chunks.
                 if(s.finaleTicks%20==0) {
-                    int samples=emitSurfaceFissure(level,s,phase);
-                    if(CI_TEST && samples>0 && !s.ciSurfaceFissureLogged) {
-                        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples={} heightmap=motion-blocking-no-leaves",
-                            samples);
+                    FissureEmission emission=emitSurfaceFissure(level,s,phase);
+                    if(CI_TEST && emission.samples()>0 && !s.ciSurfaceFissureLogged) {
+                        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples={} heightmap=motion-blocking-no-leaves ground=non-wood averageY={}",
+                            emission.samples(),emission.averageSurfaceY());
                         s.ciSurfaceFissureLogged=true;
                     }
                 }
