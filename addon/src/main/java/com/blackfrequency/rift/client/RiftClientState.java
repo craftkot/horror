@@ -163,7 +163,10 @@ public final class RiftClientState {
                 BlockPos surfacePos=new BlockPos(blockX,candidateY,blockZ);
                 BlockState surface=level.getBlockState(surfacePos);
                 BlockState head=level.getBlockState(surfacePos.above());
-                if(surface.blocksMotion() || head.blocksMotion()
+                // The ribbon is coplanar with the ground. Canopy and low overhangs
+                // above it should occlude naturally through depth testing, not reject
+                // an otherwise valid ground sample in forests.
+                if(surface.blocksMotion()
                     || !surface.getFluidState().isEmpty() || !head.getFluidState().isEmpty()) continue;
 
                 double shapeHeight=surface.isAir()
