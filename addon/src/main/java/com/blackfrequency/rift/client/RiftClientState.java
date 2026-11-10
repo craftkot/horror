@@ -105,6 +105,11 @@ public final class RiftClientState {
         private static int cachedColumnCacheHits;
         private static final int MIN_RENDERED_SEGMENTS=8;
         private static final int MIN_RENDERED_ARMS=2;
+        // Do not turn a sharp cliff into a vertical translucent wall.
+        private static final double MAX_GROUND_SEGMENT_Y_DELTA=1.25D;
+        private static boolean continuityProfileLogged;
+        private static boolean continuityBuildLogged;
+        private static int cachedSteepStepBreaks;
         private static boolean firstRenderLogged;
         private static boolean pendingRenderLogged;
         private static boolean renderEventLogged;
@@ -117,7 +122,8 @@ public final class RiftClientState {
         private record GroundPoint(double x,double y,double z) {}
         private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,
                 double phase,double taperA,double taperB) {}
-        private record GroundMesh(List<GroundSegment> segments,int activeArms,int sampledColumns,int cacheHits) {}
+        private record GroundMesh(List<GroundSegment> segments,int activeArms,int sampledColumns,int cacheHits,
+                int steepStepBreaks) {}
 
         private GroundRenderer() {}
 
@@ -171,6 +177,29 @@ public final class RiftClientState {
             double supportTop=boundedShapeHeight(supportHeight,1.0D);
             if(!Double.isFinite(coverCollisionHeight)) return supportTop;
             return 1.0D+boundedShapeHeight(coverCollisionHeight,0.0D);
+        }
+
+        // Adjacent samples may be connected only when their real support heights
+        // describe a walkable terrain transition. Large jumps are a gap, not a wall.
+        private static boolean isContinuousGroundStep(double fromY,double toY) {
+            return Double.isFinite(fromY) && Double.isFinite(toY)
+                && Math.abs(toY-fromY)<=MAX_GROUND_SEGMENT_Y_DELTA;
+        }
+
+        private static void verifyGroundContinuityProfile() {
+            if(continuityProfileLogged) return;
+            boolean flat=isContinuousGroundStep(64.0D,64.0D);
+            boolean oneBlockStep=isContinuousGroundStep(64.0D,65.0D);
+            boolean snowStep=isContinuousGroundStep(64.0D,65.125D);
+            boolean cliff=isContinuousGroundStep(64.0D,65.5D);
+            boolean invalid=isContinuousGroundStep(64.0D,Double.NaN)
+                || isContinuousGroundStep(Double.POSITIVE_INFINITY,64.0D);
+            if(!(flat && oneBlockStep && snowStep && !cliff && !invalid))
+                throw new IllegalStateException("BLACK FREQUENCY ground mesh continuity regression");
+            continuityProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_VERIFIED maxStep={}",
+                MAX_GROUND_SEGMENT_Y_DELTA);
         }
 
         private static boolean isGroundSupport(BlockState state) {
@@ -228,10 +257,12 @@ public final class RiftClientState {
                 net.minecraft.client.multiplayer.ClientLevel level,int worldAnchorX,int worldAnchorZ,
                 int referenceY) {
             verifyTaperProfile();
+            verifyGroundContinuityProfile();
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
             Map<Long,Double> surfaceYByColumn=new HashMap<>(ARM_COUNT*SEGMENTS_PER_ARM);
             int cacheHits=0;
             int activeArms=0;
+            int steepStepBreaks=0;
             for(int arm=0;arm<ARM_COUNT;arm++) {
                 int armStart=result.size();
                 double angle=arm*Math.PI/2.0D;
@@ -271,16 +302,23 @@ public final class RiftClientState {
                         double tangentZ=current.z()-previous.z();
                         double length=Math.sqrt(tangentX*tangentX+tangentZ*tangentZ);
                         if(length>1.0E-5D) {
-                            result.add(new GroundSegment(previous,current,
-                                -tangentZ/length,tangentX/length,arm*1.7D+segment*.63D,
-                                endpointTaper(segment-1),endpointTaper(segment)));
+                            if(isContinuousGroundStep(previous.y(),current.y())) {
+                                result.add(new GroundSegment(previous,current,
+                                    -tangentZ/length,tangentX/length,arm*1.7D+segment*.63D,
+                                    endpointTaper(segment-1),endpointTaper(segment)));
+                            } else {
+                                // Start the next ribbon at the new surface point,
+                                // but leave this cliff transition visibly open.
+                                steepStepBreaks++;
+                            }
                         }
                     }
                     previous=current;
                 }
                 if(result.size()>armStart) activeArms++;
             }
-            return new GroundMesh(List.copyOf(result),activeArms,surfaceYByColumn.size(),cacheHits);
+            return new GroundMesh(List.copyOf(result),activeArms,surfaceYByColumn.size(),cacheHits,
+                steepStepBreaks);
         }
 
         // Use the nearest actually sampled surface point for vertical culling.
@@ -353,6 +391,9 @@ public final class RiftClientState {
             cachedArmCount=0;
             cachedSampledColumns=0;
             cachedColumnCacheHits=0;
+            cachedSteepStepBreaks=0;
+            continuityBuildLogged=false;
+            continuityProfileLogged=false;
             firstRenderLogged=false;
             pendingRenderLogged=false;
             renderEventLogged=false;
@@ -400,6 +441,7 @@ public final class RiftClientState {
                 cachedArmCount=mesh.activeArms();
                 cachedSampledColumns=mesh.sampledColumns();
                 cachedColumnCacheHits=mesh.cacheHits();
+                cachedSteepStepBreaks=mesh.steepStepBreaks();
                 cachedAnchorSurfaceY=estimateAnchorSurfaceY(cachedSegments,
                     worldAnchorX,worldAnchorZ,surfaceReferenceY);
                 if(!surfaceWindowLogged) {
@@ -412,6 +454,12 @@ public final class RiftClientState {
                 cachedAnchorX=worldAnchorX;
                 cachedAnchorZ=worldAnchorZ;
                 cachedTick=tick;
+                if(!continuityBuildLogged) {
+                    continuityBuildLogged=true;
+                    com.mojang.logging.LogUtils.getLogger().info(
+                        "BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_STATS maxStep={} steepStepsSkipped={}",
+                        MAX_GROUND_SEGMENT_Y_DELTA,cachedSteepStepBreaks);
+                }
             }
             if(cachedSegments.isEmpty()) {
                 if(!emptyMeshLogged) {
