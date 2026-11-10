@@ -413,6 +413,37 @@ public final class RiftController {
     }
 
     /**
+     * Keep fissure motes above partial surface blocks such as snow layers.
+     * The heightmap can stop at the solid support while a non-motion-blocking
+     * layer occupies the first air cell; spawning at +0.10 would hide particles
+     * inside that layer. Clamp shape height to one block and reject non-finite data.
+     */
+    private static double fissureSurfaceParticleY(int surfaceY,double shapeHeight) {
+        double boundedHeight=Double.isFinite(shapeHeight)
+            ? Math.max(0.0D,Math.min(1.0D,shapeHeight)) : 0.0D;
+        return surfaceY+boundedHeight+0.10D;
+    }
+
+    private static double fissureParticleY(ServerLevel level,int x,int surfaceY,int z) {
+        BlockPos surface=new BlockPos(x,surfaceY,z);
+        BlockState state=level.getBlockState(surface);
+        double shapeHeight=state.isAir() ? 0.0D
+            : state.getShape(level,surface).max(net.minecraft.core.Direction.Axis.Y);
+        return fissureSurfaceParticleY(surfaceY,shapeHeight);
+    }
+
+    private static void verifyFissureSurfaceParticleHeight() {
+        if(Math.abs(fissureSurfaceParticleY(65,0.0D)-65.10D)>1.0E-9D
+            || Math.abs(fissureSurfaceParticleY(65,0.125D)-65.225D)>1.0E-9D
+            || Math.abs(fissureSurfaceParticleY(65,1.0D)-66.10D)>1.0E-9D
+            || Math.abs(fissureSurfaceParticleY(65,Double.NaN)-65.10D)>1.0E-9D
+            || Math.abs(fissureSurfaceParticleY(65,Double.POSITIVE_INFINITY)-65.10D)>1.0E-9D
+            || Math.abs(fissureSurfaceParticleY(65,2.0D)-66.10D)>1.0E-9D)
+            throw new IllegalStateException("CI fissure surface particle height regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_PARTICLE_HEIGHT_VERIFIED");
+    }
+
+    /**
      * Draw a denser six-segment, four-armed surface fissure without changing terrain.
      * Every sample is restricted to the rift radius and an already loaded chunk.
      */
@@ -438,14 +469,16 @@ public final class RiftController {
                 if(surfaceY==Integer.MIN_VALUE || surfaceY>=level.getMaxBuildHeight()) continue;
                 BlockPos support=new BlockPos(blockX,surfaceY-1,blockZ);
                 if(!isFissureGroundSupport(level.getBlockState(support))) continue;
+                double particleY=fissureParticleY(level,blockX,surfaceY,blockZ);
                 double pulse=Math.sin(phase+segment*.8+arm*.6)*.05;
                 // Two close violet motes per point make the four arms read as a
-                // connected fissure instead of isolated sparks.
+                // connected fissure instead of isolated sparks. Offset above
+                // partial snow/plant shapes so the particles are not occluded.
                 level.sendParticles(ParticleTypes.DRAGON_BREATH,
-                    px,surfaceY+.10+pulse,pz,2,.045,.025,.045,.003);
+                    px,particleY+pulse,pz,2,.045,.025,.045,.003);
                 if(segment==3 || segment==6) level.sendParticles(ParticleTypes.REVERSE_PORTAL,
-                    px,surfaceY+.14+pulse,pz,1,.025,.02,.025,.004);
-                surfaceYTotal+=surfaceY;
+                    px,particleY+.04+pulse,pz,1,.025,.02,.025,.004);
+                surfaceYTotal+=particleY;
                 samples++;
             }
         }
@@ -495,7 +528,7 @@ public final class RiftController {
                 BlockPos rayTarget=new BlockPos(blockX,surfaceY,blockZ);
                 if(!fissureRayChunksLoaded(level,viewer.blockPosition(),rayTarget)) continue;
                 net.minecraft.world.phys.Vec3 target=new net.minecraft.world.phys.Vec3(
-                    px,surfaceY+.10D,pz);
+                    px,fissureParticleY(level,blockX,surfaceY,blockZ),pz);
                 double vx=target.x-eye.x,vy=target.y-eye.y,vz=target.z-eye.z;
                 double horizontalSquared=vx*vx+vz*vz;
                 if(horizontalSquared<1.0D || horizontalSquared>36.0D || Math.abs(vy)>4.0D)
@@ -616,6 +649,7 @@ public final class RiftController {
             || !isFissureGroundSupport(Blocks.STONE.defaultBlockState())
             || !isFissureGroundSupport(Blocks.DIRT.defaultBlockState()))
             throw new IllegalStateException("CI fissure ground filter regression");
+        verifyFissureSurfaceParticleHeight();
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_GROUND_FILTER_VERIFIED");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_RULE_VERIFIED");
     }
@@ -834,6 +868,50 @@ public final class RiftController {
             && Double.isFinite(distanceSquared) && distanceSquared>=0.0D && distanceSquared<=64.0D;
     }
 
+    private static boolean mayRecoverCiBeaconAimAfterMiss(
+            boolean ciTest,boolean playerBeaconTest,boolean naturalBeaconTest,
+            boolean started,boolean restoring,boolean restored,boolean hasPendingSnapshots,
+            net.minecraft.world.InteractionHand hand,boolean alive,boolean removed,boolean spectator,
+            double distanceSquared,boolean canceled,
+            net.minecraftforge.eventbus.api.Event.Result useBlock,
+            net.minecraftforge.eventbus.api.Event.Result useItem) {
+        return ciTest && playerBeaconTest && naturalBeaconTest && started
+            && !restoring && !restored && hasPendingSnapshots && !removed
+            && mayActivateBeacon(hand,alive,spectator,distanceSquared,canceled,useBlock,useItem);
+    }
+
+    private static boolean recoverCiBeaconAimAfterMiss(ServerLevel level,
+            PlayerInteractEvent.RightClickBlock event,State s,BlockPos clicked) {
+        if(s.naturalBeaconPos==Long.MIN_VALUE
+            || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return false;
+        BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
+        if(!level.hasChunkAt(beacon) || !level.getWorldBorder().isWithinBounds(beacon)
+            || !level.getBlockState(beacon).is(Blocks.BEACON)
+            || !beaconWithinAnchor(beacon.getX(),beacon.getZ(),s.x,s.z)) return false;
+        double distanceSquared=player.distanceToSqr(beacon.getX()+0.5D,
+            beacon.getY()+0.5D,beacon.getZ()+0.5D);
+        if(!mayRecoverCiBeaconAimAfterMiss(CI_TEST,
+            Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest"),
+            Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest"),
+            s.started,s.restoring,s.restored,!s.snapshots.isEmpty(),
+            event.getHand(),player.isAlive(),player.isRemoved(),player.isSpectator(),
+            distanceSquared,event.isCanceled(),event.getUseBlock(),event.getUseItem())) return false;
+        // A real client click may land on a nearby pad block after camera
+        // automation. Re-aim only this disposable CI player at the physical
+        // beacon; the next mouse click must still trigger the normal block event.
+        player.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,
+            net.minecraft.world.phys.Vec3.atCenterOf(beacon));
+        player.connection.teleport(player.getX(),player.getY(),player.getZ(),
+            player.getYRot(),player.getXRot());
+        player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+        player.fallDistance=0.0F;
+        event.setCanceled(true);
+        event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_AIM_RECOVERED_AFTER_MISS clicked={} target={}",
+            clicked,beacon);
+        return true;
+    }
+
     private static void verifyBeaconInteractionGuard() {
         var main=net.minecraft.world.InteractionHand.MAIN_HAND;
         var off=net.minecraft.world.InteractionHand.OFF_HAND;
@@ -848,6 +926,26 @@ public final class RiftController {
             || mayActivateBeacon(main,true,false,-0.001D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
             || !mayActivateBeacon(main,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT))
             throw new IllegalStateException("CI beacon interaction guard regression");
+        if(!mayRecoverCiBeaconAimAfterMiss(true,true,true,true,false,false,true,
+                main,true,false,false,64.0D,false,
+                net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayRecoverCiBeaconAimAfterMiss(false,true,true,true,false,false,true,
+                main,true,false,false,0.0D,false,
+                net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayRecoverCiBeaconAimAfterMiss(true,true,true,true,true,false,true,
+                main,true,false,false,0.0D,false,
+                net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayRecoverCiBeaconAimAfterMiss(true,true,true,true,false,false,true,
+                off,true,false,false,0.0D,false,
+                net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayRecoverCiBeaconAimAfterMiss(true,true,true,true,false,false,true,
+                main,true,false,false,0.0D,true,
+                net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayRecoverCiBeaconAimAfterMiss(true,true,true,true,false,false,true,
+                main,true,false,false,0.0D,false,
+                net.minecraftforge.eventbus.api.Event.Result.DENY,net.minecraftforge.eventbus.api.Event.Result.DEFAULT))
+            throw new IllegalStateException("CI beacon aim recovery guard regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_AIM_RECOVERY_GUARD_VERIFIED");
         if(mayActivateBeacon(main,true,false,0.0D,true,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
             || mayActivateBeacon(main,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DENY,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
             || !mayActivateBeacon(main,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.ALLOW,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
@@ -883,7 +981,20 @@ public final class RiftController {
         BlockPos pos=event.getPos();
         // Ignore unloaded positions before querying block state: an event from
         // another mod must not cause recovery logic to load a chunk.
-        if(!level.hasChunkAt(pos) || !level.getBlockState(pos).is(Blocks.BEACON)) return;
+        if(!level.hasChunkAt(pos)) return;
+        if(!level.getBlockState(pos).is(Blocks.BEACON)) {
+            // The deterministic client smoke uses real mouse input. If its
+            // camera lands on the adjacent loaded pad, correct the test player
+            // once through the normal server event path instead of pretending
+            // the click succeeded or repeatedly clicking the wrong block.
+            if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest")
+                && Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest")) {
+                State testState=level.getDataStorage().computeIfAbsent(
+                    State::load,State::new,"blackfrequency_finale");
+                if(recoverCiBeaconAimAfterMiss(level,event,testState,pos)) return;
+            }
+            return;
+        }
         // A player-owned beacon must obey the same active border restriction
         // as generated recovery beacons; do not start restoration from outside.
         if(!level.getWorldBorder().isWithinBounds(pos)) return;

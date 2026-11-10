@@ -252,7 +252,8 @@ def capture_test_world():
         # the physical beacon is consumed by the player's right-click.
         if not terrain_shot:
             return
-        if now-beacon_ready_at<1.5 or now-last_beacon_attempt<2.0 or beacon_attempts>=8:
+        retry_delay=0.75 if "BLACK_FREQUENCY_TEST PLAYER_BEACON_AIM_RECOVERED_AFTER_MISS" in logs else 2.0
+        if now-beacon_ready_at<1.5 or now-last_beacon_attempt<retry_delay or beacon_attempts>=8:
             return
         if beacon_attempts==0:
             snap("beacon-before-right-click.png")
