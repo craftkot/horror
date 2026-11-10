@@ -146,9 +146,17 @@ def capture_test_world():
     def is_rift_violet_pixel(r,g,b):
         # Reject pale lavender UI/death-screen skies; the rift must be saturated violet.
         return r>55 and b>80 and b>g*1.5 and r>g*1.5 and b-r<150
-    # Regression samples are taken from the real Sparse death screen and Normal rift frame.
-    if is_rift_violet_pixel(142,127,155) or not is_rift_violet_pixel(134,44,150):
-        raise RuntimeError("BLACK FREQUENCY sky pixel classifier regression")
+    def is_ground_fissure_pixel(r,g,b):
+        # Ground particles are brighter than the dark sky shader behind canopy gaps.
+        return r>180 and b>180 and g<85 and r>g*1.5 and b>g*1.5 and abs(r-b)<100
+    # Samples come from real artifacts: pale death-screen lavender, a dark sky leak,
+    # and a bright Dragon Breath mote on the ground.
+    if (is_rift_violet_pixel(142,127,155)
+            or not is_rift_violet_pixel(134,44,150)
+            or is_ground_fissure_pixel(142,127,155)
+            or is_ground_fissure_pixel(134,44,150)
+            or not is_ground_fissure_pixel(201,66,214)):
+        raise RuntimeError("BLACK FREQUENCY pixel classifier regression")
     print("WORLD_CAPTURE: saturated violet pixel classifier verified",flush=True)
 
     def verify_sky_pixels(name, region, minimum, max_green=None):
@@ -325,14 +333,17 @@ def capture_test_world():
             # initial frame series ends, so waiting until afterward misses it.
             restoration_shot=False
             terrain_shot=False
+            terrain_capture_attempted=False
+            terrain_capture_failed=False
             sky_shot=False
             sky_capture_attempted=False
             def capture_terrain_fracture(logs):
-                nonlocal terrain_shot
+                nonlocal terrain_shot,terrain_capture_attempted,terrain_capture_failed
                 # A server particle marker alone is not proof that the client can
                 # see the crack. Wait for the safe-pad teleport, then aim at the
                 # original surface coordinates before taking the screenshot.
-                if terrain_shot or "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in logs:
+                if (terrain_shot or terrain_capture_attempted or terrain_capture_failed
+                        or "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in logs):
                     return
                 marker=re.search(
                     r"BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_EMITTED x=(-?\d+) y=(-?\d+) z=(-?\d+)",
@@ -350,7 +361,9 @@ def capture_test_world():
                         or "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs):
                     return
                 samples=int(geometry.group(1))
+                terrain_capture_attempted=True
                 if samples<6:
+                    terrain_capture_failed=True
                     print("WORLD_CAPTURE_FAIL: too few loaded ground-fissure samples",samples,flush=True)
                     return
                 # The server log is emitted before the client necessarily applies
@@ -390,6 +403,7 @@ def capture_test_world():
                             restored=False
                     key("F1")
                 if not restored:
+                    terrain_capture_failed=True
                     print("WORLD_CAPTURE_FAIL: fissure camera could not be restored exactly",flush=True)
                     return
                 from PIL import Image
@@ -411,14 +425,14 @@ def capture_test_world():
                         for y in range(tile_y,min(tile_y+tile_size,bottom)):
                             for x in range(tile_x,min(tile_x+tile_size,right)):
                                 r,g,b=pixels[x,y]
-                                if (r>150 and b>150 and g<100 and r>g*1.5
-                                        and b>g*1.5 and abs(r-b)<130):
+                                if is_ground_fissure_pixel(r,g,b):
                                     violet_pixels+=1
                                     tile_hits+=1
                         if tile_hits>=4:
                             visible_tiles+=1
-                if violet_pixels<300 or visible_tiles<6:
-                    print("WORLD_CAPTURE_FAIL: fissure particles were not visible in ground-plane player view",
+                if violet_pixels<180 or visible_tiles<4:
+                    terrain_capture_failed=True
+                    print("WORLD_CAPTURE_FAIL: bright fissure particles were not visible in ground-plane player view",
                           "pixels",violet_pixels,"tiles",visible_tiles,flush=True)
                     return
                 terrain_shot=True
@@ -532,6 +546,8 @@ def capture_test_world():
                 if os.environ.get("BF_TEST_RESTORATION")=="1" and not restoration_shot:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     capture_terrain_fracture(current)
+                    if terrain_capture_failed:
+                        break
                     try_beacon_click(current)
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     if ("BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current
@@ -552,6 +568,8 @@ def capture_test_world():
             while time.time()<fracture_deadline and p.poll() is None:
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                 capture_terrain_fracture(current)
+                if terrain_capture_failed:
+                    break
                 try_beacon_click(current)
                 capture_sky_before_beacon()
                 if "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in current and not fracture_seen:
