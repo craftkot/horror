@@ -147,15 +147,21 @@ def capture_test_world():
         # Reject pale lavender UI/death-screen skies; the rift must be saturated violet.
         return r>55 and b>80 and b>g*1.5 and r>g*1.5 and b-r<150
     def is_ground_fissure_pixel(r,g,b):
-        # Ground particles are brighter than the dark sky shader behind canopy gaps.
+        # Legacy particles are brighter than the dark sky shader behind canopy gaps.
         return r>180 and b>180 and g<85 and r>g*1.5 and b>g*1.5 and abs(r-b)<100
+    def is_ground_mesh_pixel(r,g,b):
+        # The new mesh uses a blue-heavy violet edge, unlike magenta particle sprites.
+        return r>145 and b>215 and b-r>28 and g<100
     # Samples come from real artifacts: pale death-screen lavender, a dark sky leak,
     # and a bright Dragon Breath mote on the ground.
     if (is_rift_violet_pixel(142,127,155)
             or not is_rift_violet_pixel(134,44,150)
             or is_ground_fissure_pixel(142,127,155)
             or is_ground_fissure_pixel(134,44,150)
-            or not is_ground_fissure_pixel(201,66,214)):
+            or not is_ground_fissure_pixel(201,66,214)
+            or not is_ground_mesh_pixel(194,58,238)
+            or is_ground_mesh_pixel(201,66,214)
+            or is_ground_mesh_pixel(142,127,155)):
         raise RuntimeError("BLACK FREQUENCY pixel classifier regression")
     print("WORLD_CAPTURE: saturated violet pixel classifier verified",flush=True)
 
@@ -361,13 +367,23 @@ def capture_test_world():
                 aim=re.search(
                     r"BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)",
                     logs)
-                if (not marker or not particles or not target or not safe_pad or not aim
+                mesh=re.search(
+                    r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+)",
+                    logs)
+                if (not marker or not particles or not target or not safe_pad or not aim or not mesh
                         or "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs):
                     return
                 samples=int(particles.group(1))
                 dragon_breath=int(particles.group(2))
                 reverse_portal=int(particles.group(3))
                 total_particles=int(particles.group(4))
+                mesh_segments=int(mesh.group(1))
+                mesh_anchor_x,mesh_anchor_z=map(int,mesh.groups()[1:])
+                if mesh_segments<24:
+                    terrain_capture_failed=True
+                    print("WORLD_CAPTURE_FAIL: client ground mesh has fewer than 24 connected surface segments",
+                          mesh_segments,flush=True)
+                    return
                 if (dragon_breath+reverse_portal!=samples or reverse_portal!=8
                         or total_particles!=samples+8):
                     terrain_capture_failed=True
@@ -431,27 +447,42 @@ def capture_test_world():
                 top,bottom=int(height*.48),int(height*.90)
                 violet_pixels=0
                 visible_tiles=0
+                mesh_pixels=0
+                mesh_tiles=0
                 tile_size=32
                 for tile_y in range(top,bottom,tile_size):
                     for tile_x in range(left,right,tile_size):
                         tile_hits=0
+                        mesh_tile_hits=0
                         for y in range(tile_y,min(tile_y+tile_size,bottom)):
                             for x in range(tile_x,min(tile_x+tile_size,right)):
                                 r,g,b=pixels[x,y]
                                 if is_ground_fissure_pixel(r,g,b):
                                     violet_pixels+=1
                                     tile_hits+=1
+                                if is_ground_mesh_pixel(r,g,b):
+                                    mesh_pixels+=1
+                                    mesh_tile_hits+=1
                         if tile_hits>=4:
                             visible_tiles+=1
+                        if mesh_tile_hits>=3:
+                            mesh_tiles+=1
                 if violet_pixels<180 or visible_tiles<4:
                     terrain_capture_failed=True
                     print("WORLD_CAPTURE_FAIL: bright fissure particles were not visible in ground-plane player view",
                           "pixels",violet_pixels,"tiles",visible_tiles,flush=True)
                     return
+                if mesh_pixels<24 or mesh_tiles<2:
+                    terrain_capture_failed=True
+                    print("WORLD_CAPTURE_FAIL: client ground mesh was not visible as a continuous blue-violet seam",
+                          "meshPixels",mesh_pixels,"meshTiles",mesh_tiles,flush=True)
+                    return
                 terrain_shot=True
-                print("WORLD_CAPTURE: visible ground fissure captured",
+                print("WORLD_CAPTURE: visible ground fissure mesh captured",
                       *marker.groups(),"target",*target.groups(),"samples",samples,
-                      "pixels",violet_pixels,"tiles",visible_tiles,
+                      "meshSegments",mesh_segments,"meshAnchor",mesh_anchor_x,mesh_anchor_z,
+                      "meshPixels",mesh_pixels,"meshTiles",mesh_tiles,
+                      "particlePixels",violet_pixels,"particleTiles",visible_tiles,
                       "aim",round(target_yaw,1),round(target_pitch,1),flush=True)
             def capture_sky_before_beacon():
                 nonlocal sky_shot,sky_capture_attempted
@@ -692,6 +723,12 @@ def capture_test_world():
             fissure=re.search(
                 r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) dragonBreath=(\d+) reversePortal=(\d+) total=(\d+) heightmap=motion-blocking-no-leaves",
                 log_after)
+            ground_mesh=re.search(
+                r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+)",
+                log_after)
+            if not ground_mesh or int(ground_mesh.group(1))<24:
+                print("WORLD_CAPTURE_FAIL: client did not render a bounded ground fissure mesh",flush=True)
+                return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples=48 spacing=0.39 extent=4.68" not in log_after:
                 print("WORLD_CAPTURE_FAIL: fissure density/radius self-check was not executed",flush=True)
                 return False
