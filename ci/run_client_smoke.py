@@ -470,9 +470,9 @@ def capture_test_world():
                 if "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in current and not fracture_seen:
                     fracture_seen=True
                     print("WORLD_CAPTURE: first physical terrain fracture confirmed",flush=True)
-                # Normal must keep observing until the local surface cue is on-screen;
-                # Sparse has no nearby-cue requirement and can proceed after its first edit.
-                if fracture_seen and (sparse_test or terrain_shot):
+                # Both modes must wait for the bounded fissure particle pass and
+                # its actual player-view capture before the recovery beacon is clicked.
+                if fracture_seen and terrain_shot:
                     break
                 time.sleep(0.1)
             if not fracture_seen:
