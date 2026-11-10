@@ -511,7 +511,7 @@ def capture_test_world():
                 if "BLACK_FREQUENCY_TEST PLAYER_VANILLA_FALL_RESTORED_AFTER_SAFE_PAD" not in log_after:
                     print("WORLD_CAPTURE_FAIL: vanilla fall was not restored after a verified safe pad",flush=True)
                     return False
-                if re.search(r"\\bEHTID_CI fell from a high place\\b",log_after):
+                if re.search(r"\bEHTID_CI fell from a high place\b",log_after):
                     print("WORLD_CAPTURE_FAIL: test player died before beacon recovery",flush=True)
                     return False
                 if not re.search(
