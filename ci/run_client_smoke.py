@@ -351,13 +351,16 @@ def capture_test_world():
                 geometry=re.search(
                     r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples=(\d+) heightmap=motion-blocking-no-leaves ground=non-wood averageY=([-+0-9.eE]+)",
                     logs)
+                target=re.search(
+                    r"BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x=([-+0-9.eE]+) y=([-+0-9.eE]+) z=([-+0-9.eE]+) distanceSquared=([-+0-9.eE]+)",
+                    logs)
                 safe_pad=re.search(
                     r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
                     logs)
                 aim=re.search(
                     r"BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)",
                     logs)
-                if (not marker or not geometry or not safe_pad or not aim
+                if (not marker or not geometry or not target or not safe_pad or not aim
                         or "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs):
                     return
                 samples=int(geometry.group(1))
@@ -369,12 +372,12 @@ def capture_test_world():
                 # The server log is emitted before the client necessarily applies
                 # its teleport packet. Wait for several client ticks before steering.
                 time.sleep(2.0)
-                fracture_x,_,fracture_z=map(int,marker.groups())
-                ground_y=float(geometry.group(2))
+                # Aim at a server-verified emitted sample with an unobstructed
+                # ray from the safe pad, not at the anchor's possibly hidden cliff face.
+                target_x,target_y,target_z=map(float,target.groups()[:3])
                 player_x,player_y,player_z=map(int,safe_pad.groups())
                 current_yaw,current_pitch=map(float,aim.groups())
                 eye_x,eye_y,eye_z=player_x+.5,player_y+1.62,player_z+.5
-                target_x,target_y,target_z=fracture_x+.5,ground_y+.1,fracture_z+.5
                 dx,dy,dz=target_x-eye_x,target_y-eye_y,target_z-eye_z
                 horizontal=math.hypot(dx,dz)
                 target_yaw=math.degrees(math.atan2(-dx,dz))
@@ -437,8 +440,9 @@ def capture_test_world():
                     return
                 terrain_shot=True
                 print("WORLD_CAPTURE: visible ground fissure captured",
-                      *marker.groups(),"samples",samples,"pixels",violet_pixels,
-                      "tiles",visible_tiles,"aim",round(target_yaw,1),round(target_pitch,1),flush=True)
+                      *marker.groups(),"target",*target.groups(),"samples",samples,
+                      "pixels",violet_pixels,"tiles",visible_tiles,
+                      "aim",round(target_yaw,1),round(target_pitch,1),flush=True)
             def capture_sky_before_beacon():
                 nonlocal sky_shot,sky_capture_attempted
                 if sky_capture_attempted:
