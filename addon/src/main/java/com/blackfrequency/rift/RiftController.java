@@ -539,7 +539,7 @@ public final class RiftController {
                 if(hit.getType()!=net.minecraft.world.phys.HitResult.Type.MISS) continue;
                 double distanceSquared=vx*vx+vy*vy+vz*vz;
                 if(best==null || distanceSquared<best.distanceSquared())
-                    best=new FissureTarget(px,surfaceY+.10D,pz,distanceSquared);
+                    best=new FissureTarget(px,target.y,pz,distanceSquared);
             }
         }
         return best;
