@@ -98,6 +98,7 @@ public final class RiftClientState {
         private static long cachedTick=Long.MIN_VALUE;
         private static int cachedAnchorX=Integer.MIN_VALUE;
         private static int cachedAnchorZ=Integer.MIN_VALUE;
+        private static int cachedAnchorSurfaceY;
         private static List<GroundSegment> cachedSegments=List.of();
         private static boolean firstRenderLogged;
 
@@ -210,6 +211,7 @@ public final class RiftClientState {
             cachedTick=Long.MIN_VALUE;
             cachedAnchorX=Integer.MIN_VALUE;
             cachedAnchorZ=Integer.MIN_VALUE;
+            cachedAnchorSurfaceY=0;
             cachedSegments=List.of();
             firstRenderLogged=false;
         }
@@ -228,29 +230,28 @@ public final class RiftClientState {
             int worldAnchorZ=anchorZ();
             long dx=(long)player.blockPosition().getX()-worldAnchorX;
             long dz=(long)player.blockPosition().getZ()-worldAnchorZ;
+            long horizontalDistanceSquared=dx*dx+dz*dz;
+            if(horizontalDistanceSquared>64L*64L) return;
             if(!level.getWorldBorder().isWithinBounds(
                     new BlockPos(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ))
                 || !level.hasChunk(worldAnchorX>>4,worldAnchorZ>>4)) {
-                cachedSegments=List.of();
-                return;
-            }
-            int anchorSurfaceY=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                worldAnchorX,worldAnchorZ);
-            double dy=player.getY()-anchorSurfaceY;
-            if(dx*dx+dz*dz+dy*dy>64.0D*64.0D) {
-                cachedSegments=List.of();
+                clearCache();
                 return;
             }
 
             long tick=level.getGameTime();
             if(level!=cachedLevel || worldAnchorX!=cachedAnchorX || worldAnchorZ!=cachedAnchorZ
                 || cachedTick==Long.MIN_VALUE || tick<cachedTick || tick-cachedTick>=REBUILD_INTERVAL) {
+                cachedAnchorSurfaceY=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    worldAnchorX,worldAnchorZ);
                 cachedSegments=buildSegments(level,worldAnchorX,worldAnchorZ);
                 cachedLevel=level;
                 cachedAnchorX=worldAnchorX;
                 cachedAnchorZ=worldAnchorZ;
                 cachedTick=tick;
             }
+            double dy=player.getY()-cachedAnchorSurfaceY;
+            if(horizontalDistanceSquared+dy*dy>64.0D*64.0D) return;
             if(cachedSegments.isEmpty()) return;
 
             Matrix4f matrix=event.getPoseStack().last().pose();
