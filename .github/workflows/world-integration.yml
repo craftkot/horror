@@ -64,7 +64,7 @@ jobs:
           match=re.search(r'BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x=(-?\d+) y=(-?\d+) z=(-?\d+) surfaceY=(-?\d+) scanOrder=([a-z-]+)',log)
           assert match, 'First fracture did not report its surface-first scan position'
           x,y,z,surface_y,order=match.groups()
-          assert order=='surface-first', f'Unexpected fracture scan order: {order}'
+          assert order=='surface-first-center-out', f'New-world fracture must start at the anchor: {order}'
           assert int(surface_y)-4 <= int(y) < int(surface_y), f'First edit was not near surface: {y=} {surface_y=}'
           print(f'SURFACE_FIRST_FRACTURE_VERIFIED x={x} y={y} z={z} surfaceY={surface_y}')
           PY
