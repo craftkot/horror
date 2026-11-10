@@ -290,13 +290,23 @@ public final class RiftController {
             ListTag saved=n.getList("snapshots",Tag.TAG_COMPOUND);
             int snapshotCount=boundedSnapshotCount(saved.size());
             for(int i=0;i<snapshotCount;i++) s.snapshots.add(saved.getCompound(i));
+            boolean snapshotStateRepaired=false;
+            if(snapshotCount>s.edits) {
+                // The pending snapshots are authoritative when a damaged save
+                // has a smaller edit counter; keep restoration accounting consistent.
+                LOGGER.warn("BLACK FREQUENCY: saved edit counter {} is below {} recovery snapshots; raising it",
+                    s.edits,snapshotCount);
+                s.edits=snapshotCount;
+                snapshotStateRepaired=true;
+            }
             if(saved.size()>snapshotCount) {
                 // Keep the oldest entries: fracture edits are recorded from the
                 // anchor outward, so this preserves the recovery core first.
                 LOGGER.warn("BLACK FREQUENCY: saved snapshot list has {} entries; retaining the first {} and ignoring {} excess entries",
                     saved.size(),snapshotCount,saved.size()-snapshotCount);
-                s.setDirty();
+                snapshotStateRepaired=true;
             }
+            if(snapshotStateRepaired) s.setDirty();
             // A damaged or older save must not crash the server by indexing past
             // the persisted snapshot list. Never invent missing terrain data.
             if(s.restoring) {
@@ -748,6 +758,7 @@ public final class RiftController {
         oversizedSave.put("snapshots",oversizedSnapshots);
         State boundedSnapshots=State.load(oversizedSave);
         if(boundedSnapshots.snapshots.size()!=MAX_EDITS
+            || boundedSnapshots.edits!=MAX_EDITS
             || boundedSnapshots.restoreIndex!=MAX_EDITS-1
             || boundedSnapshots.restoreScan!=MAX_EDITS-1
             || boundedSnapshots.snapshots.get(0).getLong("pos")!=new BlockPos(0,64,0).asLong()
