@@ -1443,7 +1443,7 @@ public final class RiftController {
                 // Otherwise a random high spawn can kill the player before the first right-click.
                 if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest")) {
                     if(!ciPlayerGravitySuppressionLogged) {
-                        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_GRAVITY_SUPPRESSED_FOR_BEACON_TEST");
+                        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_RIFT_IMPULSES_SUPPRESSED_FOR_BEACON_TEST");
                         ciPlayerGravitySuppressionLogged=true;
                     }
                     continue;
@@ -1712,6 +1712,21 @@ public final class RiftController {
                     demoPlayer.connection.teleport(demoPlayer.getX(),demoPlayer.getY(),demoPlayer.getZ(),
                         demoPlayer.getYRot(),demoPlayer.getXRot());
                     demoPlayer.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+                    // teleportTo changes position but does not clear accumulated fall damage.
+                    // The player may already be falling because the fracture removed the
+                    // original spawn column; clear that history before the first pad tick.
+                    demoPlayer.fallDistance=0.0F;
+                    BlockPos playerSupport=demoPlayer.blockPosition().below();
+                    if(!level.hasChunk(playerSupport.getX()>>4,playerSupport.getZ()>>4)
+                        || !level.getBlockState(playerSupport).blocksMotion()) {
+                        LOGGER.warn("BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_UNAVAILABLE x={} y={} z={}",
+                            playerSupport.getX(),playerSupport.getY(),playerSupport.getZ());
+                        return;
+                    }
+                    if(CI_TEST) LOGGER.info(
+                        "BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x={} y={} z={} support=solid fallDistance={}",
+                        demoPlayer.blockPosition().getX(),demoPlayer.blockPosition().getY(),
+                        demoPlayer.blockPosition().getZ(),demoPlayer.fallDistance);
                     if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw={} pitch={}",
                         demoPlayer.getYRot(),demoPlayer.getXRot());
                 } else if(playerInteractionTest) {

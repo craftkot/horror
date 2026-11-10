@@ -178,7 +178,8 @@ def capture_test_world():
             return
         # Do not begin mouse automation until the server confirms that the
         # disposable player is protected from random gravity deaths.
-        if "BLACK_FREQUENCY_TEST PLAYER_GRAVITY_SUPPRESSED_FOR_BEACON_TEST" not in logs:
+        if ("BLACK_FREQUENCY_TEST PLAYER_RIFT_IMPULSES_SUPPRESSED_FOR_BEACON_TEST" not in logs
+                or "BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT" not in logs):
             return
         if "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in logs:
             return
@@ -499,8 +500,13 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: screenshots exist, but accelerated finale not observed",flush=True)
                 return False
             if os.environ.get("BF_TEST_PLAYER_BEACON")=="1":
-                if "BLACK_FREQUENCY_TEST PLAYER_GRAVITY_SUPPRESSED_FOR_BEACON_TEST" not in log_after:
-                    print("WORLD_CAPTURE_FAIL: test-only player gravity suppression was not observed",flush=True)
+                if "BLACK_FREQUENCY_TEST PLAYER_RIFT_IMPULSES_SUPPRESSED_FOR_BEACON_TEST" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: test-only rift impulse suppression was not observed",flush=True)
+                    return False
+                if not re.search(
+                        r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=-?\\d+ y=-?\\d+ z=-?\\d+ support=solid fallDistance=0\\.0",
+                        log_after):
+                    print("WORLD_CAPTURE_FAIL: player was not reset onto a verified safe beacon pad",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon was not activated by actual player right-click",flush=True)
