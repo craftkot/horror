@@ -558,7 +558,10 @@ public final class RiftController {
                     px,fissureParticleY(level,blockX,surfaceY,blockZ),pz);
                 double vx=target.x-eye.x,vy=target.y-eye.y,vz=target.z-eye.z;
                 double horizontalSquared=vx*vx+vz*vz;
-                if(horizontalSquared<1.0D || horizontalSquared>36.0D || Math.abs(vy)>4.0D)
+                // A beacon can be placed on a higher safe ridge than the
+                // fracture floor. Permit a steep downward view; the loaded-chunk
+                // ray trace below remains the authority on actual visibility.
+                if(horizontalSquared<1.0D || horizontalSquared>36.0D || Math.abs(vy)>24.0D)
                     continue;
                 var hit=level.clip(new net.minecraft.world.level.ClipContext(eye,target,
                     net.minecraft.world.level.ClipContext.Block.COLLIDER,
