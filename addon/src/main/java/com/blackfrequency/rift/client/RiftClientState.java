@@ -365,7 +365,9 @@ public final class RiftClientState {
                 RenderSystem.enableDepthTest();
                 RenderSystem.disableBlend();
             }
-            if(!firstRenderLogged && !pendingRenderLogged && !cachedSegments.isEmpty()) {
+            if(!firstRenderLogged && !pendingRenderLogged && !cachedSegments.isEmpty()
+                && (cachedSegments.size()<MIN_RENDERED_SEGMENTS
+                    || cachedArmCount<MIN_RENDERED_ARMS)) {
                 pendingRenderLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
                     "BLACK_FREQUENCY_GROUND_MESH_PENDING segments={} arms={} requiredSegments={} requiredArms={}",

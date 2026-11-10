@@ -374,6 +374,16 @@ def capture_test_world():
                 mesh=re.search(
                     r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) arms=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+)",
                     logs)
+                pending_mesh=re.search(
+                    r"BLACK_FREQUENCY_GROUND_MESH_PENDING segments=(\\d+) arms=(\\d+) requiredSegments=(\\d+) requiredArms=(\\d+)",
+                    logs)
+                if pending_mesh:
+                    pending_segments,pending_arms,required_segments,required_arms=map(int,pending_mesh.groups())
+                    if pending_segments>=required_segments and pending_arms>=required_arms:
+                        terrain_capture_failed=True
+                        print("WORLD_CAPTURE_FAIL: ready ground mesh was incorrectly marked pending",
+                              "segments",pending_segments,"arms",pending_arms,flush=True)
+                        return
                 if (not marker or not particles or not target or not safe_pad or not aim or not mesh
                         or "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs):
                     return
