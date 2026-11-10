@@ -349,8 +349,8 @@ def capture_test_world():
                 marker=re.search(
                     r"BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_EMITTED x=(-?\d+) y=(-?\d+) z=(-?\d+)",
                     logs)
-                geometry=re.search(
-                    r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples=(\d+) heightmap=motion-blocking-no-leaves ground=non-wood averageY=([-+0-9.eE]+)",
+                particles=re.search(
+                    r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) dragonBreath=(\d+) reversePortal=(\d+) total=(\d+) heightmap=motion-blocking-no-leaves ground=non-wood averageY=([-+0-9.eE]+)",
                     logs)
                 target=re.search(
                     r"BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x=([-+0-9.eE]+) y=([-+0-9.eE]+) z=([-+0-9.eE]+) distanceSquared=([-+0-9.eE]+)",
@@ -361,10 +361,19 @@ def capture_test_world():
                 aim=re.search(
                     r"BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)",
                     logs)
-                if (not marker or not geometry or not target or not safe_pad or not aim
+                if (not marker or not particles or not target or not safe_pad or not aim
                         or "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs):
                     return
-                samples=int(geometry.group(1))
+                samples=int(particles.group(1))
+                dragon_breath=int(particles.group(2))
+                reverse_portal=int(particles.group(3))
+                total_particles=int(particles.group(4))
+                if (dragon_breath+reverse_portal!=samples or reverse_portal!=8
+                        or total_particles!=samples+8):
+                    terrain_capture_failed=True
+                    print("WORLD_CAPTURE_FAIL: fissure particle composition/budget mismatch",
+                          samples,dragon_breath,reverse_portal,total_particles,flush=True)
+                    return
                 terrain_capture_attempted=True
                 if samples<32:
                     terrain_capture_failed=True
@@ -681,16 +690,22 @@ def capture_test_world():
                     return False
                 print("WORLD_CAPTURE: POST_RESTORE_BEACON_BREAK_GUARD_VERIFIED (synthetic event)",flush=True)
             fissure=re.search(
-                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples=(\d+) heightmap=motion-blocking-no-leaves",
+                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) dragonBreath=(\d+) reversePortal=(\d+) total=(\d+) heightmap=motion-blocking-no-leaves",
                 log_after)
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples=48 spacing=0.39 extent=4.68" not in log_after:
                 print("WORLD_CAPTURE_FAIL: fissure density/radius self-check was not executed",flush=True)
                 return False
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=56 dragonBreath=40 reversePortal=8 shards=8" not in log_after:
+                print("WORLD_CAPTURE_FAIL: layered fissure particle budget self-check was not executed",flush=True)
+                return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_LAYOUT_VERIFIED count=8 material=crying_obsidian" not in log_after:
                 print("WORLD_CAPTURE_FAIL: crying-obsidian shard layout self-check was not executed",flush=True)
                 return False
-            if not fissure or int(fissure.group(1))<32:
-                print("WORLD_CAPTURE_FAIL: ground fissure geometry was not emitted with enough loaded samples",flush=True)
+            if (not fissure or int(fissure.group(1))<32
+                    or int(fissure.group(2))+int(fissure.group(3))!=int(fissure.group(1))
+                    or int(fissure.group(3))!=8
+                    or int(fissure.group(4))!=int(fissure.group(1))+8):
+                print("WORLD_CAPTURE_FAIL: ground fissure particle composition or loaded sample count is invalid",flush=True)
                 return False
             shards=re.search(
                 r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARDS_EMITTED count=([0-9]+) material=crying_obsidian",
@@ -699,7 +714,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: all eight textured fissure-edge shards were not emitted",
                       flush=True)
                 return False
-            print("WORLD_CAPTURE: bounded ground fissure geometry verified",fissure.group(1),flush=True)
+            print("WORLD_CAPTURE: bounded layered ground fissure particles verified",fissure.group(1),flush=True)
             print("WORLD_CAPTURE: crying-obsidian fissure-edge shards verified",shards.group(1),flush=True)
             if not fracture_seen:
                 print("WORLD_CAPTURE_FAIL: ground fracture never removed a block",flush=True)

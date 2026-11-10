@@ -396,7 +396,12 @@ public final class RiftController {
         return beaconPos!=Long.MIN_VALUE && affected.removeIf(pos -> pos.asLong()==beaconPos);
     }
 
-    private record FissureEmission(int samples,int shards,double averageSurfaceY) {}
+    private record FissureEmission(int samples,int dragonBreathMotes,int reversePortalMotes,
+            int shards,double averageSurfaceY) {
+        private int totalParticles() {
+            return dragonBreathMotes+reversePortalMotes+shards;
+        }
+    }
 
     // A no-leaves heightmap can still stop on a tree trunk. Walk down a bounded
     // distance to the first natural terrain support so the fissure is not drawn
@@ -456,6 +461,8 @@ public final class RiftController {
      */
     private static FissureEmission emitSurfaceFissure(ServerLevel level,State s,double phase) {
         int samples=0;
+        int dragonBreathMotes=0;
+        int reversePortalMotes=0;
         int shards=0;
         double surfaceYTotal=0.0D;
         for(int arm=0;arm<FISSURE_ARM_COUNT;arm++) {
@@ -479,24 +486,29 @@ public final class RiftController {
                 if(!isFissureGroundSupport(level.getBlockState(support))) continue;
                 double particleY=fissureParticleY(level,blockX,surfaceY,blockZ);
                 double pulse=Math.sin(phase+segment*.8+arm*.6)*.05;
-                // Closely spaced violet motes make the four arms read as a
-                // connected fissure instead of isolated sparks. Offset above
-                // partial snow/plant shapes so the particles are not occluded.
-                level.sendParticles(ParticleTypes.DRAGON_BREATH,
-                    px,particleY+pulse,pz,FISSURE_MOTES_PER_SAMPLE,.045,.025,.045,.003);
+                // Keep one primary mote per sample. At the eight shard anchors,
+                // use a slower Reverse Portal mote instead of Dragon Breath to
+                // add a darker violet core without increasing the particle count.
                 if(segment%FISSURE_SHARD_SEGMENT_INTERVAL==0) {
-                    // Textured crying-obsidian chips make the rupture edge read as fractured material.
-                    // They replace the old portal accents, keeping the per-pass particle budget unchanged.
+                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                        px,particleY+pulse,pz,1,.035,.012,.035,.008);
+                    reversePortalMotes++;
+                    // A slightly wider, faster chip burst makes the textured edge
+                    // readable against stone while retaining one chip per anchor.
                     level.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK,
                         Blocks.CRYING_OBSIDIAN.defaultBlockState()),
-                        px,particleY+.04+pulse,pz,1,.025,.02,.025,.004);
+                        px,particleY+.04+pulse,pz,1,.045,.025,.045,.012);
                     shards++;
+                } else {
+                    level.sendParticles(ParticleTypes.DRAGON_BREATH,
+                        px,particleY+pulse,pz,FISSURE_MOTES_PER_SAMPLE,.045,.025,.045,.003);
+                    dragonBreathMotes+=FISSURE_MOTES_PER_SAMPLE;
                 }
                 surfaceYTotal+=particleY;
                 samples++;
             }
         }
-        return new FissureEmission(samples,shards,
+        return new FissureEmission(samples,dragonBreathMotes,reversePortalMotes,shards,
             samples==0?Double.NaN:surfaceYTotal/samples);
     }
 
@@ -662,10 +674,17 @@ public final class RiftController {
             || FISSURE_SEGMENTS_PER_ARM/FISSURE_SHARD_SEGMENT_INTERVAL!=2)
             throw new IllegalStateException("CI fissure sampling density/radius regression");
         int shardCount=FISSURE_ARM_COUNT*2;
-        if(shardCount!=8)
-            throw new IllegalStateException("CI fissure shard accent budget regression");
+        int primaryMotes=samples*FISSURE_MOTES_PER_SAMPLE;
+        int reversePortalMotes=shardCount;
+        int dragonBreathMotes=primaryMotes-reversePortalMotes;
+        int totalParticles=primaryMotes+shardCount;
+        if(shardCount!=8 || reversePortalMotes!=8 || dragonBreathMotes!=40
+            || totalParticles!=56 || totalParticles>56)
+            throw new IllegalStateException("CI fissure particle budget regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples={} spacing={} extent={}",
             samples,FISSURE_SAMPLE_SPACING,extent);
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total={} dragonBreath={} reversePortal={} shards={}",
+            totalParticles,dragonBreathMotes,reversePortalMotes,shardCount);
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_LAYOUT_VERIFIED count={} material=crying_obsidian",
             shardCount);
     }
@@ -1858,8 +1877,9 @@ public final class RiftController {
                 if(s.finaleTicks%20==0) {
                     FissureEmission emission=emitSurfaceFissure(level,s,phase);
                     if(CI_TEST && emission.samples()>0 && !s.ciSurfaceFissureLogged) {
-                        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples={} heightmap=motion-blocking-no-leaves ground=non-wood averageY={}",
-                            emission.samples(),emission.averageSurfaceY());
+                        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples={} dragonBreath={} reversePortal={} total={} heightmap=motion-blocking-no-leaves ground=non-wood averageY={}",
+                            emission.samples(),emission.dragonBreathMotes(),emission.reversePortalMotes(),
+                            emission.totalParticles(),emission.averageSurfaceY());
                         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARDS_EMITTED count={} material=crying_obsidian",
                             emission.shards());
                         s.ciSurfaceFissureLogged=true;
