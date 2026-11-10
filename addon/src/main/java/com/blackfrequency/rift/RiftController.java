@@ -1751,7 +1751,7 @@ public final class RiftController {
                         wx,y,wz,surfaceYForFirstEdit,s.surfaceFirstScan?"surface-first":"legacy-bottom-up");
                 }
                 if(inspectSurfaceCue
-                    && shouldEmitSurfaceFractureCue(y,surfaceYForCue,editsBefore,surfaceCueSentThisTick)
+                    && shouldEmitSurfaceFractureCue(y,surfaceYForCue,editsBefore,surfaceCueSentThisTick,s.surfaceCueCooldownTicks)
                     && hasNearbySurfaceFractureViewer(level,pos)) {
                     level.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK,original),
                         pos.getX()+.5D,pos.getY()+.82D,pos.getZ()+.5D,
