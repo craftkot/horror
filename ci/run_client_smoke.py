@@ -3,6 +3,7 @@ import minecraft_launcher_lib
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 MC=ROOT/"client"
+MOUSE_SENSITIVITY=0.6
 MC.mkdir(parents=True,exist_ok=True)
 
 def status(x): print("[install]",x,flush=True)
@@ -40,7 +41,7 @@ opts.update({
 # disposable CI client, so use the regular cursor path for deterministic camera capture.
 options_file=MC/"options.txt"
 option_lines=options_file.read_text(encoding="utf-8",errors="replace").splitlines() if options_file.exists() else []
-for option,value in (("rawMouseInput","false"),("mouseSensitivity","0.6")):
+for option,value in (("rawMouseInput","false"),("mouseSensitivity",str(MOUSE_SENSITIVITY))):
     prefix=option+":"
     for index,line in enumerate(option_lines):
         if line.startswith(prefix):
@@ -108,6 +109,26 @@ def capture_test_world():
             time.sleep(0.08)
         print("WORLD_CAPTURE_INPUT: camera pitch mouse delta",delta_y,"moved",moved,flush=True)
         return moved
+    def move_camera_horizontal(delta_x):
+        # Keep yaw motion separate from pitch so both can be restored exactly.
+        direction=1 if delta_x>0 else -1
+        remaining=abs(delta_x)
+        moved=0
+        while remaining:
+            step=min(80,remaining)*direction
+            result=subprocess.run(["xdotool","mousemove_relative","--sync","--",str(step),"0"],check=False)
+            if result.returncode!=0:
+                break
+            moved+=step
+            remaining-=abs(step)
+            time.sleep(0.08)
+        print("WORLD_CAPTURE_INPUT: camera yaw mouse delta",delta_x,"moved",moved,flush=True)
+        return moved
+    def camera_delta_for_pitch(current_pitch,target_pitch):
+        # Minecraft 1.20.1 applies (sensitivity*0.6+0.2)^3*8*0.15 degrees per pixel.
+        factor=MOUSE_SENSITIVITY*0.6+0.2
+        degrees_per_pixel=factor*factor*factor*8.0*0.15
+        return round((target_pitch-current_pitch)/degrees_per_pixel)
     def is_rift_violet_pixel(r,g,b):
         # Reject pale lavender UI/death-screen skies; the rift must be saturated violet.
         return r>55 and b>80 and b>g*1.5 and r>g*1.5 and b-r<150
@@ -133,6 +154,7 @@ def capture_test_world():
         step_y=max(1,int(height*.05))
         search_bottom=int(height*.42)
         best=None
+        best_valid=None
         for top in range(0,max(1,search_bottom-window_height+1),step_y):
             for left in range(0,max(1,width-window_width+1),step_x):
                 crop=frame.crop((left,top,left+window_width,top+window_height))
@@ -158,16 +180,26 @@ def capture_test_world():
                 line_rows=sum(1 for count in purple_rows if count>=row_threshold)
                 peak_row=max(purple_rows,default=0)
                 candidate=(score,coverage,green_coverage,line_rows,peak_row,left,top,peak_threshold)
+                line_visible=line_rows>=8 and peak_row>=peak_threshold
+                valid=(coverage>=minimum and line_visible
+                       and (max_green is None or green_coverage<=max_green))
                 if best is None or candidate[0]>best[0]:
                     best=candidate
+                # The highest-scoring window may contain too much foliage even
+                # when a lower-scoring window satisfies every visibility rule.
+                # Prefer the best qualifying window; retain the overall best only
+                # for diagnostics when no window actually passes.
+                if valid and (best_valid is None or candidate[0]>best_valid[0]):
+                    best_valid=candidate
         if best is None:
             print("WORLD_CAPTURE_FAIL: no sky sample window",name,flush=True)
             return False
-        score,coverage,green_coverage,line_rows,peak_row,left,top,peak_threshold=best
+        selected=best_valid if best_valid is not None else best
+        score,coverage,green_coverage,line_rows,peak_row,left,top,peak_threshold=selected
         line_visible=line_rows>=8 and peak_row>=peak_threshold
-        visible=(coverage>=minimum and line_visible
-                 and (max_green is None or green_coverage<=max_green))
-        print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} green={green_coverage:.4f} lineRows={line_rows} peakRow={peak_row} window={left},{top} required={minimum:.4f} maxGreen={max_green} visible={visible}",flush=True)
+        visible=best_valid is not None
+        selection="valid-window" if visible else "best-diagnostic-window"
+        print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} green={green_coverage:.4f} lineRows={line_rows} peakRow={peak_row} window={left},{top} required={minimum:.4f} maxGreen={max_green} visible={visible} selection={selection}",flush=True)
         return visible
     beacon_attempts=0
     beacon_ready_at=None
@@ -316,51 +348,82 @@ def capture_test_world():
                 subprocess.run(["xdotool","mousemove","--sync","640","640"],check=False)
                 time.sleep(0.2)
                 camera_delta=0
+                camera_yaw_delta=0
                 try:
                     # The server has just teleported and aimed the player. Give
                     # the client a moment to apply that rotation before steering.
                     time.sleep(0.6)
-                    # Spawn terrain and client camera interpolation vary between
-                    # Normal and Sparse. Sweep upward in small steps and select the
-                    # first frame that actually contains the rift, instead of
-                    # assuming the same mouse delta produces the same view.
+                    current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                    aim_match=re.search(
+                        r"BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=[^ ]+ pitch=([-+0-9.eE]+)",current)
+                    initial_pitch=float(aim_match.group(1)) if aim_match else 26.46307
+                    if not aim_match:
+                        print("WORLD_CAPTURE: beacon pitch marker missing; using calibrated fallback",flush=True)
+                    horizon_delta=camera_delta_for_pitch(initial_pitch,0.0)
+                    upper_delta=camera_delta_for_pitch(initial_pitch,-65.0)
+                    # First level the server's measured beacon aim. The old fixed
+                    # -380px start tilted roughly 54 degrees above the horizon,
+                    # pointing into tree crowns before the search even began.
+                    camera_delta+=move_camera(horizon_delta)
                     horizon_visible=False
                     last_candidate=None
-                    for index,delta in enumerate((-380,-20,-20,-20,-20,-20)):
-                        camera_delta+=move_camera(delta)
+                    for index in range(10):
+                        if index:
+                            camera_yaw_delta+=move_camera_horizontal(170)
                         time.sleep(0.45)
                         candidate_name=f"sky-rift-horizon-candidate-{index:02d}.png"
                         snap(candidate_name)
                         last_candidate=shots/candidate_name
-                        if verify_sky_pixels(candidate_name,"upper",.08,.20):
+                        if verify_sky_pixels(candidate_name,"horizon",.08,.20):
                             shutil.copyfile(last_candidate,shots/"sky-rift-hudless.png")
                             horizon_visible=True
                             print("WORLD_CAPTURE: adaptive horizon frame selected",candidate_name,flush=True)
                             break
                     if not horizon_visible and last_candidate and last_candidate.is_file():
                         shutil.copyfile(last_candidate,shots/"sky-rift-hudless.png")
-                    # Continue above the selected horizon sample for a distinct
-                    # zenith frame. The accumulated delta is restored exactly below.
-                    camera_delta+=move_camera(-80)
-                    time.sleep(0.45)
-                    snap("sky-rift-zenith.png")
-                    zenith_visible=verify_sky_pixels("sky-rift-zenith.png","zenith",.08,.15)
-                    sky_shot=horizon_visible and zenith_visible
+                    # A high-angle view is more useful than exact zenith in forests:
+                    # at -90 degrees the camera looks straight into the canopy and
+                    # yaw no longer exposes gaps between trees.
+                    camera_delta+=move_camera(upper_delta-horizon_delta)
+                    upper_visible=False
+                    last_upper_candidate=None
+                    for index in range(10):
+                        if index:
+                            camera_yaw_delta+=move_camera_horizontal(170)
+                        time.sleep(0.45)
+                        candidate_name=f"sky-rift-upper-candidate-{index:02d}.png"
+                        snap(candidate_name)
+                        last_upper_candidate=shots/candidate_name
+                        if verify_sky_pixels(candidate_name,"upper",.08,.25):
+                            shutil.copyfile(last_upper_candidate,shots/"sky-rift-upper.png")
+                            upper_visible=True
+                            print("WORLD_CAPTURE: adaptive upper-sky frame selected",candidate_name,flush=True)
+                            break
+                    if not upper_visible and last_upper_candidate and last_upper_candidate.is_file():
+                        shutil.copyfile(last_upper_candidate,shots/"sky-rift-upper.png")
+                    sky_shot=horizon_visible and upper_visible
                 finally:
-                    # Restore the exact sum of successful XTest relative motions.
-                    # GLFW's cursor warp is not a reliable measure of camera movement.
+                    # Restore both camera axes by the exact sum of successful
+                    # relative inputs; the client must still aim at the beacon.
+                    if camera_yaw_delta:
+                        restored_yaw=move_camera_horizontal(-camera_yaw_delta)
+                        time.sleep(0.15)
+                        if restored_yaw!=-camera_yaw_delta:
+                            sky_shot=False
+                            print("WORLD_CAPTURE_FAIL: camera yaw inverse input incomplete",
+                                  camera_yaw_delta,restored_yaw,flush=True)
                     if camera_delta:
                         restored_delta=move_camera(-camera_delta)
                         time.sleep(0.25)
                         if restored_delta!=-camera_delta:
                             sky_shot=False
-                            print("WORLD_CAPTURE_FAIL: camera inverse input incomplete",
+                            print("WORLD_CAPTURE_FAIL: camera pitch inverse input incomplete",
                                   camera_delta,restored_delta,flush=True)
                         else:
-                            print("WORLD_CAPTURE: camera inverse input sent",restored_delta,flush=True)
+                            print("WORLD_CAPTURE: camera pitch inverse input sent",restored_delta,flush=True)
                     key("F1")
                 if sky_shot:
-                    print("WORLD_CAPTURE: SKY_RIFT_HORIZON_AND_ZENITH_VERIFIED_BEFORE_BEACON_CLICK",flush=True)
+                    print("WORLD_CAPTURE: SKY_RIFT_HORIZON_AND_UPPER_SKY_VERIFIED_BEFORE_BEACON_CLICK",flush=True)
                 else:
                     print("WORLD_CAPTURE_FAIL: sky capture failed before beacon click; still attempting real interaction",flush=True)
             for stage in range(32):
