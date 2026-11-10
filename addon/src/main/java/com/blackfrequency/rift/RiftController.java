@@ -40,6 +40,27 @@ public final class RiftController {
             : Boolean.getBoolean("blackfrequency.ciClientSmokeTest") ? 160 : MAX_EDITS)
         : MAX_EDITS;
 
+    // New worlds fracture from the anchor outward so the first ground rupture
+    // is visible near the player. Legacy saves keep their persisted row-major cursor.
+    private static final int[] CENTER_OUT_DX = new int[(RADIUS*2+1)*(RADIUS*2+1)];
+    private static final int[] CENTER_OUT_DZ = new int[CENTER_OUT_DX.length];
+    private static final int CENTER_OUT_COLUMN_COUNT;
+    static {
+        int count=0;
+        for(int ring=0;ring<=RADIUS;ring++) {
+            for(int dx=-ring;dx<=ring;dx++) {
+                for(int dz=-ring;dz<=ring;dz++) {
+                    if(Math.max(Math.abs(dx),Math.abs(dz))!=ring
+                        || dx*dx+dz*dz>RADIUS*RADIUS) continue;
+                    CENTER_OUT_DX[count]=dx;
+                    CENTER_OUT_DZ[count]=dz;
+                    count++;
+                }
+            }
+        }
+        CENTER_OUT_COLUMN_COUNT=count;
+    }
+
     // Persisted counters are untrusted input: keep them inside the state machine's
     // real limits so corrupt NBT cannot bypass the edit cap or stall recovery.
     private static int boundedCounter(int value,int maximum) {
@@ -198,6 +219,9 @@ public final class RiftController {
         // New worlds scan from the visible surface downward. Missing NBT keys
         // deliberately default to false so older worlds keep their saved cursor order.
         boolean surfaceFirstScan;
+        // Added after the original row-major cursor. Missing keys preserve old saves.
+        boolean centerOutScan;
+        int centerOutIndex;
         int edits;
         int finaleTicks;
         boolean started, finished, initialized, restoring, restored;
@@ -224,9 +248,22 @@ public final class RiftController {
             s.edits=boundedCounter(n.getInt("edits"),MAX_EDITS);
             s.finaleTicks=boundedCounter(n.getInt("finaleTicks"),Integer.MAX_VALUE);
             s.surfaceFirstScan=n.contains("surfaceFirstScan",Tag.TAG_BYTE)&&n.getBoolean("surfaceFirstScan");
+            s.centerOutScan=n.contains("centerOutScan",Tag.TAG_BYTE)&&n.getBoolean("centerOutScan");
+            s.centerOutIndex=n.getInt("centerOutIndex");
             s.started=n.getBoolean("started");s.finished=n.getBoolean("finished");
             s.initialized=n.getBoolean("initialized");
             s.restoring=n.getBoolean("restoring");s.restored=n.getBoolean("restored");
+            if(s.centerOutScan && (s.centerOutIndex<0 || s.centerOutIndex>CENTER_OUT_COLUMN_COUNT)) {
+                if(s.initialized && !s.restoring && !s.restored && !s.finished) {
+                    LOGGER.warn("BLACK FREQUENCY: invalid center-out cursor {}; stopping further terrain edits",
+                        s.centerOutIndex);
+                    s.centerOutIndex=CENTER_OUT_COLUMN_COUNT;
+                    s.finished=true;
+                    s.setDirty();
+                } else {
+                    s.centerOutIndex=0;
+                }
+            }
             s.restoreIndex=n.getInt("restoreIndex");
             // Older worlds have no scan cursor: resume at the last pending snapshot.
             s.restoreScan=n.contains("restoreScan",Tag.TAG_INT)?n.getInt("restoreScan"):s.restoreIndex;
@@ -261,6 +298,7 @@ public final class RiftController {
             n.putInt("cx",cursorX);n.putInt("cz",cursorZ);n.putInt("cy",cursorY);
             n.putInt("edits",edits);n.putInt("finaleTicks",finaleTicks);n.putBoolean("started",started);
             n.putBoolean("surfaceFirstScan",surfaceFirstScan);
+            n.putBoolean("centerOutScan",centerOutScan);n.putInt("centerOutIndex",centerOutIndex);
             n.putBoolean("finished",finished);n.putBoolean("initialized",initialized);
             n.putBoolean("restoring",restoring);n.putBoolean("restored",restored);
             n.putInt("restoreIndex",restoreIndex);n.putInt("restoreScan",restoreScan);n.putInt("restoreTicks",restoreTicks);n.putInt("restoredBlocks",restoredBlocks);n.putInt("skippedOccupied",skippedOccupied);n.putInt("skippedInvalid",skippedInvalid);n.putLong("beaconPos",beaconPos);
@@ -357,6 +395,42 @@ public final class RiftController {
         return Math.max(minY,Math.min(maxY-1,surfaceY-1));
     }
 
+    private static void advanceFractureColumn(State s) {
+        if(s.centerOutScan) {
+            if(s.centerOutIndex<CENTER_OUT_COLUMN_COUNT) s.centerOutIndex++;
+        } else {
+            s.cursorZ++;
+            if(s.cursorZ>RADIUS){s.cursorZ=-RADIUS;s.cursorX++;}
+        }
+    }
+
+    private static void verifyCenterOutColumnOrder() {
+        int side=RADIUS*2+1;
+        boolean[] seen=new boolean[side*side];
+        int previousRing=-1;
+        for(int i=0;i<CENTER_OUT_COLUMN_COUNT;i++) {
+            int dx=CENTER_OUT_DX[i],dz=CENTER_OUT_DZ[i];
+            int ring=Math.max(Math.abs(dx),Math.abs(dz));
+            if(dx*dx+dz*dz>RADIUS*RADIUS || ring<previousRing)
+                throw new IllegalStateException("CI center-out fracture order escaped radius or reversed");
+            int slot=(dx+RADIUS)*side+(dz+RADIUS);
+            if(seen[slot]) throw new IllegalStateException("CI center-out fracture order duplicated a column");
+            seen[slot]=true;
+            if(i==0 && (dx!=0 || dz!=0))
+                throw new IllegalStateException("CI center-out fracture did not start at the anchor");
+            previousRing=ring;
+        }
+        int expected=0;
+        for(int dx=-RADIUS;dx<=RADIUS;dx++)
+            for(int dz=-RADIUS;dz<=RADIUS;dz++)
+                if(dx*dx+dz*dz<=RADIUS*RADIUS) expected++;
+        if(CENTER_OUT_COLUMN_COUNT!=expected)
+            throw new IllegalStateException("CI center-out fracture omitted columns: "
+                +CENTER_OUT_COLUMN_COUNT+"/"+expected);
+        LOGGER.info("BLACK_FREQUENCY_TEST CENTER_OUT_FRACTURE_COLUMN_ORDER_VERIFIED columns={}",
+            CENTER_OUT_COLUMN_COUNT);
+    }
+
     // Emit a small ground-level cue only when an actual top-surface block is removed.
     // The edit cadence and per-tick guard keep particle traffic bounded.
     private static boolean shouldEmitSurfaceFractureCue(int y,int surfaceY,int edits,boolean sentThisTick,int cooldownTicks) {
@@ -402,14 +476,27 @@ public final class RiftController {
         legacyTag.putBoolean("initialized",true);
         legacyTag.putInt("cy",12);
         State legacy=State.load(legacyTag);
-        if(legacy.surfaceFirstScan || legacy.cursorY!=12)
+        if(legacy.surfaceFirstScan || legacy.centerOutScan || legacy.cursorY!=12)
             throw new IllegalStateException("CI legacy fracture cursor migration regression");
         State modern=new State();
         modern.surfaceFirstScan=true;
+        modern.centerOutScan=true;
+        modern.centerOutIndex=3;
         modern.cursorY=Integer.MIN_VALUE;
         State modernReloaded=State.load(modern.save(new CompoundTag()));
-        if(!modernReloaded.surfaceFirstScan || modernReloaded.cursorY!=Integer.MIN_VALUE)
-            throw new IllegalStateException("CI surface-first cursor persistence regression");
+        if(!modernReloaded.surfaceFirstScan || !modernReloaded.centerOutScan
+            || modernReloaded.centerOutIndex!=3 || modernReloaded.cursorY!=Integer.MIN_VALUE)
+            throw new IllegalStateException("CI center-out surface-first cursor persistence regression");
+        CompoundTag corruptCenterOut=new CompoundTag();
+        corruptCenterOut.putBoolean("initialized",true);
+        corruptCenterOut.putBoolean("started",true);
+        corruptCenterOut.putBoolean("centerOutScan",true);
+        corruptCenterOut.putInt("centerOutIndex",Integer.MAX_VALUE);
+        State quarantined=State.load(corruptCenterOut);
+        if(!quarantined.finished || quarantined.centerOutIndex!=CENTER_OUT_COLUMN_COUNT)
+            throw new IllegalStateException("CI corrupt center-out cursor was not quarantined");
+        LOGGER.info("BLACK_FREQUENCY_TEST CORRUPT_CENTER_OUT_CURSOR_QUARANTINED");
+        verifyCenterOutColumnOrder();
         LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_SCAN_ORDER_MIGRATION_VERIFIED");
         verifySurfaceFractureCue();
     }
@@ -1281,10 +1368,13 @@ public final class RiftController {
             s.initialized=true;
             BlockPos spawn=level.getSharedSpawnPos();s.x=spawn.getX();s.z=spawn.getZ();
             s.surfaceFirstScan=true;
+            s.centerOutScan=true;
+            s.centerOutIndex=0;
+            s.cursorX=0;s.cursorZ=0;
             // Integer.MIN_VALUE means the next already-loaded column still needs
             // its own heightmap-derived starting Y. This sentinel is persisted.
             s.cursorY=Integer.MIN_VALUE;
-            if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_SCAN_ORDER surface-first");
+            if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_SCAN_ORDER surface-first center-out");
             s.setDirty();
         }
         if(!s.started) {
@@ -1663,14 +1753,19 @@ public final class RiftController {
         // Production retains the conservative 2048-check budget.
         int scanCheckBudget=CI_TEST?8192:2048;
         while(edits<EDIT_BUDGET && checks<scanCheckBudget && !s.finished) {
-            if(s.edits>=EFFECTIVE_MAX_EDITS || s.cursorX>RADIUS) {s.finished=true;break;}
+            if(s.edits>=EFFECTIVE_MAX_EDITS
+                || (s.centerOutScan ? s.centerOutIndex>=CENTER_OUT_COLUMN_COUNT : s.cursorX>RADIUS)) {
+                s.finished=true;
+                break;
+            }
+            int dx=s.centerOutScan ? CENTER_OUT_DX[s.centerOutIndex] : s.cursorX;
+            int dz=s.centerOutScan ? CENTER_OUT_DZ[s.centerOutIndex] : s.cursorZ;
             // An anchor near the integer coordinate limits must not wrap around
             // and destroy unrelated terrain on the opposite side of the world.
-            long worldX=(long)s.x+s.cursorX,worldZ=(long)s.z+s.cursorZ;
-            if(!validFractureColumn(s.x,s.z,s.cursorX,s.cursorZ)) {
+            long worldX=(long)s.x+dx,worldZ=(long)s.z+dz;
+            if(!validFractureColumn(s.x,s.z,dx,dz)) {
                 s.cursorY=s.surfaceFirstScan?Integer.MIN_VALUE:level.getMinBuildHeight();
-                s.cursorZ++;
-                if(s.cursorZ>RADIUS){s.cursorZ=-RADIUS;s.cursorX++;}
+                advanceFractureColumn(s);
                 checks++;
                 continue;
             }
@@ -1678,8 +1773,7 @@ public final class RiftController {
             if(!level.hasChunk(wx>>4,wz>>4)) {
                 // Never force-load chunks for destruction. Skip this column and keep advancing.
                 s.cursorY=s.surfaceFirstScan?Integer.MIN_VALUE:level.getMinBuildHeight();
-                s.cursorZ++;
-                if(s.cursorZ>RADIUS){s.cursorZ=-RADIUS;s.cursorX++;}
+                advanceFractureColumn(s);
                 checks++;
                 continue;
             }
@@ -1690,21 +1784,18 @@ public final class RiftController {
             int y=s.cursorY;
             // Capture the current column before advancing: otherwise its final block
             // is evaluated against the NEXT column's fracture coordinates.
-            int dx=s.cursorX,dz=s.cursorZ;
             if(s.surfaceFirstScan) {
                 s.cursorY--;
                 if(s.cursorY<level.getMinBuildHeight()) {
                     s.cursorY=Integer.MIN_VALUE;
-                    s.cursorZ++;
-                    if(s.cursorZ>RADIUS){s.cursorZ=-RADIUS;s.cursorX++;}
+                    advanceFractureColumn(s);
                 }
             } else {
                 // Legacy saves retain their original bottom-up scan order.
                 s.cursorY++;
                 if(s.cursorY>=level.getMaxBuildHeight()) {
                     s.cursorY=level.getMinBuildHeight();
-                    s.cursorZ++;
-                    if(s.cursorZ>RADIUS){s.cursorZ=-RADIUS;s.cursorX++;}
+                    advanceFractureColumn(s);
                 }
             }
             checks++;
@@ -1750,7 +1841,8 @@ public final class RiftController {
                         throw new IllegalStateException("CI first fracture was not near the visible surface: y="
                             +y+" surfaceY="+surfaceYForFirstEdit);
                     LOGGER.info("BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x={} y={} z={} surfaceY={} scanOrder={}",
-                        wx,y,wz,surfaceYForFirstEdit,s.surfaceFirstScan?"surface-first":"legacy-bottom-up");
+                        wx,y,wz,surfaceYForFirstEdit,
+                        s.surfaceFirstScan?(s.centerOutScan?"surface-first-center-out":"surface-first"):"legacy-bottom-up");
                 }
                 if(inspectSurfaceCue
                     && shouldEmitSurfaceFractureCue(y,surfaceYForCue,editsBefore,surfaceCueSentThisTick,s.surfaceCueCooldownTicks)
