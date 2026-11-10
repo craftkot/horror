@@ -94,11 +94,15 @@ public final class RiftClientState {
         private static final int SEGMENTS_PER_ARM=12;
         private static final double SAMPLE_SPACING=.39D;
         private static final long REBUILD_INTERVAL=4L;
+        private static final int GROUND_REBUILD_VERTICAL_DELTA=2;
         private static net.minecraft.client.multiplayer.ClientLevel cachedLevel;
         private static long cachedTick=Long.MIN_VALUE;
         private static int cachedAnchorX=Integer.MIN_VALUE;
         private static int cachedAnchorZ=Integer.MIN_VALUE;
         private static int cachedAnchorSurfaceY;
+        // The sampled surface window is centered on the player's block Y.
+        // Rebuild after a meaningful vertical move even when the anchor is unchanged.
+        private static int cachedReferenceY=Integer.MIN_VALUE;
         private static List<GroundSegment> cachedSegments=List.of();
         private static int cachedArmCount;
         private static int cachedSampledColumns;
@@ -122,6 +126,7 @@ public final class RiftClientState {
         private static boolean visualProfileLogged;
         private static boolean surfaceWindowLogged;
         private static boolean surfaceHeightProfileLogged;
+        private static boolean rebuildProfileLogged;
         private static boolean rangeRejectLogged;
 
         private record GroundPoint(double x,double y,double z) {}
@@ -216,6 +221,30 @@ public final class RiftClientState {
                 MAX_GROUND_SEGMENT_Y_DELTA);
         }
 
+        private static boolean shouldRebuild(long tick,long previousTick,boolean anchorChanged,
+                int referenceY,int previousReferenceY) {
+            return anchorChanged || previousTick==Long.MIN_VALUE || tick<previousTick
+                || tick-previousTick>=REBUILD_INTERVAL
+                || previousReferenceY==Integer.MIN_VALUE
+                || Math.abs((long)referenceY-previousReferenceY)>=GROUND_REBUILD_VERTICAL_DELTA;
+        }
+
+        private static void verifyGroundRebuildProfile() {
+            if(rebuildProfileLogged) return;
+            boolean stable=!shouldRebuild(101L,100L,false,65,65);
+            boolean oneBlockStable=!shouldRebuild(101L,100L,false,66,65);
+            boolean twoBlockMove=shouldRebuild(101L,100L,false,67,65);
+            boolean teleport=shouldRebuild(101L,100L,false,80,65);
+            boolean interval=shouldRebuild(104L,100L,false,65,65);
+            boolean anchor=shouldRebuild(101L,100L,true,65,65);
+            if(!(stable && oneBlockStable && twoBlockMove && teleport && interval && anchor))
+                throw new IllegalStateException("BLACK FREQUENCY ground mesh rebuild profile regression");
+            rebuildProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_REBUILD_PROFILE_VERIFIED verticalDelta={} interval={}",
+                GROUND_REBUILD_VERTICAL_DELTA,REBUILD_INTERVAL);
+        }
+
         private static boolean isGroundSupport(BlockState state) {
             return state.blocksMotion()
                 && !state.is(BlockTags.LOGS)
@@ -272,6 +301,7 @@ public final class RiftClientState {
                 int referenceY) {
             verifyTaperProfile();
             verifyGroundContinuityProfile();
+            verifyGroundRebuildProfile();
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
             Map<Long,Double> surfaceYByColumn=new HashMap<>(ARM_COUNT*SEGMENTS_PER_ARM);
             int cacheHits=0;
@@ -401,6 +431,7 @@ public final class RiftClientState {
             cachedAnchorX=Integer.MIN_VALUE;
             cachedAnchorZ=Integer.MIN_VALUE;
             cachedAnchorSurfaceY=0;
+            cachedReferenceY=Integer.MIN_VALUE;
             cachedSegments=List.of();
             cachedArmCount=0;
             cachedSampledColumns=0;
@@ -416,6 +447,7 @@ public final class RiftClientState {
             visualProfileLogged=false;
             surfaceWindowLogged=false;
             surfaceHeightProfileLogged=false;
+            rebuildProfileLogged=false;
             rangeRejectLogged=false;
         }
 
@@ -448,9 +480,12 @@ public final class RiftClientState {
 
             long tick=level.getGameTime();
             boolean anchorChanged=level!=cachedLevel || worldAnchorX!=cachedAnchorX || worldAnchorZ!=cachedAnchorZ;
+            int surfaceReferenceY=player.blockPosition().getY();
+            int previousReferenceY=cachedReferenceY;
+            boolean verticalWindowChanged=previousReferenceY!=Integer.MIN_VALUE
+                && Math.abs((long)surfaceReferenceY-previousReferenceY)>=GROUND_REBUILD_VERTICAL_DELTA;
             if(anchorChanged) emptyMeshLogged=false;
-            if(anchorChanged || cachedTick==Long.MIN_VALUE || tick<cachedTick || tick-cachedTick>=REBUILD_INTERVAL) {
-                int surfaceReferenceY=player.blockPosition().getY();
+            if(shouldRebuild(tick,cachedTick,anchorChanged,surfaceReferenceY,cachedReferenceY)) {
                 GroundMesh mesh=buildSegments(level,worldAnchorX,worldAnchorZ,surfaceReferenceY);
                 cachedSegments=mesh.segments();
                 cachedArmCount=mesh.activeArms();
@@ -459,6 +494,12 @@ public final class RiftClientState {
                 cachedSteepStepBreaks=mesh.steepStepBreaks();
                 cachedAnchorSurfaceY=estimateAnchorSurfaceY(cachedSegments,
                     worldAnchorX,worldAnchorZ,surfaceReferenceY);
+                cachedReferenceY=surfaceReferenceY;
+                if(verticalWindowChanged) {
+                    com.mojang.logging.LogUtils.getLogger().info(
+                        "BLACK_FREQUENCY_GROUND_MESH_HEIGHT_INVALIDATED previousReferenceY={} referenceY={} delta={}",
+                        previousReferenceY,surfaceReferenceY,Math.abs((long)surfaceReferenceY-previousReferenceY));
+                }
                 if(!surfaceWindowLogged) {
                     surfaceWindowLogged=true;
                     com.mojang.logging.LogUtils.getLogger().info(

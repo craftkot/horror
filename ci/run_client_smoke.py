@@ -693,6 +693,9 @@ def capture_test_world():
             if "BLACK_FREQUENCY_GROUND_MESH_SURFACE_HEIGHT_VERIFIED" not in final_log:
                 print("WORLD_CAPTURE_FAIL: collision-based ground surface self-check was not executed",flush=True)
                 return False
+            if "BLACK_FREQUENCY_GROUND_MESH_REBUILD_PROFILE_VERIFIED verticalDelta=2 interval=4" not in final_log:
+                print("WORLD_CAPTURE_FAIL: player-height cache invalidation self-check was not executed",flush=True)
+                return False
             if os.environ.get("BF_TEST_RESTORATION")=="1":
                 # A full fracture can reach 95,000 snapshots. Recovery restores at
                 # most 12 blocks per 20 TPS tick (~396s at the cap); leave headroom
