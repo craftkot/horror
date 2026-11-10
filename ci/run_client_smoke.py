@@ -477,6 +477,7 @@ def capture_test_world():
                 visible_tiles=0
                 mesh_pixels=0
                 mesh_tiles=0
+                combined_tiles=0
                 tile_size=32
                 for tile_y in range(top,bottom,tile_size):
                     for tile_x in range(left,right,tile_size):
@@ -495,10 +496,20 @@ def capture_test_world():
                             visible_tiles+=1
                         if mesh_tile_hits>=3:
                             mesh_tiles+=1
-                if violet_pixels<180 or visible_tiles<4:
+                        if tile_hits+mesh_tile_hits>=4:
+                            combined_tiles+=1
+                # Canopy and terrain may occlude bright particles while leaving the
+                # depth-tested mesh visible. Require independent evidence from both
+                # render paths plus a combined pixel/tile floor; do not let either
+                # particles or mesh alone satisfy the screenshot proof.
+                combined_pixels=violet_pixels+mesh_pixels
+                if (violet_pixels<120 or visible_tiles<3
+                        or combined_pixels<300 or combined_tiles<6):
                     terrain_capture_failed=True
-                    print("WORLD_CAPTURE_FAIL: bright fissure particles were not visible in ground-plane player view",
-                          "pixels",violet_pixels,"tiles",visible_tiles,flush=True)
+                    print("WORLD_CAPTURE_FAIL: combined ground-fissure visibility was below threshold",
+                          "particlePixels",violet_pixels,"particleTiles",visible_tiles,
+                          "meshPixels",mesh_pixels,"meshTiles",mesh_tiles,
+                          "combinedPixels",combined_pixels,"combinedTiles",combined_tiles,flush=True)
                     return
                 if mesh_pixels<24 or mesh_tiles<2:
                     terrain_capture_failed=True
@@ -512,6 +523,7 @@ def capture_test_world():
                       "meshAnchor",mesh_anchor_x,mesh_anchor_z,
                       "meshPixels",mesh_pixels,"meshTiles",mesh_tiles,
                       "particlePixels",violet_pixels,"particleTiles",visible_tiles,
+                      "combinedPixels",combined_pixels,"combinedTiles",combined_tiles,
                       "aim",round(target_yaw,1),round(target_pitch,1),flush=True)
             def capture_sky_before_beacon():
                 nonlocal sky_shot,sky_capture_attempted
