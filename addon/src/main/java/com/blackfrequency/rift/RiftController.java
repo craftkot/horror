@@ -365,16 +365,16 @@ public final class RiftController {
     }
 
     /**
-     * Draw a short, four-armed surface fissure without changing terrain.
+     * Draw a denser six-segment, four-armed surface fissure without changing terrain.
      * Every sample is restricted to the rift radius and an already loaded chunk.
      */
     private static int emitSurfaceFissure(ServerLevel level,State s,double phase) {
         int samples=0;
         for(int arm=0;arm<4;arm++) {
             double angle=arm*Math.PI/2.0;
-            for(int segment=1;segment<=3;segment++) {
-                double distance=segment*1.15;
-                double bend=Math.sin(segment*1.7+arm*1.1)*.22;
+            for(int segment=1;segment<=6;segment++) {
+                double distance=segment*.78;
+                double bend=Math.sin(segment*1.7+arm*1.1)*.18;
                 double px=s.x+.5+Math.cos(angle)*distance-Math.sin(angle)*bend;
                 double pz=s.z+.5+Math.sin(angle)*distance+Math.cos(angle)*bend;
                 int blockX=(int)Math.floor(px);
@@ -391,11 +391,13 @@ public final class RiftController {
                 if(surfaceY<=level.getMinBuildHeight() || surfaceY>=level.getMaxBuildHeight()) continue;
                 BlockPos support=new BlockPos(blockX,surfaceY-1,blockZ);
                 if(!level.getBlockState(support).blocksMotion()) continue;
-                double pulse=Math.sin(phase+segment*.8+arm*.6)*.035;
+                double pulse=Math.sin(phase+segment*.8+arm*.6)*.05;
+                // Two close violet motes per point make the four arms read as a
+                // connected fissure instead of twelve isolated sparks.
                 level.sendParticles(ParticleTypes.DRAGON_BREATH,
-                    px,surfaceY+.08+pulse,pz,1,0,0,0,0);
-                if(segment==2) level.sendParticles(ParticleTypes.REVERSE_PORTAL,
-                    px,surfaceY+.12+pulse,pz,1,0,0,0,0);
+                    px,surfaceY+.10+pulse,pz,2,.045,.025,.045,.003);
+                if(segment==3 || segment==6) level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                    px,surfaceY+.14+pulse,pz,1,.025,.02,.025,.004);
                 samples++;
             }
         }

@@ -1,4 +1,4 @@
-import os, pathlib, subprocess, sys, time, threading, re, shutil
+import os, pathlib, subprocess, sys, time, threading, re, shutil, math
 import minecraft_launcher_lib
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
@@ -129,6 +129,12 @@ def capture_test_world():
         factor=MOUSE_SENSITIVITY*0.6+0.2
         degrees_per_pixel=factor*factor*factor*8.0*0.15
         return round((target_pitch-current_pitch)/degrees_per_pixel)
+    def camera_delta_for_yaw(current_yaw,target_yaw):
+        # Choose the shortest turn across the -180/180 boundary.
+        factor=MOUSE_SENSITIVITY*0.6+0.2
+        degrees_per_pixel=factor*factor*factor*8.0*0.15
+        delta=(target_yaw-current_yaw+180.0)%360.0-180.0
+        return round(delta/degrees_per_pixel)
     def is_rift_violet_pixel(r,g,b):
         # Reject pale lavender UI/death-screen skies; the rift must be saturated violet.
         return r>55 and b>80 and b>g*1.5 and r>g*1.5 and b-r<150
@@ -315,11 +321,10 @@ def capture_test_world():
             sky_capture_attempted=False
             def capture_terrain_fracture(logs):
                 nonlocal terrain_shot
-                # Require the actual ground-fissure particle pass, not just the
-                # older vertical plume marker. The geometry helper rejects leaves,
-                # out-of-radius samples and chunks that are not already loaded.
-                if (terrain_shot
-                        or "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in logs):
+                # A server particle marker alone is not proof that the client can
+                # see the crack. Wait for the safe-pad teleport, then aim at the
+                # original surface coordinates before taking the screenshot.
+                if terrain_shot or "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in logs:
                     return
                 marker=re.search(
                     r"BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_EMITTED x=(-?\d+) y=(-?\d+) z=(-?\d+)",
@@ -327,21 +332,85 @@ def capture_test_world():
                 geometry=re.search(
                     r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples=(\d+) heightmap=motion-blocking-no-leaves",
                     logs)
-                if not marker or not geometry:
+                safe_pad=re.search(
+                    r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
+                    logs)
+                aim=re.search(
+                    r"BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)",
+                    logs)
+                if (not marker or not geometry or not safe_pad or not aim
+                        or "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs):
                     return
                 samples=int(geometry.group(1))
                 if samples<6:
                     print("WORLD_CAPTURE_FAIL: too few loaded ground-fissure samples",samples,flush=True)
                     return
+                fracture_x,fracture_y,fracture_z=map(int,marker.groups())
+                player_x,player_y,player_z=map(int,safe_pad.groups())
+                current_yaw,current_pitch=map(float,aim.groups())
+                eye_x,eye_y,eye_z=player_x+.5,player_y+1.62,player_z+.5
+                target_x,target_y,target_z=fracture_x+.5,fracture_y+1.1,fracture_z+.5
+                dx,dy,dz=target_x-eye_x,target_y-eye_y,target_z-eye_z
+                horizontal=math.hypot(dx,dz)
+                target_yaw=math.degrees(math.atan2(-dx,dz))
+                target_pitch=-math.degrees(math.atan2(dy,max(.01,horizontal)))
+                yaw_delta=camera_delta_for_yaw(current_yaw,target_yaw)
+                pitch_delta=camera_delta_for_pitch(current_pitch,target_pitch)
                 key("F1")
+                subprocess.run(["xdotool","mousemove","--sync","640","640"],check=False)
+                time.sleep(.2)
+                moved_yaw=move_camera_horizontal(yaw_delta)
+                moved_pitch=move_camera(pitch_delta)
+                restored=True
                 try:
-                    time.sleep(0.15)
+                    # Narrative titles last up to six seconds. Let them clear while
+                    # the server keeps emitting the fissure, then capture the actual view.
+                    time.sleep(6.5)
                     snap("terrain-fracture-near-player.png")
                 finally:
+                    if moved_pitch:
+                        restored_pitch=move_camera(-moved_pitch)
+                        if restored_pitch!=-moved_pitch:
+                            restored=False
+                    if moved_yaw:
+                        restored_yaw=move_camera_horizontal(-moved_yaw)
+                        if restored_yaw!=-moved_yaw:
+                            restored=False
                     key("F1")
+                if not restored:
+                    print("WORLD_CAPTURE_FAIL: fissure camera could not be restored exactly",flush=True)
+                    return
+                from PIL import Image
+                path=shots/"terrain-fracture-near-player.png"
+                with Image.open(path) as source:
+                    frame=source.convert("RGB")
+                width,height=frame.size
+                pixels=frame.load()
+                left,right=int(width*.25),int(width*.75)
+                top,bottom=int(height*.25),int(height*.85)
+                violet_pixels=0
+                visible_tiles=0
+                tile_size=32
+                for tile_y in range(top,bottom,tile_size):
+                    for tile_x in range(left,right,tile_size):
+                        tile_hits=0
+                        for y in range(tile_y,min(tile_y+tile_size,bottom)):
+                            for x in range(tile_x,min(tile_x+tile_size,right)):
+                                r,g,b=pixels[x,y]
+                                if (r>150 and b>150 and g<100 and r>g*1.5
+                                        and b>g*1.5 and abs(r-b)<130):
+                                    violet_pixels+=1
+                                    tile_hits+=1
+                        if tile_hits>=4:
+                            visible_tiles+=1
+                if violet_pixels<120 or visible_tiles<3:
+                    print("WORLD_CAPTURE_FAIL: fissure particles were not visible in player view",
+                          "pixels",violet_pixels,"tiles",visible_tiles,flush=True)
+                    return
                 terrain_shot=True
-                print("WORLD_CAPTURE: player-visible ground fissure captured",
-                      *marker.groups(),"samples",samples,flush=True)
+                print("WORLD_CAPTURE: visible ground fissure captured",
+                      *marker.groups(),"samples",samples,"pixels",violet_pixels,
+                      "tiles",visible_tiles,"aim",round(target_yaw,1),round(target_pitch,1),flush=True)
             def capture_sky_before_beacon():
                 nonlocal sky_shot,sky_capture_attempted
                 if sky_capture_attempted:
