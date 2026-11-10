@@ -151,7 +151,7 @@ def capture_test_world():
         return r>180 and b>180 and g<85 and r>g*1.5 and b>g*1.5 and abs(r-b)<100
     def is_ground_mesh_pixel(r,g,b):
         # The new mesh uses a blue-heavy violet edge, unlike magenta particle sprites.
-        return r>145 and b>215 and b-r>28 and g<100
+        return r>145 and b>215 and b-r>28 and 18<g<100
     # Samples come from real artifacts: pale death-screen lavender, a dark sky leak,
     # and a bright Dragon Breath mote on the ground.
     if (is_rift_violet_pixel(142,127,155)
@@ -160,6 +160,7 @@ def capture_test_world():
             or is_ground_fissure_pixel(134,44,150)
             or not is_ground_fissure_pixel(201,66,214)
             or not is_ground_mesh_pixel(194,58,238)
+            or is_ground_mesh_pixel(198,0,229)
             or is_ground_mesh_pixel(201,66,214)
             or is_ground_mesh_pixel(142,127,155)):
         raise RuntimeError("BLACK FREQUENCY pixel classifier regression")
