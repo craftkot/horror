@@ -1,4 +1,4 @@
-import os, pathlib, subprocess, sys, time, threading, re
+import os, pathlib, subprocess, sys, time, threading, re, shutil
 import minecraft_launcher_lib
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
@@ -302,18 +302,33 @@ def capture_test_world():
                 time.sleep(0.2)
                 camera_delta=0
                 try:
-                    # Capture both sky angles before the player's real right-click.
-                    # The beacon is already placed and waiting, so the restoration
-                    # clock has not started while llvmpipe writes the screenshots.
-                    # The player starts with a slight downward beacon aim. Move farther
-                    # upward before calling the first frame a sky/horizon capture.
-                    camera_delta+=move_camera(-380)
-                    time.sleep(0.45)
-                    snap("sky-rift-hudless.png")
+                    # The server has just teleported and aimed the player. Give
+                    # the client a moment to apply that rotation before steering.
+                    time.sleep(0.6)
+                    # Spawn terrain and client camera interpolation vary between
+                    # Normal and Sparse. Sweep upward in small steps and select the
+                    # first frame that actually contains the rift, instead of
+                    # assuming the same mouse delta produces the same view.
+                    horizon_visible=False
+                    last_candidate=None
+                    for index,delta in enumerate((-380,-20,-20,-20,-20,-20)):
+                        camera_delta+=move_camera(delta)
+                        time.sleep(0.45)
+                        candidate_name=f"sky-rift-horizon-candidate-{index:02d}.png"
+                        snap(candidate_name)
+                        last_candidate=shots/candidate_name
+                        if verify_sky_pixels(candidate_name,"upper",.08,.20):
+                            shutil.copyfile(last_candidate,shots/"sky-rift-hudless.png")
+                            horizon_visible=True
+                            print("WORLD_CAPTURE: adaptive horizon frame selected",candidate_name,flush=True)
+                            break
+                    if not horizon_visible and last_candidate and last_candidate.is_file():
+                        shutil.copyfile(last_candidate,shots/"sky-rift-hudless.png")
+                    # Continue above the selected horizon sample for a distinct
+                    # zenith frame. The accumulated delta is restored exactly below.
                     camera_delta+=move_camera(-80)
                     time.sleep(0.45)
                     snap("sky-rift-zenith.png")
-                    horizon_visible=verify_sky_pixels("sky-rift-hudless.png","upper",.08,.20)
                     zenith_visible=verify_sky_pixels("sky-rift-zenith.png","zenith",.08,.15)
                     sky_shot=horizon_visible and zenith_visible
                 finally:
