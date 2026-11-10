@@ -369,7 +369,7 @@ def capture_test_world():
                     r"BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)",
                     logs)
                 mesh=re.search(
-                    r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+)",
+                    r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) arms=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+)",
                     logs)
                 if (not marker or not particles or not target or not safe_pad or not aim or not mesh
                         or "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs):
@@ -379,11 +379,12 @@ def capture_test_world():
                 reverse_portal=int(particles.group(3))
                 total_particles=int(particles.group(4))
                 mesh_segments=int(mesh.group(1))
-                mesh_anchor_x,mesh_anchor_z=map(int,mesh.groups()[1:])
-                if mesh_segments<24:
+                mesh_arms=int(mesh.group(2))
+                mesh_anchor_x,mesh_anchor_z=map(int,mesh.groups()[2:])
+                if mesh_segments<8 or mesh_arms<2 or mesh_arms>4:
                     terrain_capture_failed=True
-                    print("WORLD_CAPTURE_FAIL: client ground mesh has fewer than 24 connected surface segments",
-                          mesh_segments,flush=True)
+                    print("WORLD_CAPTURE_FAIL: client ground mesh lacks 8 connected segments across at least 2 arms",
+                          "segments",mesh_segments,"arms",mesh_arms,flush=True)
                     return
                 if (dragon_breath+reverse_portal!=samples or reverse_portal!=8
                         or total_particles!=samples+8):
@@ -481,7 +482,8 @@ def capture_test_world():
                 terrain_shot=True
                 print("WORLD_CAPTURE: visible ground fissure mesh captured",
                       *marker.groups(),"target",*target.groups(),"samples",samples,
-                      "meshSegments",mesh_segments,"meshAnchor",mesh_anchor_x,mesh_anchor_z,
+                      "meshSegments",mesh_segments,"meshArms",mesh_arms,
+                      "meshAnchor",mesh_anchor_x,mesh_anchor_z,
                       "meshPixels",mesh_pixels,"meshTiles",mesh_tiles,
                       "particlePixels",violet_pixels,"particleTiles",visible_tiles,
                       "aim",round(target_yaw,1),round(target_pitch,1),flush=True)

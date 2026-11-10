@@ -100,12 +100,15 @@ public final class RiftClientState {
         private static int cachedAnchorZ=Integer.MIN_VALUE;
         private static int cachedAnchorSurfaceY;
         private static List<GroundSegment> cachedSegments=List.of();
-        private static final int MIN_RENDERED_SEGMENTS=24;
+        private static int cachedArmCount;
+        private static final int MIN_RENDERED_SEGMENTS=8;
+        private static final int MIN_RENDERED_ARMS=2;
         private static boolean firstRenderLogged;
         private static boolean pendingRenderLogged;
 
         private record GroundPoint(double x,double y,double z) {}
         private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,double phase) {}
+        private record GroundMesh(List<GroundSegment> segments,int activeArms) {}
 
         private GroundRenderer() {}
 
@@ -113,37 +116,52 @@ public final class RiftClientState {
             return state.blocksMotion()
                 && !state.is(BlockTags.LOGS)
                 && !state.is(BlockTags.LEAVES)
-                && !state.is(BlockTags.PLANKS);
+                && !state.is(BlockTags.PLANKS)
+                && !state.is(net.minecraft.world.level.block.Blocks.POWDER_SNOW);
         }
 
         private static GroundPoint sampleGround(net.minecraft.client.multiplayer.ClientLevel level,
-                int blockX,int blockZ,double x,double z) {
+                int blockX,int blockZ,double x,double z,int anchorSurfaceY) {
             if(!level.getWorldBorder().isWithinBounds(
                     new BlockPos(blockX,level.getMinBuildHeight(),blockZ))
                 || !level.hasChunk(blockX>>4,blockZ>>4)) return null;
-            int surfaceY=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,blockX,blockZ);
-            int min=level.getMinBuildHeight();
-            boolean supported=false;
-            for(int depth=0;depth<32 && surfaceY>min+1;depth++,surfaceY--) {
-                if(isGroundSupport(level.getBlockState(new BlockPos(blockX,surfaceY-1,blockZ)))) {
-                    supported=true;
-                    break;
-                }
+
+            // Heightmaps select the highest point in a column. In a jagged biome
+            // that can be the top of a distant ice spike or cliff, far above the
+            // fracture anchor. Sample a narrow local band around the anchor instead
+            // and require two blocks of clearance so the ribbon follows walkable
+            // ground rather than bridging vertical walls or roofs.
+            int minSurfaceY=Math.max(level.getMinBuildHeight()+1,anchorSurfaceY-8);
+            int maxSurfaceY=Math.min(level.getMaxBuildHeight()-2,anchorSurfaceY+4);
+            for(int surfaceY=maxSurfaceY;surfaceY>=minSurfaceY;surfaceY--) {
+                BlockPos supportPos=new BlockPos(blockX,surfaceY-1,blockZ);
+                BlockState support=level.getBlockState(supportPos);
+                if(!isGroundSupport(support) || !support.getFluidState().isEmpty()) continue;
+
+                BlockPos surfacePos=new BlockPos(blockX,surfaceY,blockZ);
+                BlockState surface=level.getBlockState(surfacePos);
+                BlockState head=level.getBlockState(surfacePos.above());
+                if(surface.blocksMotion() || head.blocksMotion()
+                    || !surface.getFluidState().isEmpty() || !head.getFluidState().isEmpty()) continue;
+
+                double shapeHeight=surface.isAir()
+                    ? support.getShape(level,supportPos).max(Direction.Axis.Y)
+                    : surface.getShape(level,surfacePos).max(Direction.Axis.Y);
+                if(!Double.isFinite(shapeHeight)) shapeHeight=0.0D;
+                shapeHeight=Math.max(0.0D,Math.min(1.0D,shapeHeight));
+                double baseY=surface.isAir()?surfaceY-1:surfaceY;
+                return new GroundPoint(x,baseY+shapeHeight+.035D,z);
             }
-            if(!supported || surfaceY>=level.getMaxBuildHeight()) return null;
-            BlockPos surfacePos=new BlockPos(blockX,surfaceY,blockZ);
-            BlockState surface=level.getBlockState(surfacePos);
-            double shapeHeight=surface.isAir()?0.0D
-                :surface.getShape(level,surfacePos).max(Direction.Axis.Y);
-            if(!Double.isFinite(shapeHeight)) shapeHeight=0.0D;
-            shapeHeight=Math.max(0.0D,Math.min(1.0D,shapeHeight));
-            return new GroundPoint(x,surfaceY+shapeHeight+.035D,z);
+            return null;
         }
 
-        private static List<GroundSegment> buildSegments(
-                net.minecraft.client.multiplayer.ClientLevel level,int worldAnchorX,int worldAnchorZ) {
+        private static GroundMesh buildSegments(
+                net.minecraft.client.multiplayer.ClientLevel level,int worldAnchorX,int worldAnchorZ,
+                int anchorSurfaceY) {
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
+            int activeArms=0;
             for(int arm=0;arm<ARM_COUNT;arm++) {
+                int armStart=result.size();
                 double angle=arm*Math.PI/2.0D;
                 GroundPoint previous=null;
                 for(int segment=1;segment<=SEGMENTS_PER_ARM;segment++) {
@@ -159,9 +177,10 @@ public final class RiftClientState {
                         previous=null;
                         continue;
                     }
-                    GroundPoint current=sampleGround(level,blockX,blockZ,x,z);
+                    GroundPoint current=sampleGround(level,blockX,blockZ,x,z,anchorSurfaceY);
                     if(current==null) {
-                        // Never bridge a visual seam across an unloaded chunk or missing support.
+                        // Never bridge a visual seam across an unloaded chunk,
+                        // unsupported column, liquid, or obstructed headroom.
                         previous=null;
                         continue;
                     }
@@ -176,8 +195,9 @@ public final class RiftClientState {
                     }
                     previous=current;
                 }
+                if(result.size()>armStart) activeArms++;
             }
-            return List.copyOf(result);
+            return new GroundMesh(List.copyOf(result),activeArms);
         }
 
         private static int colorChannel(float value) {
@@ -215,6 +235,7 @@ public final class RiftClientState {
             cachedAnchorZ=Integer.MIN_VALUE;
             cachedAnchorSurfaceY=0;
             cachedSegments=List.of();
+            cachedArmCount=0;
             firstRenderLogged=false;
             pendingRenderLogged=false;
         }
@@ -247,7 +268,9 @@ public final class RiftClientState {
                 || cachedTick==Long.MIN_VALUE || tick<cachedTick || tick-cachedTick>=REBUILD_INTERVAL) {
                 cachedAnchorSurfaceY=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
                     worldAnchorX,worldAnchorZ);
-                cachedSegments=buildSegments(level,worldAnchorX,worldAnchorZ);
+                GroundMesh mesh=buildSegments(level,worldAnchorX,worldAnchorZ,cachedAnchorSurfaceY);
+                cachedSegments=mesh.segments();
+                cachedArmCount=mesh.activeArms();
                 cachedLevel=level;
                 cachedAnchorX=worldAnchorX;
                 cachedAnchorZ=worldAnchorZ;
@@ -296,18 +319,19 @@ public final class RiftClientState {
             if(!firstRenderLogged && !pendingRenderLogged && !cachedSegments.isEmpty()) {
                 pendingRenderLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_GROUND_MESH_PENDING segments={} required={}",
-                    cachedSegments.size(),MIN_RENDERED_SEGMENTS);
+                    "BLACK_FREQUENCY_GROUND_MESH_PENDING segments={} arms={} requiredSegments={} requiredArms={}",
+                    cachedSegments.size(),cachedArmCount,MIN_RENDERED_SEGMENTS,MIN_RENDERED_ARMS);
             }
             // The first render can happen while only the spawn chunk has arrived.
             // Keep drawing the available local segments, but do not report the mesh
             // as ready until a connected surface is large enough for the client test.
             // Rebuilds continue from loaded chunks only; no chunk tickets are requested.
-            if(!firstRenderLogged && cachedSegments.size()>=MIN_RENDERED_SEGMENTS) {
+            if(!firstRenderLogged && cachedSegments.size()>=MIN_RENDERED_SEGMENTS
+                && cachedArmCount>=MIN_RENDERED_ARMS) {
                 firstRenderLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_GROUND_MESH_RENDERED segments={} anchorX={} anchorZ={}",
-                    cachedSegments.size(),worldAnchorX,worldAnchorZ);
+                    "BLACK_FREQUENCY_GROUND_MESH_RENDERED segments={} arms={} anchorX={} anchorZ={}",
+                    cachedSegments.size(),cachedArmCount,worldAnchorX,worldAnchorZ);
             }
         }
     }
