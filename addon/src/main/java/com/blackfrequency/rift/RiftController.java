@@ -38,9 +38,10 @@ public final class RiftController {
     private static final long TEST_STEP = Boolean.getBoolean("blackfrequency.ciTestMode")
         ? Math.max(1L, Math.min(2400L, Long.getLong("blackfrequency.ciTickStep", 2400L))) : 1L;
     private static final int RADIUS = 48;
-    // Double fissure sampling resolution without increasing motes per pass.
+    // Double fissure sampling resolution while preserving 48 dragon-breath motes per pass.
     private static final int FISSURE_ARM_COUNT = 4;
     private static final int FISSURE_SEGMENTS_PER_ARM = 12;
+    private static final int FISSURE_MOTES_PER_SAMPLE = 1;
     private static final double FISSURE_SAMPLE_SPACING = .39D;
     private static final int EDIT_BUDGET = 160;
     private static final int MAX_EDITS = 95000;
@@ -479,7 +480,7 @@ public final class RiftController {
                 // connected fissure instead of isolated sparks. Offset above
                 // partial snow/plant shapes so the particles are not occluded.
                 level.sendParticles(ParticleTypes.DRAGON_BREATH,
-                    px,particleY+pulse,pz,2,.045,.025,.045,.003);
+                    px,particleY+pulse,pz,FISSURE_MOTES_PER_SAMPLE,.045,.025,.045,.003);
                 if(segment==3 || segment==6) level.sendParticles(ParticleTypes.REVERSE_PORTAL,
                     px,particleY+.04+pulse,pz,1,.025,.02,.025,.004);
                 surfaceYTotal+=particleY;
@@ -642,8 +643,8 @@ public final class RiftController {
     private static void verifyFissureSamplingDensity() {
         int samples=FISSURE_ARM_COUNT*FISSURE_SEGMENTS_PER_ARM;
         double extent=FISSURE_SEGMENTS_PER_ARM*FISSURE_SAMPLE_SPACING;
-        if(FISSURE_ARM_COUNT!=4 || samples!=48
-            || !Double.isFinite(FISSURE_SAMPLE_SPACING)
+        if(FISSURE_ARM_COUNT!=4 || samples!=48 || samples*FISSURE_MOTES_PER_SAMPLE!=48
+            || FISSURE_MOTES_PER_SAMPLE<1 || !Double.isFinite(FISSURE_SAMPLE_SPACING)
             || FISSURE_SAMPLE_SPACING<=0.0D || FISSURE_SAMPLE_SPACING>0.5D
             || Math.abs(extent-4.68D)>1.0E-9D || extent>=RADIUS)
             throw new IllegalStateException("CI fissure sampling density/radius regression");
