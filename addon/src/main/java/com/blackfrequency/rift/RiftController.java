@@ -42,6 +42,8 @@ public final class RiftController {
     private static final int FISSURE_ARM_COUNT = 4;
     private static final int FISSURE_SEGMENTS_PER_ARM = 12;
     private static final int FISSURE_MOTES_PER_SAMPLE = 1;
+    // Replace two portal accents per arm with textured crying-obsidian chips.
+    private static final int FISSURE_SHARD_SEGMENT_INTERVAL = 6;
     private static final double FISSURE_SAMPLE_SPACING = .39D;
     private static final int EDIT_BUDGET = 160;
     private static final int MAX_EDITS = 95000;
@@ -394,7 +396,7 @@ public final class RiftController {
         return beaconPos!=Long.MIN_VALUE && affected.removeIf(pos -> pos.asLong()==beaconPos);
     }
 
-    private record FissureEmission(int samples,double averageSurfaceY) {}
+    private record FissureEmission(int samples,int shards,double averageSurfaceY) {}
 
     // A no-leaves heightmap can still stop on a tree trunk. Walk down a bounded
     // distance to the first natural terrain support so the fissure is not drawn
@@ -449,11 +451,12 @@ public final class RiftController {
     }
 
     /**
-     * Draw a denser six-segment, four-armed surface fissure without changing terrain.
+     * Draw a dense twelve-segment, four-armed surface fissure without changing terrain.
      * Every sample is restricted to the rift radius and an already loaded chunk.
      */
     private static FissureEmission emitSurfaceFissure(ServerLevel level,State s,double phase) {
         int samples=0;
+        int shards=0;
         double surfaceYTotal=0.0D;
         for(int arm=0;arm<FISSURE_ARM_COUNT;arm++) {
             double angle=arm*Math.PI/2.0;
@@ -481,13 +484,20 @@ public final class RiftController {
                 // partial snow/plant shapes so the particles are not occluded.
                 level.sendParticles(ParticleTypes.DRAGON_BREATH,
                     px,particleY+pulse,pz,FISSURE_MOTES_PER_SAMPLE,.045,.025,.045,.003);
-                if(segment==6 || segment==12) level.sendParticles(ParticleTypes.REVERSE_PORTAL,
-                    px,particleY+.04+pulse,pz,1,.025,.02,.025,.004);
+                if(segment%FISSURE_SHARD_SEGMENT_INTERVAL==0) {
+                    // Textured crying-obsidian chips make the rupture edge read as fractured material.
+                    // They replace the old portal accents, keeping the per-pass particle budget unchanged.
+                    level.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK,
+                        Blocks.CRYING_OBSIDIAN.defaultBlockState()),
+                        px,particleY+.04+pulse,pz,1,.025,.02,.025,.004);
+                    shards++;
+                }
                 surfaceYTotal+=particleY;
                 samples++;
             }
         }
-        return new FissureEmission(samples,samples==0?Double.NaN:surfaceYTotal/samples);
+        return new FissureEmission(samples,shards,
+            samples==0?Double.NaN:surfaceYTotal/samples);
     }
 
     private record FissureTarget(double x,double y,double z,double distanceSquared) {}
@@ -646,10 +656,18 @@ public final class RiftController {
         if(FISSURE_ARM_COUNT!=4 || samples!=48 || samples*FISSURE_MOTES_PER_SAMPLE!=48
             || FISSURE_MOTES_PER_SAMPLE<1 || !Double.isFinite(FISSURE_SAMPLE_SPACING)
             || FISSURE_SAMPLE_SPACING<=0.0D || FISSURE_SAMPLE_SPACING>0.5D
-            || Math.abs(extent-4.68D)>1.0E-9D || extent>=RADIUS)
+            || Math.abs(extent-4.68D)>1.0E-9D || extent>=RADIUS
+            || FISSURE_SHARD_SEGMENT_INTERVAL<=0
+            || FISSURE_SEGMENTS_PER_ARM%FISSURE_SHARD_SEGMENT_INTERVAL!=0
+            || FISSURE_SEGMENTS_PER_ARM/FISSURE_SHARD_SEGMENT_INTERVAL!=2)
             throw new IllegalStateException("CI fissure sampling density/radius regression");
+        int shardCount=FISSURE_ARM_COUNT*2;
+        if(shardCount!=8)
+            throw new IllegalStateException("CI fissure shard accent budget regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples={} spacing={} extent={}",
             samples,FISSURE_SAMPLE_SPACING,extent);
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_LAYOUT_VERIFIED count={} material=crying_obsidian",
+            shardCount);
     }
 
     private static void verifySurfaceFractureCue() {
@@ -1842,6 +1860,8 @@ public final class RiftController {
                     if(CI_TEST && emission.samples()>0 && !s.ciSurfaceFissureLogged) {
                         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples={} heightmap=motion-blocking-no-leaves ground=non-wood averageY={}",
                             emission.samples(),emission.averageSurfaceY());
+                        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARDS_EMITTED count={} material=crying_obsidian",
+                            emission.shards());
                         s.ciSurfaceFissureLogged=true;
                     }
                 }

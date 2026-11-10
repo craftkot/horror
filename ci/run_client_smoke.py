@@ -686,10 +686,21 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples=48 spacing=0.39 extent=4.68" not in log_after:
                 print("WORLD_CAPTURE_FAIL: fissure density/radius self-check was not executed",flush=True)
                 return False
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_LAYOUT_VERIFIED count=8 material=crying_obsidian" not in log_after:
+                print("WORLD_CAPTURE_FAIL: crying-obsidian shard layout self-check was not executed",flush=True)
+                return False
             if not fissure or int(fissure.group(1))<32:
                 print("WORLD_CAPTURE_FAIL: ground fissure geometry was not emitted with enough loaded samples",flush=True)
                 return False
+            shards=re.search(
+                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARDS_EMITTED count=(\\d+) material=crying_obsidian",
+                log_after)
+            if not shards or int(shards.group(1))!=8:
+                print("WORLD_CAPTURE_FAIL: all eight textured fissure-edge shards were not emitted",
+                      flush=True)
+                return False
             print("WORLD_CAPTURE: bounded ground fissure geometry verified",fissure.group(1),flush=True)
+            print("WORLD_CAPTURE: crying-obsidian fissure-edge shards verified",shards.group(1),flush=True)
             if not fracture_seen:
                 print("WORLD_CAPTURE_FAIL: ground fracture never removed a block",flush=True)
                 return False
