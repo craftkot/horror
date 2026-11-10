@@ -4,6 +4,9 @@ import minecraft_launcher_lib
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 MC=ROOT/"client"
 MOUSE_SENSITIVITY=0.6
+MIN_GROUND_MESH_SEGMENTS=8
+MIN_GROUND_MESH_ARMS=2
+MAX_GROUND_MESH_ARMS=4
 MC.mkdir(parents=True,exist_ok=True)
 
 def status(x): print("[install]",x,flush=True)
@@ -381,9 +384,10 @@ def capture_test_world():
                 mesh_segments=int(mesh.group(1))
                 mesh_arms=int(mesh.group(2))
                 mesh_anchor_x,mesh_anchor_z=map(int,mesh.groups()[2:])
-                if mesh_segments<8 or mesh_arms<2 or mesh_arms>4:
+                if (mesh_segments<MIN_GROUND_MESH_SEGMENTS
+                        or mesh_arms<MIN_GROUND_MESH_ARMS or mesh_arms>MAX_GROUND_MESH_ARMS):
                     terrain_capture_failed=True
-                    print("WORLD_CAPTURE_FAIL: client ground mesh lacks 8 connected segments across at least 2 arms",
+                    print("WORLD_CAPTURE_FAIL: client ground mesh is below the shared segment/arm threshold",
                           "segments",mesh_segments,"arms",mesh_arms,flush=True)
                     return
                 if (dragon_breath+reverse_portal!=samples or reverse_portal!=8
@@ -736,10 +740,17 @@ def capture_test_world():
                 r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) dragonBreath=(\d+) reversePortal=(\d+) total=(\d+) heightmap=motion-blocking-no-leaves",
                 log_after)
             ground_mesh=re.search(
-                r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+)",
+                r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) arms=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+)",
                 log_after)
-            if not ground_mesh or int(ground_mesh.group(1))<24:
+            if not ground_mesh:
                 print("WORLD_CAPTURE_FAIL: client did not render a bounded ground fissure mesh",flush=True)
+                return False
+            mesh_segments=int(ground_mesh.group(1))
+            mesh_arms=int(ground_mesh.group(2))
+            if (mesh_segments<MIN_GROUND_MESH_SEGMENTS
+                    or mesh_arms<MIN_GROUND_MESH_ARMS or mesh_arms>MAX_GROUND_MESH_ARMS):
+                print("WORLD_CAPTURE_FAIL: final ground mesh is below the shared segment/arm threshold",
+                      "segments",mesh_segments,"arms",mesh_arms,flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples=48 spacing=0.39 extent=4.68" not in log_after:
                 print("WORLD_CAPTURE_FAIL: fissure density/radius self-check was not executed",flush=True)
