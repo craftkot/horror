@@ -245,6 +245,7 @@ public final class RiftController {
         // CI-only one-shot beacon removal: exercise recovery after a lost beacon.
         boolean ciNaturalBeaconRemoved, ciNaturalBeaconReplaced;
         boolean ciSparseRecoveryEligibilityLogged;
+        boolean ciSurfaceFissureLogged;
         final List<CompoundTag> snapshots = new ArrayList<>();
         static State load(CompoundTag n) {
             State s = new State();
@@ -361,6 +362,44 @@ public final class RiftController {
      */
     private static boolean protectRecoveryBeaconFromExplosion(List<BlockPos> affected,long beaconPos) {
         return beaconPos!=Long.MIN_VALUE && affected.removeIf(pos -> pos.asLong()==beaconPos);
+    }
+
+    /**
+     * Draw a short, four-armed surface fissure without changing terrain.
+     * Every sample is restricted to the rift radius and an already loaded chunk.
+     */
+    private static int emitSurfaceFissure(ServerLevel level,State s,double phase) {
+        int samples=0;
+        for(int arm=0;arm<4;arm++) {
+            double angle=arm*Math.PI/2.0;
+            for(int segment=1;segment<=3;segment++) {
+                double distance=segment*1.15;
+                double bend=Math.sin(segment*1.7+arm*1.1)*.22;
+                double px=s.x+.5+Math.cos(angle)*distance-Math.sin(angle)*bend;
+                double pz=s.z+.5+Math.sin(angle)*distance+Math.cos(angle)*bend;
+                int blockX=(int)Math.floor(px);
+                int blockZ=(int)Math.floor(pz);
+                long dx=blockX-(long)s.x;
+                long dz=blockZ-(long)s.z;
+                if(dx*dx+dz*dz>(long)RADIUS*RADIUS
+                    || !level.getWorldBorder().isWithinBounds(
+                        new BlockPos(blockX,level.getMinBuildHeight(),blockZ))
+                    || !level.hasChunk(blockX>>4,blockZ>>4)) continue;
+                int surfaceY=level.getHeight(
+                    net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    blockX,blockZ);
+                if(surfaceY<=level.getMinBuildHeight() || surfaceY>=level.getMaxBuildHeight()) continue;
+                BlockPos support=new BlockPos(blockX,surfaceY-1,blockZ);
+                if(!level.getBlockState(support).blocksMotion()) continue;
+                double pulse=Math.sin(phase+segment*.8+arm*.6)*.035;
+                level.sendParticles(ParticleTypes.DRAGON_BREATH,
+                    px,surfaceY+.08+pulse,pz,1,0,0,0,0);
+                if(segment==2) level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                    px,surfaceY+.12+pulse,pz,1,0,0,0,0);
+                samples++;
+            }
+        }
+        return samples;
     }
 
     // Run after ordinary explosion modifiers: protect the fixture even when
@@ -1506,7 +1545,12 @@ public final class RiftController {
         // Sea-level placement hid the effect beneath mountains and above deep valleys.
         if (!s.restoring && s.finaleTicks > 85 && s.finaleTicks % 10 == 0
             && level.hasChunk(s.x >> 4, s.z >> 4)) {
-            double plumeY = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, s.x, s.z) + 1.0;
+            // Ignore leaf canopies: the rupture belongs on the terrain surface,
+            // not on top of the nearest tree crown.
+            double surfaceY = level.getHeight(
+                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                s.x,s.z);
+            double plumeY = surfaceY + 1.0;
             boolean witnessed = false;
             for (var viewer : level.players()) {
                 if (!viewer.isAlive() || viewer.isRemoved() || viewer.isSpectator()) continue;
@@ -1520,7 +1564,17 @@ public final class RiftController {
             }
             if (witnessed) {
                 double phase = s.finaleTicks * .055;
-                // Four rising strands, bounded to a two-block footprint.
+                // A low, jagged cross of violet particles reads as a ground crack.
+                // It is cosmetic only and samples terrain only in already loaded chunks.
+                if(s.finaleTicks%20==0) {
+                    int samples=emitSurfaceFissure(level,s,phase);
+                    if(CI_TEST && samples>0 && !s.ciSurfaceFissureLogged) {
+                        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples={} heightmap=motion-blocking-no-leaves",
+                            samples);
+                        s.ciSurfaceFissureLogged=true;
+                    }
+                }
+                // Keep the existing rising strands as a vertical accent above the crack.
                 for (int strand = 0; strand < 4; strand++) {
                     double angle = phase + strand * Math.PI / 2.0;
                     level.sendParticles(ParticleTypes.REVERSE_PORTAL,
