@@ -115,6 +115,9 @@ public final class RiftClientState {
         private static final double GROUND_GLOW_WIDTH_SCALE=4.0D;
         private static final double GROUND_CORE_WIDTH_SCALE=.52D;
         private static final double GROUND_EDGE_HALF_WIDTH=.016D;
+        // A restrained violet filament pulses inside the dark core without another trig call.
+        private static final double GROUND_CORE_PULSE_BASE=.10D;
+        private static final double GROUND_CORE_PULSE_RANGE=.22D;
         private static boolean continuityProfileLogged;
         private static boolean continuityBuildLogged;
         private static int cachedSteepStepBreaks;
@@ -127,6 +130,7 @@ public final class RiftClientState {
         private static boolean surfaceWindowLogged;
         private static boolean surfaceHeightProfileLogged;
         private static boolean rebuildProfileLogged;
+        private static boolean animationProfileLogged;
         private static boolean rangeRejectLogged;
 
         private record GroundPoint(double x,double y,double z) {}
@@ -245,6 +249,29 @@ public final class RiftClientState {
                 GROUND_REBUILD_VERTICAL_DELTA,REBUILD_INTERVAL);
         }
 
+        private static double boundedCorePulse(double wave) {
+            double boundedWave=Double.isFinite(wave) ? Math.max(0.0D,Math.min(1.0D,wave)) : 0.0D;
+            return GROUND_CORE_PULSE_BASE+GROUND_CORE_PULSE_RANGE*boundedWave;
+        }
+
+        private static void verifyGroundAnimationProfile() {
+            if(animationProfileLogged) return;
+            double minimum=boundedCorePulse(0.0D);
+            double midpoint=boundedCorePulse(.5D);
+            double maximum=boundedCorePulse(1.0D);
+            double invalid=boundedCorePulse(Double.NaN);
+            if(Math.abs(minimum-.10D)>1.0E-9D
+                || Math.abs(midpoint-.21D)>1.0E-9D
+                || Math.abs(maximum-.32D)>1.0E-9D
+                || Math.abs(invalid-minimum)>1.0E-9D
+                || minimum<0.0D || maximum>1.0D)
+                throw new IllegalStateException("BLACK FREQUENCY ground core pulse regression");
+            animationProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_CORE_PULSE_VERIFIED min={} midpoint={} max={} widthScale={}",
+                minimum,midpoint,maximum,.16D);
+        }
+
         private static boolean isGroundSupport(BlockState state) {
             return state.blocksMotion()
                 && !state.is(BlockTags.LOGS)
@@ -308,6 +335,7 @@ public final class RiftClientState {
             verifyTaperProfile();
             verifyGroundContinuityProfile();
             verifyGroundRebuildProfile();
+            verifyGroundAnimationProfile();
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
             Map<Long,Double> surfaceYByColumn=new HashMap<>(ARM_COUNT*SEGMENTS_PER_ARM);
             int cacheHits=0;
@@ -454,6 +482,7 @@ public final class RiftClientState {
             surfaceWindowLogged=false;
             surfaceHeightProfileLogged=false;
             rebuildProfileLogged=false;
+            animationProfileLogged=false;
             rangeRejectLogged=false;
         }
 
@@ -570,6 +599,9 @@ public final class RiftClientState {
                         .20F,.025F,.43F,alpha*.34F);
                     ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_CORE_WIDTH_SCALE,
                         .008F,.001F,.022F,alpha*.94F);
+                    float corePulse=(float)boundedCorePulse(wave);
+                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*.16D,
+                        .28F,.015F,.62F,alpha*corePulse);
                     float edgeAlpha=Math.min(1.0F,boundedStrength*(.94F*pulse+.06F));
                     ribbon(builder,matrix,camera,segment,halfWidth*1.9D,GROUND_EDGE_HALF_WIDTH,
                         .78F,.18F,1.0F,edgeAlpha);
