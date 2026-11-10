@@ -255,8 +255,12 @@ public final class RiftClientState {
 
         private static double sampleGroundY(net.minecraft.client.multiplayer.ClientLevel level,
                 int blockX,int blockZ,int referenceY) {
-            if(!level.getWorldBorder().isWithinBounds(
-                    new BlockPos(blockX,level.getMinBuildHeight(),blockZ))
+            // Reuse one mutable position through the bounded vertical scan.
+            // The queried states and collision shapes are consumed immediately;
+            // no mutable position escapes this method or is retained by the mesh.
+            BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos(
+                blockX,level.getMinBuildHeight(),blockZ);
+            if(!level.getWorldBorder().isWithinBounds(cursor)
                 || !level.hasChunk(blockX>>4,blockZ>>4)) return Double.NaN;
 
             // A no-leaves heightmap can still select the top of a tall tree trunk.
@@ -265,27 +269,29 @@ public final class RiftClientState {
             int maxSurfaceY=Math.min(referenceY+8,level.getMaxBuildHeight()-2);
             int minSurfaceY=Math.max(level.getMinBuildHeight()+1,referenceY-32);
             for(int candidateY=maxSurfaceY;candidateY>=minSurfaceY;candidateY--) {
-                BlockPos supportPos=new BlockPos(blockX,candidateY-1,blockZ);
-                BlockState support=level.getBlockState(supportPos);
+                cursor.set(blockX,candidateY-1,blockZ);
+                BlockState support=level.getBlockState(cursor);
                 if(!isGroundSupport(support) || !support.getFluidState().isEmpty()) continue;
+                var supportCollision=support.getCollisionShape(level,cursor);
+                double supportHeight=supportCollision.isEmpty()
+                    ? support.getShape(level,cursor).max(Direction.Axis.Y)
+                    : supportCollision.max(Direction.Axis.Y);
 
-                BlockPos surfacePos=new BlockPos(blockX,candidateY,blockZ);
-                BlockState surface=level.getBlockState(surfacePos);
-                BlockState head=level.getBlockState(surfacePos.above());
+                cursor.set(blockX,candidateY,blockZ);
+                BlockState surface=level.getBlockState(cursor);
                 // The ribbon is coplanar with the ground. Canopy and low overhangs
                 // above it should occlude naturally through depth testing, not reject
                 // an otherwise valid ground sample in forests.
-                if(surface.blocksMotion()
-                    || !surface.getFluidState().isEmpty() || !head.getFluidState().isEmpty()) continue;
-
-                var supportCollision=support.getCollisionShape(level,supportPos);
-                double supportHeight=supportCollision.isEmpty()
-                    ? support.getShape(level,supportPos).max(Direction.Axis.Y)
-                    : supportCollision.max(Direction.Axis.Y);
-                var coverCollision=surface.getCollisionShape(level,surfacePos);
+                if(surface.blocksMotion() || !surface.getFluidState().isEmpty()) continue;
+                var coverCollision=surface.getCollisionShape(level,cursor);
                 double coverHeight=coverCollision.isEmpty()
                     ? Double.NaN
                     : coverCollision.max(Direction.Axis.Y);
+
+                cursor.set(blockX,candidateY+1,blockZ);
+                BlockState head=level.getBlockState(cursor);
+                if(!head.getFluidState().isEmpty()) continue;
+
                 double surfaceOffset=groundSurfaceOffset(supportHeight,coverHeight);
                 return candidateY-1+surfaceOffset+.035D;
             }
