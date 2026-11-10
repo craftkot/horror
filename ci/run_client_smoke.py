@@ -108,6 +108,14 @@ def capture_test_world():
             time.sleep(0.08)
         print("WORLD_CAPTURE_INPUT: camera pitch mouse delta",delta_y,"moved",moved,flush=True)
         return moved
+    def is_rift_violet_pixel(r,g,b):
+        # Reject pale lavender UI/death-screen skies; the rift must be saturated violet.
+        return r>55 and b>80 and b>g*1.5 and r>g*1.5 and b-r<150
+    # Regression samples are taken from the real Sparse death screen and Normal rift frame.
+    if is_rift_violet_pixel(142,127,155) or not is_rift_violet_pixel(134,44,150):
+        raise RuntimeError("BLACK FREQUENCY sky pixel classifier regression")
+    print("WORLD_CAPTURE: saturated violet pixel classifier verified",flush=True)
+
     def verify_sky_pixels(name, region, minimum, max_green=None):
         from PIL import Image
         path=shots/name
@@ -136,7 +144,7 @@ def capture_test_world():
                     row_purple=0
                     start=y*crop.width
                     for r,g,b in pixels[start:start+crop.width]:
-                        if r>35 and b>45 and b>g*1.25 and r>g*1.35 and b-r<150:
+                        if is_rift_violet_pixel(r,g,b):
                             purple+=1
                             row_purple+=1
                         if g>r*1.15 and g>b*1.15 and g>25:
