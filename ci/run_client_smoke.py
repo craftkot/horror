@@ -226,9 +226,9 @@ def capture_test_world():
         if beacon_ready_at is None:
             beacon_ready_at=now
             print("WORLD_CAPTURE: beacon ready; waiting for client teleport",flush=True)
-        # In the full Normal scenario, prove the player-visible ground fracture
-        # before consuming the recovery beacon. Sparse keeps its short path.
-        if os.environ.get("BF_TEST_SPARSE_RECOVERY")!="1" and not terrain_shot:
+        # Both Normal and Sparse must capture the real ground fissure before
+        # the physical beacon is consumed by the player's right-click.
+        if not terrain_shot:
             return
         if now-beacon_ready_at<1.5 or now-last_beacon_attempt<2.0 or beacon_attempts>=8:
             return
@@ -322,10 +322,10 @@ def capture_test_world():
                         or "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in logs):
                     return
                 marker=re.search(
-                    r"BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_EMITTED x=(-?\\d+) y=(-?\\d+) z=(-?\\d+)",
+                    r"BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_EMITTED x=(-?\d+) y=(-?\d+) z=(-?\d+)",
                     logs)
                 geometry=re.search(
-                    r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples=(\\d+) heightmap=motion-blocking-no-leaves",
+                    r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples=(\d+) heightmap=motion-blocking-no-leaves",
                     logs)
                 if not marker or not geometry:
                     return
@@ -571,7 +571,7 @@ def capture_test_world():
                     return False
                 print("WORLD_CAPTURE: POST_RESTORE_BEACON_BREAK_GUARD_VERIFIED (synthetic event)",flush=True)
             fissure=re.search(
-                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples=(\\d+) heightmap=motion-blocking-no-leaves",
+                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples=(\d+) heightmap=motion-blocking-no-leaves",
                 log_after)
             if not fissure or int(fissure.group(1))<6:
                 print("WORLD_CAPTURE_FAIL: ground fissure geometry was not emitted with enough loaded samples",flush=True)
