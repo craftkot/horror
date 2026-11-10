@@ -107,6 +107,10 @@ public final class RiftClientState {
         private static final int MIN_RENDERED_ARMS=2;
         // Do not turn a sharp cliff into a vertical translucent wall.
         private static final double MAX_GROUND_SEGMENT_Y_DELTA=1.25D;
+        // Slightly widen the ground seam so it remains legible through partial canopy gaps.
+        private static final double GROUND_GLOW_WIDTH_SCALE=4.0D;
+        private static final double GROUND_CORE_WIDTH_SCALE=.52D;
+        private static final double GROUND_EDGE_HALF_WIDTH=.016D;
         private static boolean continuityProfileLogged;
         private static boolean continuityBuildLogged;
         private static int cachedSteepStepBreaks;
@@ -115,6 +119,7 @@ public final class RiftClientState {
         private static boolean renderEventLogged;
         private static boolean emptyMeshLogged;
         private static boolean taperProfileLogged;
+        private static boolean visualProfileLogged;
         private static boolean surfaceWindowLogged;
         private static boolean surfaceHeightProfileLogged;
         private static boolean rangeRejectLogged;
@@ -145,6 +150,15 @@ public final class RiftClientState {
                 taperProfileLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
                     "BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED tip={} middle={} end={}",tip,middle,end);
+            }
+            if(!visualProfileLogged) {
+                if(!(GROUND_GLOW_WIDTH_SCALE>3.6D && GROUND_CORE_WIDTH_SCALE>.48D
+                    && GROUND_EDGE_HALF_WIDTH>.012D && GROUND_EDGE_HALF_WIDTH<.045D))
+                    throw new IllegalStateException("BLACK FREQUENCY ground mesh visual profile regression");
+                visualProfileLogged=true;
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale={} coreScale={} edgeHalfWidth={}",
+                    GROUND_GLOW_WIDTH_SCALE,GROUND_CORE_WIDTH_SCALE,GROUND_EDGE_HALF_WIDTH);
             }
             if(!surfaceHeightProfileLogged) {
                 double fullBlock=groundSurfaceOffset(1.0D,Double.NaN);
@@ -399,6 +413,7 @@ public final class RiftClientState {
             renderEventLogged=false;
             emptyMeshLogged=false;
             taperProfileLogged=false;
+            visualProfileLogged=false;
             surfaceWindowLogged=false;
             surfaceHeightProfileLogged=false;
             rangeRejectLogged=false;
@@ -500,18 +515,18 @@ public final class RiftClientState {
                     double wave=.5D+.5D*Math.sin(time*.14D+segment.phase());
                     // A slow travelling pulse changes width independently along
                     // the seam; endpoint taper keeps each arm from ending bluntly.
-                    double widthFlicker=.003D*Math.sin(time*.055D+segment.phase()*1.9D);
-                    double halfWidth=Math.max(.038D,.042D+.014D*wave+widthFlicker);
+                    double widthFlicker=.004D*Math.sin(time*.055D+segment.phase()*1.9D);
+                    double halfWidth=Math.max(.045D,.048D+.016D*wave+widthFlicker);
                     float pulse=(float)(.78D+.22D*Math.sin(time*.19D+segment.phase()));
                     float alpha=boundedStrength*pulse;
-                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*3.6D,
+                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_GLOW_WIDTH_SCALE,
                         .20F,.025F,.43F,alpha*.34F);
-                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*.48D,
+                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_CORE_WIDTH_SCALE,
                         .008F,.001F,.022F,alpha*.94F);
                     float edgeAlpha=Math.min(1.0F,boundedStrength*(.94F*pulse+.06F));
-                    ribbon(builder,matrix,camera,segment,halfWidth*1.9D,.012D,
+                    ribbon(builder,matrix,camera,segment,halfWidth*1.9D,GROUND_EDGE_HALF_WIDTH,
                         .78F,.18F,1.0F,edgeAlpha);
-                    ribbon(builder,matrix,camera,segment,-halfWidth*1.9D,.012D,
+                    ribbon(builder,matrix,camera,segment,-halfWidth*1.9D,GROUND_EDGE_HALF_WIDTH,
                         .78F,.18F,1.0F,edgeAlpha);
                 }
                 BufferUploader.drawWithShader(builder.end());
