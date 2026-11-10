@@ -18,13 +18,31 @@ import net.minecraftforge.fml.common.Mod;
 import java.io.IOException;
 
 public final class RiftSkyRenderer {
+    private static final float MIN_VISIBLE_STRENGTH=0.0001f;
     private static ShaderInstance shader;
     private static boolean firstVisibleFrameLogged;
+
+    private static boolean shouldRender(float strength) {
+        // Match the fragment shader's transparent early-out exactly. Avoid
+        // rebuilding and submitting a fullscreen quad while the rift is invisible.
+        return Float.isFinite(strength) && strength>MIN_VISIBLE_STRENGTH;
+    }
+
+    private static void verifyRenderThreshold() {
+        if(shouldRender(0.0f) || shouldRender(MIN_VISIBLE_STRENGTH)
+            || !shouldRender(MIN_VISIBLE_STRENGTH+0.00001f)
+            || shouldRender(Float.NaN) || shouldRender(Float.POSITIVE_INFINITY)
+            || shouldRender(Float.NEGATIVE_INFINITY))
+            throw new IllegalStateException("BLACK FREQUENCY sky render threshold regression");
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST SKY_RENDER_THRESHOLD_VERIFIED");
+    }
 
     @Mod.EventBusSubscriber(modid="blackfrequency", bus=Mod.EventBusSubscriber.Bus.MOD, value=Dist.CLIENT)
     public static final class Registration {
         @SubscribeEvent
         public static void shaders(RegisterShadersEvent event) throws IOException {
+            verifyRenderThreshold();
             event.registerShader(
                 new ShaderInstance(event.getResourceProvider(),
                     new ResourceLocation("blackfrequency","sky_rift"), DefaultVertexFormat.POSITION),
@@ -45,8 +63,9 @@ public final class RiftSkyRenderer {
             // A stale Overworld packet must not draw the fracture in other dimensions.
             if(!mc.level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
             float strength=RiftClientState.visibleStrength();
-            // Reject corrupted client state before sending it to the GPU.
-            if(!Float.isFinite(strength) || strength<=0f) return;
+            // Reject corrupted client state before sending it to the GPU, and
+            // skip the draw entirely while the shader would output transparency.
+            if(!shouldRender(strength)) return;
             strength=Math.min(strength,1f);
             if(!firstVisibleFrameLogged) {
                 firstVisibleFrameLogged=true;
