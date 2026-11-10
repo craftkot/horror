@@ -7,6 +7,7 @@ MOUSE_SENSITIVITY=0.6
 MIN_GROUND_MESH_SEGMENTS=8
 MIN_GROUND_MESH_ARMS=2
 MAX_GROUND_MESH_ARMS=4
+GROUND_MESH_SAMPLES=48
 MC.mkdir(parents=True,exist_ok=True)
 
 def status(x): print("[install]",x,flush=True)
@@ -372,7 +373,7 @@ def capture_test_world():
                     r"BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)",
                     logs)
                 mesh=re.search(
-                    r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) arms=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+)",
+                    r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) arms=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+) sampledColumns=(\d+) cacheHits=(\d+)",
                     logs)
                 pending_mesh=re.search(
                     r"BLACK_FREQUENCY_GROUND_MESH_PENDING segments=(\d+) arms=(\d+) requiredSegments=(\d+) requiredArms=(\d+)",
@@ -393,7 +394,16 @@ def capture_test_world():
                 total_particles=int(particles.group(4))
                 mesh_segments=int(mesh.group(1))
                 mesh_arms=int(mesh.group(2))
-                mesh_anchor_x,mesh_anchor_z=map(int,mesh.groups()[2:])
+                mesh_anchor_x,mesh_anchor_z=map(int,mesh.groups()[2:4])
+                mesh_columns=int(mesh.group(5))
+                mesh_cache_hits=int(mesh.group(6))
+                if not (0<mesh_columns<GROUND_MESH_SAMPLES
+                        and mesh_cache_hits>0
+                        and mesh_columns+mesh_cache_hits==GROUND_MESH_SAMPLES):
+                    terrain_capture_failed=True
+                    print("WORLD_CAPTURE_FAIL: per-build ground-column cache accounting is invalid",
+                          "columns",mesh_columns,"cacheHits",mesh_cache_hits,flush=True)
+                    return
                 if (mesh_segments<MIN_GROUND_MESH_SEGMENTS
                         or mesh_arms<MIN_GROUND_MESH_ARMS or mesh_arms>MAX_GROUND_MESH_ARMS):
                     terrain_capture_failed=True
@@ -756,13 +766,21 @@ def capture_test_world():
                 r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) dragonBreath=(\d+) reversePortal=(\d+) total=(\d+) heightmap=motion-blocking-no-leaves",
                 log_after)
             ground_mesh=re.search(
-                r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) arms=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+)",
+                r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) arms=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+) sampledColumns=(\d+) cacheHits=(\d+)",
                 log_after)
             if not ground_mesh:
                 print("WORLD_CAPTURE_FAIL: client did not render a bounded ground fissure mesh",flush=True)
                 return False
             mesh_segments=int(ground_mesh.group(1))
             mesh_arms=int(ground_mesh.group(2))
+            mesh_columns=int(ground_mesh.group(5))
+            mesh_cache_hits=int(ground_mesh.group(6))
+            if not (0<mesh_columns<GROUND_MESH_SAMPLES
+                    and mesh_cache_hits>0
+                    and mesh_columns+mesh_cache_hits==GROUND_MESH_SAMPLES):
+                print("WORLD_CAPTURE_FAIL: per-build ground-column cache accounting is invalid",
+                      "columns",mesh_columns,"cacheHits",mesh_cache_hits,flush=True)
+                return False
             if (mesh_segments<MIN_GROUND_MESH_SEGMENTS
                     or mesh_arms<MIN_GROUND_MESH_ARMS or mesh_arms>MAX_GROUND_MESH_ARMS):
                 print("WORLD_CAPTURE_FAIL: final ground mesh is below the shared segment/arm threshold",
