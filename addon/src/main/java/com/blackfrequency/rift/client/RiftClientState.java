@@ -87,7 +87,6 @@ public final class RiftClientState {
      * Client-only ground mesh for the same four-arm fissure emitted by the server.
      * It is cosmetic: it reads only already-loaded client chunks and never edits terrain.
      */
-    @Mod.EventBusSubscriber(modid="blackfrequency", bus=Mod.EventBusSubscriber.Bus.FORGE, value=Dist.CLIENT)
     public static final class GroundRenderer {
         private static final int RADIUS=48;
         private static final int ARM_COUNT=4;
@@ -105,6 +104,8 @@ public final class RiftClientState {
         private static final int MIN_RENDERED_ARMS=2;
         private static boolean firstRenderLogged;
         private static boolean pendingRenderLogged;
+        private static boolean renderEventLogged;
+        private static boolean emptyMeshLogged;
 
         private record GroundPoint(double x,double y,double z) {}
         private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,double phase) {}
@@ -121,24 +122,23 @@ public final class RiftClientState {
         }
 
         private static GroundPoint sampleGround(net.minecraft.client.multiplayer.ClientLevel level,
-                int blockX,int blockZ,double x,double z,int anchorSurfaceY) {
+                int blockX,int blockZ,double x,double z) {
             if(!level.getWorldBorder().isWithinBounds(
                     new BlockPos(blockX,level.getMinBuildHeight(),blockZ))
                 || !level.hasChunk(blockX>>4,blockZ>>4)) return null;
 
-            // Heightmaps select the highest point in a column. In a jagged biome
-            // that can be the top of a distant ice spike or cliff, far above the
-            // fracture anchor. Sample a narrow local band around the anchor instead
-            // and require two blocks of clearance so the ribbon follows walkable
-            // ground rather than bridging vertical walls or roofs.
-            int minSurfaceY=Math.max(level.getMinBuildHeight()+1,anchorSurfaceY-8);
-            int maxSurfaceY=Math.min(level.getMaxBuildHeight()-2,anchorSurfaceY+4);
-            for(int surfaceY=maxSurfaceY;surfaceY>=minSurfaceY;surfaceY--) {
-                BlockPos supportPos=new BlockPos(blockX,surfaceY-1,blockZ);
+            // Mirror the server fissure sampler: start at this column's no-leaves
+            // heightmap and walk down at most 32 blocks past trunks, leaves and
+            // planks. An anchor-relative band can miss valid ground on a steep drop.
+            int surfaceY=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,blockX,blockZ);
+            int minSurfaceY=Math.max(level.getMinBuildHeight()+1,surfaceY-32);
+            for(int candidateY=Math.min(surfaceY,level.getMaxBuildHeight()-2);
+                    candidateY>=minSurfaceY;candidateY--) {
+                BlockPos supportPos=new BlockPos(blockX,candidateY-1,blockZ);
                 BlockState support=level.getBlockState(supportPos);
                 if(!isGroundSupport(support) || !support.getFluidState().isEmpty()) continue;
 
-                BlockPos surfacePos=new BlockPos(blockX,surfaceY,blockZ);
+                BlockPos surfacePos=new BlockPos(blockX,candidateY,blockZ);
                 BlockState surface=level.getBlockState(surfacePos);
                 BlockState head=level.getBlockState(surfacePos.above());
                 if(surface.blocksMotion() || head.blocksMotion()
@@ -149,15 +149,14 @@ public final class RiftClientState {
                     : surface.getShape(level,surfacePos).max(Direction.Axis.Y);
                 if(!Double.isFinite(shapeHeight)) shapeHeight=0.0D;
                 shapeHeight=Math.max(0.0D,Math.min(1.0D,shapeHeight));
-                double baseY=surface.isAir()?surfaceY-1:surfaceY;
+                double baseY=surface.isAir()?candidateY-1:candidateY;
                 return new GroundPoint(x,baseY+shapeHeight+.035D,z);
             }
             return null;
         }
 
         private static GroundMesh buildSegments(
-                net.minecraft.client.multiplayer.ClientLevel level,int worldAnchorX,int worldAnchorZ,
-                int anchorSurfaceY) {
+                net.minecraft.client.multiplayer.ClientLevel level,int worldAnchorX,int worldAnchorZ) {
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
             int activeArms=0;
             for(int arm=0;arm<ARM_COUNT;arm++) {
@@ -177,7 +176,7 @@ public final class RiftClientState {
                         previous=null;
                         continue;
                     }
-                    GroundPoint current=sampleGround(level,blockX,blockZ,x,z,anchorSurfaceY);
+                    GroundPoint current=sampleGround(level,blockX,blockZ,x,z);
                     if(current==null) {
                         // Never bridge a visual seam across an unloaded chunk,
                         // unsupported column, liquid, or obstructed headroom.
@@ -238,10 +237,16 @@ public final class RiftClientState {
             cachedArmCount=0;
             firstRenderLogged=false;
             pendingRenderLogged=false;
+            renderEventLogged=false;
+            emptyMeshLogged=false;
         }
 
-        @SubscribeEvent
         public static void render(RenderLevelStageEvent event) {
+            if(!renderEventLogged) {
+                renderEventLogged=true;
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_GROUND_MESH_EVENT_ACTIVE stage=after_particles");
+            }
             if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_PARTICLES) return;
             Minecraft minecraft=Minecraft.getInstance();
             var level=minecraft.level;
@@ -264,11 +269,12 @@ public final class RiftClientState {
             }
 
             long tick=level.getGameTime();
-            if(level!=cachedLevel || worldAnchorX!=cachedAnchorX || worldAnchorZ!=cachedAnchorZ
-                || cachedTick==Long.MIN_VALUE || tick<cachedTick || tick-cachedTick>=REBUILD_INTERVAL) {
+            boolean anchorChanged=level!=cachedLevel || worldAnchorX!=cachedAnchorX || worldAnchorZ!=cachedAnchorZ;
+            if(anchorChanged) emptyMeshLogged=false;
+            if(anchorChanged || cachedTick==Long.MIN_VALUE || tick<cachedTick || tick-cachedTick>=REBUILD_INTERVAL) {
                 cachedAnchorSurfaceY=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
                     worldAnchorX,worldAnchorZ);
-                GroundMesh mesh=buildSegments(level,worldAnchorX,worldAnchorZ,cachedAnchorSurfaceY);
+                GroundMesh mesh=buildSegments(level,worldAnchorX,worldAnchorZ);
                 cachedSegments=mesh.segments();
                 cachedArmCount=mesh.activeArms();
                 cachedLevel=level;
@@ -278,7 +284,15 @@ public final class RiftClientState {
             }
             double dy=player.getY()-cachedAnchorSurfaceY;
             if(horizontalDistanceSquared+dy*dy>64.0D*64.0D) return;
-            if(cachedSegments.isEmpty()) return;
+            if(cachedSegments.isEmpty()) {
+                if(!emptyMeshLogged) {
+                    emptyMeshLogged=true;
+                    com.mojang.logging.LogUtils.getLogger().info(
+                        "BLACK_FREQUENCY_GROUND_MESH_EMPTY anchorY={} anchorChunkLoaded={}",
+                        cachedAnchorSurfaceY,level.hasChunk(worldAnchorX>>4,worldAnchorZ>>4));
+                }
+                return;
+            }
 
             Matrix4f matrix=event.getPoseStack().last().pose();
             Vec3 camera=event.getCamera().getPosition();

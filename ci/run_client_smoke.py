@@ -633,6 +633,15 @@ def capture_test_world():
                 snap("terrain-fracture-not-seen.png")
                 return False
             if not terrain_shot:
+                final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                if "BLACK_FREQUENCY_GROUND_MESH_EVENT_ACTIVE" not in final_log:
+                    print("WORLD_CAPTURE_FAIL: AFTER_PARTICLES ground renderer was never dispatched",flush=True)
+                elif "BLACK_FREQUENCY_GROUND_MESH_EMPTY" in final_log:
+                    print("WORLD_CAPTURE_FAIL: client sampler found no valid loaded surface segments",flush=True)
+                elif "BLACK_FREQUENCY_GROUND_MESH_RENDERED" not in final_log:
+                    print("WORLD_CAPTURE_FAIL: ground renderer ran but did not reach its mesh readiness threshold",flush=True)
+                else:
+                    print("WORLD_CAPTURE_FAIL: mesh marker exists but no player-visible fissure frame was captured",flush=True)
                 print("WORLD_CAPTURE_FAIL: no player-visible ground fissure was captured",flush=True)
                 snap("recovery-beacon-ground-context.png")
                 return False

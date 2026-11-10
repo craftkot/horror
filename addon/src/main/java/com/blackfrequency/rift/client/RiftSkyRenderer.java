@@ -57,6 +57,10 @@ public final class RiftSkyRenderer {
     public static final class RenderEvents {
         @SubscribeEvent
         public static void sky(RenderLevelStageEvent event) {
+            if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_PARTICLES) {
+                RiftClientState.GroundRenderer.render(event);
+                return;
+            }
             if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_SKY || shader==null) return;
             Minecraft mc=Minecraft.getInstance();
             if(mc.level==null || mc.player==null) return;
