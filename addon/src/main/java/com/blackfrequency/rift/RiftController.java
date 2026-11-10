@@ -1878,10 +1878,10 @@ public final class RiftController {
                             LOGGER.warn("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_UNAVAILABLE");
                             ciFissureTargetUnavailableLogged=true;
                         }
-                        return;
+                    } else {
+                        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x={} y={} z={} distanceSquared={}",
+                            visibleFissure.x(),visibleFissure.y(),visibleFissure.z(),visibleFissure.distanceSquared());
                     }
-                    LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x={} y={} z={} distanceSquared={}",
-                        visibleFissure.x(),visibleFissure.y(),visibleFissure.z(),visibleFissure.distanceSquared());
                     // Restore ordinary vanilla gravity only after the player is
                     // standing above a loaded, motion-blocking support block.
                     ciPlayerSafePadReady=true;
