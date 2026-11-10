@@ -447,10 +447,12 @@ def capture_test_world():
                     frame=source.convert("RGB")
                 width,height=frame.size
                 pixels=frame.load()
-                # Keep the classifier on the aimed ground plane. The sky shader
-                # can be purple through canopy gaps and must not satisfy a ground test.
-                left,right=int(width*.30),int(width*.70)
-                top,bottom=int(height*.48),int(height*.90)
+                # The server-verified target can project into the upper half when
+                # the safe pad is above the local fissure. Scan the central viewport,
+                # not a fixed lower strip; saturated particle and mesh classifiers
+                # still reject the sky shader and HUD.
+                left,right=int(width*.20),int(width*.80)
+                top,bottom=int(height*.10),int(height*.90)
                 violet_pixels=0
                 visible_tiles=0
                 mesh_pixels=0
