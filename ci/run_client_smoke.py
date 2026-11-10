@@ -375,7 +375,7 @@ def capture_test_world():
                     r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) arms=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+)",
                     logs)
                 pending_mesh=re.search(
-                    r"BLACK_FREQUENCY_GROUND_MESH_PENDING segments=(\\d+) arms=(\\d+) requiredSegments=(\\d+) requiredArms=(\\d+)",
+                    r"BLACK_FREQUENCY_GROUND_MESH_PENDING segments=(\d+) arms=(\d+) requiredSegments=(\d+) requiredArms=(\d+)",
                     logs)
                 if pending_mesh:
                     pending_segments,pending_arms,required_segments,required_arms=map(int,pending_mesh.groups())
