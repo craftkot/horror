@@ -107,6 +107,7 @@ public final class RiftClientState {
         private static boolean emptyMeshLogged;
         private static boolean taperProfileLogged;
         private static boolean surfaceWindowLogged;
+        private static boolean surfaceHeightProfileLogged;
         private static boolean rangeRejectLogged;
 
         private record GroundPoint(double x,double y,double z) {}
@@ -125,15 +126,47 @@ public final class RiftClientState {
         }
 
         private static void verifyTaperProfile() {
-            if(taperProfileLogged) return;
-            double tip=endpointTaper(1);
-            double middle=endpointTaper(SEGMENTS_PER_ARM/2);
-            double end=endpointTaper(SEGMENTS_PER_ARM);
-            if(!(tip<middle && end<middle && Math.abs(tip-end)<1.0E-9D))
-                throw new IllegalStateException("BLACK FREQUENCY ground mesh taper regression");
-            taperProfileLogged=true;
-            com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED tip={} middle={} end={}",tip,middle,end);
+            if(!taperProfileLogged) {
+                double tip=endpointTaper(1);
+                double middle=endpointTaper(SEGMENTS_PER_ARM/2);
+                double end=endpointTaper(SEGMENTS_PER_ARM);
+                if(!(tip<middle && end<middle && Math.abs(tip-end)<1.0E-9D))
+                    throw new IllegalStateException("BLACK FREQUENCY ground mesh taper regression");
+                taperProfileLogged=true;
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED tip={} middle={} end={}",tip,middle,end);
+            }
+            if(!surfaceHeightProfileLogged) {
+                double fullBlock=groundSurfaceOffset(1.0D,Double.NaN);
+                double tallGrass=groundSurfaceOffset(1.0D,Double.NaN);
+                double snowLayer=groundSurfaceOffset(1.0D,.125D);
+                double bottomSlab=groundSurfaceOffset(.5D,Double.NaN);
+                double invalidCover=groundSurfaceOffset(.75D,Double.POSITIVE_INFINITY);
+                if(Math.abs(fullBlock-1.0D)>1.0E-9D
+                    || Math.abs(tallGrass-1.0D)>1.0E-9D
+                    || Math.abs(snowLayer-1.125D)>1.0E-9D
+                    || Math.abs(bottomSlab-.5D)>1.0E-9D
+                    || Math.abs(invalidCover-.75D)>1.0E-9D)
+                    throw new IllegalStateException("BLACK FREQUENCY ground surface collision-height regression");
+                surfaceHeightProfileLogged=true;
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_GROUND_MESH_SURFACE_HEIGHT_VERIFIED fullBlock={} tallGrass={} snowLayer={} bottomSlab={} invalidFallback={}",
+                    fullBlock,tallGrass,snowLayer,bottomSlab,invalidCover);
+            }
+        }
+
+        private static double boundedShapeHeight(double height,double fallback) {
+            return Double.isFinite(height)
+                ? Math.max(0.0D,Math.min(1.0D,height))
+                : fallback;
+        }
+
+        // Non-colliding plants have an outline shape but no physical top surface.
+        // Only a collision-bearing cover may raise the fissure above its support.
+        private static double groundSurfaceOffset(double supportHeight,double coverCollisionHeight) {
+            double supportTop=boundedShapeHeight(supportHeight,1.0D);
+            if(!Double.isFinite(coverCollisionHeight)) return supportTop;
+            return 1.0D+boundedShapeHeight(coverCollisionHeight,0.0D);
         }
 
         private static boolean isGroundSupport(BlockState state) {
@@ -169,13 +202,16 @@ public final class RiftClientState {
                 if(surface.blocksMotion()
                     || !surface.getFluidState().isEmpty() || !head.getFluidState().isEmpty()) continue;
 
-                double shapeHeight=surface.isAir()
+                var supportCollision=support.getCollisionShape(level,supportPos);
+                double supportHeight=supportCollision.isEmpty()
                     ? support.getShape(level,supportPos).max(Direction.Axis.Y)
-                    : surface.getShape(level,surfacePos).max(Direction.Axis.Y);
-                if(!Double.isFinite(shapeHeight)) shapeHeight=0.0D;
-                shapeHeight=Math.max(0.0D,Math.min(1.0D,shapeHeight));
-                double baseY=surface.isAir()?candidateY-1:candidateY;
-                return new GroundPoint(x,baseY+shapeHeight+.035D,z);
+                    : supportCollision.max(Direction.Axis.Y);
+                var coverCollision=surface.getCollisionShape(level,surfacePos);
+                double coverHeight=coverCollision.isEmpty()
+                    ? Double.NaN
+                    : coverCollision.max(Direction.Axis.Y);
+                double surfaceOffset=groundSurfaceOffset(supportHeight,coverHeight);
+                return new GroundPoint(x,candidateY-1+surfaceOffset+.035D,z);
             }
             return null;
         }
@@ -301,6 +337,7 @@ public final class RiftClientState {
             emptyMeshLogged=false;
             taperProfileLogged=false;
             surfaceWindowLogged=false;
+            surfaceHeightProfileLogged=false;
             rangeRejectLogged=false;
         }
 
