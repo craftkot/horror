@@ -15,7 +15,6 @@ import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
@@ -107,6 +106,8 @@ public final class RiftClientState {
         private static boolean renderEventLogged;
         private static boolean emptyMeshLogged;
         private static boolean taperProfileLogged;
+        private static boolean surfaceWindowLogged;
+        private static boolean rangeRejectLogged;
 
         private record GroundPoint(double x,double y,double z) {}
         private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,
@@ -144,18 +145,17 @@ public final class RiftClientState {
         }
 
         private static GroundPoint sampleGround(net.minecraft.client.multiplayer.ClientLevel level,
-                int blockX,int blockZ,double x,double z) {
+                int blockX,int blockZ,double x,double z,int referenceY) {
             if(!level.getWorldBorder().isWithinBounds(
                     new BlockPos(blockX,level.getMinBuildHeight(),blockZ))
                 || !level.hasChunk(blockX>>4,blockZ>>4)) return null;
 
-            // Mirror the server fissure sampler: start at this column's no-leaves
-            // heightmap and walk down at most 32 blocks past trunks, leaves and
-            // planks. An anchor-relative band can miss valid ground on a steep drop.
-            int surfaceY=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,blockX,blockZ);
-            int minSurfaceY=Math.max(level.getMinBuildHeight()+1,surfaceY-32);
-            for(int candidateY=Math.min(surfaceY,level.getMaxBuildHeight()-2);
-                    candidateY>=minSurfaceY;candidateY--) {
+            // A no-leaves heightmap can still select the top of a tall tree trunk.
+            // Search a bounded window around the nearby player's actual height instead:
+            // this finds the ground below canopies without scanning an entire column.
+            int maxSurfaceY=Math.min(referenceY+8,level.getMaxBuildHeight()-2);
+            int minSurfaceY=Math.max(level.getMinBuildHeight()+1,referenceY-32);
+            for(int candidateY=maxSurfaceY;candidateY>=minSurfaceY;candidateY--) {
                 BlockPos supportPos=new BlockPos(blockX,candidateY-1,blockZ);
                 BlockState support=level.getBlockState(supportPos);
                 if(!isGroundSupport(support) || !support.getFluidState().isEmpty()) continue;
@@ -181,7 +181,8 @@ public final class RiftClientState {
         }
 
         private static GroundMesh buildSegments(
-                net.minecraft.client.multiplayer.ClientLevel level,int worldAnchorX,int worldAnchorZ) {
+                net.minecraft.client.multiplayer.ClientLevel level,int worldAnchorX,int worldAnchorZ,
+                int referenceY) {
             verifyTaperProfile();
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
             int activeArms=0;
@@ -202,7 +203,7 @@ public final class RiftClientState {
                         previous=null;
                         continue;
                     }
-                    GroundPoint current=sampleGround(level,blockX,blockZ,x,z);
+                    GroundPoint current=sampleGround(level,blockX,blockZ,x,z,referenceY);
                     if(current==null) {
                         // Never bridge a visual seam across an unloaded chunk,
                         // unsupported column, liquid, or obstructed headroom.
@@ -224,6 +225,34 @@ public final class RiftClientState {
                 if(result.size()>armStart) activeArms++;
             }
             return new GroundMesh(List.copyOf(result),activeArms);
+        }
+
+        // Use the nearest actually sampled surface point for vertical culling.
+        // The anchor column's heightmap may point at a tree canopy dozens of blocks
+        // above the ground and incorrectly hide a valid nearby fissure mesh.
+        private static int estimateAnchorSurfaceY(List<GroundSegment> segments,
+                int worldAnchorX,int worldAnchorZ,int fallbackY) {
+            double centerX=worldAnchorX+.5D;
+            double centerZ=worldAnchorZ+.5D;
+            double nearestDistanceSquared=Double.POSITIVE_INFINITY;
+            double nearestY=fallbackY;
+            for(GroundSegment segment:segments) {
+                GroundPoint a=segment.a();
+                double ax=a.x()-centerX,az=a.z()-centerZ;
+                double aDistanceSquared=ax*ax+az*az;
+                if(aDistanceSquared<nearestDistanceSquared) {
+                    nearestDistanceSquared=aDistanceSquared;
+                    nearestY=a.y();
+                }
+                GroundPoint b=segment.b();
+                double bx=b.x()-centerX,bz=b.z()-centerZ;
+                double bDistanceSquared=bx*bx+bz*bz;
+                if(bDistanceSquared<nearestDistanceSquared) {
+                    nearestDistanceSquared=bDistanceSquared;
+                    nearestY=b.y();
+                }
+            }
+            return (int)Math.floor(nearestY);
         }
 
         private static int colorChannel(float value) {
@@ -271,6 +300,8 @@ public final class RiftClientState {
             renderEventLogged=false;
             emptyMeshLogged=false;
             taperProfileLogged=false;
+            surfaceWindowLogged=false;
+            rangeRejectLogged=false;
         }
 
         public static void render(RenderLevelStageEvent event) {
@@ -304,24 +335,40 @@ public final class RiftClientState {
             boolean anchorChanged=level!=cachedLevel || worldAnchorX!=cachedAnchorX || worldAnchorZ!=cachedAnchorZ;
             if(anchorChanged) emptyMeshLogged=false;
             if(anchorChanged || cachedTick==Long.MIN_VALUE || tick<cachedTick || tick-cachedTick>=REBUILD_INTERVAL) {
-                cachedAnchorSurfaceY=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                    worldAnchorX,worldAnchorZ);
-                GroundMesh mesh=buildSegments(level,worldAnchorX,worldAnchorZ);
+                int surfaceReferenceY=player.blockPosition().getY();
+                GroundMesh mesh=buildSegments(level,worldAnchorX,worldAnchorZ,surfaceReferenceY);
                 cachedSegments=mesh.segments();
                 cachedArmCount=mesh.activeArms();
+                cachedAnchorSurfaceY=estimateAnchorSurfaceY(cachedSegments,
+                    worldAnchorX,worldAnchorZ,surfaceReferenceY);
+                if(!surfaceWindowLogged) {
+                    surfaceWindowLogged=true;
+                    com.mojang.logging.LogUtils.getLogger().info(
+                        "BLACK_FREQUENCY_GROUND_MESH_SURFACE_WINDOW referenceY={} topOffset=8 bottomOffset=32 segments={} arms={}",
+                        surfaceReferenceY,cachedSegments.size(),cachedArmCount);
+                }
                 cachedLevel=level;
                 cachedAnchorX=worldAnchorX;
                 cachedAnchorZ=worldAnchorZ;
                 cachedTick=tick;
             }
-            double dy=player.getY()-cachedAnchorSurfaceY;
-            if(horizontalDistanceSquared+dy*dy>64.0D*64.0D) return;
             if(cachedSegments.isEmpty()) {
                 if(!emptyMeshLogged) {
                     emptyMeshLogged=true;
                     com.mojang.logging.LogUtils.getLogger().info(
                         "BLACK_FREQUENCY_GROUND_MESH_EMPTY anchorY={} anchorChunkLoaded={}",
                         cachedAnchorSurfaceY,level.hasChunk(worldAnchorX>>4,worldAnchorZ>>4));
+                }
+                return;
+            }
+            double dy=player.getY()-cachedAnchorSurfaceY;
+            double playerDistanceSquared=horizontalDistanceSquared+dy*dy;
+            if(playerDistanceSquared>64.0D*64.0D) {
+                if(!rangeRejectLogged) {
+                    rangeRejectLogged=true;
+                    com.mojang.logging.LogUtils.getLogger().info(
+                        "BLACK_FREQUENCY_GROUND_MESH_RANGE_REJECT playerY={} sampledSurfaceY={} distanceSquared={}",
+                        player.getY(),cachedAnchorSurfaceY,playerDistanceSquared);
                 }
                 return;
             }
