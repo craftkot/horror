@@ -693,7 +693,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: ground fissure geometry was not emitted with enough loaded samples",flush=True)
                 return False
             shards=re.search(
-                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARDS_EMITTED count=(\\d+) material=crying_obsidian",
+                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARDS_EMITTED count=([0-9]+) material=crying_obsidian",
                 log_after)
             if not shards or int(shards.group(1))!=8:
                 print("WORLD_CAPTURE_FAIL: all eight textured fissure-edge shards were not emitted",
