@@ -32,6 +32,7 @@ public final class RiftController {
     // CI-only hold while the sparse fracture removes the original spawn support.
     // Released only after the replacement beacon's standing pad is verified.
     private static boolean ciPlayerSafePadReady;
+    private static boolean ciFissureTargetUnavailableLogged;
     private static final long DAY = 24000L;
     // Only for disposable CI worlds. Never increases Minecraft's global tick rate.
     private static final long TEST_STEP = Boolean.getBoolean("blackfrequency.ciTestMode")
@@ -425,6 +426,53 @@ public final class RiftController {
             }
         }
         return new FissureEmission(samples,samples==0?Double.NaN:surfaceYTotal/samples);
+    }
+
+    private record FissureTarget(double x,double y,double z,double distanceSquared) {}
+
+    /**
+     * Pick a real emitted fissure sample that the test player can see from the
+     * verified beacon pad. A nearby surface hidden behind a cliff is not a
+     * useful camera target, even when its particles were sent successfully.
+     */
+    private static FissureTarget findVisibleFissureTarget(ServerLevel level,State s,
+            net.minecraft.server.level.ServerPlayer viewer) {
+        if(viewer==null || !viewer.isAlive() || viewer.isRemoved()) return null;
+        net.minecraft.world.phys.Vec3 eye=viewer.getEyePosition();
+        FissureTarget best=null;
+        for(int arm=0;arm<4;arm++) {
+            double angle=arm*Math.PI/2.0D;
+            for(int segment=1;segment<=6;segment++) {
+                double distance=segment*.78D;
+                double bend=Math.sin(segment*1.7D+arm*1.1D)*.18D;
+                double px=s.x+.5D+Math.cos(angle)*distance-Math.sin(angle)*bend;
+                double pz=s.z+.5D+Math.sin(angle)*distance+Math.cos(angle)*bend;
+                int blockX=(int)Math.floor(px),blockZ=(int)Math.floor(pz);
+                long dx=(long)blockX-s.x,dz=(long)blockZ-s.z;
+                if(dx*dx+dz*dz>(long)RADIUS*RADIUS
+                    || !level.getWorldBorder().isWithinBounds(
+                        new BlockPos(blockX,level.getMinBuildHeight(),blockZ))
+                    || !level.hasChunk(blockX>>4,blockZ>>4)) continue;
+                int surfaceY=findFissureGroundY(level,blockX,blockZ);
+                if(surfaceY==Integer.MIN_VALUE || surfaceY>=level.getMaxBuildHeight()
+                    || !isFissureGroundSupport(level.getBlockState(new BlockPos(blockX,surfaceY-1,blockZ))))
+                    continue;
+                net.minecraft.world.phys.Vec3 target=new net.minecraft.world.phys.Vec3(
+                    px,surfaceY+.10D,pz);
+                double vx=target.x-eye.x,vy=target.y-eye.y,vz=target.z-eye.z;
+                double horizontalSquared=vx*vx+vz*vz;
+                if(horizontalSquared<1.0D || horizontalSquared>36.0D || Math.abs(vy)>4.0D)
+                    continue;
+                var hit=level.clip(new net.minecraft.world.level.ClipContext(eye,target,
+                    net.minecraft.world.level.ClipContext.Block.COLLIDER,
+                    net.minecraft.world.level.ClipContext.Fluid.NONE,viewer));
+                if(hit.getType()!=net.minecraft.world.phys.HitResult.Type.MISS) continue;
+                double distanceSquared=vx*vx+vy*vy+vz*vz;
+                if(best==null || distanceSquared<best.distanceSquared())
+                    best=new FissureTarget(px,surfaceY+.10D,pz,distanceSquared);
+            }
+        }
+        return best;
     }
 
     // Run after ordinary explosion modifiers: protect the fixture even when
@@ -1824,6 +1872,16 @@ public final class RiftController {
                             playerSupport.getX(),playerSupport.getY(),playerSupport.getZ());
                         return;
                     }
+                    FissureTarget visibleFissure=findVisibleFissureTarget(level,s,demoPlayer);
+                    if(visibleFissure==null) {
+                        if(!ciFissureTargetUnavailableLogged) {
+                            LOGGER.warn("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_UNAVAILABLE");
+                            ciFissureTargetUnavailableLogged=true;
+                        }
+                        return;
+                    }
+                    LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x={} y={} z={} distanceSquared={}",
+                        visibleFissure.x(),visibleFissure.y(),visibleFissure.z(),visibleFissure.distanceSquared());
                     // Restore ordinary vanilla gravity only after the player is
                     // standing above a loaded, motion-blocking support block.
                     ciPlayerSafePadReady=true;
