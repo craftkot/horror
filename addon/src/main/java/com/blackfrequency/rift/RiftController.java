@@ -74,6 +74,12 @@ public final class RiftController {
         return Math.max(0,Math.min(maximum,value));
     }
 
+    // A valid finale cannot own more recovery snapshots than its edit budget.
+    // Bound the copied queue when loading damaged NBT to avoid unbounded growth.
+    private static int boundedSnapshotCount(int value) {
+        return Math.max(0,Math.min(MAX_EDITS,value));
+    }
+
     private static long boundedElapsed(long value) {
         return Math.max(0L,Math.min(DAY*10L,value));
     }
@@ -282,7 +288,15 @@ public final class RiftController {
             s.beaconPos=n.getLong("beaconPos");
             s.naturalBeaconPos=n.contains("naturalBeaconPos",Tag.TAG_LONG)?n.getLong("naturalBeaconPos"):Long.MIN_VALUE;
             ListTag saved=n.getList("snapshots",Tag.TAG_COMPOUND);
-            for(int i=0;i<saved.size();i++) s.snapshots.add(saved.getCompound(i));
+            int snapshotCount=boundedSnapshotCount(saved.size());
+            for(int i=0;i<snapshotCount;i++) s.snapshots.add(saved.getCompound(i));
+            if(saved.size()>snapshotCount) {
+                // Keep the oldest entries: fracture edits are recorded from the
+                // anchor outward, so this preserves the recovery core first.
+                LOGGER.warn("BLACK FREQUENCY: saved snapshot list has {} entries; retaining the first {} and ignoring {} excess entries",
+                    saved.size(),snapshotCount,saved.size()-snapshotCount);
+                s.setDirty();
+            }
             // A damaged or older save must not crash the server by indexing past
             // the persisted snapshot list. Never invent missing terrain data.
             if(s.restoring) {
@@ -718,6 +732,30 @@ public final class RiftController {
             || nextNonNegativeTick(Integer.MAX_VALUE)!=Integer.MAX_VALUE)
             throw new IllegalStateException("CI excessive saved counters were not bounded");
         LOGGER.info("BLACK_FREQUENCY_TEST CORRUPT_STATE_COUNTERS_SANITIZED");
+
+        // A corrupt NBT list must not grow the recovery queue beyond the same
+        // 95,000-entry ceiling enforced by terrain destruction.
+        ListTag oversizedSnapshots=new ListTag();
+        for(int i=0;i<MAX_EDITS+1;i++) {
+            CompoundTag entry=new CompoundTag();
+            entry.putLong("pos",new BlockPos(i,64,0).asLong());
+            oversizedSnapshots.add(entry);
+        }
+        CompoundTag oversizedSave=new CompoundTag();
+        oversizedSave.putBoolean("restoring",true);
+        oversizedSave.putInt("restoreIndex",MAX_EDITS);
+        oversizedSave.putInt("restoreScan",MAX_EDITS);
+        oversizedSave.put("snapshots",oversizedSnapshots);
+        State boundedSnapshots=State.load(oversizedSave);
+        if(boundedSnapshots.snapshots.size()!=MAX_EDITS
+            || boundedSnapshots.restoreIndex!=MAX_EDITS-1
+            || boundedSnapshots.restoreScan!=MAX_EDITS-1
+            || boundedSnapshots.snapshots.get(0).getLong("pos")!=new BlockPos(0,64,0).asLong()
+            || boundedSnapshots.snapshots.get(MAX_EDITS-1).getLong("pos")
+                !=new BlockPos(MAX_EDITS-1,64,0).asLong())
+            throw new IllegalStateException("CI oversized recovery snapshot list was not bounded safely");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_LIST_BOUNDED count={} cap={}",
+            boundedSnapshots.snapshots.size(),MAX_EDITS);
         LOGGER.info("BLACK_FREQUENCY_TEST PENDING_SNAPSHOT_PERSISTENCE_VERIFIED");
     }
 
