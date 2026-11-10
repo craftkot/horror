@@ -100,7 +100,9 @@ public final class RiftClientState {
         private static int cachedAnchorZ=Integer.MIN_VALUE;
         private static int cachedAnchorSurfaceY;
         private static List<GroundSegment> cachedSegments=List.of();
+        private static final int MIN_RENDERED_SEGMENTS=24;
         private static boolean firstRenderLogged;
+        private static boolean pendingRenderLogged;
 
         private record GroundPoint(double x,double y,double z) {}
         private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,double phase) {}
@@ -214,6 +216,7 @@ public final class RiftClientState {
             cachedAnchorSurfaceY=0;
             cachedSegments=List.of();
             firstRenderLogged=false;
+            pendingRenderLogged=false;
         }
 
         @SubscribeEvent
@@ -290,7 +293,17 @@ public final class RiftClientState {
                 RenderSystem.enableDepthTest();
                 RenderSystem.disableBlend();
             }
-            if(!firstRenderLogged) {
+            if(!firstRenderLogged && !pendingRenderLogged && !cachedSegments.isEmpty()) {
+                pendingRenderLogged=true;
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_GROUND_MESH_PENDING segments={} required={}",
+                    cachedSegments.size(),MIN_RENDERED_SEGMENTS);
+            }
+            // The first render can happen while only the spawn chunk has arrived.
+            // Keep drawing the available local segments, but do not report the mesh
+            // as ready until a connected surface is large enough for the client test.
+            // Rebuilds continue from loaded chunks only; no chunk tickets are requested.
+            if(!firstRenderLogged && cachedSegments.size()>=MIN_RENDERED_SEGMENTS) {
                 firstRenderLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
                     "BLACK_FREQUENCY_GROUND_MESH_RENDERED segments={} anchorX={} anchorZ={}",
