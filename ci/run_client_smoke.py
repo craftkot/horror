@@ -179,7 +179,9 @@ def capture_test_world():
         # Do not begin mouse automation until the server confirms that the
         # disposable player is protected from random gravity deaths.
         if ("BLACK_FREQUENCY_TEST PLAYER_RIFT_IMPULSES_SUPPRESSED_FOR_BEACON_TEST" not in logs
-                or "BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT" not in logs):
+                or "BLACK_FREQUENCY_TEST PLAYER_VANILLA_FALL_SUPPRESSED_FOR_BEACON_TEST" not in logs
+                or "BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT" not in logs
+                or "BLACK_FREQUENCY_TEST PLAYER_VANILLA_FALL_RESTORED_AFTER_SAFE_PAD" not in logs):
             return
         if "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in logs:
             return
@@ -502,6 +504,15 @@ def capture_test_world():
             if os.environ.get("BF_TEST_PLAYER_BEACON")=="1":
                 if "BLACK_FREQUENCY_TEST PLAYER_RIFT_IMPULSES_SUPPRESSED_FOR_BEACON_TEST" not in log_after:
                     print("WORLD_CAPTURE_FAIL: test-only rift impulse suppression was not observed",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST PLAYER_VANILLA_FALL_SUPPRESSED_FOR_BEACON_TEST" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: vanilla fall was not held while the spawn support was fractured",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST PLAYER_VANILLA_FALL_RESTORED_AFTER_SAFE_PAD" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: vanilla fall was not restored after a verified safe pad",flush=True)
+                    return False
+                if re.search(r"\\bEHTID_CI fell from a high place\\b",log_after):
+                    print("WORLD_CAPTURE_FAIL: test player died before beacon recovery",flush=True)
                     return False
                 if not re.search(
                         r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=-?\d+ y=-?\d+ z=-?\d+ support=solid fallDistance=0\.0",

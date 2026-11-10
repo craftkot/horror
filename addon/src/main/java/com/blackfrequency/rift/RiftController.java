@@ -29,6 +29,9 @@ public final class RiftController {
     // The client smoke test verifies a real beacon click, not player survival under random gravity.
     // Keep its single test player stable before the beacon exists; production physics is unchanged.
     private static boolean ciPlayerGravitySuppressionLogged;
+    // CI-only hold while the sparse fracture removes the original spawn support.
+    // Released only after the replacement beacon's standing pad is verified.
+    private static boolean ciPlayerSafePadReady;
     private static final long DAY = 24000L;
     // Only for disposable CI worlds. Never increases Minecraft's global tick rate.
     private static final long TEST_STEP = Boolean.getBoolean("blackfrequency.ciTestMode")
@@ -1442,8 +1445,20 @@ public final class RiftController {
                 // from the start of the anomaly phase, not only after the beacon has been placed.
                 // Otherwise a random high spawn can kill the player before the first right-click.
                 if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest")) {
+                    if(player.isAlive() && !player.isRemoved() && !player.isSpectator()) {
+                        // Suppressing only rift impulses is insufficient: vanilla gravity
+                        // still kills the player after the center-out scan removes spawn support.
+                        // Hold the disposable test player until the replacement beacon has
+                        // a verified solid standing pad; production physics is untouched.
+                        player.setNoGravity(!ciPlayerSafePadReady);
+                        if(!ciPlayerSafePadReady) {
+                            player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+                            player.fallDistance=0.0F;
+                        }
+                    }
                     if(!ciPlayerGravitySuppressionLogged) {
                         LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_RIFT_IMPULSES_SUPPRESSED_FOR_BEACON_TEST");
+                        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VANILLA_FALL_SUPPRESSED_FOR_BEACON_TEST");
                         ciPlayerGravitySuppressionLogged=true;
                     }
                     continue;
@@ -1723,6 +1738,15 @@ public final class RiftController {
                             playerSupport.getX(),playerSupport.getY(),playerSupport.getZ());
                         return;
                     }
+                    // Restore ordinary vanilla gravity only after the player is
+                    // standing above a loaded, motion-blocking support block.
+                    ciPlayerSafePadReady=true;
+                    demoPlayer.setNoGravity(false);
+                    demoPlayer.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+                    demoPlayer.fallDistance=0.0F;
+                    if(CI_TEST) LOGGER.info(
+                        "BLACK_FREQUENCY_TEST PLAYER_VANILLA_FALL_RESTORED_AFTER_SAFE_PAD x={} y={} z={}",
+                        playerSupport.getX(),playerSupport.getY(),playerSupport.getZ());
                     if(CI_TEST) LOGGER.info(
                         "BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x={} y={} z={} support=solid fallDistance={}",
                         demoPlayer.blockPosition().getX(),demoPlayer.blockPosition().getY(),
