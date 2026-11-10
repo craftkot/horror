@@ -228,7 +228,19 @@ public final class RiftClientState {
             int worldAnchorZ=anchorZ();
             long dx=(long)player.blockPosition().getX()-worldAnchorX;
             long dz=(long)player.blockPosition().getZ()-worldAnchorZ;
-            if(dx*dx+dz*dz>64L*64L) return;
+            if(!level.getWorldBorder().isWithinBounds(
+                    new BlockPos(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ))
+                || !level.hasChunk(worldAnchorX>>4,worldAnchorZ>>4)) {
+                cachedSegments=List.of();
+                return;
+            }
+            int anchorSurfaceY=level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                worldAnchorX,worldAnchorZ);
+            double dy=player.getY()-anchorSurfaceY;
+            if(dx*dx+dz*dz+dy*dy>64.0D*64.0D) {
+                cachedSegments=List.of();
+                return;
+            }
 
             long tick=level.getGameTime();
             if(level!=cachedLevel || worldAnchorX!=cachedAnchorX || worldAnchorZ!=cachedAnchorZ
