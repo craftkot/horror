@@ -683,6 +683,9 @@ def capture_test_world():
             fissure=re.search(
                 r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_GEOMETRY_EMITTED samples=(\d+) heightmap=motion-blocking-no-leaves",
                 log_after)
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples=48 spacing=0.39 extent=4.68" not in log_after:
+                print("WORLD_CAPTURE_FAIL: fissure density/radius self-check was not executed",flush=True)
+                return False
             if not fissure or int(fissure.group(1))<32:
                 print("WORLD_CAPTURE_FAIL: ground fissure geometry was not emitted with enough loaded samples",flush=True)
                 return False

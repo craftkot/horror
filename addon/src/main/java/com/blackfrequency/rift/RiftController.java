@@ -476,12 +476,12 @@ public final class RiftController {
                 if(!isFissureGroundSupport(level.getBlockState(support))) continue;
                 double particleY=fissureParticleY(level,blockX,surfaceY,blockZ);
                 double pulse=Math.sin(phase+segment*.8+arm*.6)*.05;
-                // Two close violet motes per point make the four arms read as a
+                // Closely spaced violet motes make the four arms read as a
                 // connected fissure instead of isolated sparks. Offset above
                 // partial snow/plant shapes so the particles are not occluded.
                 level.sendParticles(ParticleTypes.DRAGON_BREATH,
                     px,particleY+pulse,pz,FISSURE_MOTES_PER_SAMPLE,.045,.025,.045,.003);
-                if(segment==3 || segment==6) level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                if(segment==6 || segment==12) level.sendParticles(ParticleTypes.REVERSE_PORTAL,
                     px,particleY+.04+pulse,pz,1,.025,.02,.025,.004);
                 surfaceYTotal+=particleY;
                 samples++;
