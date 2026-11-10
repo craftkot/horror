@@ -106,12 +106,34 @@ public final class RiftClientState {
         private static boolean pendingRenderLogged;
         private static boolean renderEventLogged;
         private static boolean emptyMeshLogged;
+        private static boolean taperProfileLogged;
 
         private record GroundPoint(double x,double y,double z) {}
-        private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,double phase) {}
+        private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,
+                double phase,double taperA,double taperB) {}
         private record GroundMesh(List<GroundSegment> segments,int activeArms) {}
 
         private GroundRenderer() {}
+
+        // Fade both ends of each arm over three samples. The connected ribbons
+        // become narrow tips instead of ending as uniform rectangular strips.
+        private static double endpointTaper(int sample) {
+            double ramp=Math.min(1.0,sample/3.0);
+            double tail=Math.min(1.0,(SEGMENTS_PER_ARM-sample+1)/3.0);
+            return .5D+.5D*Math.min(ramp,tail);
+        }
+
+        private static void verifyTaperProfile() {
+            if(taperProfileLogged) return;
+            double tip=endpointTaper(1);
+            double middle=endpointTaper(SEGMENTS_PER_ARM/2);
+            double end=endpointTaper(SEGMENTS_PER_ARM);
+            if(!(tip<middle && end<middle && Math.abs(tip-end)<1.0E-9D))
+                throw new IllegalStateException("BLACK FREQUENCY ground mesh taper regression");
+            taperProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED tip={} middle={} end={}",tip,middle,end);
+        }
 
         private static boolean isGroundSupport(BlockState state) {
             return state.blocksMotion()
@@ -157,6 +179,7 @@ public final class RiftClientState {
 
         private static GroundMesh buildSegments(
                 net.minecraft.client.multiplayer.ClientLevel level,int worldAnchorX,int worldAnchorZ) {
+            verifyTaperProfile();
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
             int activeArms=0;
             for(int arm=0;arm<ARM_COUNT;arm++) {
@@ -189,7 +212,8 @@ public final class RiftClientState {
                         double length=Math.sqrt(tangentX*tangentX+tangentZ*tangentZ);
                         if(length>1.0E-5D) {
                             result.add(new GroundSegment(previous,current,
-                                -tangentZ/length,tangentX/length,arm*1.7D+segment*.63D));
+                                -tangentZ/length,tangentX/length,arm*1.7D+segment*.63D,
+                                endpointTaper(segment-1),endpointTaper(segment)));
                         }
                     }
                     previous=current;
@@ -215,13 +239,17 @@ public final class RiftClientState {
                 float red,float green,float blue,float alpha) {
             GroundPoint a=segment.a();
             GroundPoint b=segment.b();
-            double leftA=offset+halfWidth;
-            double rightA=offset-halfWidth;
+            // Scale the offset and half-width together so glow, dark core and
+            // bright edge rails converge at the same tapered endpoint.
+            double leftA=(offset+halfWidth)*segment.taperA();
+            double rightA=(offset-halfWidth)*segment.taperA();
+            double leftB=(offset+halfWidth)*segment.taperB();
+            double rightB=(offset-halfWidth)*segment.taperB();
             vertex(builder,matrix,camera,a.x()+segment.normalX()*leftA,a.y(),a.z()+segment.normalZ()*leftA,
                 red,green,blue,alpha);
-            vertex(builder,matrix,camera,b.x()+segment.normalX()*leftA,b.y(),b.z()+segment.normalZ()*leftA,
+            vertex(builder,matrix,camera,b.x()+segment.normalX()*leftB,b.y(),b.z()+segment.normalZ()*leftB,
                 red,green,blue,alpha);
-            vertex(builder,matrix,camera,b.x()+segment.normalX()*rightA,b.y(),b.z()+segment.normalZ()*rightA,
+            vertex(builder,matrix,camera,b.x()+segment.normalX()*rightB,b.y(),b.z()+segment.normalZ()*rightB,
                 red,green,blue,alpha);
             vertex(builder,matrix,camera,a.x()+segment.normalX()*rightA,a.y(),a.z()+segment.normalZ()*rightA,
                 red,green,blue,alpha);
@@ -239,6 +267,7 @@ public final class RiftClientState {
             pendingRenderLogged=false;
             renderEventLogged=false;
             emptyMeshLogged=false;
+            taperProfileLogged=false;
         }
 
         public static void render(RenderLevelStageEvent event) {
@@ -310,7 +339,10 @@ public final class RiftClientState {
                 float boundedStrength=Math.min(1.0F,strength);
                 for(GroundSegment segment:cachedSegments) {
                     double wave=.5D+.5D*Math.sin(time*.14D+segment.phase());
-                    double halfWidth=.042D+.014D*wave;
+                    // A slow travelling pulse changes width independently along
+                    // the seam; endpoint taper keeps each arm from ending bluntly.
+                    double widthFlicker=.003D*Math.sin(time*.055D+segment.phase()*1.9D);
+                    double halfWidth=Math.max(.038D,.042D+.014D*wave+widthFlicker);
                     float pulse=(float)(.78D+.22D*Math.sin(time*.19D+segment.phase()));
                     float alpha=boundedStrength*pulse;
                     ribbon(builder,matrix,camera,segment,0.0D,halfWidth*3.6D,
