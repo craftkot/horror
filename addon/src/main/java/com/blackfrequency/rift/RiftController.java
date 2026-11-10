@@ -35,8 +35,10 @@ public final class RiftController {
     private static final int MAX_EDITS = 95000;
     // Only disposable CI worlds can stop after a small fracture to test
     // recovery when fewer than 160 blocks were damaged.
-    private static final int EFFECTIVE_MAX_EDITS = CI_TEST && Boolean.getBoolean("blackfrequency.ciSparseRecoveryTest")
-        ? 80 : MAX_EDITS;
+    private static final int EFFECTIVE_MAX_EDITS = CI_TEST
+        ? (Boolean.getBoolean("blackfrequency.ciSparseRecoveryTest") ? 80
+            : Boolean.getBoolean("blackfrequency.ciClientSmokeTest") ? 160 : MAX_EDITS)
+        : MAX_EDITS;
 
     // Persisted counters are untrusted input: keep them inside the state machine's
     // real limits so corrupt NBT cannot bypass the edit cap or stall recovery.
