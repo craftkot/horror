@@ -38,6 +38,23 @@ public final class RiftController {
     private static final int EFFECTIVE_MAX_EDITS = CI_TEST && Boolean.getBoolean("blackfrequency.ciSparseRecoveryTest")
         ? 80 : MAX_EDITS;
 
+    // Persisted counters are untrusted input: keep them inside the state machine's
+    // real limits so corrupt NBT cannot bypass the edit cap or stall recovery.
+    private static int boundedCounter(int value,int maximum) {
+        return Math.max(0,Math.min(maximum,value));
+    }
+
+    private static long boundedElapsed(long value) {
+        return Math.max(0L,Math.min(DAY*10L,value));
+    }
+
+    // Tick counters may be restored from damaged saves. Saturation avoids signed
+    // overflow turning a long-running finale/recovery back into negative time.
+    private static int nextNonNegativeTick(int value) {
+        if(value<0) return 0;
+        return value==Integer.MAX_VALUE ? value : value+1;
+    }
+
     // Outside the drift cap, an anomaly may slow existing motion but cannot
     // accelerate it farther outward. Preserve external movement unchanged.
     private static double boundedAnomalyVelocity(double current, double impulse) {
@@ -199,10 +216,11 @@ public final class RiftController {
         final List<CompoundTag> snapshots = new ArrayList<>();
         static State load(CompoundTag n) {
             State s = new State();
-            s.elapsed=n.getLong("elapsed");
+            s.elapsed=boundedElapsed(n.getLong("elapsed"));
             s.x=n.getInt("x");s.z=n.getInt("z");
             s.cursorX=n.getInt("cx");s.cursorZ=n.getInt("cz");s.cursorY=n.getInt("cy");
-            s.edits=n.getInt("edits");s.finaleTicks=n.getInt("finaleTicks");
+            s.edits=boundedCounter(n.getInt("edits"),MAX_EDITS);
+            s.finaleTicks=boundedCounter(n.getInt("finaleTicks"),Integer.MAX_VALUE);
             s.surfaceFirstScan=n.contains("surfaceFirstScan",Tag.TAG_BYTE)&&n.getBoolean("surfaceFirstScan");
             s.started=n.getBoolean("started");s.finished=n.getBoolean("finished");
             s.initialized=n.getBoolean("initialized");
@@ -210,7 +228,11 @@ public final class RiftController {
             s.restoreIndex=n.getInt("restoreIndex");
             // Older worlds have no scan cursor: resume at the last pending snapshot.
             s.restoreScan=n.contains("restoreScan",Tag.TAG_INT)?n.getInt("restoreScan"):s.restoreIndex;
-            s.restoreTicks=n.getInt("restoreTicks");s.restoredBlocks=n.getInt("restoredBlocks");s.skippedOccupied=n.getInt("skippedOccupied");s.skippedInvalid=n.getInt("skippedInvalid");s.beaconPos=n.getLong("beaconPos");
+            s.restoreTicks=boundedCounter(n.getInt("restoreTicks"),Integer.MAX_VALUE);
+            s.restoredBlocks=boundedCounter(n.getInt("restoredBlocks"),MAX_EDITS);
+            s.skippedOccupied=boundedCounter(n.getInt("skippedOccupied"),MAX_EDITS);
+            s.skippedInvalid=boundedCounter(n.getInt("skippedInvalid"),MAX_EDITS);
+            s.beaconPos=n.getLong("beaconPos");
             s.naturalBeaconPos=n.contains("naturalBeaconPos",Tag.TAG_LONG)?n.getLong("naturalBeaconPos"):Long.MIN_VALUE;
             ListTag saved=n.getList("snapshots",Tag.TAG_COMPOUND);
             for(int i=0;i<saved.size();i++) s.snapshots.add(saved.getCompound(i));
@@ -436,6 +458,39 @@ public final class RiftController {
             || repaired.snapshots.get(0).getLong("pos")!=pos.asLong())
             throw new IllegalStateException("CI damaged recovery cursor persistence regression");
         LOGGER.info("BLACK_FREQUENCY_TEST DAMAGED_RECOVERY_CURSOR_REPAIRED");
+
+        // Corrupt counters must not bypass the 95,000-edit ceiling, create
+        // negative progress, or make the recovery clock wait billions of ticks.
+        CompoundTag negativeCounters=new CompoundTag();
+        negativeCounters.putLong("elapsed",Long.MIN_VALUE);
+        negativeCounters.putInt("edits",Integer.MIN_VALUE);
+        negativeCounters.putInt("finaleTicks",Integer.MIN_VALUE);
+        negativeCounters.putInt("restoreTicks",Integer.MIN_VALUE);
+        negativeCounters.putInt("restoredBlocks",Integer.MIN_VALUE);
+        negativeCounters.putInt("skippedOccupied",Integer.MIN_VALUE);
+        negativeCounters.putInt("skippedInvalid",Integer.MIN_VALUE);
+        State sanitized=State.load(negativeCounters);
+        if(sanitized.elapsed!=0L || sanitized.edits!=0 || sanitized.finaleTicks!=0
+            || sanitized.restoreTicks!=0 || sanitized.restoredBlocks!=0
+            || sanitized.skippedOccupied!=0 || sanitized.skippedInvalid!=0)
+            throw new IllegalStateException("CI negative saved counters were not sanitized");
+        CompoundTag excessiveCounters=new CompoundTag();
+        excessiveCounters.putLong("elapsed",Long.MAX_VALUE);
+        excessiveCounters.putInt("edits",Integer.MAX_VALUE);
+        excessiveCounters.putInt("finaleTicks",Integer.MAX_VALUE);
+        excessiveCounters.putInt("restoreTicks",Integer.MAX_VALUE);
+        excessiveCounters.putInt("restoredBlocks",Integer.MAX_VALUE);
+        excessiveCounters.putInt("skippedOccupied",Integer.MAX_VALUE);
+        excessiveCounters.putInt("skippedInvalid",Integer.MAX_VALUE);
+        State capped=State.load(excessiveCounters);
+        if(capped.elapsed!=DAY*10L || capped.edits!=MAX_EDITS
+            || capped.finaleTicks!=Integer.MAX_VALUE || capped.restoreTicks!=Integer.MAX_VALUE
+            || capped.restoredBlocks!=MAX_EDITS || capped.skippedOccupied!=MAX_EDITS
+            || capped.skippedInvalid!=MAX_EDITS
+            || nextNonNegativeTick(-1)!=0 || nextNonNegativeTick(0)!=1
+            || nextNonNegativeTick(Integer.MAX_VALUE)!=Integer.MAX_VALUE)
+            throw new IllegalStateException("CI excessive saved counters were not bounded");
+        LOGGER.info("BLACK_FREQUENCY_TEST CORRUPT_STATE_COUNTERS_SANITIZED");
         LOGGER.info("BLACK_FREQUENCY_TEST PENDING_SNAPSHOT_PERSISTENCE_VERIFIED");
     }
 
@@ -871,7 +926,7 @@ public final class RiftController {
                 }
             }
         }
-        s.restoreTicks++;
+        s.restoreTicks=nextNonNegativeTick(s.restoreTicks);
         // A visible, bounded stabilization pulse at the activated physical beacon.
         // Only query an already loaded chunk; never resurrect a removed beacon
         // or force chunk generation during recovery.
@@ -1283,7 +1338,7 @@ public final class RiftController {
             if(level.getGameTime()%20L==0)s.setDirty();
             return;
         }
-        s.finaleTicks++;
+        s.finaleTicks=nextNonNegativeTick(s.finaleTicks);
         // Spatial gravity anomalies drift through the rift field. Server-side only;
         // gentle bounded impulses allow movement without overriding vanilla physics.
         if (!s.restoring && s.finaleTicks > 85 && s.finaleTicks % 5 == 0) {
