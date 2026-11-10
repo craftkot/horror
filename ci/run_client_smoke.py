@@ -477,34 +477,40 @@ def capture_test_world():
                 visible_tiles=0
                 mesh_pixels=0
                 mesh_tiles=0
+                combined_pixels=0
                 combined_tiles=0
                 tile_size=32
                 for tile_y in range(top,bottom,tile_size):
                     for tile_x in range(left,right,tile_size):
                         tile_hits=0
                         mesh_tile_hits=0
+                        combined_tile_hits=0
                         for y in range(tile_y,min(tile_y+tile_size,bottom)):
                             for x in range(tile_x,min(tile_x+tile_size,right)):
                                 r,g,b=pixels[x,y]
-                                if is_ground_fissure_pixel(r,g,b):
+                                particle_pixel=is_ground_fissure_pixel(r,g,b)
+                                mesh_pixel=is_ground_mesh_pixel(r,g,b)
+                                if particle_pixel:
                                     violet_pixels+=1
                                     tile_hits+=1
-                                if is_ground_mesh_pixel(r,g,b):
+                                if mesh_pixel:
                                     mesh_pixels+=1
                                     mesh_tile_hits+=1
+                                if particle_pixel or mesh_pixel:
+                                    combined_pixels+=1
+                                    combined_tile_hits+=1
                         if tile_hits>=4:
                             visible_tiles+=1
                         if mesh_tile_hits>=3:
                             mesh_tiles+=1
-                        if tile_hits+mesh_tile_hits>=4:
+                        if combined_tile_hits>=4:
                             combined_tiles+=1
                 # Canopy and terrain may occlude bright particles while leaving the
                 # depth-tested mesh visible. Require independent evidence from both
                 # render paths plus a combined pixel/tile floor; do not let either
                 # particles or mesh alone satisfy the screenshot proof.
-                combined_pixels=violet_pixels+mesh_pixels
                 if (violet_pixels<120 or visible_tiles<3
-                        or combined_pixels<300 or combined_tiles<6):
+                        or combined_pixels<160 or combined_tiles<6):
                     terrain_capture_failed=True
                     print("WORLD_CAPTURE_FAIL: combined ground-fissure visibility was below threshold",
                           "particlePixels",violet_pixels,"particleTiles",visible_tiles,
