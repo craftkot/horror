@@ -168,6 +168,10 @@ def capture_test_world():
         nonlocal beacon_attempts,beacon_ready_at,last_beacon_attempt
         if os.environ.get("BF_TEST_PLAYER_BEACON")!="1":
             return
+        # Do not begin mouse automation until the server confirms that the
+        # disposable player is protected from random gravity deaths.
+        if "BLACK_FREQUENCY_TEST PLAYER_GRAVITY_SUPPRESSED_FOR_BEACON_TEST" not in logs:
+            return
         if "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in logs:
             return
         if "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs:
@@ -486,9 +490,13 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST FINALE_STARTED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: screenshots exist, but accelerated finale not observed",flush=True)
                 return False
-            if os.environ.get("BF_TEST_PLAYER_BEACON")=="1" and "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" not in log_after:
-                print("WORLD_CAPTURE_FAIL: beacon was not activated by actual player right-click",flush=True)
-                return False
+            if os.environ.get("BF_TEST_PLAYER_BEACON")=="1":
+                if "BLACK_FREQUENCY_TEST PLAYER_GRAVITY_SUPPRESSED_FOR_BEACON_TEST" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: test-only player gravity suppression was not observed",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: beacon was not activated by actual player right-click",flush=True)
+                    return False
             if not sky_shot:
                 print("WORLD_CAPTURE_FAIL: sky shader pixels were not visible in both horizon and zenith frames",flush=True)
                 return False

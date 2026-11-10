@@ -26,6 +26,9 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 public final class RiftController {
     private static final org.slf4j.Logger LOGGER = com.mojang.logging.LogUtils.getLogger();
     private static final boolean CI_TEST = Boolean.getBoolean("blackfrequency.ciTestMode");
+    // The client smoke test verifies a real beacon click, not player survival under random gravity.
+    // Keep its single test player stable before the beacon exists; production physics is unchanged.
+    private static boolean ciPlayerGravitySuppressionLogged;
     private static final long DAY = 24000L;
     // Only for disposable CI worlds. Never increases Minecraft's global tick rate.
     private static final long TEST_STEP = Boolean.getBoolean("blackfrequency.ciTestMode")
@@ -1435,11 +1438,16 @@ public final class RiftController {
         // gentle bounded impulses allow movement without overriding vanilla physics.
         if (!s.restoring && s.finaleTicks > 85 && s.finaleTicks % 5 == 0) {
             for (var player : level.players()) {
-                // The disposable real-click regression needs a stable raycast.
-                // Do not let test-only gravity impulses drift the player away
-                // from the beacon between teleportation and mouse input.
-                if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest")
-                    && s.beaconPos!=0L && !s.restoring) continue;
+                // The disposable real-click regression must keep its player alive and stationary
+                // from the start of the anomaly phase, not only after the beacon has been placed.
+                // Otherwise a random high spawn can kill the player before the first right-click.
+                if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest")) {
+                    if(!ciPlayerGravitySuppressionLogged) {
+                        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_GRAVITY_SUPPRESSED_FOR_BEACON_TEST");
+                        ciPlayerGravitySuppressionLogged=true;
+                    }
+                    continue;
+                }
                 // Never apply rift impulses to dead or removed player entities.
                 // Respect active flight from other mods or server-granted abilities.
                 // Rift gravity must not unexpectedly drag a flying player.
@@ -1512,10 +1520,9 @@ public final class RiftController {
         // Particles only: no extra entities, chunk loads or world edits.
         if (!s.restoring && s.finaleTicks > 85 && s.finaleTicks % 8 == 0) {
             for (var player : level.players()) {
-                // Keep the real-click beacon regression free of misleading
-                // gravity cues, just as the impulse loop above is disabled.
-                if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest")
-                    && s.beaconPos!=0L) continue;
+                // The real-click regression suppresses player gravity cues for the whole
+                // disposable run, matching the test-only impulse suppression above.
+                if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest")) continue;
                 // Only mark players actually affected by gravity impulses.
                 // Creative and flying players are immune, so avoid misleading
                 // particle cues and unnecessary network traffic for them.
