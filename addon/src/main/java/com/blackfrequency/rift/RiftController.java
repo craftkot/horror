@@ -224,23 +224,107 @@ public final class RiftController {
             throw new IllegalStateException("CI passenger probe requires an unmounted player");
         net.minecraft.world.phys.Vec3 previousPosition=player.position();
         net.minecraft.world.phys.Vec3 previousMovement=player.getDeltaMovement();
+        float previousFallDistance=player.fallDistance;
+        boolean previousHurtMarked=player.hurtMarked;
+        State probe=new State();
+        probe.x=(int)Math.floor(previousPosition.x);
+        probe.z=(int)Math.floor(previousPosition.z);
+        double testX=probe.x+.5D,testZ=probe.z+.5D;
+        int probeTicks=-1;
+        double probeZone=Double.NaN;
+        for(int tick=0;tick<10000;tick++) {
+            double zone=Math.sin(testX*.115+Math.sin(tick*.011)*1.8)
+                *Math.cos(testZ*.125-tick*.008);
+            if(zone>.42D) {
+                probeTicks=tick;
+                probeZone=zone;
+                break;
+            }
+        }
+        if(probeTicks<0)
+            throw new IllegalStateException("CI could not place passenger probe inside a lift zone");
+        probe.finaleTicks=probeTicks;
+        double testY=Math.max(level.getMinBuildHeight()+2.0D,
+            Math.min(level.getMaxBuildHeight()-3.0D,level.getSeaLevel()+10.0D));
         var mount=net.minecraft.world.entity.EntityType.PIG.create(level);
         if(mount==null)
             throw new IllegalStateException("CI could not create passenger probe mount");
         try {
-            mount.moveTo(previousPosition.x,previousPosition.y,previousPosition.z,
-                player.getYRot(),player.getXRot());
+            player.setPos(testX,testY,testZ);
+            player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            boolean controlImpulseApplied=applyRiftGravityImpulse(level,probe,player);
+            if(!controlImpulseApplied
+                || net.minecraft.world.phys.Vec3.ZERO.equals(player.getDeltaMovement()))
+                throw new IllegalStateException("CI lift-zone control probe did not apply an impulse");
+            player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            player.fallDistance=previousFallDistance;
+            player.hurtMarked=previousHurtMarked;
+            mount.moveTo(testX,testY,testZ,player.getYRot(),player.getXRot());
+            mount.setDeltaMovement(.03D,.01D,-.02D);
             if(!level.addFreshEntity(mount) || !player.startRiding(mount,true))
                 throw new IllegalStateException("CI could not mount player for gravity probe");
-            if(!player.isPassenger() || shouldApplyRiftGravity(player))
-                throw new IllegalStateException("CI mounted player remained eligible for rift gravity");
+            net.minecraft.world.phys.Vec3 expectedPlayerMotion=
+                new net.minecraft.world.phys.Vec3(.17D,.08D,-.13D);
+            player.setDeltaMovement(expectedPlayerMotion);
+            net.minecraft.world.phys.Vec3 expectedVehicleMotion=mount.getDeltaMovement();
+            boolean impulseApplied=applyRiftGravityImpulse(level,probe,player);
+            if(!player.isPassenger() || shouldApplyRiftGravity(player) || impulseApplied
+                || !expectedPlayerMotion.equals(player.getDeltaMovement())
+                || !expectedVehicleMotion.equals(mount.getDeltaMovement()))
+                throw new IllegalStateException("CI mounted player received an independent rift impulse");
             LOGGER.info("BLACK_FREQUENCY_TEST ACTUAL_PASSENGER_GRAVITY_IMMUNITY_VERIFIED");
+            LOGGER.info("BLACK_FREQUENCY_TEST PASSENGER_RIFT_IMPULSE_SUPPRESSED_VERIFIED controlImpulse=true zone={} tick={}",
+                probeZone,probeTicks);
         } finally {
             player.stopRiding();
             mount.discard();
             player.setPos(previousPosition.x,previousPosition.y,previousPosition.z);
             player.setDeltaMovement(previousMovement);
+            player.fallDistance=previousFallDistance;
+            player.hurtMarked=previousHurtMarked;
         }
+    }
+
+    /**
+     * Apply the same bounded anomaly impulse used by the live player loop.
+     * Keeping the eligibility guard here lets the real-entity CI probe verify
+     * that passengers retain both their own velocity and their vehicle motion.
+     */
+    private static boolean applyRiftGravityImpulse(
+            ServerLevel level,State s,net.minecraft.server.level.ServerPlayer player) {
+        if(!shouldApplyRiftGravity(player)) return false;
+        double px=player.getX(),pz=player.getZ();
+        double ax=px-s.x,ay=player.getY()-level.getSeaLevel(),az=pz-s.z;
+        double distanceSquared=ax*ax+ay*ay+az*az;
+        final double outerRadius=RADIUS+16.0;
+        if(distanceSquared>=outerRadius*outerRadius) return false;
+        double fade=Math.min(1.0,Math.max(0.0,
+            (outerRadius-Math.sqrt(distanceSquared))/16.0));
+        double zone=Math.sin(px*.115+Math.sin(s.finaleTicks*.011)*1.8)
+            *Math.cos(pz*.125-s.finaleTicks*.008);
+        if(zone>.42) {
+            var v=player.getDeltaMovement();
+            double lift=Math.max(.045,Math.min(.19,.11+zone*.07))*fade;
+            double dx=Math.sin(pz*.14+s.finaleTicks*.022)*.035*fade;
+            double dz=Math.cos(px*.13-s.finaleTicks*.018)*.035*fade;
+            // Limit only the anomaly's additional drift. Never clamp
+            // existing sprint, knockback or mod-provided velocity.
+            double nextX=boundedAnomalyVelocity(v.x,dx);
+            double nextZ=boundedAnomalyVelocity(v.z,dz);
+            player.setDeltaMovement(nextX,boundedLiftVelocity(v.y,lift),nextZ);
+            player.hurtMarked=true;
+            if(fade>.25) player.fallDistance=0;
+            return true;
+        }
+        if(zone<-.68) {
+            var v=player.getDeltaMovement();
+            double drag=1.0-.06*fade;
+            player.setDeltaMovement(boundedSinkDrag(v.x,drag),
+                boundedSinkVelocity(v.y,-.09*fade),boundedSinkDrag(v.z,drag));
+            player.hurtMarked=true;
+            return true;
+        }
+        return false;
     }
 
     private static void verifyBoundedSinkDrag() {
@@ -2065,41 +2149,9 @@ public final class RiftController {
                     }
                     continue;
                 }
-                // Never apply rift impulses to dead or removed player entities.
-                // Respect active flight from other mods or server-granted abilities.
-                // Rift gravity must not unexpectedly drag a flying player.
-                if (!shouldApplyRiftGravity(player)) continue;
-                double px=player.getX(), pz=player.getZ();
-                // Keep gravity local in all three dimensions: a player high
-                // above or deep below the rift must not be pulled sideways.
-                double ax=px-s.x, ay=player.getY()-level.getSeaLevel(), az=pz-s.z;
-                double distanceSquared=ax*ax+ay*ay+az*az;
-                final double outerRadius=RADIUS+16.0;
-                if(distanceSquared>=outerRadius*outerRadius) continue;
-                // Fade impulses over the outer 16 blocks instead of introducing
-                // a sudden velocity discontinuity at the anomaly boundary.
-                double fade=Math.min(1.0,Math.max(0.0,
-                    (outerRadius-Math.sqrt(distanceSquared))/16.0));
-                double zone=Math.sin(px*.115+Math.sin(s.finaleTicks*.011)*1.8)
-                            *Math.cos(pz*.125-s.finaleTicks*.008);
-                if(zone > .42) {
-                    var v=player.getDeltaMovement();
-                    double lift=Math.max(.045,Math.min(.19,.11+zone*.07))*fade;
-                    double dx=Math.sin(pz*.14+s.finaleTicks*.022)*.035*fade;
-                    double dz=Math.cos(px*.13-s.finaleTicks*.018)*.035*fade;
-                    // Limit only the anomaly's additional drift. Never clamp
-                    // existing sprint, knockback or mod-provided velocity.
-                    double nextX=boundedAnomalyVelocity(v.x,dx);
-                    double nextZ=boundedAnomalyVelocity(v.z,dz);
-                    player.setDeltaMovement(nextX,boundedLiftVelocity(v.y,lift),nextZ);
-                    player.hurtMarked=true;
-                    if(fade>.25) player.fallDistance=0;
-                } else if (zone < -.68) {
-                    var v=player.getDeltaMovement();
-                    double drag=1.0-.06*fade;
-                    player.setDeltaMovement(boundedSinkDrag(v.x,drag),boundedSinkVelocity(v.y,-.09*fade),boundedSinkDrag(v.z,drag));
-                    player.hurtMarked=true;
-                }
+                // Dead, removed, flying, gliding and mounted players are not
+                // independent bodies in the rift gravity field.
+                applyRiftGravityImpulse(level,s,player);
             }
         }
         // A compact violet fracture plume marks the actual ground-rift center.
