@@ -1,6 +1,7 @@
 package com.blackfrequency.rift;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
@@ -1610,11 +1611,15 @@ public final class RiftController {
                             // leave a stale recovery objective in SavedData.
                             if(isOwnedNaturalBeaconAtLoadedPosition(level,s,pos))
                                 level.setBlock(pos,Blocks.AIR.defaultBlockState(),3);
-                            if(!isOwnedNaturalBeaconAtLoadedPosition(level,s,pos)) {
-                                s.naturalBeaconPos=Long.MIN_VALUE;
-                                s.naturalBeaconId=null;
-                                s.setDirty();
+                            if(isOwnedNaturalBeaconAtLoadedPosition(level,s,pos)) {
+                                // If another mod cancels removal, keep this anchor tracked
+                                // and stop searching rather than creating a second objective.
+                                LOGGER.warn("BLACK FREQUENCY: could not retire unstable recovery beacon at {}",pos);
+                                return true;
                             }
+                            s.naturalBeaconPos=Long.MIN_VALUE;
+                            s.naturalBeaconId=null;
+                            s.setDirty();
                             LOGGER.warn("BLACK FREQUENCY: rejected recovery beacon with unstable snow support at {}",pos);
                             continue;
                         }
