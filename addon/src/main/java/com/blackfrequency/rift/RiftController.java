@@ -1293,7 +1293,29 @@ public final class RiftController {
         verifyRiftGravityEligibility();
         verifyPendingSnapshotPersistence();
         verifySparseBeaconSupport();
+        verifyRestorationProgress();
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED");
+    }
+
+    /** Progress remains below 100% until the final stabilization hold has completed. */
+    private static int restorationPercent(int restoreIndex,int snapshotCount) {
+        if(snapshotCount<=0) return 0;
+        long pending=Math.max(0L,Math.min((long)snapshotCount,(long)restoreIndex+1L));
+        int completed=snapshotCount-(int)pending;
+        return Math.max(0,Math.min(99,(int)(100L*completed/snapshotCount)));
+    }
+
+    private static void verifyRestorationProgress() {
+        int[][] cases={
+            {9,10,0}, {4,10,50}, {0,10,90}, {-1,10,99},
+            {Integer.MAX_VALUE,10,0}, {Integer.MIN_VALUE,10,99}, {0,0,0}
+        };
+        for(int[] sample:cases) {
+            int actual=restorationPercent(sample[0],sample[1]);
+            if(actual!=sample[2] || actual>=100)
+                throw new IllegalStateException("CI restoration progress regression: "+actual);
+        }
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_PROGRESS_HELD_BELOW_COMPLETION");
     }
 
     /** Right-click a vanilla beacon within 128 blocks of the fracture anchor. */
@@ -1744,7 +1766,7 @@ public final class RiftController {
             LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_BOUNDS_GUARD_VERIFIED");
         }
         if(s.restoreTicks%40==0 && !s.snapshots.isEmpty()) {
-            int percent=(int)(100d*(s.snapshots.size()-Math.max(0,s.restoreIndex+1))/(double)s.snapshots.size());
+            int percent=restorationPercent(s.restoreIndex,s.snapshots.size());
             // Restoration is local to the fracture. Do not spam action-bar
             // updates to players exploring distant parts of the Overworld.
             for(var player:level.players()) {
