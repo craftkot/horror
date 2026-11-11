@@ -589,14 +589,21 @@ public final class RiftController {
         }
     }
 
-    // A no-leaves heightmap can still stop on a tree trunk. Walk down a bounded
-    // distance to the first natural terrain support so the fissure is not drawn
-    // across the top of a canopy or wooden structure.
+    // A no-leaves heightmap can still stop on a tree trunk or a village roof.
+    // Walk down to terrain instead of treating stairs, slabs, walls or other
+    // structural surfaces as the ground fracture plane.
     private static boolean isFissureGroundSupport(BlockState state) {
         return state.blocksMotion()
             && !state.is(net.minecraft.tags.BlockTags.LOGS)
             && !state.is(net.minecraft.tags.BlockTags.LEAVES)
-            && !state.is(net.minecraft.tags.BlockTags.PLANKS);
+            && !state.is(net.minecraft.tags.BlockTags.PLANKS)
+            && !state.is(net.minecraft.tags.BlockTags.STAIRS)
+            && !state.is(net.minecraft.tags.BlockTags.SLABS)
+            && !state.is(net.minecraft.tags.BlockTags.WALLS)
+            && !state.is(net.minecraft.tags.BlockTags.FENCES)
+            && !state.is(net.minecraft.tags.BlockTags.FENCE_GATES)
+            && !state.is(net.minecraft.tags.BlockTags.DOORS)
+            && !state.is(net.minecraft.tags.BlockTags.TRAPDOORS);
     }
 
     private static int findFissureGroundY(ServerLevel level,int x,int z) {
@@ -885,9 +892,17 @@ public final class RiftController {
         if(isFissureGroundSupport(Blocks.OAK_LOG.defaultBlockState())
             || isFissureGroundSupport(Blocks.OAK_LEAVES.defaultBlockState())
             || isFissureGroundSupport(Blocks.OAK_PLANKS.defaultBlockState())
+            || isFissureGroundSupport(Blocks.OAK_STAIRS.defaultBlockState())
+            || isFissureGroundSupport(Blocks.COBBLESTONE_SLAB.defaultBlockState())
+            || isFissureGroundSupport(Blocks.COBBLESTONE_WALL.defaultBlockState())
+            || isFissureGroundSupport(Blocks.OAK_FENCE.defaultBlockState())
+            || isFissureGroundSupport(Blocks.OAK_FENCE_GATE.defaultBlockState())
+            || isFissureGroundSupport(Blocks.OAK_DOOR.defaultBlockState())
+            || isFissureGroundSupport(Blocks.OAK_TRAPDOOR.defaultBlockState())
             || !isFissureGroundSupport(Blocks.STONE.defaultBlockState())
             || !isFissureGroundSupport(Blocks.DIRT.defaultBlockState()))
-            throw new IllegalStateException("CI fissure ground filter regression");
+            throw new IllegalStateException("CI fissure terrain/structure filter regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_STRUCTURAL_SUPPORT_FILTER_VERIFIED");
         verifyFissureSurfaceParticleHeight();
         verifyFissureSamplingDensity();
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_GROUND_FILTER_VERIFIED");
@@ -2155,50 +2170,48 @@ public final class RiftController {
             }
         }
         // A compact violet fracture plume marks the actual ground-rift center.
-        // Query the surface only after confirming the center chunk is loaded.
-        // Sea-level placement hid the effect beneath mountains and above deep valleys.
+        // Resolve the same filtered terrain support used by the four-arm fissure;
+        // the raw no-leaves heightmap can otherwise place the plume on village roofs.
         if (!s.restoring && s.finaleTicks > 85 && s.finaleTicks % 10 == 0
             && level.hasChunk(s.x >> 4, s.z >> 4)) {
-            // Ignore leaf canopies: the rupture belongs on the terrain surface,
-            // not on top of the nearest tree crown.
-            double surfaceY = level.getHeight(
-                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                s.x,s.z);
-            double plumeY = surfaceY + 1.0;
-            boolean witnessed = false;
-            for (var viewer : level.players()) {
-                if (!viewer.isAlive() || viewer.isRemoved() || viewer.isSpectator()) continue;
-                double dx = viewer.getX() - s.x;
-                double dy = viewer.getY() - plumeY;
-                double dz = viewer.getZ() - s.z;
-                if (dx * dx + dy * dy + dz * dz <= 48.0 * 48.0) {
-                    witnessed = true;
-                    break;
-                }
-            }
-            if (witnessed) {
-                double phase = s.finaleTicks * .055;
-                // A low, jagged cross of violet particles reads as a ground crack.
-                // It is cosmetic only and samples terrain only in already loaded chunks.
-                if(s.finaleTicks%20==0) {
-                    FissureEmission emission=emitSurfaceFissure(level,s,phase);
-                    if(CI_TEST && emission.samples()>0 && !s.ciSurfaceFissureLogged) {
-                        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples={} dragonBreath={} reversePortal={} total={} heightmap=motion-blocking-no-leaves ground=non-wood averageY={}",
-                            emission.samples(),emission.dragonBreathMotes(),emission.reversePortalMotes(),
-                            emission.totalParticles(),emission.averageSurfaceY());
-                        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARDS_EMITTED count={} material=crying_obsidian",
-                            emission.shards());
-                        s.ciSurfaceFissureLogged=true;
+            int surfaceY=findFissureGroundY(level,s.x,s.z);
+            if(surfaceY!=Integer.MIN_VALUE) {
+                double plumeY=surfaceY+1.0;
+                boolean witnessed = false;
+                for (var viewer : level.players()) {
+                    if (!viewer.isAlive() || viewer.isRemoved() || viewer.isSpectator()) continue;
+                    double dx = viewer.getX() - s.x;
+                    double dy = viewer.getY() - plumeY;
+                    double dz = viewer.getZ() - s.z;
+                    if (dx * dx + dy * dy + dz * dz <= 48.0 * 48.0) {
+                        witnessed = true;
+                        break;
                     }
                 }
-                // Keep the existing rising strands as a vertical accent above the crack.
-                for (int strand = 0; strand < 4; strand++) {
-                    double angle = phase + strand * Math.PI / 2.0;
-                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,
-                        s.x + .5 + Math.cos(angle) * 1.5,
-                        plumeY + 1.0 + Math.sin(phase * .7 + strand) * .6,
-                        s.z + .5 + Math.sin(angle) * 1.5,
-                        2, .12, .65, .12, .035);
+                if (witnessed) {
+                    double phase = s.finaleTicks * .055;
+                    // A low, jagged cross of violet particles reads as a ground crack.
+                    // It is cosmetic only and samples terrain only in already loaded chunks.
+                    if(s.finaleTicks%20==0) {
+                        FissureEmission emission=emitSurfaceFissure(level,s,phase);
+                        if(CI_TEST && emission.samples()>0 && !s.ciSurfaceFissureLogged) {
+                            LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples={} dragonBreath={} reversePortal={} total={} heightmap=motion-blocking-no-leaves ground=terrain-support-filtered averageY={}",
+                                emission.samples(),emission.dragonBreathMotes(),emission.reversePortalMotes(),
+                                emission.totalParticles(),emission.averageSurfaceY());
+                            LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARDS_EMITTED count={} material=crying_obsidian",
+                                emission.shards());
+                            s.ciSurfaceFissureLogged=true;
+                        }
+                    }
+                    // Keep the existing rising strands as a vertical accent above the crack.
+                    for (int strand = 0; strand < 4; strand++) {
+                        double angle = phase + strand * Math.PI / 2.0;
+                        level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                            s.x + .5 + Math.cos(angle) * 1.5,
+                            plumeY + 1.0 + Math.sin(phase * .7 + strand) * .6,
+                            s.z + .5 + Math.sin(angle) * 1.5,
+                            2, .12, .65, .12, .035);
+                    }
                 }
             }
         }

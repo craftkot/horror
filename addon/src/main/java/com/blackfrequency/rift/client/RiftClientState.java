@@ -132,6 +132,7 @@ public final class RiftClientState {
         private static boolean rebuildProfileLogged;
         private static boolean animationProfileLogged;
         private static boolean rangeRejectLogged;
+        private static boolean supportFilterLogged;
 
         private record GroundPoint(double x,double y,double z) {}
         private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,
@@ -272,11 +273,37 @@ public final class RiftClientState {
                 minimum,midpoint,maximum,.16D);
         }
 
+        private static void verifyGroundSupportProfile() {
+            if(supportFilterLogged) return;
+            boolean naturalGrass=isGroundSupport(net.minecraft.world.level.block.Blocks.GRASS_BLOCK.defaultBlockState());
+            boolean naturalStone=isGroundSupport(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+            boolean rejectsStructures=
+                !isGroundSupport(net.minecraft.world.level.block.Blocks.OAK_STAIRS.defaultBlockState())
+                && !isGroundSupport(net.minecraft.world.level.block.Blocks.COBBLESTONE_SLAB.defaultBlockState())
+                && !isGroundSupport(net.minecraft.world.level.block.Blocks.COBBLESTONE_WALL.defaultBlockState())
+                && !isGroundSupport(net.minecraft.world.level.block.Blocks.OAK_FENCE.defaultBlockState())
+                && !isGroundSupport(net.minecraft.world.level.block.Blocks.OAK_FENCE_GATE.defaultBlockState())
+                && !isGroundSupport(net.minecraft.world.level.block.Blocks.OAK_DOOR.defaultBlockState())
+                && !isGroundSupport(net.minecraft.world.level.block.Blocks.OAK_TRAPDOOR.defaultBlockState());
+            if(!(naturalGrass && naturalStone && rejectsStructures))
+                throw new IllegalStateException("BLACK FREQUENCY ground mesh terrain/structure filter regression");
+            supportFilterLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_STRUCTURAL_SUPPORT_FILTER_VERIFIED");
+        }
+
         private static boolean isGroundSupport(BlockState state) {
             return state.blocksMotion()
                 && !state.is(BlockTags.LOGS)
                 && !state.is(BlockTags.LEAVES)
                 && !state.is(BlockTags.PLANKS)
+                && !state.is(BlockTags.STAIRS)
+                && !state.is(BlockTags.SLABS)
+                && !state.is(BlockTags.WALLS)
+                && !state.is(BlockTags.FENCES)
+                && !state.is(BlockTags.FENCE_GATES)
+                && !state.is(BlockTags.DOORS)
+                && !state.is(BlockTags.TRAPDOORS)
                 && !state.is(net.minecraft.world.level.block.Blocks.POWDER_SNOW);
         }
 
@@ -336,6 +363,7 @@ public final class RiftClientState {
             verifyGroundContinuityProfile();
             verifyGroundRebuildProfile();
             verifyGroundAnimationProfile();
+            verifyGroundSupportProfile();
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
             Map<Long,Double> surfaceYByColumn=new HashMap<>(ARM_COUNT*SEGMENTS_PER_ARM);
             int cacheHits=0;

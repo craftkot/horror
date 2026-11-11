@@ -448,7 +448,7 @@ def capture_test_world():
                     r"BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_EMITTED x=(-?\d+) y=(-?\d+) z=(-?\d+)",
                     logs)
                 particles=re.search(
-                    r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) dragonBreath=(\d+) reversePortal=(\d+) total=(\d+) heightmap=motion-blocking-no-leaves ground=non-wood averageY=([-+0-9.eE]+)",
+                    r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) dragonBreath=(\d+) reversePortal=(\d+) total=(\d+) heightmap=motion-blocking-no-leaves ground=terrain-support-filtered averageY=([-+0-9.eE]+)",
                     logs)
                 target=re.search(
                     r"BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x=([-+0-9.eE]+) y=([-+0-9.eE]+) z=([-+0-9.eE]+) distanceSquared=([-+0-9.eE]+)",
@@ -844,6 +844,9 @@ def capture_test_world():
             continuity=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_STATS maxStep=([-+0-9.eE]+) steepStepsSkipped=(\d+)",
                 log_after)
+            if "BLACK_FREQUENCY_GROUND_MESH_STRUCTURAL_SUPPORT_FILTER_VERIFIED" not in log_after:
+                print("WORLD_CAPTURE_FAIL: client ground mesh did not verify structural-surface filtering",flush=True)
+                return False
             if ("BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_VERIFIED maxStep=1.25" not in log_after
                     or not continuity or abs(float(continuity.group(1))-1.25)>1.0E-9):
                 print("WORLD_CAPTURE_FAIL: ground mesh did not verify its cliff-discontinuity guard",
@@ -869,6 +872,9 @@ def capture_test_world():
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=56 dragonBreath=40 reversePortal=8 shards=8" not in log_after:
                 print("WORLD_CAPTURE_FAIL: layered fissure particle budget self-check was not executed",flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_STRUCTURAL_SUPPORT_FILTER_VERIFIED" not in log_after:
+                print("WORLD_CAPTURE_FAIL: server did not reject structural blocks as fissure terrain",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_LAYOUT_VERIFIED count=8 material=crying_obsidian" not in log_after:
                 print("WORLD_CAPTURE_FAIL: crying-obsidian shard layout self-check was not executed",flush=True)
