@@ -1803,16 +1803,18 @@ public final class RiftController {
                 deniedEvent.setCanceled(true);
                 new RiftController().onRecoveryBeaconBreak(deniedEvent);
                 if(!deniedEvent.isCanceled() || !level.getBlockState(beacon).is(Blocks.BEACON)
-                    || s.naturalBeaconPos!=beacon.asLong() || s.naturalBeaconId!=null)
+                    || s.naturalBeaconPos!=beacon.asLong() || s.naturalBeaconId==null)
                     throw new IllegalStateException("CI canceled beacon break mutated recovery fixture");
+                LOGGER.info("BLACK_FREQUENCY_TEST CANCELED_BEACON_OWNERSHIP_PRESERVED");
                 LOGGER.info("BLACK_FREQUENCY_TEST CANCELED_BEACON_BREAK_PRESERVED x={} y={} z={}",
                     beacon.getX(),beacon.getY(),beacon.getZ());
                 var testEvent=new net.minecraftforge.event.level.BlockEvent.BreakEvent(
                     level,beacon,level.getBlockState(beacon),level.players().get(0));
                 new RiftController().onRecoveryBeaconBreak(testEvent);
                 if(!testEvent.isCanceled() || !level.getBlockState(beacon).isAir()
-                    || s.naturalBeaconPos!=Long.MIN_VALUE)
+                    || s.naturalBeaconPos!=Long.MIN_VALUE || s.naturalBeaconId!=null)
                     throw new IllegalStateException("CI post-restoration beacon break guard failed");
+                LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_ID_CLEARED_AFTER_BREAK");
                 LOGGER.info("BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_CONSUMED x={} y={} z={}",
                     beacon.getX(),beacon.getY(),beacon.getZ());
             }
