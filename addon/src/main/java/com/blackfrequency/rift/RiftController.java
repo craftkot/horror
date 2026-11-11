@@ -149,6 +149,34 @@ public final class RiftController {
         return current*Math.max(0.0D,Math.min(1.0D,drag));
     }
 
+    /**
+     * Elytra flight is an active flight mode too. Do not inject rift impulses
+     * or misleading sink/lift particles into gliding players.
+     */
+    private static boolean shouldApplyRiftGravity(boolean alive,boolean removed,boolean creative,
+            boolean spectator,boolean abilityFlying,boolean fallFlying) {
+        return alive && !removed && !creative && !spectator && !abilityFlying && !fallFlying;
+    }
+
+    private static void verifyRiftGravityEligibility() {
+        boolean[][] cases={
+            {true,false,false,false,false,false,true},
+            {false,false,false,false,false,false,false},
+            {true,true,false,false,false,false,false},
+            {true,false,true,false,false,false,false},
+            {true,false,false,true,false,false,false},
+            {true,false,false,false,true,false,false},
+            {true,false,false,false,false,true,false}
+        };
+        for(boolean[] sample:cases) {
+            boolean actual=shouldApplyRiftGravity(
+                sample[0],sample[1],sample[2],sample[3],sample[4],sample[5]);
+            if(actual!=sample[6])
+                throw new IllegalStateException("CI rift gravity flight eligibility regression");
+        }
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FLIGHT_IMMUNITY_VERIFIED");
+    }
+
     private static void verifyBoundedSinkDrag() {
         double[][] cases={
             {0.4D,0.94D,0.376D},
@@ -1097,6 +1125,7 @@ public final class RiftController {
         verifyBoundedLiftVelocity();
         verifyBoundedSinkVelocity();
         verifyBoundedSinkDrag();
+        verifyRiftGravityEligibility();
         verifyPendingSnapshotPersistence();
         verifySparseBeaconSupport();
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED");
@@ -1955,8 +1984,9 @@ public final class RiftController {
                 // Never apply rift impulses to dead or removed player entities.
                 // Respect active flight from other mods or server-granted abilities.
                 // Rift gravity must not unexpectedly drag a flying player.
-                if (!player.isAlive() || player.isRemoved() || player.isCreative()
-                    || player.isSpectator() || player.getAbilities().flying) continue;
+                if (!shouldApplyRiftGravity(player.isAlive(),player.isRemoved(),
+                    player.isCreative(),player.isSpectator(),player.getAbilities().flying,
+                    player.isFallFlying())) continue;
                 double px=player.getX(), pz=player.getZ();
                 // Keep gravity local in all three dimensions: a player high
                 // above or deep below the rift must not be pulled sideways.
@@ -2048,8 +2078,9 @@ public final class RiftController {
                 // Only mark players actually affected by gravity impulses.
                 // Creative and flying players are immune, so avoid misleading
                 // particle cues and unnecessary network traffic for them.
-                if (!player.isAlive() || player.isRemoved() || player.isCreative()
-                    || player.isSpectator() || player.getAbilities().flying) continue;
+                if (!shouldApplyRiftGravity(player.isAlive(),player.isRemoved(),
+                    player.isCreative(),player.isSpectator(),player.getAbilities().flying,
+                    player.isFallFlying())) continue;
                 double ax=player.getX()-s.x, ay=player.getY()-level.getSeaLevel(), az=player.getZ()-s.z;
                 // Mirror the impulse falloff at the outer boundary. Avoid
                 // sending a full particle burst where gravity is almost zero.
