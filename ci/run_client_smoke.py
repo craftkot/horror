@@ -181,6 +181,14 @@ def capture_test_world():
             or has_continuous_sky_band([55]+[0]*128,64)):
         raise RuntimeError("BLACK FREQUENCY continuous sky band classifier regression")
     print("WORLD_CAPTURE: continuous sky band classifier verified",flush=True)
+    def has_sky_background(dark_coverage):
+        return math.isfinite(dark_coverage) and dark_coverage>=.08
+
+    # Measured from the real 20e05e3 client artifacts: the upper-sky frame
+    # contained 11.8% dark sky pixels; the false-positive ground frame 4.8%.
+    if not has_sky_background(.117) or has_sky_background(.048):
+        raise RuntimeError("BLACK FREQUENCY sky-background classifier regression")
+    print("WORLD_CAPTURE: dark sky background classifier verified",flush=True)
     def sky_capture_summary(horizon_visible, upper_visible):
         if horizon_visible and upper_visible:
             return "horizon+upper"
@@ -270,6 +278,7 @@ def capture_test_world():
                 pixels=list(crop.get_flattened_data())
                 purple=0
                 green=0
+                dark_sky=0
                 purple_rows=[]
                 purple_longest_runs=[]
                 for y in range(crop.height):
@@ -287,10 +296,15 @@ def capture_test_world():
                             current_run=0
                         if g>r*1.15 and g>b*1.15 and g>25:
                             green+=1
+                        # Ground cracks can contain the same violet pixels as the sky shader.
+                        # Require a real dark sky field behind the tear, not just purple geometry.
+                        if max(r,g,b)<50 and b>=g:
+                            dark_sky+=1
                     purple_rows.append(row_purple)
                     purple_longest_runs.append(row_longest)
                 coverage=purple/(crop.width*crop.height)
                 green_coverage=green/(crop.width*crop.height)
+                dark_sky_coverage=dark_sky/(crop.width*crop.height)
                 score=coverage-.35*green_coverage
                 row_threshold=max(6,int(crop.width*.01))
                 peak_threshold=max(12,int(crop.width*.025))
@@ -299,11 +313,11 @@ def capture_test_world():
                 peak_row=max(purple_rows,default=0)
                 continuous_rows=sum(1 for run in purple_longest_runs if run>=min_contiguous_run)
                 max_contiguous_run=max(purple_longest_runs,default=0)
-                candidate=(score,coverage,green_coverage,line_rows,peak_row,
+                candidate=(score,coverage,green_coverage,dark_sky_coverage,line_rows,peak_row,
                            continuous_rows,max_contiguous_run,left,top,peak_threshold,min_contiguous_run)
                 line_visible=(line_rows>=8 and peak_row>=peak_threshold
                               and has_continuous_sky_band(purple_longest_runs,min_contiguous_run))
-                valid=(coverage>=minimum and line_visible
+                valid=(coverage>=minimum and dark_sky_coverage>=.08 and line_visible
                        and (max_green is None or green_coverage<=max_green))
                 if best is None or candidate[0]>best[0]:
                     best=candidate
@@ -317,13 +331,13 @@ def capture_test_world():
             print("WORLD_CAPTURE_FAIL: no sky sample window",name,flush=True)
             return False
         selected=best_valid if best_valid is not None else best
-        (score,coverage,green_coverage,line_rows,peak_row,continuous_rows,
+        (score,coverage,green_coverage,dark_sky_coverage,line_rows,peak_row,continuous_rows,
          max_contiguous_run,left,top,peak_threshold,min_contiguous_run)=selected
         line_visible=(line_rows>=8 and peak_row>=peak_threshold
                        and continuous_rows>=6 and max_contiguous_run>=min_contiguous_run)
         visible=best_valid is not None
         selection="valid-window" if visible else "best-diagnostic-window"
-        print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} green={green_coverage:.4f} lineRows={line_rows} peakRow={peak_row} continuousRows={continuous_rows} maxRun={max_contiguous_run} minRun={min_contiguous_run} window={left},{top} required={minimum:.4f} maxGreen={max_green} visible={visible} selection={selection}",flush=True)
+        print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} green={green_coverage:.4f} darkSky={dark_sky_coverage:.4f} lineRows={line_rows} peakRow={peak_row} continuousRows={continuous_rows} maxRun={max_contiguous_run} minRun={min_contiguous_run} window={left},{top} required={minimum:.4f} minDarkSky=0.0800 maxGreen={max_green} visible={visible} selection={selection}",flush=True)
         return visible
     beacon_attempts=0
     beacon_ready_at=None
