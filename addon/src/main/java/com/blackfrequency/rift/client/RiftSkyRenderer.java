@@ -143,27 +143,35 @@ public final class RiftSkyRenderer {
             if(shader.getUniform("GreenPhase")!=null)shader.getUniform("GreenPhase").set(RiftClientState.greenPhase());
             if(shader.getUniform("GameTime")!=null)
                 shader.getUniform("GameTime").set(interpolatedGameTime(mc.level.getGameTime(),event.getPartialTick()));
-            RenderSystem.enableBlend();
-            RenderSystem.defaultBlendFunc();
-            RenderSystem.disableDepthTest();
-            // The camera is INSIDE the sky cube; back-face culling would hide its walls.
-            RenderSystem.disableCull();
-            RenderSystem.depthMask(false);
-            RenderSystem.setShader(() -> shader);
-            RenderSystem.setShaderColor(1f,1f,1f,1f);
-            // A single screen-space quad avoids overlapping translucent sky-cube
-            // faces. The vertex shader reconstructs the world-space view ray.
-            BufferBuilder bb=Tesselator.getInstance().getBuilder();
-            bb.begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.POSITION);
-            bb.vertex(-1f,-1f,0f).endVertex();
-            bb.vertex( 1f,-1f,0f).endVertex();
-            bb.vertex( 1f, 1f,0f).endVertex();
-            bb.vertex(-1f, 1f,0f).endVertex();
-            BufferUploader.drawWithShader(bb.end());
-            RenderSystem.depthMask(true);
-            RenderSystem.enableDepthTest();
-            RenderSystem.enableCull();
-            RenderSystem.disableBlend();
+            // Rendering is allowed to fail (for example, during a resource reload),
+            // but it must never leave the next world pass with depth writes disabled.
+            // Keep every state change inside the guarded region so cleanup also runs
+            // if shader binding, buffer construction, or upload throws.
+            try {
+                RenderSystem.enableBlend();
+                RenderSystem.defaultBlendFunc();
+                RenderSystem.disableDepthTest();
+                // The camera is INSIDE the sky cube; back-face culling would hide its walls.
+                RenderSystem.disableCull();
+                RenderSystem.depthMask(false);
+                RenderSystem.setShader(() -> shader);
+                RenderSystem.setShaderColor(1f,1f,1f,1f);
+                // A single screen-space quad avoids overlapping translucent sky-cube
+                // faces. The vertex shader reconstructs the world-space view ray.
+                BufferBuilder bb=Tesselator.getInstance().getBuilder();
+                bb.begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.POSITION);
+                bb.vertex(-1f,-1f,0f).endVertex();
+                bb.vertex( 1f,-1f,0f).endVertex();
+                bb.vertex( 1f, 1f,0f).endVertex();
+                bb.vertex(-1f, 1f,0f).endVertex();
+                BufferUploader.drawWithShader(bb.end());
+            } finally {
+                RenderSystem.depthMask(true);
+                RenderSystem.setShaderColor(1f,1f,1f,1f);
+                RenderSystem.enableDepthTest();
+                RenderSystem.enableCull();
+                RenderSystem.disableBlend();
+            }
         }
     }
 }
