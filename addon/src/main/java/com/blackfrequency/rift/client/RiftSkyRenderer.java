@@ -16,8 +16,11 @@ import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import java.io.IOException;
+import java.util.Objects;
 
 public final class RiftSkyRenderer {
+    private static final ResourceLocation SKY_RIFT_SHADER_ID=Objects.requireNonNull(
+        ResourceLocation.tryBuild("blackfrequency","sky_rift"),"Invalid BLACK FREQUENCY sky shader id");
     private static final float MIN_VISIBLE_STRENGTH=0.0001f;
     // All shader time multipliers are multiples of 0.005. This wrap is
     // four near-complete cycles of the base 0.00006 rad/tick phase.
@@ -109,7 +112,7 @@ public final class RiftSkyRenderer {
             verifyRenderThreshold();
             event.registerShader(
                 new ShaderInstance(event.getResourceProvider(),
-                    new ResourceLocation("blackfrequency","sky_rift"), DefaultVertexFormat.POSITION),
+                    SKY_RIFT_SHADER_ID, DefaultVertexFormat.POSITION),
                 loaded -> {
                     shader=loaded;
                     com.mojang.logging.LogUtils.getLogger().info("BLACK_FREQUENCY_SHADER_READY sky_rift");

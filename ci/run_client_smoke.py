@@ -181,6 +181,25 @@ def capture_test_world():
             or has_continuous_sky_band([55]+[0]*128,64)):
         raise RuntimeError("BLACK FREQUENCY continuous sky band classifier regression")
     print("WORLD_CAPTURE: continuous sky band classifier verified",flush=True)
+    def sky_capture_summary(horizon_visible, upper_visible):
+        if horizon_visible and upper_visible:
+            return "horizon+upper"
+        if upper_visible:
+            return "upper-only"
+        if horizon_visible:
+            return "horizon-only"
+        return "none"
+
+    expected_summaries=[
+        (True,True,"horizon+upper"),
+        (False,True,"upper-only"),
+        (True,False,"horizon-only"),
+        (False,False,"none"),
+    ]
+    if any(sky_capture_summary(horizon,upper)!=expected
+           for horizon,upper,expected in expected_summaries):
+        raise RuntimeError("BLACK FREQUENCY sky capture summary regression")
+    print("WORLD_CAPTURE: separate horizon/upper visibility summary verified",flush=True)
 
     def measure_ground_visibility(frame):
         width,height=frame.size
@@ -654,7 +673,7 @@ def capture_test_world():
                     sky_shot=upper_visible
                     if upper_visible and not horizon_visible:
                         shutil.copyfile(shots/"sky-rift-upper.png",shots/"sky-rift-hudless.png")
-                        print("WORLD_CAPTURE: upper-sky frame accepted; horizon is obstructed by terrain",
+                        print("WORLD_CAPTURE: upper-sky frame accepted; horizon did not meet the continuous-band threshold",
                               flush=True)
                 finally:
                     # Restore both camera axes by the exact sum of successful
@@ -676,10 +695,14 @@ def capture_test_world():
                         else:
                             print("WORLD_CAPTURE: camera pitch inverse input sent",restored_delta,flush=True)
                     key("F1")
-                if sky_shot:
+                if horizon_visible and upper_visible:
                     print("WORLD_CAPTURE: SKY_RIFT_HORIZON_AND_UPPER_SKY_VERIFIED_BEFORE_BEACON_CLICK",flush=True)
+                elif upper_visible:
+                    print("WORLD_CAPTURE: SKY_RIFT_UPPER_SKY_ONLY_VERIFIED_BEFORE_BEACON_CLICK",flush=True)
+                elif horizon_visible:
+                    print("WORLD_CAPTURE: SKY_RIFT_HORIZON_ONLY_VERIFIED_BEFORE_BEACON_CLICK",flush=True)
                 else:
-                    print("WORLD_CAPTURE_FAIL: sky capture failed before beacon click; still attempting real interaction",flush=True)
+                    print("WORLD_CAPTURE_FAIL: neither horizon nor upper-sky frame passed visibility checks; still attempting real interaction",flush=True)
             for stage in range(32):
                 if p.poll() is not None:
                     break
@@ -934,7 +957,7 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: mounted player was not proven immune inside an active lift zone",flush=True)
                     return False
             if not sky_shot:
-                print("WORLD_CAPTURE_FAIL: sky shader pixels were not visible in both horizon and zenith frames",flush=True)
+                print("WORLD_CAPTURE_FAIL: sky shader pixels were not visible in the upper-sky frame",flush=True)
                 return False
             if "BLACK_FREQUENCY_RENDER_ACTIVE" not in log_after:
                 print("WORLD_CAPTURE_FAIL: no actual sky renderer invocation observed",flush=True)

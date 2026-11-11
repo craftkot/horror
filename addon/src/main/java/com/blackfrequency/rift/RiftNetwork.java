@@ -1,5 +1,6 @@
 package com.blackfrequency.rift;
 
+import java.util.Objects;
 import java.util.function.Supplier;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
@@ -14,8 +15,10 @@ import net.minecraftforge.fml.DistExecutor;
 
 public final class RiftNetwork {
     private static final String VERSION = "2";
+    private static final ResourceLocation CHANNEL_ID = Objects.requireNonNull(
+        ResourceLocation.tryBuild("blackfrequency", "main"), "Invalid BLACK FREQUENCY channel id");
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
-        new ResourceLocation("blackfrequency", "main"), () -> VERSION,
+        CHANNEL_ID, () -> VERSION,
         VERSION::equals, VERSION::equals);
     private static boolean registered;
 
