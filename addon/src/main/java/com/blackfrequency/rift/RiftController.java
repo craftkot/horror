@@ -261,6 +261,9 @@ public final class RiftController {
         boolean ciSparseRecoveryEligibilityLogged;
         boolean ciSurfaceFissureLogged;
         final List<CompoundTag> snapshots = new ArrayList<>();
+        // Reuse the small per-tick retry set during recovery instead of allocating
+        // a new HashSet on every server tick. It is transient and never persisted.
+        final java.util.Set<Long> restoreFailedWrites = new java.util.HashSet<>();
         static State load(CompoundTag n) {
             State s = new State();
             s.elapsed=boundedElapsed(n.getLong("elapsed"));
@@ -768,8 +771,20 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_COLUMN_BOUNDS_VERIFIED");
     }
 
+    /** Verify that the transient retry set is cleared and reused between recovery ticks. */
+    private static void verifyRestoreFailureCacheReuse() {
+        State state=new State();
+        java.util.Set<Long> first=beginRestoreTick(state);
+        first.add(0xBFL);
+        java.util.Set<Long> second=beginRestoreTick(state);
+        if(first!=second || !second.isEmpty())
+            throw new IllegalStateException("CI restore failure cache reuse regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_FAILURE_CACHE_REUSED");
+    }
+
     /** Verify that a pending terrain snapshot survives a SavedData round trip. */
     private static void verifyPendingSnapshotPersistence() {
+        verifyRestoreFailureCacheReuse();
         State original=new State();
         original.started=true;
         original.restoring=true;
@@ -1354,6 +1369,11 @@ public final class RiftController {
             && dx*dx+dz*dz<=(long)RADIUS*RADIUS;
     }
 
+    private static java.util.Set<Long> beginRestoreTick(State s) {
+        s.restoreFailedWrites.clear();
+        return s.restoreFailedWrites;
+    }
+
     private static void restore(ServerLevel level,State s) {
         // Vanilla can open its beacon configuration screen despite the server
         // interaction being consumed by the rift. Close only the activated
@@ -1459,7 +1479,7 @@ public final class RiftController {
         int scanBudget=Math.min(48,Math.max(0,s.restoreIndex+1));
         // A failed block write must not be attempted repeatedly in one tick.
         // Other loaded snapshots can still recover; retry this position next tick.
-        java.util.Set<Long> failedWritesThisTick=new java.util.HashSet<>();
+        java.util.Set<Long> failedWritesThisTick=beginRestoreTick(s);
         while(s.restoreIndex>=0 && restoredThisTick<12 && checks<scanBudget) {
             // A single unloaded chunk must not block recovery in other loaded chunks.
             // Scan at most 48 candidates per tick and retain unloaded snapshots
