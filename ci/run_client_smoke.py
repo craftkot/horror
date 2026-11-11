@@ -536,9 +536,7 @@ def capture_test_world():
                       *marker.groups(),"target",*target.groups(),"samples",samples,
                       "meshSegments",mesh_segments,"meshArms",mesh_arms,
                       "meshAnchor",mesh_anchor_x,mesh_anchor_z,
-                      "meshPixels",mesh_pixels,"meshTiles",mesh_tiles,
-                      "particlePixels",violet_pixels,"particleTiles",visible_tiles,
-                      "combinedPixels",combined_pixels,"combinedTiles",combined_tiles,
+                      "visibility",metrics,
                       "aim",round(target_yaw,1),round(target_pitch,1),flush=True)
             def capture_sky_before_beacon():
                 nonlocal sky_shot,sky_capture_attempted
