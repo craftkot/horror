@@ -184,7 +184,7 @@ public final class RiftController {
         for(boolean[] sample:cases) {
             boolean actual=shouldApplyRiftGravity(
                 sample[0],sample[1],sample[2],sample[3],sample[4],sample[5],sample[6]);
-            if(actual!=sample[6])
+            if(actual!=sample[7])
                 throw new IllegalStateException("CI rift gravity flight eligibility regression");
         }
         LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FLIGHT_IMMUNITY_VERIFIED");
