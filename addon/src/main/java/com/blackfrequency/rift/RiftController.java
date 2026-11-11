@@ -30,6 +30,8 @@ public final class RiftController {
     // The client smoke test verifies a real beacon click, not player survival under random gravity.
     // Keep its single test player stable before the beacon exists; production physics is unchanged.
     private static boolean ciPlayerGravitySuppressionLogged;
+    // CI-only integration probe: exercise the real ServerPlayer fall-flying flag.
+    private static boolean ciActualElytraStateVerified;
     // CI-only hold while the sparse fracture removes the original spawn support.
     // Released only after the replacement beacon's standing pad is verified.
     private static boolean ciPlayerSafePadReady;
@@ -175,6 +177,31 @@ public final class RiftController {
                 throw new IllegalStateException("CI rift gravity flight eligibility regression");
         }
         LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FLIGHT_IMMUNITY_VERIFIED");
+    }
+
+    /**
+     * Exercise the actual Forge player flight flag, not only a boolean test fixture.
+     * The equipment and flight state are restored in the same server tick.
+     */
+    private static void verifyActualElytraFlightImmunity(
+            net.minecraft.server.level.ServerPlayer player) {
+        net.minecraft.world.item.ItemStack previousChest=
+            player.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST).copy();
+        try {
+            player.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST,
+                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ELYTRA));
+            player.startFallFlying();
+            boolean fallFlying=player.isFallFlying();
+            boolean gravityEligible=shouldApplyRiftGravity(
+                player.isAlive(),player.isRemoved(),player.isCreative(),
+                player.isSpectator(),player.getAbilities().flying,fallFlying);
+            if(!fallFlying || gravityEligible)
+                throw new IllegalStateException("CI actual elytra flight immunity regression");
+            LOGGER.info("BLACK_FREQUENCY_TEST ACTUAL_ELYTRA_FLIGHT_IMMUNITY_VERIFIED");
+        } finally {
+            player.stopFallFlying();
+            player.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST,previousChest);
+        }
     }
 
     private static void verifyBoundedSinkDrag() {
@@ -1868,6 +1895,18 @@ public final class RiftController {
         if(event.phase != TickEvent.Phase.END || !(event.level instanceof ServerLevel level)
            || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
         State s = level.getDataStorage().computeIfAbsent(State::load, State::new, "blackfrequency_finale");
+        // Validate the real player fall-flying flag once in disposable CI worlds.
+        // The probe restores the original chest item and flight state immediately.
+        if(CI_TEST && !ciActualElytraStateVerified) {
+            for(var player:level.players()) {
+                if(!player.isAlive() || player.isRemoved() || player.isCreative()
+                    || player.isSpectator() || player.getAbilities().flying
+                    || player.isFallFlying()) continue;
+                verifyActualElytraFlightImmunity(player);
+                ciActualElytraStateVerified=true;
+                break;
+            }
+        }
         if(s.surfaceCueCooldownTicks>0) s.surfaceCueCooldownTicks--;
         if(s.restoring) { restore(level,s); return; }
         // Keep clients synchronized even on old worlds or after the finale.
