@@ -19,6 +19,7 @@ import java.io.IOException;
 
 public final class RiftSkyRenderer {
     private static final float MIN_VISIBLE_STRENGTH=0.0001f;
+    private static final long SKY_TIME_WRAP_TICKS=100000L;
     private static ShaderInstance shader;
     private static boolean firstVisibleFrameLogged;
 
@@ -28,14 +29,38 @@ public final class RiftSkyRenderer {
         return Float.isFinite(strength) && strength>MIN_VISIBLE_STRENGTH;
     }
 
+    // Interpolate shader time between simulation ticks so the sky tear animates
+    // at render rate instead of stepping visibly at 20 updates per second.
+    private static float interpolatedGameTime(long gameTime,float partialTick) {
+        float safePartial=Float.isFinite(partialTick)
+            ? Math.max(0.0F,Math.min(1.0F,partialTick))
+            : 0.0F;
+        return (float)Math.floorMod(gameTime,SKY_TIME_WRAP_TICKS)+safePartial;
+    }
+
     private static void verifyRenderThreshold() {
         if(shouldRender(0.0f) || shouldRender(MIN_VISIBLE_STRENGTH)
             || !shouldRender(MIN_VISIBLE_STRENGTH+0.00001f)
             || shouldRender(Float.NaN) || shouldRender(Float.POSITIVE_INFINITY)
             || shouldRender(Float.NEGATIVE_INFINITY))
             throw new IllegalStateException("BLACK FREQUENCY sky render threshold regression");
+        float midpoint=interpolatedGameTime(42L,.5F);
+        float tickBoundary=interpolatedGameTime(42L,1.0F);
+        float wrapped=interpolatedGameTime(SKY_TIME_WRAP_TICKS,.25F);
+        float negative=interpolatedGameTime(-1L,.5F);
+        float invalid=interpolatedGameTime(42L,Float.NaN);
+        float clamped=interpolatedGameTime(42L,1.5F);
+        if(Math.abs(midpoint-42.5F)>1.0E-4F
+            || Math.abs(tickBoundary-43.0F)>1.0E-4F
+            || Math.abs(wrapped-.25F)>1.0E-4F
+            || Math.abs(negative-99999.5F)>1.0E-4F
+            || Math.abs(invalid-42.0F)>1.0E-4F
+            || Math.abs(clamped-43.0F)>1.0E-4F)
+            throw new IllegalStateException("BLACK FREQUENCY sky animation interpolation regression");
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST SKY_RENDER_THRESHOLD_VERIFIED");
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST SKY_ANIMATION_INTERPOLATION_VERIFIED period={}",SKY_TIME_WRAP_TICKS);
     }
 
     @Mod.EventBusSubscriber(modid="blackfrequency", bus=Mod.EventBusSubscriber.Bus.MOD, value=Dist.CLIENT)
@@ -77,7 +102,8 @@ public final class RiftSkyRenderer {
             }
             if(shader.getUniform("RiftStrength")!=null)shader.getUniform("RiftStrength").set(strength);
             if(shader.getUniform("GreenPhase")!=null)shader.getUniform("GreenPhase").set(RiftClientState.greenPhase());
-            if(shader.getUniform("GameTime")!=null)shader.getUniform("GameTime").set((float)(mc.level.getGameTime()%100000L));
+            if(shader.getUniform("GameTime")!=null)
+                shader.getUniform("GameTime").set(interpolatedGameTime(mc.level.getGameTime(),event.getPartialTick()));
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();
             RenderSystem.disableDepthTest();
