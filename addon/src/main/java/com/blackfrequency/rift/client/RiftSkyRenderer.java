@@ -18,6 +18,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import java.io.IOException;
 import java.util.Objects;
+import org.lwjgl.opengl.GL11;
 
 public final class RiftSkyRenderer {
     private static final ResourceLocation SKY_RIFT_SHADER_ID=Objects.requireNonNull(
@@ -33,6 +34,7 @@ public final class RiftSkyRenderer {
     private static final double SKY_MAX_WRAP_PHASE_ERROR=0.002D;
     private static ShaderInstance shader;
     private static boolean firstVisibleFrameLogged;
+    private static boolean firstCiCloudOcclusionLogged;
     private static final boolean CI_TEST_MODE=Boolean.getBoolean("blackfrequency.ciTestMode");
     private static float lastCiCameraYaw=Float.NaN;
     private static float lastCiCameraPitch=Float.NaN;
@@ -157,7 +159,19 @@ public final class RiftSkyRenderer {
                 RiftClientState.GroundRenderer.render(event);
                 return;
             }
-            if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_SKY || shader==null) return;
+            if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_SKY) {
+                renderRift(event,false);
+                return;
+            }
+            // Forge dispatches AFTER_WEATHER after vanilla clouds and weather.
+            // Reapply the sky tear at the far plane with depth testing enabled:
+            // sky/cloud pixels remain eligible, while terrain depth rejects the quad.
+            if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_WEATHER)
+                renderRift(event,true);
+        }
+
+        private static void renderRift(RenderLevelStageEvent event,boolean depthAwareCloudPass) {
+            if(shader==null) return;
             Minecraft mc=Minecraft.getInstance();
             if(mc.level==null || mc.player==null) return;
             // A stale Overworld packet must not draw the fracture in other dimensions.
@@ -167,10 +181,16 @@ public final class RiftSkyRenderer {
             // skip the draw entirely while the shader would output transparency.
             if(!shouldRender(strength)) return;
             strength=Math.min(strength,1f);
-            logCiCameraRotation(event.getCamera());
-            if(!firstVisibleFrameLogged) {
-                firstVisibleFrameLogged=true;
-                com.mojang.logging.LogUtils.getLogger().info("BLACK_FREQUENCY_RENDER_ACTIVE strength={}",strength);
+            if(!depthAwareCloudPass) {
+                logCiCameraRotation(event.getCamera());
+                if(!firstVisibleFrameLogged) {
+                    firstVisibleFrameLogged=true;
+                    com.mojang.logging.LogUtils.getLogger().info("BLACK_FREQUENCY_RENDER_ACTIVE strength={}",strength);
+                }
+            } else if(CI_TEST_MODE && !firstCiCloudOcclusionLogged) {
+                firstCiCloudOcclusionLogged=true;
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_TEST SKY_CLOUD_OCCLUSION_PASS");
             }
             if(shader.getUniform("RiftStrength")!=null)shader.getUniform("RiftStrength").set(strength);
             if(shader.getUniform("GreenPhase")!=null)shader.getUniform("GreenPhase").set(RiftClientState.greenPhase());
@@ -183,7 +203,14 @@ public final class RiftSkyRenderer {
             try {
                 RenderSystem.enableBlend();
                 RenderSystem.defaultBlendFunc();
-                RenderSystem.disableDepthTest();
+                if(depthAwareCloudPass) {
+                    // The vertex shader places this quad on the far plane. LEQUAL
+                    // lets it cover untouched sky pixels but not nearer terrain.
+                    RenderSystem.enableDepthTest();
+                    RenderSystem.depthFunc(GL11.GL_LEQUAL);
+                } else {
+                    RenderSystem.disableDepthTest();
+                }
                 // The camera is INSIDE the sky cube; back-face culling would hide its walls.
                 RenderSystem.disableCull();
                 RenderSystem.depthMask(false);
@@ -200,6 +227,7 @@ public final class RiftSkyRenderer {
                 BufferUploader.drawWithShader(bb.end());
             } finally {
                 RenderSystem.depthMask(true);
+                RenderSystem.depthFunc(GL11.GL_LEQUAL);
                 RenderSystem.setShaderColor(1f,1f,1f,1f);
                 RenderSystem.enableDepthTest();
                 RenderSystem.enableCull();
