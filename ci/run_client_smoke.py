@@ -379,6 +379,21 @@ def capture_test_world():
     if os.environ.get("BF_ISOLATED_TEST")=="1":
         # Singleplayer may open Create World directly on a fresh installation.
         snap("02b-world-selection.png")
+        # A random seed can place the disposable player on a tiny island, leaving
+        # the four-arm ground mesh with only one supported segment. Pin the client
+        # fixture to a verified Java 1.20 plains spawn so the render test measures
+        # the mesh rather than unrelated random world-generation variance.
+        click(640,35)  # World tab
+        time.sleep(0.8)
+        click(640,245)  # Seed field
+        key("CTRL+A")
+        seed="5589746799300216064"
+        subprocess.run(["xdotool","type","--clearmodifiers",seed],check=False)
+        time.sleep(0.5)
+        snap("02c-world-seed-configured.png")
+        print("WORLD_CAPTURE: deterministic Java 1.20.1 plains seed entered",seed,flush=True)
+        click(270,35)  # Return to Game tab
+        time.sleep(0.5)
         click(400,665)
     else:
         click(400,665)
