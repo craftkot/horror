@@ -133,6 +133,7 @@ public final class RiftClientState {
         private static boolean animationProfileLogged;
         private static boolean rangeRejectLogged;
         private static boolean supportFilterLogged;
+        private static boolean sampleCursorReuseLogged;
 
         private record GroundPoint(double x,double y,double z) {}
         private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,
@@ -308,12 +309,11 @@ public final class RiftClientState {
         }
 
         private static double sampleGroundY(net.minecraft.client.multiplayer.ClientLevel level,
-                int blockX,int blockZ,int referenceY) {
-            // Reuse one mutable position through the bounded vertical scan.
-            // The queried states and collision shapes are consumed immediately;
+                int blockX,int blockZ,int referenceY,BlockPos.MutableBlockPos cursor) {
+            // The caller owns one render-thread cursor for the whole mesh rebuild.
+            // Every state and collision shape is consumed before the cursor moves;
             // no mutable position escapes this method or is retained by the mesh.
-            BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos(
-                blockX,level.getMinBuildHeight(),blockZ);
+            cursor.set(blockX,level.getMinBuildHeight(),blockZ);
             if(!level.getWorldBorder().isWithinBounds(cursor)
                 || !level.hasChunk(blockX>>4,blockZ>>4)) return Double.NaN;
 
@@ -366,6 +366,9 @@ public final class RiftClientState {
             verifyGroundSupportProfile();
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
             Map<Long,Double> surfaceYByColumn=new HashMap<>(ARM_COUNT*SEGMENTS_PER_ARM);
+            BlockPos.MutableBlockPos surfaceCursor=new BlockPos.MutableBlockPos(
+                worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);
+            int surfaceSamples=0;
             int cacheHits=0;
             int activeArms=0;
             int steepStepBreaks=0;
@@ -389,7 +392,8 @@ public final class RiftClientState {
                     long key=columnKey(blockX,blockZ);
                     Double sampledY=surfaceYByColumn.get(key);
                     if(sampledY==null) {
-                        sampledY=sampleGroundY(level,blockX,blockZ,referenceY);
+                        sampledY=sampleGroundY(level,blockX,blockZ,referenceY,surfaceCursor);
+                        surfaceSamples++;
                         surfaceYByColumn.put(key,sampledY);
                     } else {
                         cacheHits++;
@@ -422,6 +426,14 @@ public final class RiftClientState {
                     previous=current;
                 }
                 if(result.size()>armStart) activeArms++;
+            }
+            if(!sampleCursorReuseLogged) {
+                if(surfaceSamples<=0 || surfaceSamples!=surfaceYByColumn.size())
+                    throw new IllegalStateException("BLACK FREQUENCY ground sample cursor reuse regression");
+                sampleCursorReuseLogged=true;
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_CURSOR_REUSE_VERIFIED sampledColumns={} mutableCursors=1",
+                    surfaceSamples);
             }
             return new GroundMesh(List.copyOf(result),activeArms,surfaceYByColumn.size(),cacheHits,
                 steepStepBreaks);

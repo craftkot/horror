@@ -847,6 +847,9 @@ def capture_test_world():
             if "BLACK_FREQUENCY_GROUND_MESH_STRUCTURAL_SUPPORT_FILTER_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: client ground mesh did not verify structural-surface filtering",flush=True)
                 return False
+            if "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_CURSOR_REUSE_VERIFIED" not in log_after:
+                print("WORLD_CAPTURE_FAIL: ground sampler did not verify shared mutable cursor reuse",flush=True)
+                return False
             if ("BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_VERIFIED maxStep=1.25" not in log_after
                     or not continuity or abs(float(continuity.group(1))-1.25)>1.0E-9):
                 print("WORLD_CAPTURE_FAIL: ground mesh did not verify its cliff-discontinuity guard",
