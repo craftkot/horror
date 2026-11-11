@@ -371,10 +371,10 @@ public final class RiftController {
         BlockPos pos=event.getPos();
         // Ignore unloaded positions before querying block state: an event from
         // another mod must not cause recovery logic to load a chunk.
-        if(!level.hasChunkAt(pos) || !level.getBlockState(pos).is(Blocks.BEACON)) return;
+        if(!level.hasChunkAt(pos)) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
-        if(!s.started || pos.asLong()!=s.naturalBeaconPos
-            || !level.getWorldBorder().isWithinBounds(pos)) return;
+        if(!isValidNaturalBeaconPosition(level,s,pos)
+            || !level.getBlockState(pos).is(Blocks.BEACON)) return;
         // Cancel vanilla harvesting before it creates a valuable beacon item.
         event.setCanceled(true);
         if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),3)
@@ -592,10 +592,8 @@ public final class RiftController {
         // that later occupy its old position from explosion damage.
         BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
         if(!event.getAffectedBlocks().contains(beacon)
+            || !isValidNaturalBeaconPosition(level,s,beacon)
             || !level.hasChunkAt(beacon)
-            // A border shrink retires the generated fixture. Do not keep
-            // shielding a block at an inaccessible, stale coordinate.
-            || !level.getWorldBorder().isWithinBounds(beacon)
             || !level.getBlockState(beacon).is(Blocks.BEACON)) return;
         // Explosion affected blocks are already loaded; this does not request
         // additional chunks or modify terrain.
@@ -883,6 +881,29 @@ public final class RiftController {
         return Math.abs(dx)<=128L && Math.abs(dz)<=128L && dx*dx+dz*dz<=128L*128L;
     }
 
+    /**
+     * A generated recovery beacon is placed no farther than RADIUS-4 from the
+     * fracture anchor. Validate the persisted coordinate before treating a
+     * beacon there as mod-owned; corrupted NBT must not consume or shield a
+     * player-owned beacon elsewhere in the world.
+     */
+    private static boolean naturalBeaconWithinFracture(BlockPos beacon,int anchorX,int anchorZ,
+            int minBuildHeight,int maxBuildHeight) {
+        long dx=(long)beacon.getX()-anchorX,dz=(long)beacon.getZ()-anchorZ;
+        long limit=RADIUS-4L;
+        return beacon.getY()>=minBuildHeight && beacon.getY()<maxBuildHeight
+            && Math.abs(dx)<=limit && Math.abs(dz)<=limit
+            && dx*dx+dz*dz<=limit*limit;
+    }
+
+    private static boolean isValidNaturalBeaconPosition(ServerLevel level,State s,BlockPos beacon) {
+        return s.started && s.naturalBeaconPos!=Long.MIN_VALUE
+            && beacon.asLong()==s.naturalBeaconPos
+            && naturalBeaconWithinFracture(beacon,s.x,s.z,
+                level.getMinBuildHeight(),level.getMaxBuildHeight())
+            && level.getWorldBorder().isWithinBounds(beacon);
+    }
+
     /** Overflow-safe 3D audience filter shared by recovery effects and titles. */
     private static boolean withinRecoveryAudience(BlockPos player, int anchorX, int anchorY, int anchorZ) {
         long dx=(long)player.getX()-anchorX;
@@ -958,9 +979,9 @@ public final class RiftController {
         if(s.naturalBeaconPos==Long.MIN_VALUE
             || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return false;
         BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
-        if(!level.hasChunkAt(beacon) || !level.getWorldBorder().isWithinBounds(beacon)
-            || !level.getBlockState(beacon).is(Blocks.BEACON)
-            || !beaconWithinAnchor(beacon.getX(),beacon.getZ(),s.x,s.z)) return false;
+        if(!isValidNaturalBeaconPosition(level,s,beacon)
+            || !level.hasChunkAt(beacon)
+            || !level.getBlockState(beacon).is(Blocks.BEACON)) return false;
         double distanceSquared=player.distanceToSqr(beacon.getX()+0.5D,
             beacon.getY()+0.5D,beacon.getZ()+0.5D);
         if(!mayRecoverCiBeaconAimAfterMiss(CI_TEST,
@@ -1032,6 +1053,14 @@ public final class RiftController {
             || !beaconWithinAnchor(-128,0,0,0)
             || beaconWithinAnchor(Integer.MAX_VALUE,0,Integer.MIN_VALUE,0))
             throw new IllegalStateException("CI beacon anchor radius regression");
+        if(!naturalBeaconWithinFracture(new BlockPos(RADIUS-4,319,0),0,0,-64,320)
+            || naturalBeaconWithinFracture(new BlockPos(RADIUS-3,319,0),0,0,-64,320)
+            || naturalBeaconWithinFracture(new BlockPos(RADIUS-4,320,0),0,0,-64,320)
+            || naturalBeaconWithinFracture(new BlockPos(0,-65,0),0,0,-64,320)
+            || naturalBeaconWithinFracture(new BlockPos(Integer.MAX_VALUE,64,Integer.MIN_VALUE),
+                Integer.MIN_VALUE,0,-64,320))
+            throw new IllegalStateException("CI natural recovery beacon anchor bounds regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_ANCHOR_BOUNDS_VERIFIED");
         verifyRecoveryAudienceBounds();
         verifyRecoveryVortexContraction();
         verifyFractureColumnBounds();
@@ -1697,9 +1726,10 @@ public final class RiftController {
                 if(s.naturalBeaconPos==Long.MIN_VALUE || level.players().isEmpty())
                     throw new IllegalStateException("CI recovery beacon missing after restoration");
                 BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
-                if(!level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)
+                if(!isValidNaturalBeaconPosition(level,s,beacon)
+                    || !level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)
                     || !level.getBlockState(beacon).is(Blocks.BEACON))
-                    throw new IllegalStateException("CI recovery beacon not loaded after restoration");
+                    throw new IllegalStateException("CI recovery beacon not loaded at its bounded anchor after restoration");
                 // A protection mod may have canceled the break before our handler.
                 // It must leave both the physical beacon and its saved anchor intact.
                 var deniedEvent=new net.minecraftforge.event.level.BlockEvent.BreakEvent(
@@ -1993,14 +2023,16 @@ public final class RiftController {
             // Border membership does not require a loaded chunk. Retire an
             // inaccessible objective even when its old chunk is unloaded, so
             // restoration can offer a new beacon near an active player.
-            if(!level.getWorldBorder().isWithinBounds(beacon)) {
-                    // A saved position does not prove that the block is still ours:
-                    // another mod or player may have replaced the original beacon.
-                    // Untrack the inaccessible fixture instead of deleting a
-                    // potentially player-owned block after the border shrinks.
+            if(!isValidNaturalBeaconPosition(level,s,beacon)) {
+                    // Invalid, out-of-build-height, out-of-radius, or out-of-border
+                    // saved anchors are retired without querying or deleting a block.
+                    // The next bounded placement pass may offer a new objective.
+                    boolean outsideBorder=!level.getWorldBorder().isWithinBounds(beacon);
                     s.naturalBeaconPos=Long.MIN_VALUE;
                     s.setDirty();
-                    if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST OUTSIDE_BORDER_BEACON_RETIRED");
+                    if(CI_TEST) LOGGER.info(outsideBorder
+                        ? "BLACK_FREQUENCY_TEST OUTSIDE_BORDER_BEACON_RETIRED"
+                        : "BLACK_FREQUENCY_TEST INVALID_NATURAL_BEACON_ANCHOR_RETIRED");
             // Only inspect block state when the chunk is already loaded.
             } else if(level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)) {
                 if(!level.getBlockState(beacon).is(Blocks.BEACON)) {
