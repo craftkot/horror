@@ -32,6 +32,7 @@ public final class RiftController {
     private static boolean ciPlayerGravitySuppressionLogged;
     // CI-only integration probe: exercise the real ServerPlayer fall-flying flag.
     private static boolean ciActualElytraStateVerified;
+    private static boolean ciActualPassengerStateVerified;
     // CI-only hold while the sparse fracture removes the original spawn support.
     // Released only after the replacement beacon's standing pad is verified.
     private static boolean ciPlayerSafePadReady;
@@ -156,23 +157,33 @@ public final class RiftController {
      * or misleading sink/lift particles into gliding players.
      */
     private static boolean shouldApplyRiftGravity(boolean alive,boolean removed,boolean creative,
-            boolean spectator,boolean abilityFlying,boolean fallFlying) {
-        return alive && !removed && !creative && !spectator && !abilityFlying && !fallFlying;
+            boolean spectator,boolean abilityFlying,boolean fallFlying,boolean passenger) {
+        return alive && !removed && !creative && !spectator
+            && !abilityFlying && !fallFlying && !passenger;
+    }
+
+    // Use the same eligibility check for the real server player in both the
+    // impulse and particle paths; mounted players follow their vehicle's physics.
+    private static boolean shouldApplyRiftGravity(net.minecraft.server.level.ServerPlayer player) {
+        return shouldApplyRiftGravity(player.isAlive(),player.isRemoved(),
+            player.isCreative(),player.isSpectator(),player.getAbilities().flying,
+            player.isFallFlying(),player.isPassenger());
     }
 
     private static void verifyRiftGravityEligibility() {
         boolean[][] cases={
-            {true,false,false,false,false,false,true},
-            {false,false,false,false,false,false,false},
-            {true,true,false,false,false,false,false},
-            {true,false,true,false,false,false,false},
-            {true,false,false,true,false,false,false},
-            {true,false,false,false,true,false,false},
-            {true,false,false,false,false,true,false}
+            {true,false,false,false,false,false,false,true},
+            {false,false,false,false,false,false,false,false},
+            {true,true,false,false,false,false,false,false},
+            {true,false,true,false,false,false,false,false},
+            {true,false,false,true,false,false,false,false},
+            {true,false,false,false,true,false,false,false},
+            {true,false,false,false,false,true,false,false},
+            {true,false,false,false,false,false,true,false}
         };
         for(boolean[] sample:cases) {
             boolean actual=shouldApplyRiftGravity(
-                sample[0],sample[1],sample[2],sample[3],sample[4],sample[5]);
+                sample[0],sample[1],sample[2],sample[3],sample[4],sample[5],sample[6]);
             if(actual!=sample[6])
                 throw new IllegalStateException("CI rift gravity flight eligibility regression");
         }
@@ -192,15 +203,43 @@ public final class RiftController {
                 new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ELYTRA));
             player.startFallFlying();
             boolean fallFlying=player.isFallFlying();
-            boolean gravityEligible=shouldApplyRiftGravity(
-                player.isAlive(),player.isRemoved(),player.isCreative(),
-                player.isSpectator(),player.getAbilities().flying,fallFlying);
+            boolean gravityEligible=shouldApplyRiftGravity(player);
             if(!fallFlying || gravityEligible)
                 throw new IllegalStateException("CI actual elytra flight immunity regression");
             LOGGER.info("BLACK_FREQUENCY_TEST ACTUAL_ELYTRA_FLIGHT_IMMUNITY_VERIFIED");
         } finally {
             player.stopFallFlying();
             player.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST,previousChest);
+        }
+    }
+
+    /**
+     * A mounted player must inherit the vehicle's motion rather than receive
+     * independent rift impulses. The disposable CI probe mounts and dismounts
+     * the real ServerPlayer in one tick and restores its position and velocity.
+     */
+    private static void verifyActualPassengerGravityImmunity(
+            ServerLevel level,net.minecraft.server.level.ServerPlayer player) {
+        if(player.isPassenger())
+            throw new IllegalStateException("CI passenger probe requires an unmounted player");
+        net.minecraft.world.phys.Vec3 previousPosition=player.position();
+        net.minecraft.world.phys.Vec3 previousMovement=player.getDeltaMovement();
+        var mount=net.minecraft.world.entity.EntityType.PIG.create(level);
+        if(mount==null)
+            throw new IllegalStateException("CI could not create passenger probe mount");
+        try {
+            mount.moveTo(previousPosition.x,previousPosition.y,previousPosition.z,
+                player.getYRot(),player.getXRot());
+            if(!level.addFreshEntity(mount) || !player.startRiding(mount,true))
+                throw new IllegalStateException("CI could not mount player for gravity probe");
+            if(!player.isPassenger() || shouldApplyRiftGravity(player))
+                throw new IllegalStateException("CI mounted player remained eligible for rift gravity");
+            LOGGER.info("BLACK_FREQUENCY_TEST ACTUAL_PASSENGER_GRAVITY_IMMUNITY_VERIFIED");
+        } finally {
+            player.stopRiding();
+            mount.discard();
+            player.setPos(previousPosition.x,previousPosition.y,previousPosition.z);
+            player.setDeltaMovement(previousMovement);
         }
     }
 
@@ -1897,13 +1936,19 @@ public final class RiftController {
         State s = level.getDataStorage().computeIfAbsent(State::load, State::new, "blackfrequency_finale");
         // Validate the real player fall-flying flag once in disposable CI worlds.
         // The probe restores the original chest item and flight state immediately.
-        if(CI_TEST && !ciActualElytraStateVerified) {
+        if(CI_TEST && (!ciActualElytraStateVerified || !ciActualPassengerStateVerified)) {
             for(var player:level.players()) {
                 if(!player.isAlive() || player.isRemoved() || player.isCreative()
                     || player.isSpectator() || player.getAbilities().flying
-                    || player.isFallFlying()) continue;
-                verifyActualElytraFlightImmunity(player);
-                ciActualElytraStateVerified=true;
+                    || player.isFallFlying() || player.isPassenger()) continue;
+                if(!ciActualElytraStateVerified) {
+                    verifyActualElytraFlightImmunity(player);
+                    ciActualElytraStateVerified=true;
+                }
+                if(!ciActualPassengerStateVerified) {
+                    verifyActualPassengerGravityImmunity(level,player);
+                    ciActualPassengerStateVerified=true;
+                }
                 break;
             }
         }
@@ -2023,9 +2068,7 @@ public final class RiftController {
                 // Never apply rift impulses to dead or removed player entities.
                 // Respect active flight from other mods or server-granted abilities.
                 // Rift gravity must not unexpectedly drag a flying player.
-                if (!shouldApplyRiftGravity(player.isAlive(),player.isRemoved(),
-                    player.isCreative(),player.isSpectator(),player.getAbilities().flying,
-                    player.isFallFlying())) continue;
+                if (!shouldApplyRiftGravity(player)) continue;
                 double px=player.getX(), pz=player.getZ();
                 // Keep gravity local in all three dimensions: a player high
                 // above or deep below the rift must not be pulled sideways.
@@ -2117,9 +2160,7 @@ public final class RiftController {
                 // Only mark players actually affected by gravity impulses.
                 // Creative and flying players are immune, so avoid misleading
                 // particle cues and unnecessary network traffic for them.
-                if (!shouldApplyRiftGravity(player.isAlive(),player.isRemoved(),
-                    player.isCreative(),player.isSpectator(),player.getAbilities().flying,
-                    player.isFallFlying())) continue;
+                if (!shouldApplyRiftGravity(player)) continue;
                 double ax=player.getX()-s.x, ay=player.getY()-level.getSeaLevel(), az=player.getZ()-s.z;
                 // Mirror the impulse falloff at the outer boundary. Avoid
                 // sending a full particle burst where gravity is almost zero.
