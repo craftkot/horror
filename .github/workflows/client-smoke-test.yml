@@ -48,10 +48,23 @@ jobs:
 
       - name: Install client smoke dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb xdotool x11-xserver-utils scrot mesa-utils libgl1-mesa-dri libx11-6 libxext6 libxrender1 libxtst6 libxi6 libxrandr2 libxcursor1 libxinerama1 libxxf86vm1
-          python -m pip install --upgrade pip
-          python -m pip install minecraft-launcher-lib pillow
+          set -e
+          APT_RETRIES=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          for attempt in 1 2 3; do
+            if sudo apt-get "${APT_RETRIES[@]}" update; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "APT package indexes remained unreachable after 3 attempts" >&2
+              exit 1
+            fi
+            delay=$((attempt * 15))
+            echo "APT update failed; retrying in ${delay}s (attempt $((attempt + 1))/3)" >&2
+            sleep "$delay"
+          done
+          sudo apt-get "${APT_RETRIES[@]}" install -y xvfb xdotool x11-xserver-utils scrot mesa-utils libgl1-mesa-dri libx11-6 libxext6 libxrender1 libxtst6 libxi6 libxrandr2 libxcursor1 libxinerama1 libxxf86vm1
+          python -m pip install --upgrade --retries 5 --timeout 30 pip
+          python -m pip install --retries 5 --timeout 30 minecraft-launcher-lib pillow
 
       - name: Start virtual display
         run: |

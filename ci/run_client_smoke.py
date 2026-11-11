@@ -203,18 +203,29 @@ def capture_test_world():
         smoothstep01(.025,.18,.18),
         smoothstep01(.025,.18,1.0),
     ]
+    gate_start=shader_source.find("if(fractureField>.025){")
+    gate_end=shader_source.find("\n }",gate_start)
+    filament_gate=shader_source[gate_start:gate_end+3] if gate_start>=0 and gate_end>=0 else ""
+    cell_calls=re.findall(r"cells\\(n\\.(?:yz|xz|xy),7\\.\\)",shader_source)
     if (not all(token in shader_source for token in (
             "float fractureField=max(majorGlow,zenithGlow);",
+            "float filaments=0.;",
+            "if(fractureField>.025){",
             "float filamentMask=smoothstep(.025,.18,fractureField);",
-            "filaments*=filamentMask;"))
+            "filaments=(1.-smoothstep(.008,.023,cellDistance))*filamentMask;"))
+            or len(cell_calls)!=3
+            or filament_gate.count("cells(n.")!=3
+            or "float filaments=0.;" not in shader_source[:gate_start]
             or filament_mask_samples[0]!=0.0
             or filament_mask_samples[1]!=0.0
             or not (0.0<filament_mask_samples[2]<1.0)
             or filament_mask_samples[3]!=1.0
             or filament_mask_samples[4]!=1.0):
-        raise RuntimeError("BLACK FREQUENCY fracture-localized sky filament regression")
-    print("WORLD_CAPTURE: fracture-localized sky filaments verified",
-          [round(value,4) for value in filament_mask_samples],flush=True)
+        raise RuntimeError("BLACK FREQUENCY fracture-gated sky filament regression")
+    print("WORLD_CAPTURE: fracture-gated sky filaments verified",
+          {"mask": [round(value,4) for value in filament_mask_samples],
+           "voronoiSearches": len(cell_calls),
+           "gateThreshold": 0.025},flush=True)
 
     def sky_capture_summary(horizon_visible, upper_visible):
         if horizon_visible and upper_visible:

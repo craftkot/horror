@@ -154,22 +154,22 @@ void main(){
  float lowerCore=1.-smoothstep(lowerWidth,lowerWidth+.023,lowerDistance);
  float lowerGlow=exp(-lowerDistance*mix(19.,14.,lowerSurge));
  float lowerCorona=exp(-lowerDistance*8.);
- // Sparse fine filaments, not the previous full-screen Voronoi patchwork.
- // Three 3x3 cell searches instead of nine: 27 vs 81 cell evaluations.
- // Fourth-power axis weights are just two squarings; avoid a general pow per fragment.
- vec3 weights=abs(n);
- weights*=weights;
- weights*=weights;
- weights/=max(dot(weights,vec3(1.)),.0001);
- float cellDistance=dot(vec3(cells(n.yz,7.),cells(n.xz,7.),cells(n.xy,7.)),weights);
  float majorGlow=max(spineGlow,max(branchGlow,max(upperGlow,max(lowerGlow,crownGlow))));
  float fractureField=max(majorGlow,zenithGlow);
- // Keep Voronoi filaments attached to the actual tears instead of drawing
- // a faint polygon grid across otherwise empty sky. The cell searches stay
- // unchanged; only their contribution is spatially masked by existing glow.
- float filaments=1.-smoothstep(.008,.023,cellDistance);
- float filamentMask=smoothstep(.025,.18,fractureField);
- filaments*=filamentMask;
+ // The filament mask is exactly zero at and below .025. Skip all three
+ // 3x3 Voronoi searches outside the tear influence instead of calculating
+ // 27 cell candidates for fragments whose filament contribution is zero.
+ float filaments=0.;
+ if(fractureField>.025){
+  // Fourth-power axis weights use two squarings; no general pow per fragment.
+  vec3 weights=abs(n);
+  weights*=weights;
+  weights*=weights;
+  weights/=max(dot(weights,vec3(1.)),.0001);
+  float cellDistance=dot(vec3(cells(n.yz,7.),cells(n.xz,7.),cells(n.xy,7.)),weights);
+  float filamentMask=smoothstep(.025,.18,fractureField);
+  filaments=(1.-smoothstep(.008,.023,cellDistance))*filamentMask;
+ }
  float pulse=.86+.14*sin(t*2.7+longitude*11.);
  float spineRim=fractureRim(spineDistance,coreWidth);
  float upperRim=fractureRim(upperDistance,upperWidth);
