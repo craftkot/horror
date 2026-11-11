@@ -142,10 +142,11 @@ def capture_test_world():
         degrees_per_pixel=factor*factor*factor*8.0*0.15
         return round((target_pitch-current_pitch)/degrees_per_pixel)
     def camera_delta_for_yaw(current_yaw,target_yaw):
-        # Choose the shortest turn across the -180/180 boundary.
+        # Positive X mouse motion decreases Minecraft yaw; use the shortest
+        # signed correction across the -180/180 boundary.
         factor=MOUSE_SENSITIVITY*0.6+0.2
         degrees_per_pixel=factor*factor*factor*8.0*0.15
-        delta=(target_yaw-current_yaw+180.0)%360.0-180.0
+        delta=(current_yaw-target_yaw+180.0)%360.0-180.0
         return round(delta/degrees_per_pixel)
 
     def wrapped_angle_delta(current,target):
@@ -176,11 +177,69 @@ def capture_test_world():
             time.sleep(0.05)
         return last
 
+    def wait_for_camera_orientation(target_yaw,target_pitch,tolerance=3.0,timeout=2.0):
+        deadline=time.monotonic()+timeout
+        last=read_client_camera_rotation()
+        while time.monotonic()<deadline:
+            current=read_client_camera_rotation()
+            if current is not None:
+                last=current
+                yaw_error=wrapped_angle_delta(current[0],target_yaw)
+                pitch_error=current[1]-target_pitch
+                if abs(yaw_error)<=tolerance and abs(pitch_error)<=tolerance:
+                    return current
+            time.sleep(0.05)
+        return last
+
+    def restore_camera_orientation(target_yaw,target_pitch):
+        # Input sums are not a reliable camera state: server teleports, cursor
+        # recentering and pitch clamping can change the view outside XTest input.
+        # Re-read the rendered camera and close the remaining error instead.
+        last=None
+        for attempt in range(3):
+            current=read_client_camera_rotation()
+            if current is None:
+                time.sleep(0.1)
+                continue
+            last=current
+            yaw_error=wrapped_angle_delta(current[0],target_yaw)
+            pitch_error=current[1]-target_pitch
+            if abs(yaw_error)<=3.0 and abs(pitch_error)<=3.0:
+                return current
+            yaw_delta=camera_delta_for_yaw(current[0],target_yaw)
+            pitch_delta=camera_delta_for_pitch(current[1],target_pitch)
+            if yaw_delta==0 and pitch_delta==0:
+                break
+            if yaw_delta:
+                moved=move_camera_horizontal(yaw_delta)
+                if moved!=yaw_delta:
+                    break
+            if pitch_delta:
+                moved=move_camera(pitch_delta)
+                if moved!=pitch_delta:
+                    break
+            last=wait_for_camera_orientation(target_yaw,target_pitch,tolerance=3.0,timeout=2.0)
+            if (last is not None
+                    and abs(wrapped_angle_delta(last[0],target_yaw))<=3.0
+                    and abs(last[1]-target_pitch)<=3.0):
+                return last
+        return last if last is not None else read_client_camera_rotation()
+
     camera_sample="BLACK_FREQUENCY_TEST CLIENT_CAMERA_ROTATION yaw=179.0 pitch=26.5"
     if (read_client_camera_rotation(camera_sample)!=(179.0,26.5)
             or abs(wrapped_angle_delta(-179.0,179.0)-2.0)>1.0E-9):
         raise RuntimeError("BLACK FREQUENCY client camera telemetry parser regression")
-    print("WORLD_CAPTURE: client camera telemetry parser verified",flush=True)
+    camera_direction_cases=(
+        camera_delta_for_pitch(26.46307,0.0)<0,
+        camera_delta_for_pitch(0.0,-65.0)<0,
+        camera_delta_for_pitch(-65.0,26.46307)>0,
+        camera_delta_for_yaw(0.0,-178.0)>0,
+        camera_delta_for_yaw(-178.0,0.0)<0,
+        camera_delta_for_yaw(179.0,-179.0)<0,
+    )
+    if not all(camera_direction_cases):
+        raise RuntimeError("BLACK FREQUENCY camera correction direction regression")
+    print("WORLD_CAPTURE: client camera telemetry and correction directions verified",flush=True)
     def is_rift_violet_pixel(r,g,b):
         # Reject pale lavender UI/death-screen skies; the rift must be saturated violet.
         return r>55 and b>80 and b>g*1.5 and r>g*1.5 and b-r<150
@@ -699,8 +758,6 @@ def capture_test_world():
                 # Keep enough vertical pointer travel for the full camera sweep.
                 subprocess.run(["xdotool","mousemove","--sync","640","640"],check=False)
                 time.sleep(0.2)
-                camera_delta=0
-                camera_yaw_delta=0
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                 initial_rotation=read_client_camera_rotation(current)
                 if initial_rotation is None:
@@ -715,7 +772,7 @@ def capture_test_world():
                     # The server's BEACON_AIM_SET value is only a requested rotation.
                     # Level the camera from the rotation that the client actually rendered.
                     horizon_delta=camera_delta_for_pitch(initial_pitch,0.0)
-                    camera_delta+=move_camera(horizon_delta)
+                    move_camera(horizon_delta)
                     horizon_rotation=wait_for_camera_rotation(0.0,tolerance=4.0,timeout=2.0)
                     for correction_attempt in range(2):
                         if horizon_rotation is not None and abs(horizon_rotation[1])<=4.0:
@@ -727,7 +784,6 @@ def capture_test_world():
                         if correction==0:
                             break
                         moved=move_camera(correction)
-                        camera_delta+=moved
                         if moved!=correction:
                             break
                         horizon_rotation=wait_for_camera_rotation(0.0,tolerance=4.0,timeout=2.0)
@@ -744,7 +800,7 @@ def capture_test_world():
                     last_candidate=None
                     for index in range(10 if horizon_camera_confirmed else 0):
                         if index:
-                            camera_yaw_delta+=move_camera_horizontal(170)
+                            move_camera_horizontal(170)
                             wait_for_camera_rotation(timeout=0.8)
                         time.sleep(0.45)
                         candidate_name=f"sky-rift-horizon-candidate-{index:02d}.png"
@@ -763,7 +819,7 @@ def capture_test_world():
                     upper_camera_confirmed=False
                     if measured is not None:
                         upper_delta=camera_delta_for_pitch(measured[1],-65.0)
-                        camera_delta+=move_camera(upper_delta)
+                        move_camera(upper_delta)
                         upper_rotation=wait_for_camera_rotation(-65.0,tolerance=5.0,timeout=2.0)
                         for correction_attempt in range(2):
                             if upper_rotation is not None and abs(upper_rotation[1]+65.0)<=5.0:
@@ -775,7 +831,6 @@ def capture_test_world():
                             if correction==0:
                                 break
                             moved=move_camera(correction)
-                            camera_delta+=moved
                             if moved!=correction:
                                 break
                             upper_rotation=wait_for_camera_rotation(-65.0,tolerance=5.0,timeout=2.0)
@@ -792,7 +847,7 @@ def capture_test_world():
                     last_upper_candidate=None
                     for index in range(10 if upper_camera_confirmed else 0):
                         if index:
-                            camera_yaw_delta+=move_camera_horizontal(170)
+                            move_camera_horizontal(170)
                             wait_for_camera_rotation(timeout=0.8)
                         time.sleep(0.45)
                         candidate_name=f"sky-rift-upper-candidate-{index:02d}.png"
@@ -811,26 +866,8 @@ def capture_test_world():
                         print("WORLD_CAPTURE: upper-sky frame accepted; horizon did not meet the continuous-band threshold",
                               flush=True)
                 finally:
-                    # Restore both camera axes by the exact sum of successful
-                    # relative inputs; then verify the rendered camera, not just XTest's return code.
-                    if camera_yaw_delta:
-                        restored_yaw=move_camera_horizontal(-camera_yaw_delta)
-                        time.sleep(0.15)
-                        if restored_yaw!=-camera_yaw_delta:
-                            sky_shot=False
-                            print("WORLD_CAPTURE_FAIL: camera yaw inverse input incomplete",
-                                  camera_yaw_delta,restored_yaw,flush=True)
-                    if camera_delta:
-                        restored_delta=move_camera(-camera_delta)
-                        time.sleep(0.25)
-                        if restored_delta!=-camera_delta:
-                            sky_shot=False
-                            print("WORLD_CAPTURE_FAIL: camera pitch inverse input incomplete",
-                                  camera_delta,restored_delta,flush=True)
-                        else:
-                            print("WORLD_CAPTURE: camera pitch inverse input sent",restored_delta,flush=True)
                     key("F1")
-                restored_rotation=wait_for_camera_rotation(initial_pitch,tolerance=3.0,timeout=2.0)
+                restored_rotation=restore_camera_orientation(initial_yaw,initial_pitch)
                 if (restored_rotation is None
                         or abs(restored_rotation[1]-initial_pitch)>3.0
                         or abs(wrapped_angle_delta(restored_rotation[0],initial_yaw))>3.0):
