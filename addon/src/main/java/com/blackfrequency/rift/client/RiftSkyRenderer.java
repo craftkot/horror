@@ -181,11 +181,7 @@ public final class RiftSkyRenderer {
                 firstVisibleFrameLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info("BLACK_FREQUENCY_RENDER_ACTIVE strength={}",strength);
             }
-            if(CI_TEST_MODE && !firstDepthAwareFrameLogged) {
-                firstDepthAwareFrameLogged=true;
-                com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_TEST SKY_DEPTH_AWARE_FINAL_PASS_VERIFIED stage=after_level");
-            }
+            boolean depthAwareDrawSubmitted=false;
             if(shader.getUniform("RiftStrength")!=null)shader.getUniform("RiftStrength").set(strength);
             if(shader.getUniform("GreenPhase")!=null)shader.getUniform("GreenPhase").set(RiftClientState.greenPhase());
             if(shader.getUniform("GameTime")!=null)
@@ -215,6 +211,7 @@ public final class RiftSkyRenderer {
                 bb.vertex( 1f, 1f,0f).endVertex();
                 bb.vertex(-1f, 1f,0f).endVertex();
                 BufferUploader.drawWithShader(bb.end());
+                depthAwareDrawSubmitted=true;
             } finally {
                 RenderSystem.depthMask(true);
                 RenderSystem.depthFunc(GL11.GL_LEQUAL);
@@ -222,6 +219,13 @@ public final class RiftSkyRenderer {
                 RenderSystem.enableDepthTest();
                 RenderSystem.enableCull();
                 RenderSystem.disableBlend();
+            }
+            // The smoke-test marker means the draw call returned and render-state
+            // cleanup completed; entering AFTER_LEVEL alone is not a successful pass.
+            if(CI_TEST_MODE && depthAwareDrawSubmitted && !firstDepthAwareFrameLogged) {
+                firstDepthAwareFrameLogged=true;
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_TEST SKY_DEPTH_AWARE_DRAW_SUBMITTED stage=after_level");
             }
         }
     }

@@ -1152,7 +1152,7 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST SKY_RENDER_THRESHOLD_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: client sky-render threshold regression was not executed",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST SKY_DEPTH_AWARE_FINAL_PASS_VERIFIED stage=after_level" not in log_after:
+            if "BLACK_FREQUENCY_TEST SKY_DEPTH_AWARE_DRAW_SUBMITTED stage=after_level" not in log_after:
                 print("WORLD_CAPTURE_FAIL: depth-aware final sky pass was not observed",flush=True)
                 return False
             print("WORLD_CAPTURE: accelerated finale and depth-aware sky rendering confirmed",flush=True)
