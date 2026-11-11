@@ -1542,6 +1542,27 @@ public final class RiftController {
             // A failed write is retried next tick, but must never prevent
             // quarantine of an invalid snapshot sharing the same position.
             if(failedWritesThisTick.contains(pos.asLong())) {
+                // Duplicate records can share a position but contain different block states.
+                // Validate this rare path before deferring the retry, or a corrupt air record
+                // could remain hidden behind a repeatedly rejected valid snapshot.
+                BlockState duplicateOriginal=NbtUtils.readBlockState(
+                    level.holderLookup(Registries.BLOCK),entry.getCompound("state"));
+                if(duplicateOriginal.isAir()) {
+                    s.skippedInvalid++;
+                    LOGGER.warn("BLACK FREQUENCY: duplicate recovery snapshot at {} resolves to air; no terrain edit",pos);
+                    if(CI_TEST && entry.getBoolean("ciDuplicateInvalid")) {
+                        if(s.restoreTicks!=1)
+                            throw new IllegalStateException("CI duplicate invalid snapshot was not quarantined in the failed-write tick");
+                        LOGGER.info("BLACK_FREQUENCY_TEST DUPLICATE_INVALID_SNAPSHOT_QUARANTINED tick={}",s.restoreTicks);
+                    }
+                    if(candidate!=s.restoreIndex) {
+                        s.snapshots.set(candidate,s.snapshots.get(s.restoreIndex));
+                        s.snapshots.set(s.restoreIndex,entry);
+                    }
+                    s.restoreIndex--;
+                    if(s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
+                    continue;
+                }
                 s.restoreScan--;
                 continue;
             }
@@ -1664,8 +1685,8 @@ public final class RiftController {
         }
         // Hold the final stabilization glow long enough to be visible in-game.
         if(s.restoreIndex<0 && s.restoreTicks>=100) {
-            if(CI_TEST && Boolean.getBoolean("blackfrequency.ciRestoreWriteFailureTest") && s.skippedInvalid!=2)
-                throw new IllegalStateException("CI malformed/out-of-bounds snapshot quarantine failed: "+s.skippedInvalid);
+            if(CI_TEST && Boolean.getBoolean("blackfrequency.ciRestoreWriteFailureTest") && s.skippedInvalid!=3)
+                throw new IllegalStateException("CI malformed/out-of-bounds/duplicate snapshot quarantine failed: "+s.skippedInvalid);
             s.restoring=false;s.restored=true;s.finished=true;s.snapshots.clear();
             for(var player:level.players()) RiftNetwork.send(player,0f,false,0,s.x,s.z);
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored={} destroyed={} skippedOccupied={} skippedInvalid={} flowingReplaced={}",s.restoredBlocks,s.edits,s.skippedOccupied,s.skippedInvalid,s.ciFlowingReplaced);
@@ -2063,6 +2084,15 @@ public final class RiftController {
             // Valid snapshots must still restore and (0,0,0) must not be edited.
             if(CI_TEST && Boolean.getBoolean("blackfrequency.ciRestoreWriteFailureTest")
                 && !playerInteractionTest) {
+                // Place a well-formed air snapshot immediately before the real
+                // snapshot that will fail its first write. Both share one position;
+                // the invalid duplicate must be quarantined in the same tick.
+                BlockPos failedWritePos=BlockPos.of(s.snapshots.get(s.restoreIndex).getLong("pos"));
+                CompoundTag duplicateInvalid=new CompoundTag();
+                duplicateInvalid.putLong("pos",failedWritePos.asLong());
+                duplicateInvalid.put("state",NbtUtils.writeBlockState(Blocks.AIR.defaultBlockState()));
+                duplicateInvalid.putBoolean("ciDuplicateInvalid",true);
+                s.snapshots.add(s.snapshots.size()-1,duplicateInvalid);
                 CompoundTag malformed=new CompoundTag();
                 malformed.put("state",new CompoundTag()); // missing pos and Name
                 s.snapshots.add(0,malformed);
