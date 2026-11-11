@@ -19,7 +19,14 @@ import java.io.IOException;
 
 public final class RiftSkyRenderer {
     private static final float MIN_VISIBLE_STRENGTH=0.0001f;
-    private static final long SKY_TIME_WRAP_TICKS=100000L;
+    // All shader time multipliers are multiples of 0.005. This wrap is
+    // four near-complete cycles of the base 0.00006 rad/tick phase.
+    // The measured worst float32 phase seam across all shader harmonics is < 0.002 rad.
+    private static final long SKY_TIME_WRAP_TICKS=418879L;
+    private static final long SKY_TIME_WRAP_CYCLES=4L;
+    private static final float SKY_TIME_TICK_SCALE=0.012F;
+    private static final float SKY_TIME_MULTIPLIER_QUANTUM=0.005F;
+    private static final double SKY_MAX_WRAP_PHASE_ERROR=0.002D;
     private static ShaderInstance shader;
     private static boolean firstVisibleFrameLogged;
 
@@ -38,6 +45,29 @@ public final class RiftSkyRenderer {
         return (float)Math.floorMod(gameTime,SKY_TIME_WRAP_TICKS)+safePartial;
     }
 
+    private static double shaderWrapPhaseError(float shaderTime,float multiplier) {
+        int harmonic=Math.round(multiplier/SKY_TIME_MULTIPLIER_QUANTUM);
+        double expected=harmonic*SKY_TIME_WRAP_CYCLES*2.0D*Math.PI;
+        float actual=shaderTime*multiplier;
+        return Math.abs(Math.IEEEremainder((double)actual-expected,2.0D*Math.PI));
+    }
+
+    private static double maximumShaderWrapPhaseError() {
+        float wrappedShaderTime=(float)SKY_TIME_WRAP_TICKS*SKY_TIME_TICK_SCALE;
+        float[] multipliers={.09F,.13F,.21F,.61F,.43F,.73F,.17F,.27F,.5F,
+            .075F,.39F,.12F,.06F,.37F,.51F,.18F,.7F,.11F,.31F,.57F,
+            2.1F,2.7F,5.3F,3.1F,.4F};
+        double maximum=0.0D;
+        for(float multiplier:multipliers)
+            maximum=Math.max(maximum,shaderWrapPhaseError(wrappedShaderTime,multiplier));
+        // branchSurge uses a per-branch frequency: .49 + .07 * i, i in [0,4].
+        for(int i=0;i<5;i++) {
+            float multiplier=.49F+.07F*i;
+            maximum=Math.max(maximum,shaderWrapPhaseError(wrappedShaderTime,multiplier));
+        }
+        return maximum;
+    }
+
     private static void verifyRenderThreshold() {
         if(shouldRender(0.0f) || shouldRender(MIN_VISIBLE_STRENGTH)
             || !shouldRender(MIN_VISIBLE_STRENGTH+0.00001f)
@@ -50,17 +80,23 @@ public final class RiftSkyRenderer {
         float negative=interpolatedGameTime(-1L,.5F);
         float invalid=interpolatedGameTime(42L,Float.NaN);
         float clamped=interpolatedGameTime(42L,1.5F);
+        double maximumWrapError=maximumShaderWrapPhaseError();
         if(Math.abs(midpoint-42.5F)>1.0E-4F
             || Math.abs(tickBoundary-43.0F)>1.0E-4F
             || Math.abs(wrapped-.25F)>1.0E-4F
             || Math.abs(negative-99999.5F)>1.0E-4F
             || Math.abs(invalid-42.0F)>1.0E-4F
-            || Math.abs(clamped-43.0F)>1.0E-4F)
+            || Math.abs(clamped-43.0F)>1.0E-4F
+            || !Double.isFinite(maximumWrapError)
+            || maximumWrapError>SKY_MAX_WRAP_PHASE_ERROR)
             throw new IllegalStateException("BLACK FREQUENCY sky animation interpolation regression");
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST SKY_RENDER_THRESHOLD_VERIFIED");
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST SKY_ANIMATION_INTERPOLATION_VERIFIED period={}",SKY_TIME_WRAP_TICKS);
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST SKY_ANIMATION_WRAP_CONTINUITY_VERIFIED cycles={} maxPhaseErrorRadians={}",
+            SKY_TIME_WRAP_CYCLES,maximumWrapError);
     }
 
     @Mod.EventBusSubscriber(modid="blackfrequency", bus=Mod.EventBusSubscriber.Bus.MOD, value=Dist.CLIENT)
