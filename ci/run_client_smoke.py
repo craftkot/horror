@@ -189,6 +189,33 @@ def capture_test_world():
     if not has_sky_background(.117) or has_sky_background(.048):
         raise RuntimeError("BLACK FREQUENCY sky-background classifier regression")
     print("WORLD_CAPTURE: dark sky background classifier verified",flush=True)
+
+    def smoothstep01(edge0,edge1,value):
+        x=max(0.0,min(1.0,(value-edge0)/(edge1-edge0)))
+        return x*x*(3.0-2.0*x)
+
+    shader_path=ROOT/"addon"/"src"/"main"/"resources"/"assets"/"blackfrequency"/"shaders"/"core"/"sky_rift.fsh"
+    shader_source=shader_path.read_text(encoding="utf-8")
+    filament_mask_samples=[
+        smoothstep01(.025,.18,0.0),
+        smoothstep01(.025,.18,.025),
+        smoothstep01(.025,.18,.10),
+        smoothstep01(.025,.18,.18),
+        smoothstep01(.025,.18,1.0),
+    ]
+    if (not all(token in shader_source for token in (
+            "float fractureField=max(majorGlow,zenithGlow);",
+            "float filamentMask=smoothstep(.025,.18,fractureField);",
+            "filaments*=filamentMask;"))
+            or filament_mask_samples[0]!=0.0
+            or filament_mask_samples[1]!=0.0
+            or not (0.0<filament_mask_samples[2]<1.0)
+            or filament_mask_samples[3]!=1.0
+            or filament_mask_samples[4]!=1.0):
+        raise RuntimeError("BLACK FREQUENCY fracture-localized sky filament regression")
+    print("WORLD_CAPTURE: fracture-localized sky filaments verified",
+          [round(value,4) for value in filament_mask_samples],flush=True)
+
     def sky_capture_summary(horizon_visible, upper_visible):
         if horizon_visible and upper_visible:
             return "horizon+upper"

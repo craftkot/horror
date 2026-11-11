@@ -162,7 +162,14 @@ void main(){
  weights*=weights;
  weights/=max(dot(weights,vec3(1.)),.0001);
  float cellDistance=dot(vec3(cells(n.yz,7.),cells(n.xz,7.),cells(n.xy,7.)),weights);
+ float majorGlow=max(spineGlow,max(branchGlow,max(upperGlow,max(lowerGlow,crownGlow))));
+ float fractureField=max(majorGlow,zenithGlow);
+ // Keep Voronoi filaments attached to the actual tears instead of drawing
+ // a faint polygon grid across otherwise empty sky. The cell searches stay
+ // unchanged; only their contribution is spatially masked by existing glow.
  float filaments=1.-smoothstep(.008,.023,cellDistance);
+ float filamentMask=smoothstep(.025,.18,fractureField);
+ filaments*=filamentMask;
  float pulse=.86+.14*sin(t*2.7+longitude*11.);
  float spineRim=fractureRim(spineDistance,coreWidth);
  float upperRim=fractureRim(upperDistance,upperWidth);
@@ -177,7 +184,6 @@ void main(){
  // Modulate existing glow masks rather than adding more Voronoi searches.
  float lightningWave=sin(longitude*43.-t*5.3+sin(longitude*9.+t*.7)*2.);
  float lightningFlash=pow(max(lightningWave,0.),12.);
- float majorGlow=max(spineGlow,max(branchGlow,max(upperGlow,max(lowerGlow,crownGlow))));
  float lightning=lightningFlash*majorGlow*(1.-green);
  color+=edge*(spineGlow*.96+branchGlow*.78+upperGlow*.80+lowerGlow*.72+crownGlow*.74+zenithGlow*.62+filaments*.07)*pulse;
  color+=vec3(.19,.035,.34)*lightning*.55;
