@@ -156,7 +156,10 @@ void main(){
  float lowerCorona=exp(-lowerDistance*8.);
  // Sparse fine filaments, not the previous full-screen Voronoi patchwork.
  // Three 3x3 cell searches instead of nine: 27 vs 81 cell evaluations.
- vec3 weights=pow(abs(n),vec3(4.));
+ // Fourth-power axis weights are just two squarings; avoid a general pow per fragment.
+ vec3 weights=abs(n);
+ weights*=weights;
+ weights*=weights;
  weights/=max(dot(weights,vec3(1.)),.0001);
  float cellDistance=dot(vec3(cells(n.yz,7.),cells(n.xz,7.),cells(n.xy,7.)),weights);
  float filaments=1.-smoothstep(.008,.023,cellDistance);
