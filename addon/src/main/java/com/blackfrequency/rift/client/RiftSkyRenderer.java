@@ -81,10 +81,13 @@ public final class RiftSkyRenderer {
         float invalid=interpolatedGameTime(42L,Float.NaN);
         float clamped=interpolatedGameTime(42L,1.5F);
         double maximumWrapError=maximumShaderWrapPhaseError();
-        if(Math.abs(midpoint-42.5F)>1.0E-4F
+        float beforeWrap=interpolatedGameTime(SKY_TIME_WRAP_TICKS-1L,1.0F);
+        float afterWrap=interpolatedGameTime(SKY_TIME_WRAP_TICKS,0.0F);
+        if(beforeWrap!=SKY_TIME_WRAP_TICKS || afterWrap!=0.0F
+            || Math.abs(midpoint-42.5F)>1.0E-4F
             || Math.abs(tickBoundary-43.0F)>1.0E-4F
             || Math.abs(wrapped-.25F)>1.0E-4F
-            || Math.abs(negative-99999.5F)>1.0E-4F
+            || Math.abs(negative-(SKY_TIME_WRAP_TICKS-.5F))>1.0E-4F
             || Math.abs(invalid-42.0F)>1.0E-4F
             || Math.abs(clamped-43.0F)>1.0E-4F
             || !Double.isFinite(maximumWrapError)
