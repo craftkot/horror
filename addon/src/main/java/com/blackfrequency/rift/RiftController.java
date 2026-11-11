@@ -1326,16 +1326,16 @@ public final class RiftController {
         // never count as successful activation in the real-client CI test.
         if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION x={} y={} z={} natural={}",pos.getX(),pos.getY(),pos.getZ(),pos.asLong()==s.naturalBeaconPos);
         s.restoring=true;s.restoreIndex=s.snapshots.size()-1;s.restoreScan=s.restoreIndex;s.restoreTicks=0;s.restoredBlocks=0;s.skippedOccupied=0;s.skippedInvalid=0;s.beaconPos=pos.asLong();s.setDirty();
-        // Only nearby, active players should see the stabilization title.
-        // A distant player must not receive a misleading world-local event.
+        // Keep the physical beacon visible during activation. A full-screen title
+        // covered the object in the player's view; use the action bar instead.
+        // Only nearby, active players should receive this world-local notice.
         for(var player:level.players()) {
             if(!player.isAlive() || player.isRemoved() || player.isSpectator()
                 || player.distanceToSqr(pos.getX()+0.5D,pos.getY()+0.5D,pos.getZ()+0.5D)>128.0D*128.0D)
                 continue;
-            player.connection.send(new ClientboundSetTitlesAnimationPacket(10,100,30));
-            player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§5СТАБИЛИЗАЦИЯ")));
-            player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§dМаяк возвращает миру его форму")));
+            player.displayClientMessage(Component.literal("§5✦ Маяк запустил восстановление мира"),true);
         }
+        if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_START_ACTIONBAR_ONLY");
         event.setCanceled(true);
         event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
         if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED");

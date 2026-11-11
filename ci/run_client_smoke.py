@@ -170,6 +170,18 @@ def capture_test_world():
         raise RuntimeError("BLACK FREQUENCY pixel classifier regression")
     print("WORLD_CAPTURE: saturated violet pixel classifier verified",flush=True)
 
+    def has_continuous_sky_band(longest_runs, minimum_run, minimum_rows=6):
+        return (max(longest_runs,default=0)>=minimum_run
+                and sum(1 for run in longest_runs if run>=minimum_run)>=minimum_rows)
+
+    # Isolated portal particles can be vivid violet, but they are not a sky tear.
+    # Require a continuous shader-colored band across several rows.
+    if (not has_continuous_sky_band([64]*6,64)
+            or has_continuous_sky_band([32]*129,64)
+            or has_continuous_sky_band([55]+[0]*128,64)):
+        raise RuntimeError("BLACK FREQUENCY continuous sky band classifier regression")
+    print("WORLD_CAPTURE: continuous sky band classifier verified",flush=True)
+
     def measure_ground_visibility(frame):
         width,height=frame.size
         pixels=frame.load()
@@ -240,25 +252,38 @@ def capture_test_world():
                 purple=0
                 green=0
                 purple_rows=[]
+                purple_longest_runs=[]
                 for y in range(crop.height):
                     row_purple=0
+                    row_longest=0
+                    current_run=0
                     start=y*crop.width
                     for r,g,b in pixels[start:start+crop.width]:
                         if is_rift_violet_pixel(r,g,b):
                             purple+=1
                             row_purple+=1
+                            current_run+=1
+                            row_longest=max(row_longest,current_run)
+                        else:
+                            current_run=0
                         if g>r*1.15 and g>b*1.15 and g>25:
                             green+=1
                     purple_rows.append(row_purple)
+                    purple_longest_runs.append(row_longest)
                 coverage=purple/(crop.width*crop.height)
                 green_coverage=green/(crop.width*crop.height)
                 score=coverage-.35*green_coverage
                 row_threshold=max(6,int(crop.width*.01))
                 peak_threshold=max(12,int(crop.width*.025))
+                min_contiguous_run=max(64,int(crop.width*.22))
                 line_rows=sum(1 for count in purple_rows if count>=row_threshold)
                 peak_row=max(purple_rows,default=0)
-                candidate=(score,coverage,green_coverage,line_rows,peak_row,left,top,peak_threshold)
-                line_visible=line_rows>=8 and peak_row>=peak_threshold
+                continuous_rows=sum(1 for run in purple_longest_runs if run>=min_contiguous_run)
+                max_contiguous_run=max(purple_longest_runs,default=0)
+                candidate=(score,coverage,green_coverage,line_rows,peak_row,
+                           continuous_rows,max_contiguous_run,left,top,peak_threshold,min_contiguous_run)
+                line_visible=(line_rows>=8 and peak_row>=peak_threshold
+                              and has_continuous_sky_band(purple_longest_runs,min_contiguous_run))
                 valid=(coverage>=minimum and line_visible
                        and (max_green is None or green_coverage<=max_green))
                 if best is None or candidate[0]>best[0]:
@@ -273,11 +298,13 @@ def capture_test_world():
             print("WORLD_CAPTURE_FAIL: no sky sample window",name,flush=True)
             return False
         selected=best_valid if best_valid is not None else best
-        score,coverage,green_coverage,line_rows,peak_row,left,top,peak_threshold=selected
-        line_visible=line_rows>=8 and peak_row>=peak_threshold
+        (score,coverage,green_coverage,line_rows,peak_row,continuous_rows,
+         max_contiguous_run,left,top,peak_threshold,min_contiguous_run)=selected
+        line_visible=(line_rows>=8 and peak_row>=peak_threshold
+                       and continuous_rows>=6 and max_contiguous_run>=min_contiguous_run)
         visible=best_valid is not None
         selection="valid-window" if visible else "best-diagnostic-window"
-        print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} green={green_coverage:.4f} lineRows={line_rows} peakRow={peak_row} window={left},{top} required={minimum:.4f} maxGreen={max_green} visible={visible} selection={selection}",flush=True)
+        print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} green={green_coverage:.4f} lineRows={line_rows} peakRow={peak_row} continuousRows={continuous_rows} maxRun={max_contiguous_run} minRun={min_contiguous_run} window={left},{top} required={minimum:.4f} maxGreen={max_green} visible={visible} selection={selection}",flush=True)
         return visible
     beacon_attempts=0
     beacon_ready_at=None
@@ -872,6 +899,9 @@ def capture_test_world():
                     return False
                 if "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon was not activated by actual player right-click",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST BEACON_START_ACTIONBAR_ONLY" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: beacon activation did not use the non-obstructive action bar",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST ACTUAL_PASSENGER_GRAVITY_IMMUNITY_VERIFIED" not in log_after:
                     print("WORLD_CAPTURE_FAIL: actual mounted-player gravity probe did not run",flush=True)
