@@ -16,6 +16,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -38,6 +39,7 @@ public final class RiftController {
     private static final long TEST_STEP = Boolean.getBoolean("blackfrequency.ciTestMode")
         ? Math.max(1L, Math.min(2400L, Long.getLong("blackfrequency.ciTickStep", 2400L))) : 1L;
     private static final int RADIUS = 48;
+    private static final String NATURAL_BEACON_ID_TAG = "blackfrequency:natural_recovery_beacon";
     // Double fissure sampling resolution while preserving 48 dragon-breath motes per pass.
     private static final int FISSURE_ARM_COUNT = 4;
     private static final int FISSURE_SEGMENTS_PER_ARM = 12;
@@ -250,6 +252,7 @@ public final class RiftController {
         // A one-time recovery beacon is placed in a loaded, safe air block.
         // Keep it separate from the beacon that a player actually activates.
         long naturalBeaconPos=Long.MIN_VALUE;
+        UUID naturalBeaconId;
         // CI diagnostics only; never persisted in production saves.
         long ciRejectedRestorePos=Long.MIN_VALUE;
         int ciFlowingReplaced;
@@ -297,6 +300,7 @@ public final class RiftController {
             s.skippedInvalid=boundedCounter(n.getInt("skippedInvalid"),MAX_EDITS);
             s.beaconPos=n.getLong("beaconPos");
             s.naturalBeaconPos=n.contains("naturalBeaconPos",Tag.TAG_LONG)?n.getLong("naturalBeaconPos"):Long.MIN_VALUE;
+            s.naturalBeaconId=n.hasUUID("naturalBeaconId")?n.getUUID("naturalBeaconId"):null;
             ListTag saved=n.getList("snapshots",Tag.TAG_COMPOUND);
             int snapshotCount=boundedSnapshotCount(saved.size());
             for(int i=0;i<snapshotCount;i++) s.snapshots.add(saved.getCompound(i));
@@ -345,6 +349,7 @@ public final class RiftController {
             n.putBoolean("restoring",restoring);n.putBoolean("restored",restored);
             n.putInt("restoreIndex",restoreIndex);n.putInt("restoreScan",restoreScan);n.putInt("restoreTicks",restoreTicks);n.putInt("restoredBlocks",restoredBlocks);n.putInt("skippedOccupied",skippedOccupied);n.putInt("skippedInvalid",skippedInvalid);n.putLong("beaconPos",beaconPos);
             n.putLong("naturalBeaconPos",naturalBeaconPos);
+            if(naturalBeaconId!=null) n.putUUID("naturalBeaconId",naturalBeaconId);
             ListTag saved=new ListTag();for(CompoundTag tag:snapshots)saved.add(tag.copy());
             n.put("snapshots",saved);
             return n;
@@ -373,13 +378,13 @@ public final class RiftController {
         // another mod must not cause recovery logic to load a chunk.
         if(!level.hasChunkAt(pos)) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
-        if(!isValidNaturalBeaconPosition(level,s,pos)
-            || !level.getBlockState(pos).is(Blocks.BEACON)) return;
+        if(!isOwnedNaturalBeaconAtLoadedPosition(level,s,pos)) return;
         // Cancel vanilla harvesting before it creates a valuable beacon item.
         event.setCanceled(true);
         if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),3)
             && level.getBlockState(pos).isAir()) {
             s.naturalBeaconPos=Long.MIN_VALUE;
+            s.naturalBeaconId=null;
             s.setDirty();
             event.getPlayer().displayClientMessage(Component.literal(
                 s.restoring || s.restored
@@ -592,9 +597,7 @@ public final class RiftController {
         // that later occupy its old position from explosion damage.
         BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
         if(!event.getAffectedBlocks().contains(beacon)
-            || !isValidNaturalBeaconPosition(level,s,beacon)
-            || !level.hasChunkAt(beacon)
-            || !level.getBlockState(beacon).is(Blocks.BEACON)) return;
+            || !isOwnedNaturalBeaconAtLoadedPosition(level,s,beacon)) return;
         // Explosion affected blocks are already loaded; this does not request
         // additional chunks or modify terrain.
         if(protectRecoveryBeaconFromExplosion(event.getAffectedBlocks(),s.naturalBeaconPos)
@@ -897,11 +900,38 @@ public final class RiftController {
     }
 
     private static boolean isValidNaturalBeaconPosition(ServerLevel level,State s,BlockPos beacon) {
-        return s.started && s.naturalBeaconPos!=Long.MIN_VALUE
+        return s.started && s.naturalBeaconPos!=Long.MIN_VALUE && s.naturalBeaconId!=null
             && beacon.asLong()==s.naturalBeaconPos
             && naturalBeaconWithinFracture(beacon,s.x,s.z,
                 level.getMinBuildHeight(),level.getMaxBuildHeight())
             && level.getWorldBorder().isWithinBounds(beacon);
+    }
+
+    /**
+     * A coordinate and block type are not proof of ownership: another mod or a
+     * player can replace the generated beacon with a vanilla beacon at the same
+     * position. Bind the saved objective to Forge's persistent block-entity data.
+     * Check chunk availability before any block-entity lookup; never force-load.
+     */
+    private static boolean isOwnedNaturalBeaconAtLoadedPosition(ServerLevel level,State s,BlockPos beacon) {
+        if(!isValidNaturalBeaconPosition(level,s,beacon) || !level.hasChunkAt(beacon)
+            || !level.getBlockState(beacon).is(Blocks.BEACON)) return false;
+        var blockEntity=level.getBlockEntity(beacon);
+        return blockEntity instanceof net.minecraft.world.level.block.entity.BeaconBlockEntity
+            && blockEntity.getPersistentData().hasUUID(NATURAL_BEACON_ID_TAG)
+            && s.naturalBeaconId.equals(blockEntity.getPersistentData().getUUID(NATURAL_BEACON_ID_TAG));
+    }
+
+    private static void verifyNaturalBeaconIdPersistence() {
+        State saved=new State();
+        saved.started=true;
+        saved.naturalBeaconPos=new BlockPos(3,64,-7).asLong();
+        saved.naturalBeaconId=UUID.fromString("2f65b99d-95c1-4cb7-8d8f-1f37f37c4b92");
+        State loaded=State.load(saved.save(new CompoundTag()));
+        if(!saved.naturalBeaconId.equals(loaded.naturalBeaconId)
+            || loaded.naturalBeaconPos!=saved.naturalBeaconPos)
+            throw new IllegalStateException("CI natural beacon ownership UUID persistence regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_ID_STATE_PERSISTENCE_VERIFIED");
     }
 
     /** Overflow-safe 3D audience filter shared by recovery effects and titles. */
@@ -979,9 +1009,7 @@ public final class RiftController {
         if(s.naturalBeaconPos==Long.MIN_VALUE
             || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return false;
         BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
-        if(!isValidNaturalBeaconPosition(level,s,beacon)
-            || !level.hasChunkAt(beacon)
-            || !level.getBlockState(beacon).is(Blocks.BEACON)) return false;
+        if(!isOwnedNaturalBeaconAtLoadedPosition(level,s,beacon)) return false;
         double distanceSquared=player.distanceToSqr(beacon.getX()+0.5D,
             beacon.getY()+0.5D,beacon.getZ()+0.5D);
         if(!mayRecoverCiBeaconAimAfterMiss(CI_TEST,
@@ -1061,6 +1089,7 @@ public final class RiftController {
                 Integer.MIN_VALUE,0,-64,320))
             throw new IllegalStateException("CI natural recovery beacon anchor bounds regression");
         LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_ANCHOR_BOUNDS_VERIFIED");
+        verifyNaturalBeaconIdPersistence();
         verifyRecoveryAudienceBounds();
         verifyRecoveryVortexContraction();
         verifyFractureColumnBounds();
@@ -1311,8 +1340,40 @@ public final class RiftController {
                             || entity instanceof net.minecraft.world.entity.boss.enderdragon.EndCrystal).isEmpty()) continue;
                     if(!level.setBlock(pos,Blocks.BEACON.defaultBlockState(),3)) continue;
                     // Other mods may intercept or replace the placement. Do not
-                    // persist a recovery objective unless a beacon really exists.
+                    // persist a recovery objective unless a beacon block entity really exists.
                     if(!level.getBlockState(pos).is(Blocks.BEACON)) continue;
+                    var beaconBlockEntity=level.getBlockEntity(pos);
+                    if(!(beaconBlockEntity instanceof net.minecraft.world.level.block.entity.BeaconBlockEntity recoveryBeacon)) {
+                        LOGGER.warn("BLACK FREQUENCY: placed beacon at {} has no BeaconBlockEntity; leaving it untracked",pos);
+                        continue;
+                    }
+                    UUID recoveryBeaconId=UUID.randomUUID();
+                    recoveryBeacon.getPersistentData().putUUID(NATURAL_BEACON_ID_TAG,recoveryBeaconId);
+                    recoveryBeacon.setChanged();
+                    s.naturalBeaconPos=pos.asLong();
+                    s.naturalBeaconId=recoveryBeaconId;
+                    if(!isOwnedNaturalBeaconAtLoadedPosition(level,s,pos)) {
+                        recoveryBeacon.getPersistentData().remove(NATURAL_BEACON_ID_TAG);
+                        recoveryBeacon.setChanged();
+                        s.naturalBeaconPos=Long.MIN_VALUE;
+                        s.naturalBeaconId=null;
+                        s.setDirty();
+                        LOGGER.warn("BLACK FREQUENCY: recovery beacon ownership marker could not be verified at {}",pos);
+                        continue;
+                    }
+                    s.setDirty();
+                    if(CI_TEST) {
+                        // Exercise the actual Forge block-entity persistence path,
+                        // not only the SavedData UUID field.
+                        CompoundTag beaconSave=recoveryBeacon.saveWithFullMetadata();
+                        var reloadedBeacon=net.minecraft.world.level.block.entity.BlockEntity.loadStatic(
+                            pos,level.getBlockState(pos),beaconSave);
+                        if(!(reloadedBeacon instanceof net.minecraft.world.level.block.entity.BeaconBlockEntity)
+                            || !reloadedBeacon.getPersistentData().hasUUID(NATURAL_BEACON_ID_TAG)
+                            || !recoveryBeaconId.equals(reloadedBeacon.getPersistentData().getUUID(NATURAL_BEACON_ID_TAG)))
+                            throw new IllegalStateException("CI natural beacon block-entity UUID persistence regression");
+                        LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_BLOCK_ENTITY_ID_PERSISTENCE_VERIFIED");
+                    }
                     if(snowFixture) {
                         if(!level.getBlockState(pos.below()).is(Blocks.SNOW)
                             || !level.getBlockState(pos.below(2)).blocksMotion())
@@ -1320,8 +1381,6 @@ public final class RiftController {
                         LOGGER.info("BLACK_FREQUENCY_TEST SNOW_BEACON_SUPPORT_VERIFIED x={} y={} z={} snowY={}",
                             pos.getX(),pos.getY(),pos.getZ(),pos.getY()-1);
                     }
-                    s.naturalBeaconPos=pos.asLong();
-                    s.setDirty();
                     if(CI_TEST) {
                         // Deterministic list-filter regression. This is not a
                         // substitute for a live TNT/creeper explosion test.
@@ -1345,6 +1404,15 @@ public final class RiftController {
                     // exercise the same recovery path as a player mining it.
                     if(CI_TEST && Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest")) {
                         if(!s.ciNaturalBeaconRemoved) {
+                            if(!level.setBlock(pos,Blocks.AIR.defaultBlockState(),3)
+                                || !level.setBlock(pos,Blocks.BEACON.defaultBlockState(),3))
+                                throw new IllegalStateException("CI beacon replacement fixture failed");
+                            // A new vanilla beacon at the same coordinates has no
+                            // ownership marker and must not inherit the old objective.
+                            if(isOwnedNaturalBeaconAtLoadedPosition(level,s,pos))
+                                throw new IllegalStateException("CI replacement beacon inherited recovery ownership");
+                            LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_REPLACEMENT_REJECTED x={} y={} z={}",
+                                pos.getX(),pos.getY(),pos.getZ());
                             if(!level.setBlock(pos,Blocks.AIR.defaultBlockState(),3))
                                 throw new IllegalStateException("CI beacon removal failed");
                             s.ciNaturalBeaconRemoved=true;
@@ -1726,10 +1794,8 @@ public final class RiftController {
                 if(s.naturalBeaconPos==Long.MIN_VALUE || level.players().isEmpty())
                     throw new IllegalStateException("CI recovery beacon missing after restoration");
                 BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
-                if(!isValidNaturalBeaconPosition(level,s,beacon)
-                    || !level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)
-                    || !level.getBlockState(beacon).is(Blocks.BEACON))
-                    throw new IllegalStateException("CI recovery beacon not loaded at its bounded anchor after restoration");
+                if(!isOwnedNaturalBeaconAtLoadedPosition(level,s,beacon))
+                    throw new IllegalStateException("CI recovery beacon ownership marker missing after restoration");
                 // A protection mod may have canceled the break before our handler.
                 // It must leave both the physical beacon and its saved anchor intact.
                 var deniedEvent=new net.minecraftforge.event.level.BlockEvent.BreakEvent(
@@ -1737,7 +1803,7 @@ public final class RiftController {
                 deniedEvent.setCanceled(true);
                 new RiftController().onRecoveryBeaconBreak(deniedEvent);
                 if(!deniedEvent.isCanceled() || !level.getBlockState(beacon).is(Blocks.BEACON)
-                    || s.naturalBeaconPos!=beacon.asLong())
+                    || s.naturalBeaconPos!=beacon.asLong() || s.naturalBeaconId!=null)
                     throw new IllegalStateException("CI canceled beacon break mutated recovery fixture");
                 LOGGER.info("BLACK_FREQUENCY_TEST CANCELED_BEACON_BREAK_PRESERVED x={} y={} z={}",
                     beacon.getX(),beacon.getY(),beacon.getZ());
@@ -2029,16 +2095,21 @@ public final class RiftController {
                     // The next bounded placement pass may offer a new objective.
                     boolean outsideBorder=!level.getWorldBorder().isWithinBounds(beacon);
                     s.naturalBeaconPos=Long.MIN_VALUE;
+                    s.naturalBeaconId=null;
                     s.setDirty();
                     if(CI_TEST) LOGGER.info(outsideBorder
                         ? "BLACK_FREQUENCY_TEST OUTSIDE_BORDER_BEACON_RETIRED"
                         : "BLACK_FREQUENCY_TEST INVALID_NATURAL_BEACON_ANCHOR_RETIRED");
             // Only inspect block state when the chunk is already loaded.
             } else if(level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)) {
-                if(!level.getBlockState(beacon).is(Blocks.BEACON)) {
+                if(!isOwnedNaturalBeaconAtLoadedPosition(level,s,beacon)) {
+                    boolean beaconBlockPresent=level.getBlockState(beacon).is(Blocks.BEACON);
                     s.naturalBeaconPos=Long.MIN_VALUE;
+                    s.naturalBeaconId=null;
                     s.setDirty();
-                    if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_MISSING x={} y={} z={}",
+                    if(CI_TEST) LOGGER.info(beaconBlockPresent
+                        ? "BLACK_FREQUENCY_TEST NATURAL_BEACON_REPLACED x={} y={} z={}"
+                        : "BLACK_FREQUENCY_TEST NATURAL_BEACON_MISSING x={} y={} z={}",
                         beacon.getX(),beacon.getY(),beacon.getZ());
                 } else {
                     // The idle beacon is visible only locally. Avoid broadcasting
