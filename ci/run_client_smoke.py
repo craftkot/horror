@@ -147,6 +147,40 @@ def capture_test_world():
         degrees_per_pixel=factor*factor*factor*8.0*0.15
         delta=(target_yaw-current_yaw+180.0)%360.0-180.0
         return round(delta/degrees_per_pixel)
+
+    def wrapped_angle_delta(current,target):
+        return (current-target+180.0)%360.0-180.0
+
+    def read_client_camera_rotation(log_text=None):
+        if log_text is None:
+            log_text=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+        matches=list(re.finditer(
+            r"BLACK_FREQUENCY_TEST CLIENT_CAMERA_ROTATION yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)",
+            log_text))
+        if not matches:
+            return None
+        yaw,pitch=map(float,matches[-1].groups())
+        if not math.isfinite(yaw) or not math.isfinite(pitch):
+            return None
+        return yaw,pitch
+
+    def wait_for_camera_rotation(target_pitch=None,tolerance=2.5,timeout=1.5):
+        deadline=time.monotonic()+timeout
+        last=read_client_camera_rotation()
+        while time.monotonic()<deadline:
+            current=read_client_camera_rotation()
+            if current is not None:
+                last=current
+                if target_pitch is None or abs(current[1]-target_pitch)<=tolerance:
+                    return current
+            time.sleep(0.05)
+        return last
+
+    camera_sample="BLACK_FREQUENCY_TEST CLIENT_CAMERA_ROTATION yaw=179.0 pitch=26.5"
+    if (read_client_camera_rotation(camera_sample)!=(179.0,26.5)
+            or abs(wrapped_angle_delta(-179.0,179.0)-2.0)>1.0E-9):
+        raise RuntimeError("BLACK FREQUENCY client camera telemetry parser regression")
+    print("WORLD_CAPTURE: client camera telemetry parser verified",flush=True)
     def is_rift_violet_pixel(r,g,b):
         # Reject pale lavender UI/death-screen skies; the rift must be saturated violet.
         return r>55 and b>80 and b>g*1.5 and r>g*1.5 and b-r<150
@@ -661,36 +695,57 @@ def capture_test_world():
                         and "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" in current
                         and "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" not in current):
                     return
-                sky_capture_attempted=True
                 key("F1")
-                # Leave enough vertical pointer travel for the full -460/+460
-                # camera sweep. Starting at screen centre made X11 clamp the
-                # upward move at y=0, so the inverse move overshot by 80 pixels.
+                # Keep enough vertical pointer travel for the full camera sweep.
                 subprocess.run(["xdotool","mousemove","--sync","640","640"],check=False)
                 time.sleep(0.2)
                 camera_delta=0
                 camera_yaw_delta=0
+                current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                initial_rotation=read_client_camera_rotation(current)
+                if initial_rotation is None:
+                    print("WORLD_CAPTURE: actual client camera telemetry not ready; will retry",flush=True)
+                    key("F1")
+                    return
+                sky_capture_attempted=True
+                initial_yaw,initial_pitch=initial_rotation
+                print("WORLD_CAPTURE: actual client camera rotation",
+                      "yaw",round(initial_yaw,2),"pitch",round(initial_pitch,2),flush=True)
                 try:
-                    # The server has just teleported and aimed the player. Give
-                    # the client a moment to apply that rotation before steering.
-                    time.sleep(0.6)
-                    current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-                    aim_match=re.search(
-                        r"BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=[^ ]+ pitch=([-+0-9.eE]+)",current)
-                    initial_pitch=float(aim_match.group(1)) if aim_match else 26.46307
-                    if not aim_match:
-                        print("WORLD_CAPTURE: beacon pitch marker missing; using calibrated fallback",flush=True)
+                    # The server's BEACON_AIM_SET value is only a requested rotation.
+                    # Level the camera from the rotation that the client actually rendered.
                     horizon_delta=camera_delta_for_pitch(initial_pitch,0.0)
-                    upper_delta=camera_delta_for_pitch(initial_pitch,-65.0)
-                    # First level the server's measured beacon aim. The old fixed
-                    # -380px start tilted roughly 54 degrees above the horizon,
-                    # pointing into tree crowns before the search even began.
                     camera_delta+=move_camera(horizon_delta)
+                    horizon_rotation=wait_for_camera_rotation(0.0,tolerance=4.0,timeout=2.0)
+                    for correction_attempt in range(2):
+                        if horizon_rotation is not None and abs(horizon_rotation[1])<=4.0:
+                            break
+                        measured=read_client_camera_rotation()
+                        if measured is None:
+                            break
+                        correction=camera_delta_for_pitch(measured[1],0.0)
+                        if correction==0:
+                            break
+                        moved=move_camera(correction)
+                        camera_delta+=moved
+                        if moved!=correction:
+                            break
+                        horizon_rotation=wait_for_camera_rotation(0.0,tolerance=4.0,timeout=2.0)
+                    horizon_camera_confirmed=(
+                        horizon_rotation is not None and abs(horizon_rotation[1])<=4.0)
+                    if horizon_camera_confirmed:
+                        print("WORLD_CAPTURE: horizon camera pitch verified",
+                              round(horizon_rotation[1],2),flush=True)
+                    else:
+                        measured=read_client_camera_rotation()
+                        print("WORLD_CAPTURE_FAIL: camera did not reach the horizon",
+                              None if measured is None else round(measured[1],2),flush=True)
                     horizon_visible=False
                     last_candidate=None
-                    for index in range(10):
+                    for index in range(10 if horizon_camera_confirmed else 0):
                         if index:
                             camera_yaw_delta+=move_camera_horizontal(170)
+                            wait_for_camera_rotation(timeout=0.8)
                         time.sleep(0.45)
                         candidate_name=f"sky-rift-horizon-candidate-{index:02d}.png"
                         snap(candidate_name)
@@ -702,15 +757,43 @@ def capture_test_world():
                             break
                     if not horizon_visible and last_candidate and last_candidate.is_file():
                         shutil.copyfile(last_candidate,shots/"sky-rift-hudless.png")
-                    # A high-angle view is more useful than exact zenith in forests:
-                    # at -90 degrees the camera looks straight into the canopy and
-                    # yaw no longer exposes gaps between trees.
-                    camera_delta+=move_camera(upper_delta-horizon_delta)
+                    # Use the measured pitch after the horizon sweep. This avoids
+                    # accumulating assumptions about how much X11 input Minecraft accepted.
+                    measured=read_client_camera_rotation()
+                    upper_camera_confirmed=False
+                    if measured is not None:
+                        upper_delta=camera_delta_for_pitch(measured[1],-65.0)
+                        camera_delta+=move_camera(upper_delta)
+                        upper_rotation=wait_for_camera_rotation(-65.0,tolerance=5.0,timeout=2.0)
+                        for correction_attempt in range(2):
+                            if upper_rotation is not None and abs(upper_rotation[1]+65.0)<=5.0:
+                                break
+                            measured=read_client_camera_rotation()
+                            if measured is None:
+                                break
+                            correction=camera_delta_for_pitch(measured[1],-65.0)
+                            if correction==0:
+                                break
+                            moved=move_camera(correction)
+                            camera_delta+=moved
+                            if moved!=correction:
+                                break
+                            upper_rotation=wait_for_camera_rotation(-65.0,tolerance=5.0,timeout=2.0)
+                        upper_camera_confirmed=(
+                            upper_rotation is not None and abs(upper_rotation[1]+65.0)<=5.0)
+                    if upper_camera_confirmed:
+                        print("WORLD_CAPTURE: upper-sky camera pitch verified",
+                              round(upper_rotation[1],2),flush=True)
+                    else:
+                        measured=read_client_camera_rotation()
+                        print("WORLD_CAPTURE_FAIL: camera did not reach the upper-sky angle",
+                              None if measured is None else round(measured[1],2),flush=True)
                     upper_visible=False
                     last_upper_candidate=None
-                    for index in range(10):
+                    for index in range(10 if upper_camera_confirmed else 0):
                         if index:
                             camera_yaw_delta+=move_camera_horizontal(170)
+                            wait_for_camera_rotation(timeout=0.8)
                         time.sleep(0.45)
                         candidate_name=f"sky-rift-upper-candidate-{index:02d}.png"
                         snap(candidate_name)
@@ -729,7 +812,7 @@ def capture_test_world():
                               flush=True)
                 finally:
                     # Restore both camera axes by the exact sum of successful
-                    # relative inputs; the client must still aim at the beacon.
+                    # relative inputs; then verify the rendered camera, not just XTest's return code.
                     if camera_yaw_delta:
                         restored_yaw=move_camera_horizontal(-camera_yaw_delta)
                         time.sleep(0.15)
@@ -747,6 +830,18 @@ def capture_test_world():
                         else:
                             print("WORLD_CAPTURE: camera pitch inverse input sent",restored_delta,flush=True)
                     key("F1")
+                restored_rotation=wait_for_camera_rotation(initial_pitch,tolerance=3.0,timeout=2.0)
+                if (restored_rotation is None
+                        or abs(restored_rotation[1]-initial_pitch)>3.0
+                        or abs(wrapped_angle_delta(restored_rotation[0],initial_yaw))>3.0):
+                    sky_shot=False
+                    print("WORLD_CAPTURE_FAIL: rendered camera rotation was not restored",
+                          None if restored_rotation is None else
+                          (round(restored_rotation[0],2),round(restored_rotation[1],2)),
+                          "expected",(round(initial_yaw,2),round(initial_pitch,2)),flush=True)
+                else:
+                    print("WORLD_CAPTURE: rendered camera rotation restored",
+                          round(restored_rotation[0],2),round(restored_rotation[1],2),flush=True)
                 if horizon_visible and upper_visible:
                     print("WORLD_CAPTURE: SKY_RIFT_HORIZON_AND_UPPER_SKY_VERIFIED_BEFORE_BEACON_CLICK",flush=True)
                 elif upper_visible:
@@ -1008,6 +1103,9 @@ def capture_test_world():
                 if "BLACK_FREQUENCY_TEST PASSENGER_RIFT_IMPULSE_SUPPRESSED_VERIFIED controlImpulse=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: mounted player was not proven immune inside an active lift zone",flush=True)
                     return False
+            if "BLACK_FREQUENCY_TEST CLIENT_CAMERA_ROTATION" not in log_after:
+                print("WORLD_CAPTURE_FAIL: actual client camera rotation telemetry was not recorded",flush=True)
+                return False
             if not sky_shot:
                 print("WORLD_CAPTURE_FAIL: sky shader pixels were not visible in the upper-sky frame",flush=True)
                 return False
