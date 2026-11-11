@@ -7,6 +7,7 @@ import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.resources.ResourceLocation;
@@ -32,11 +33,39 @@ public final class RiftSkyRenderer {
     private static final double SKY_MAX_WRAP_PHASE_ERROR=0.002D;
     private static ShaderInstance shader;
     private static boolean firstVisibleFrameLogged;
+    private static final boolean CI_TEST_MODE=Boolean.getBoolean("blackfrequency.ciTestMode");
+    private static float lastCiCameraYaw=Float.NaN;
+    private static float lastCiCameraPitch=Float.NaN;
 
     private static boolean shouldRender(float strength) {
         // Match the fragment shader's transparent early-out exactly. Avoid
         // rebuilding and submitting a fullscreen quad while the rift is invisible.
         return Float.isFinite(strength) && strength>MIN_VISIBLE_STRENGTH;
+    }
+
+    private static float wrappedDegrees(float angle) {
+        float wrapped=angle%360.0F;
+        if(wrapped>=180.0F) wrapped-=360.0F;
+        if(wrapped< -180.0F) wrapped+=360.0F;
+        return wrapped;
+    }
+
+    // CI capture must use the camera rotation that the client actually rendered,
+    // not the server's requested teleport aim (which may arrive a tick later).
+    // This is disabled in normal play and logs only when the view changes.
+    private static void logCiCameraRotation(Camera camera) {
+        if(!CI_TEST_MODE || camera==null) return;
+        float yaw=camera.getYRot();
+        float pitch=camera.getXRot();
+        if(!Float.isFinite(yaw) || !Float.isFinite(pitch)) return;
+        boolean changed=!Float.isFinite(lastCiCameraYaw)
+            || Math.abs(wrappedDegrees(yaw-lastCiCameraYaw))>=0.25F
+            || Math.abs(pitch-lastCiCameraPitch)>=0.25F;
+        if(!changed) return;
+        lastCiCameraYaw=yaw;
+        lastCiCameraPitch=pitch;
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST CLIENT_CAMERA_ROTATION yaw={} pitch={}",yaw,pitch);
     }
 
     // Interpolate shader time between simulation ticks so the sky tear animates
@@ -138,6 +167,7 @@ public final class RiftSkyRenderer {
             // skip the draw entirely while the shader would output transparency.
             if(!shouldRender(strength)) return;
             strength=Math.min(strength,1f);
+            logCiCameraRotation(event.getCamera());
             if(!firstVisibleFrameLogged) {
                 firstVisibleFrameLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info("BLACK_FREQUENCY_RENDER_ACTIVE strength={}",strength);
