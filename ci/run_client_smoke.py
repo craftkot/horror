@@ -170,6 +170,51 @@ def capture_test_world():
         raise RuntimeError("BLACK FREQUENCY pixel classifier regression")
     print("WORLD_CAPTURE: saturated violet pixel classifier verified",flush=True)
 
+    def measure_ground_visibility(frame):
+        width,height=frame.size
+        pixels=frame.load()
+        left,right=int(width*.20),int(width*.80)
+        top,bottom=int(height*.40),int(height*.90)
+        particle_pixels=mesh_pixels=combined_pixels=0
+        particle_tiles=mesh_tiles=combined_tiles=0
+        tile_size=32
+        for tile_y in range(top,bottom,tile_size):
+            for tile_x in range(left,right,tile_size):
+                particle_hits=mesh_hits=combined_hits=0
+                for y in range(tile_y,min(tile_y+tile_size,bottom)):
+                    for x in range(tile_x,min(tile_x+tile_size,right)):
+                        r,g,b=pixels[x,y]
+                        particle=is_ground_fissure_pixel(r,g,b)
+                        mesh=is_ground_mesh_pixel(r,g,b)
+                        if particle:
+                            particle_pixels+=1
+                            particle_hits+=1
+                        if mesh:
+                            mesh_pixels+=1
+                            mesh_hits+=1
+                        if particle or mesh:
+                            combined_pixels+=1
+                            combined_hits+=1
+                if particle_hits>=4:
+                    particle_tiles+=1
+                if mesh_hits>=3:
+                    mesh_tiles+=1
+                if combined_hits>=4:
+                    combined_tiles+=1
+        return {
+            "particlePixels":particle_pixels,
+            "particleTiles":particle_tiles,
+            "meshPixels":mesh_pixels,
+            "meshTiles":mesh_tiles,
+            "combinedPixels":combined_pixels,
+            "combinedTiles":combined_tiles,
+        }
+
+    def ground_visibility_passes(metrics):
+        return (metrics["particlePixels"]>=120 and metrics["particleTiles"]>=3
+                and metrics["combinedPixels"]>=160 and metrics["combinedTiles"]>=6
+                and metrics["meshPixels"]>=24 and metrics["meshTiles"]>=2)
+
     def verify_sky_pixels(name, region, minimum, max_green=None):
         from PIL import Image
         path=shots/name
@@ -465,62 +510,26 @@ def capture_test_world():
                 path=shots/"terrain-fracture-near-player.png"
                 with Image.open(path) as source:
                     frame=source.convert("RGB")
-                width,height=frame.size
-                pixels=frame.load()
-                # The server-verified target can project above screen center when
-                # the safe pad is above the local fissure. Keep the upper sky band out
-                # of this ground-only classifier while retaining the lower half of
-                # that elevated view; the mesh classifier independently rejects sky glow.
-                left,right=int(width*.20),int(width*.80)
-                top,bottom=int(height*.40),int(height*.90)
-                violet_pixels=0
-                visible_tiles=0
-                mesh_pixels=0
-                mesh_tiles=0
-                combined_pixels=0
-                combined_tiles=0
-                tile_size=32
-                for tile_y in range(top,bottom,tile_size):
-                    for tile_x in range(left,right,tile_size):
-                        tile_hits=0
-                        mesh_tile_hits=0
-                        combined_tile_hits=0
-                        for y in range(tile_y,min(tile_y+tile_size,bottom)):
-                            for x in range(tile_x,min(tile_x+tile_size,right)):
-                                r,g,b=pixels[x,y]
-                                particle_pixel=is_ground_fissure_pixel(r,g,b)
-                                mesh_pixel=is_ground_mesh_pixel(r,g,b)
-                                if particle_pixel:
-                                    violet_pixels+=1
-                                    tile_hits+=1
-                                if mesh_pixel:
-                                    mesh_pixels+=1
-                                    mesh_tile_hits+=1
-                                if particle_pixel or mesh_pixel:
-                                    combined_pixels+=1
-                                    combined_tile_hits+=1
-                        if tile_hits>=4:
-                            visible_tiles+=1
-                        if mesh_tile_hits>=3:
-                            mesh_tiles+=1
-                        if combined_tile_hits>=4:
-                            combined_tiles+=1
-                # Canopy and terrain may occlude bright particles while leaving the
-                # depth-tested mesh visible. Require independent evidence from both
-                # render paths plus a combined pixel/tile floor; do not let either
-                # particles or mesh alone satisfy the screenshot proof.
-                if (violet_pixels<120 or visible_tiles<3
-                        or combined_pixels<160 or combined_tiles<6):
+                metrics=measure_ground_visibility(frame)
+                # The target-aimed sample frame can miss a narrow seam on irregular
+                # Normal terrain even though the mesh is visible from the restored
+                # player view. Capture that view before the real beacon click and
+                # apply the identical particle+mesh thresholds; never accept logs alone.
+                if not ground_visibility_passes(metrics):
+                    fallback_path=shots/"recovery-beacon-ground-context.png"
+                    snap("recovery-beacon-ground-context.png")
+                    fallback_metrics=None
+                    if fallback_path.is_file():
+                        with Image.open(fallback_path) as source:
+                            fallback_metrics=measure_ground_visibility(source.convert("RGB"))
+                    if fallback_metrics is not None and ground_visibility_passes(fallback_metrics):
+                        terrain_shot=True
+                        print("WORLD_CAPTURE: visible ground fissure mesh captured",
+                              "view=restored-beacon-context",fallback_metrics,flush=True)
+                        return
                     terrain_capture_failed=True
-                    print("WORLD_CAPTURE_FAIL: combined ground-fissure visibility was below threshold",
-                          "particlePixels",violet_pixels,"particleTiles",visible_tiles,
-                          "meshPixels",mesh_pixels,"meshTiles",mesh_tiles,
-                          "combinedPixels",combined_pixels,"combinedTiles",combined_tiles,flush=True)
-                    return
-                if mesh_pixels<24 or mesh_tiles<2:
-                    terrain_capture_failed=True
-                    print("WORLD_CAPTURE_FAIL: client ground mesh was not visible as a continuous blue-violet seam",
-                          "meshPixels",mesh_pixels,"meshTiles",mesh_tiles,flush=True)
+                    print("WORLD_CAPTURE_FAIL: ground fissure was not visible in either player view",
+                          "targetView",metrics,"restoredBeaconView",fallback_metrics,flush=True)
                     return
                 terrain_shot=True
                 print("WORLD_CAPTURE: visible ground fissure mesh captured",
