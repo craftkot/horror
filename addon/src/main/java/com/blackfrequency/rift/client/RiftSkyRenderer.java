@@ -191,17 +191,14 @@ public final class RiftSkyRenderer {
             // Keep every state change inside the guarded region so cleanup also runs
             // if shader binding, buffer construction, or upload throws.
             try {
-                RenderSystem.enableBlend();
-                RenderSystem.defaultBlendFunc();
+                // The shader JSON owns blending. Keep the fullscreen quad counter-clockwise
+                // so the normal back-face culling state remains untouched.
                 // The quad is on the far plane: LEQUAL admits untouched sky pixels
                 // while the depth buffer rejects solid terrain and nearer geometry.
                 RenderSystem.enableDepthTest();
                 RenderSystem.depthFunc(GL11.GL_LEQUAL);
-                // The camera is INSIDE the sky cube; back-face culling would hide its walls.
-                RenderSystem.disableCull();
                 RenderSystem.depthMask(false);
                 RenderSystem.setShader(() -> shader);
-                RenderSystem.setShaderColor(1f,1f,1f,1f);
                 // A single screen-space quad avoids overlapping translucent sky-cube
                 // faces. The vertex shader reconstructs the world-space view ray.
                 BufferBuilder bb=Tesselator.getInstance().getBuilder();
@@ -213,15 +210,22 @@ public final class RiftSkyRenderer {
                 BufferUploader.drawWithShader(bb.end());
                 depthAwareDrawSubmitted=true;
             } finally {
+                // Restore the vanilla post-level depth contract. Blend and cull
+                // state are owned by the shader/pipeline and are never toggled here.
                 RenderSystem.depthMask(true);
                 RenderSystem.depthFunc(GL11.GL_LEQUAL);
-                RenderSystem.setShaderColor(1f,1f,1f,1f);
                 RenderSystem.enableDepthTest();
-                RenderSystem.enableCull();
-                RenderSystem.disableBlend();
             }
-            // The smoke-test marker means the draw call returned and render-state
-            // cleanup completed; entering AFTER_LEVEL alone is not a successful pass.
+            if(CI_TEST_MODE && depthAwareDrawSubmitted) {
+                if(!GL11.glIsEnabled(GL11.GL_DEPTH_TEST)
+                    || GL11.glGetInteger(GL11.GL_DEPTH_FUNC)!=GL11.GL_LEQUAL
+                    || !GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK))
+                    throw new IllegalStateException("BLACK FREQUENCY sky depth state cleanup regression");
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_TEST SKY_DEPTH_STATE_CLEANUP_VERIFIED");
+            }
+            // The smoke-test marker means the draw call returned and the depth
+            // contract was restored; entering AFTER_LEVEL alone is not a successful pass.
             if(CI_TEST_MODE && depthAwareDrawSubmitted && !firstDepthAwareFrameLogged) {
                 firstDepthAwareFrameLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
