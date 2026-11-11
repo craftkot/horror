@@ -113,8 +113,8 @@ public final class RiftClientState {
         private static final double MAX_GROUND_SEGMENT_Y_DELTA=1.25D;
         // Slightly widen the ground seam so it remains legible through partial canopy gaps.
         private static final double GROUND_GLOW_WIDTH_SCALE=4.0D;
-        private static final double GROUND_CORE_WIDTH_SCALE=.52D;
-        private static final double GROUND_EDGE_HALF_WIDTH=.016D;
+        private static final double GROUND_CORE_WIDTH_SCALE=.66D;
+        private static final double GROUND_EDGE_HALF_WIDTH=.020D;
         // A restrained violet filament pulses inside the dark core without another trig call.
         private static final double GROUND_CORE_PULSE_BASE=.10D;
         private static final double GROUND_CORE_PULSE_RANGE=.22D;
@@ -161,8 +161,8 @@ public final class RiftClientState {
                     "BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED tip={} middle={} end={}",tip,middle,end);
             }
             if(!visualProfileLogged) {
-                if(!(GROUND_GLOW_WIDTH_SCALE>3.6D && GROUND_CORE_WIDTH_SCALE>.48D
-                    && GROUND_EDGE_HALF_WIDTH>.012D && GROUND_EDGE_HALF_WIDTH<.045D))
+                if(!(GROUND_GLOW_WIDTH_SCALE>3.6D && GROUND_CORE_WIDTH_SCALE>.64D
+                    && GROUND_EDGE_HALF_WIDTH>.018D && GROUND_EDGE_HALF_WIDTH<.045D))
                     throw new IllegalStateException("BLACK FREQUENCY ground mesh visual profile regression");
                 visualProfileLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
