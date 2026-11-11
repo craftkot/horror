@@ -1379,18 +1379,22 @@ public final class RiftController {
     }
 
     /** Only the disposable sparse-client fixture may replace unstable supports. */
-    private static boolean needsSparseBeaconSupport(BlockState support) {
-        return (!support.blocksMotion() && (support.isAir() || !support.getFluidState().isEmpty()))
+    private static boolean needsSparseBeaconSupport(BlockState support,boolean sturdyTopFace) {
+        // Motion blocking alone is insufficient: thin snow layers need a genuinely
+        // sturdy upward face beneath them or the test beacon can lose its platform.
+        return !sturdyTopFace
+            || (!support.blocksMotion() && (support.isAir() || !support.getFluidState().isEmpty()))
             || support.getBlock() instanceof net.minecraft.world.level.block.FallingBlock;
     }
 
     private static void verifySparseBeaconSupport() {
-        if(!needsSparseBeaconSupport(Blocks.AIR.defaultBlockState())
-            || !needsSparseBeaconSupport(Blocks.WATER.defaultBlockState())
-            || !needsSparseBeaconSupport(Blocks.SAND.defaultBlockState())
-            || !needsSparseBeaconSupport(Blocks.GRAVEL.defaultBlockState())
-            || needsSparseBeaconSupport(Blocks.STONE.defaultBlockState()))
-            throw new IllegalStateException("CI sparse beacon support regression");
+        if(!needsSparseBeaconSupport(Blocks.AIR.defaultBlockState(),false)
+            || !needsSparseBeaconSupport(Blocks.WATER.defaultBlockState(),false)
+            || !needsSparseBeaconSupport(Blocks.SAND.defaultBlockState(),true)
+            || !needsSparseBeaconSupport(Blocks.GRAVEL.defaultBlockState(),true)
+            || !needsSparseBeaconSupport(Blocks.STONE.defaultBlockState(),false)
+            || needsSparseBeaconSupport(Blocks.STONE.defaultBlockState(),true))
+            throw new IllegalStateException("CI sparse beacon sturdy-face support regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SPARSE_BEACON_SUPPORT_RULE_VERIFIED");
     }
 
@@ -1467,7 +1471,8 @@ public final class RiftController {
                         && fixtureSupportPos.getY()>=level.getMinBuildHeight()
                         && level.getWorldBorder().isWithinBounds(fixtureSupportPos)) {
                         BlockState candidateSupport=level.getBlockState(fixtureSupportPos);
-                        if(needsSparseBeaconSupport(candidateSupport)) {
+                        if(needsSparseBeaconSupport(candidateSupport,
+                            candidateSupport.isFaceSturdy(level,fixtureSupportPos,Direction.UP))) {
                             if(!level.setBlock(fixtureSupportPos,Blocks.STONE.defaultBlockState(),3)) continue;
                             LOGGER.info("BLACK_FREQUENCY_TEST SPARSE_BEACON_SUPPORT_PREPARED x={} y={} z={} previous={}",
                                 fixtureSupportPos.getX(),fixtureSupportPos.getY(),fixtureSupportPos.getZ(),
@@ -1483,6 +1488,8 @@ public final class RiftController {
                         && level.getBlockState(pos.above()).isAir()
                         && level.getBlockState(pos.below()).blocksMotion()
                         && level.getBlockState(pos.below()).getFluidState().isEmpty()
+                        && level.getBlockState(pos.below()).isFaceSturdy(
+                            level,pos.below(),Direction.UP)
                         && !level.setBlock(pos,Blocks.SNOW.defaultBlockState(),3))
                         throw new IllegalStateException("CI snow support placement failed");
                     // Motion-blocking heightmaps can stop at a solid block below
@@ -1497,6 +1504,7 @@ public final class RiftController {
                     // fall away or destroy the objective after an update.
                     boolean supportedSnow=support.is(Blocks.SNOW)
                         && snowFoundation.blocksMotion()
+                        && snowFoundation.isFaceSturdy(level,pos.below(2),Direction.UP)
                         && snowFoundation.getFluidState().isEmpty()
                         && !(snowFoundation.getBlock() instanceof net.minecraft.world.level.block.FallingBlock)
                         && !snowFoundation.is(Blocks.MAGMA_BLOCK)
@@ -1591,9 +1599,25 @@ public final class RiftController {
                         LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_BLOCK_ENTITY_ID_PERSISTENCE_VERIFIED");
                     }
                     if(snowFixture) {
-                        if(!level.getBlockState(pos.below()).is(Blocks.SNOW)
-                            || !level.getBlockState(pos.below(2)).blocksMotion())
-                            throw new IllegalStateException("CI snow support was destroyed");
+                        BlockPos snowPos=pos.below();
+                        BlockPos foundationPos=pos.below(2);
+                        if(!level.getBlockState(snowPos).is(Blocks.SNOW)
+                            || !level.getBlockState(foundationPos).isFaceSturdy(
+                                level,foundationPos,Direction.UP)) {
+                            // A modded block update may invalidate a candidate after
+                            // placement. Remove only the beacon carrying our UUID and
+                            // retire its anchor; never crash the integrated server or
+                            // leave a stale recovery objective in SavedData.
+                            if(isOwnedNaturalBeaconAtLoadedPosition(level,s,pos))
+                                level.setBlock(pos,Blocks.AIR.defaultBlockState(),3);
+                            if(!isOwnedNaturalBeaconAtLoadedPosition(level,s,pos)) {
+                                s.naturalBeaconPos=Long.MIN_VALUE;
+                                s.naturalBeaconId=null;
+                                s.setDirty();
+                            }
+                            LOGGER.warn("BLACK FREQUENCY: rejected recovery beacon with unstable snow support at {}",pos);
+                            continue;
+                        }
                         LOGGER.info("BLACK_FREQUENCY_TEST SNOW_BEACON_SUPPORT_VERIFIED x={} y={} z={} snowY={}",
                             pos.getX(),pos.getY(),pos.getZ(),pos.getY()-1);
                     }
