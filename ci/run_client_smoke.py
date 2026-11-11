@@ -873,6 +873,12 @@ def capture_test_world():
                 if "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon was not activated by actual player right-click",flush=True)
                     return False
+                if "BLACK_FREQUENCY_TEST ACTUAL_PASSENGER_GRAVITY_IMMUNITY_VERIFIED" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: actual mounted-player gravity probe did not run",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST PASSENGER_RIFT_IMPULSE_SUPPRESSED_VERIFIED controlImpulse=true" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: mounted player was not proven immune inside an active lift zone",flush=True)
+                    return False
             if not sky_shot:
                 print("WORLD_CAPTURE_FAIL: sky shader pixels were not visible in both horizon and zenith frames",flush=True)
                 return False
