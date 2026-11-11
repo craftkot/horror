@@ -55,7 +55,7 @@ public final class RiftSkyRenderer {
     private static double maximumShaderWrapPhaseError() {
         float wrappedShaderTime=(float)SKY_TIME_WRAP_TICKS*SKY_TIME_TICK_SCALE;
         float[] multipliers={.09F,.13F,.21F,.61F,.43F,.73F,.17F,.27F,.5F,
-            .075F,.39F,.12F,.06F,.37F,.51F,.18F,.7F,.11F,.31F,.57F,
+            .075F,.39F,.19F,.12F,.06F,.37F,.51F,.18F,.7F,.11F,.31F,.57F,
             2.1F,2.7F,5.3F,3.1F,.4F};
         double maximum=0.0D;
         for(float multiplier:multipliers)
