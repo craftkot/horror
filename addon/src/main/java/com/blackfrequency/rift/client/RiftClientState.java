@@ -93,7 +93,8 @@ public final class RiftClientState {
         private static final int ARM_COUNT=4;
         private static final int SEGMENTS_PER_ARM=12;
         private static final double SAMPLE_SPACING=.39D;
-        private static final long REBUILD_INTERVAL=4L;
+        // Terrain sampling is throttled; the fissure pulse itself still renders every frame.
+        private static final long REBUILD_INTERVAL=6L;
         private static final int GROUND_REBUILD_VERTICAL_DELTA=2;
         private static net.minecraft.client.multiplayer.ClientLevel cachedLevel;
         private static long cachedTick=Long.MIN_VALUE;
@@ -241,14 +242,15 @@ public final class RiftClientState {
             boolean oneBlockStable=!shouldRebuild(101L,100L,false,66,65);
             boolean twoBlockMove=shouldRebuild(101L,100L,false,67,65);
             boolean teleport=shouldRebuild(101L,100L,false,80,65);
-            boolean interval=shouldRebuild(104L,100L,false,65,65);
+            boolean beforeInterval=!shouldRebuild(105L,100L,false,65,65);
+            boolean interval=shouldRebuild(106L,100L,false,65,65);
             boolean anchor=shouldRebuild(101L,100L,true,65,65);
-            if(!(stable && oneBlockStable && twoBlockMove && teleport && interval && anchor))
+            if(!(stable && oneBlockStable && twoBlockMove && teleport && beforeInterval && interval && anchor))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh rebuild profile regression");
             rebuildProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_REBUILD_PROFILE_VERIFIED verticalDelta={} interval={}",
-                GROUND_REBUILD_VERTICAL_DELTA,REBUILD_INTERVAL);
+                "BLACK_FREQUENCY_GROUND_MESH_REBUILD_PROFILE_VERIFIED verticalDelta={} interval={} boundaryVerified={}",
+                GROUND_REBUILD_VERTICAL_DELTA,REBUILD_INTERVAL,beforeInterval && interval);
         }
 
         private static double boundedCorePulse(double wave) {
