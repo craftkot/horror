@@ -1224,6 +1224,13 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST VANILLA_CLOUDS_SUPPRESSED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: vanilla clouds were not suppressed during the active rift",flush=True)
                 return False
+            beacon_click=log_after.rfind("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION")
+            cloud_restore=log_after.rfind("BLACK_FREQUENCY_TEST VANILLA_CLOUDS_RESTORED")
+            if beacon_click<0 or cloud_restore<=beacon_click:
+                print("WORLD_CAPTURE_FAIL: vanilla clouds were not restored after physical beacon activation",
+                      flush=True)
+                return False
+            print("WORLD_CAPTURE: vanilla clouds restored after beacon activation",flush=True)
             cleanup_marker="BLACK_FREQUENCY_TEST SKY_DEPTH_STATE_CLEANUP_VERIFIED"
             cleanup_count=log_after.count(cleanup_marker)
             if cleanup_count!=1:

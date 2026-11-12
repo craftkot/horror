@@ -58,6 +58,8 @@ public final class RiftCloudEffects {
                 if(suppressionLogged) {
                     suppressionLogged=false;
                     LOGGER.info("BLACK_FREQUENCY_CLOUDS_RESTORED");
+                    if(Boolean.getBoolean("blackfrequency.ciTestMode"))
+                        LOGGER.info("BLACK_FREQUENCY_TEST VANILLA_CLOUDS_RESTORED");
                 }
                 return false;
             }
