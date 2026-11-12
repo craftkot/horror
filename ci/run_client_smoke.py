@@ -992,6 +992,10 @@ def capture_test_world():
                     or "double dy=camera.y-cachedAnchorSurfaceY;" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: ground mesh render range is not consistently camera-relative",flush=True)
                 return False
+            if ("private static double boundedRenderPartialTick(double partialTick)" not in camera_source
+                    or "double time=(double)tick+boundedRenderPartialTick(event.getPartialTick());" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: ground fissure animation does not clamp the renderer partial tick",flush=True)
+                return False
             visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=5.6 coreScale=0.82 edgeHalfWidth=0.026"
             if visual_profile_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: widened ground fissure visual profile self-check was not executed",flush=True)
@@ -1120,6 +1124,9 @@ def capture_test_world():
                 return False
             if "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_CACHE_SENTINEL_VERIFIED miss=positiveInfinity unsupported=nan singleLookup=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: ground sample cache miss sentinel did not preserve unsupported-column entries",flush=True)
+                return False
+            if "BLACK_FREQUENCY_GROUND_MESH_PARTIAL_TICK_GUARD_VERIFIED finiteClamped=true nonFiniteFallback=zero" not in log_after:
+                print("WORLD_CAPTURE_FAIL: ground fissure animation did not verify finite partial-tick handling",flush=True)
                 return False
             source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
             source_text=source_path.read_text(encoding="utf-8",errors="replace")
