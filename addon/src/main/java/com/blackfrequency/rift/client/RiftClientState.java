@@ -144,6 +144,10 @@ public final class RiftClientState {
         private static boolean samplingProfileLogged;
         private static boolean rangeRejectLogged;
         private static boolean rangeProfileLogged;
+        private static boolean verticallyCulled;
+        private static int verticallyCulledAnchorX=Integer.MIN_VALUE;
+        private static int verticallyCulledAnchorZ=Integer.MIN_VALUE;
+        private static int verticallyCulledSurfaceY;
         private static boolean supportFilterLogged;
         private static boolean sampleCursorReuseLogged;
         private static boolean inactiveCacheCleanupLogged;
@@ -294,9 +298,29 @@ public final class RiftClientState {
         // A vertically distant camera should release the sampled ClientLevel and
         // mesh just like a camera that leaves the horizontal radius.
         private static boolean clearGeometryCacheIfOutsideGroundRenderRange(
-                long horizontalDistanceSquared,double verticalDelta) {
+                long horizontalDistanceSquared,double verticalDelta,int worldAnchorX,int worldAnchorZ,
+                int anchorSurfaceY) {
             if(isWithinGroundRenderRange(horizontalDistanceSquared,verticalDelta)) return false;
             clearGeometryCacheIfPresent();
+            verticallyCulled=true;
+            verticallyCulledAnchorX=worldAnchorX;
+            verticallyCulledAnchorZ=worldAnchorZ;
+            verticallyCulledSurfaceY=anchorSurfaceY;
+            return true;
+        }
+
+        // Once an out-of-range mesh is released, do not rebuild it every frame.
+        // Resume only when the camera returns to the 3D envelope or the anchor changes.
+        private static boolean shouldSkipGroundMeshBuildWhileVerticallyCulled(
+                int worldAnchorX,int worldAnchorZ,long horizontalDistanceSquared,double playerY) {
+            if(!verticallyCulled) return false;
+            if(worldAnchorX!=verticallyCulledAnchorX || worldAnchorZ!=verticallyCulledAnchorZ
+                || isWithinGroundRenderRange(horizontalDistanceSquared,playerY-verticallyCulledSurfaceY)) {
+                verticallyCulled=false;
+                verticallyCulledAnchorX=Integer.MIN_VALUE;
+                verticallyCulledAnchorZ=Integer.MIN_VALUE;
+                return false;
+            }
             return true;
         }
 
@@ -312,9 +336,29 @@ public final class RiftClientState {
             if(!(center && horizontalBoundary && verticalBoundary && verticalOutside
                 && horizontalOutside && nanRejected && infinityRejected))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh 3D range regression");
+            verticallyCulled=true;
+            verticallyCulledAnchorX=1;
+            verticallyCulledAnchorZ=2;
+            verticallyCulledSurfaceY=64;
+            boolean stableOutOfRangeSkip=shouldSkipGroundMeshBuildWhileVerticallyCulled(1,2,0L,128.01D);
+            boolean repeatedOutOfRangeSkip=shouldSkipGroundMeshBuildWhileVerticallyCulled(1,2,0L,128.01D);
+            boolean returnToRangeRebuild=!shouldSkipGroundMeshBuildWhileVerticallyCulled(1,2,0L,128.0D);
+            verticallyCulled=true;
+            verticallyCulledAnchorX=1;
+            verticallyCulledAnchorZ=2;
+            verticallyCulledSurfaceY=64;
+            boolean anchorChangeRebuild=!shouldSkipGroundMeshBuildWhileVerticallyCulled(2,2,0L,128.01D);
+            verticallyCulled=false;
+            verticallyCulledAnchorX=Integer.MIN_VALUE;
+            verticallyCulledAnchorZ=Integer.MIN_VALUE;
+            if(!(stableOutOfRangeSkip && repeatedOutOfRangeSkip
+                && returnToRangeRebuild && anchorChangeRebuild))
+                throw new IllegalStateException("BLACK FREQUENCY vertical ground mesh cull latch regression");
             rangeProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_3D_RANGE_PROFILE_VERIFIED radius=64 horizontalBoundary=true verticalBoundary=true invalidRejected=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_LATCH_VERIFIED stable=true returnRebuild=true anchorChangeRebuild=true");
         }
 
         private static double boundedCorePulse(double wave) {
@@ -613,6 +657,9 @@ public final class RiftClientState {
         }
 
         private static void clearGeometryCacheIfPresent() {
+            verticallyCulled=false;
+            verticallyCulledAnchorX=Integer.MIN_VALUE;
+            verticallyCulledAnchorZ=Integer.MIN_VALUE;
             if(cachedLevel!=null || cachedTick!=Long.MIN_VALUE || !cachedSegments.isEmpty()
                 || !SURFACE_Y_BY_COLUMN.isEmpty()) clearGeometryCache();
         }
@@ -633,6 +680,9 @@ public final class RiftClientState {
             animationProfileLogged=false;
             rangeRejectLogged=false;
             rangeProfileLogged=false;
+            verticallyCulled=false;
+            verticallyCulledAnchorX=Integer.MIN_VALUE;
+            verticallyCulledAnchorZ=Integer.MIN_VALUE;
         }
 
         private static void verifyInactiveCacheCleanup(net.minecraft.client.multiplayer.ClientLevel level) {
@@ -667,12 +717,15 @@ public final class RiftClientState {
             cachedSegments=List.of(new GroundSegment(new GroundPoint(1,64,2),
                 new GroundPoint(2,64,2),1,0,0,1,1));
             SURFACE_Y_BY_COLUMN.put(columnKey(1,2),64.0D);
-            boolean verticalRangeCleared=clearGeometryCacheIfOutsideGroundRenderRange(0L,64.01D);
+            boolean verticalRangeCleared=clearGeometryCacheIfOutsideGroundRenderRange(0L,64.01D,1,2,64);
             if(!verticalRangeCleared || cachedLevel!=null || cachedTick!=Long.MIN_VALUE
                 || !cachedSegments.isEmpty() || !SURFACE_Y_BY_COLUMN.isEmpty())
                 throw new IllegalStateException("BLACK FREQUENCY vertical ground mesh cache cleanup regression");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_RANGE_CACHE_RELEASE_VERIFIED levelReference=true");
+            verticallyCulled=false;
+            verticallyCulledAnchorX=Integer.MIN_VALUE;
+            verticallyCulledAnchorZ=Integer.MIN_VALUE;
             inactiveCacheCleanupLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_INACTIVE_CACHE_CLEANUP_VERIFIED levelReference=true");
@@ -713,6 +766,8 @@ public final class RiftClientState {
                 clearCache();
                 return;
             }
+            if(shouldSkipGroundMeshBuildWhileVerticallyCulled(
+                    worldAnchorX,worldAnchorZ,horizontalDistanceSquared,player.getY())) return;
 
             long tick=level.getGameTime();
             boolean anchorChanged=level!=cachedLevel || worldAnchorX!=cachedAnchorX || worldAnchorZ!=cachedAnchorZ;
@@ -765,7 +820,8 @@ public final class RiftClientState {
             double dy=player.getY()-cachedAnchorSurfaceY;
             double playerDistanceSquared=horizontalDistanceSquared+dy*dy;
             int sampledSurfaceY=cachedAnchorSurfaceY;
-            if(clearGeometryCacheIfOutsideGroundRenderRange(horizontalDistanceSquared,dy)) {
+            if(clearGeometryCacheIfOutsideGroundRenderRange(
+                    horizontalDistanceSquared,dy,worldAnchorX,worldAnchorZ,sampledSurfaceY)) {
                 if(!rangeRejectLogged) {
                     rangeRejectLogged=true;
                     com.mojang.logging.LogUtils.getLogger().info(
