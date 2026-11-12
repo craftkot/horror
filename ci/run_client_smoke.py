@@ -1077,8 +1077,23 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: final ground mesh is below the shared segment/arm threshold",
                       "segments",mesh_segments,"arms",mesh_arms,flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples=48 spacing=0.39 extent=4.68" not in log_after:
+            density = re.search(
+                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples=(\\d+) spacing=([0-9.]+) extent=([0-9.]+)",
+                log_after)
+            if not density:
                 print("WORLD_CAPTURE_FAIL: fissure density/radius self-check was not executed",flush=True)
+                return False
+            density_samples=int(density.group(1))
+            density_spacing=float(density.group(2))
+            density_extent=float(density.group(3))
+            if (density_samples!=GROUND_MESH_SAMPLES
+                    or density_spacing<0.45 or density_spacing>0.5
+                    or not math.isclose(density_extent,12*density_spacing,
+                                        rel_tol=0.0,abs_tol=1.0e-9)
+                    or density_extent>=48.0):
+                print("WORLD_CAPTURE_FAIL: fissure density/radius is outside the verified bounds",
+                      "samples",density_samples,"spacing",density_spacing,
+                      "extent",density_extent,flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=56 dragonBreath=40 reversePortal=8 shards=8" not in log_after:
                 print("WORLD_CAPTURE_FAIL: layered fissure particle budget self-check was not executed",flush=True)
