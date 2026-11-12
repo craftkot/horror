@@ -12,6 +12,14 @@ import net.minecraftforge.fml.common.Mod;
 public final class RiftAtmosphere {
     private static boolean interpolationVerified;
 
+    private static float finiteUnit(float value) {
+        return Float.isFinite(value) ? Math.max(0.0F,Math.min(1.0F,value)) : 0.0F;
+    }
+
+    private static boolean validFogPlanes(float near,float far) {
+        return Float.isFinite(near) && Float.isFinite(far) && far>0.0F;
+    }
+
     private RiftAtmosphere() {}
 
     // Render events run between simulation ticks. Clamp the partial tick so a
@@ -30,12 +38,29 @@ public final class RiftAtmosphere {
         double invalid=interpolatedGameTime(42L,Double.NaN);
         double negative=interpolatedGameTime(42L,-0.5D);
         double over=interpolatedGameTime(42L,1.5D);
+        float nanStrength=finiteUnit(Float.NaN);
+        float positiveInfinityStrength=finiteUnit(Float.POSITIVE_INFINITY);
+        float negativeInfinityStrength=finiteUnit(Float.NEGATIVE_INFINITY);
+        float lowStrength=finiteUnit(-0.5F);
+        float highStrength=finiteUnit(1.5F);
+        boolean validPlanes=validFogPlanes(0.05F,256.0F);
+        boolean nanNearRejected=validFogPlanes(Float.NaN,256.0F);
+        boolean nanFarRejected=validFogPlanes(0.05F,Float.NaN);
+        boolean infiniteFarRejected=validFogPlanes(0.05F,Float.POSITIVE_INFINITY);
+        boolean zeroFarRejected=validFogPlanes(0.05F,0.0F);
         if(Math.abs(midpoint-42.5D)>1.0E-9D || tickBoundary!=43.0D
             || invalid!=42.0D || negative!=42.0D || over!=43.0D)
             throw new IllegalStateException("BLACK FREQUENCY fog interpolation regression");
+        if(nanStrength!=0.0F || positiveInfinityStrength!=0.0F
+            || negativeInfinityStrength!=0.0F || lowStrength!=0.0F || highStrength!=1.0F
+            || !validPlanes || nanNearRejected || nanFarRejected
+            || infiniteFarRejected || zeroFarRejected)
+            throw new IllegalStateException("BLACK FREQUENCY fog input guard regression");
         interpolationVerified=true;
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST FOG_INTERPOLATION_VERIFIED");
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST FOG_INPUT_GUARDS_VERIFIED");
     }
 
     // Rift packets can outlive a dimension transfer. Never tint the Nether or End.
@@ -47,7 +72,7 @@ public final class RiftAtmosphere {
     @SubscribeEvent
     public static void onFogColor(ViewportEvent.ComputeFogColor event) {
         if(!isOverworld()) return;
-        float f=RiftClientState.visibleStrength();
+        float f=finiteUnit(RiftClientState.visibleStrength());
         if(f<=0) return;
         // Slow cold pulses and a subtle violet shimmer make the atmosphere feel alive.
         verifyFogInterpolation();
@@ -62,15 +87,20 @@ public final class RiftAtmosphere {
     @SubscribeEvent
     public static void onFogDistance(ViewportEvent.RenderFog event) {
         if(!isOverworld()) return;
-        float f=RiftClientState.visibleStrength();
+        float f=finiteUnit(RiftClientState.visibleStrength());
         if(f<=0) return;
         verifyFogInterpolation();
         double time=interpolatedGameTime(Minecraft.getInstance().level.getGameTime(),event.getPartialTick());
         float pulse=(float)(.5D+.5D*Math.sin(time*.029D));
+        float nearInput=event.getNearPlaneDistance();
+        float farInput=event.getFarPlaneDistance();
+        if(!validFogPlanes(nearInput,farInput)) return;
         float contraction=Math.min(.88f,f*(.76f+.10f*pulse));
-        float far=Math.max(24f,event.getFarPlaneDistance()*(1f-contraction));
+        float far=Math.max(24f,farInput*(1f-contraction));
+        float near=Math.min(Math.max(0.0F,nearInput),far*.22f);
+        if(!validFogPlanes(near,far)) return;
         event.setFarPlaneDistance(far);
-        event.setNearPlaneDistance(Math.min(event.getNearPlaneDistance(),far*.22f));
+        event.setNearPlaneDistance(near);
         event.setCanceled(true);
     }
 }
