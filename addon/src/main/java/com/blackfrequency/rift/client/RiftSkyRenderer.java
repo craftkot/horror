@@ -160,10 +160,11 @@ public final class RiftSkyRenderer {
                 RiftClientState.GroundRenderer.render(event);
                 return;
             }
-            // Draw immediately after the vanilla sky, before clouds and weather.
-            // Later cloud/weather and terrain passes then keep their normal colors and
-            // depth occlusion instead of being darkened by the catastrophe overlay.
-            if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_SKY)
+            // Vanilla clouds are rendered after AFTER_SKY and can obscure the rift.
+            // Composite after opaque terrain has populated depth: the far-plane quad
+            // remains visible over sky/cloud pixels while solid terrain fails LEQUAL.
+            // Later cutout, entity, translucent, weather, and particle passes stay in front.
+            if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_SOLID_BLOCKS)
                 renderRift(event);
         }
 
@@ -235,7 +236,7 @@ public final class RiftSkyRenderer {
             if(CI_TEST_MODE && depthAwareDrawSubmitted && !firstDepthAwareFrameLogged) {
                 firstDepthAwareFrameLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_TEST SKY_DEPTH_AWARE_DRAW_SUBMITTED stage=after_sky");
+                    "BLACK_FREQUENCY_TEST SKY_DEPTH_AWARE_DRAW_SUBMITTED stage=after_solid_blocks");
             }
         }
     }
