@@ -969,6 +969,12 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST GROUND_MESH_INACTIVE_CACHE_CLEANUP_VERIFIED levelReference=true" not in final_log:
                 print("WORLD_CAPTURE_FAIL: inactive ground mesh cache did not prove ClientLevel reference release",flush=True)
                 return False
+            if "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_RANGE_CACHE_RELEASE_VERIFIED levelReference=true" not in final_log:
+                print("WORLD_CAPTURE_FAIL: vertical range rejection did not release the cached ClientLevel",flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST GROUND_MESH_3D_RANGE_PROFILE_VERIFIED radius=64 horizontalBoundary=true verticalBoundary=true invalidRejected=true" not in final_log:
+                print("WORLD_CAPTURE_FAIL: 3D ground mesh render-range boundaries were not verified",flush=True)
+                return False
             visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=5.6 coreScale=0.82 edgeHalfWidth=0.026"
             if visual_profile_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: widened ground fissure visual profile self-check was not executed",flush=True)

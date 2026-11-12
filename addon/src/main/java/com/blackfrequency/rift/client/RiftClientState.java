@@ -143,6 +143,7 @@ public final class RiftClientState {
         private static boolean animationProfileLogged;
         private static boolean samplingProfileLogged;
         private static boolean rangeRejectLogged;
+        private static boolean rangeProfileLogged;
         private static boolean supportFilterLogged;
         private static boolean sampleCursorReuseLogged;
         private static boolean inactiveCacheCleanupLogged;
@@ -281,6 +282,41 @@ public final class RiftClientState {
                 GROUND_REBUILD_VERTICAL_DELTA,REBUILD_INTERVAL,sixTickStable && beforeInterval && interval);
         }
 
+        // The ground mesh is useful only inside the same 64-block 3D envelope
+        // used by its visual culling. Reject non-finite deltas instead of letting
+        // NaN bypass the comparison and keep an invisible mesh pinned in memory.
+        private static boolean isWithinGroundRenderRange(long horizontalDistanceSquared,double verticalDelta) {
+            return horizontalDistanceSquared>=0L && horizontalDistanceSquared<=64L*64L
+                && Double.isFinite(verticalDelta)
+                && horizontalDistanceSquared+verticalDelta*verticalDelta<=64.0D*64.0D;
+        }
+
+        // A vertically distant camera should release the sampled ClientLevel and
+        // mesh just like a camera that leaves the horizontal radius.
+        private static boolean clearGeometryCacheIfOutsideGroundRenderRange(
+                long horizontalDistanceSquared,double verticalDelta) {
+            if(isWithinGroundRenderRange(horizontalDistanceSquared,verticalDelta)) return false;
+            clearGeometryCacheIfPresent();
+            return true;
+        }
+
+        private static void verifyGroundRenderRangeProfile() {
+            if(rangeProfileLogged) return;
+            boolean center=isWithinGroundRenderRange(0L,0.0D);
+            boolean horizontalBoundary=isWithinGroundRenderRange(64L*64L,0.0D);
+            boolean verticalBoundary=isWithinGroundRenderRange(0L,64.0D);
+            boolean verticalOutside=!isWithinGroundRenderRange(0L,64.01D);
+            boolean horizontalOutside=!isWithinGroundRenderRange(64L*64L+1L,0.0D);
+            boolean nanRejected=!isWithinGroundRenderRange(0L,Double.NaN);
+            boolean infinityRejected=!isWithinGroundRenderRange(0L,Double.POSITIVE_INFINITY);
+            if(!(center && horizontalBoundary && verticalBoundary && verticalOutside
+                && horizontalOutside && nanRejected && infinityRejected))
+                throw new IllegalStateException("BLACK FREQUENCY ground mesh 3D range regression");
+            rangeProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_3D_RANGE_PROFILE_VERIFIED radius=64 horizontalBoundary=true verticalBoundary=true invalidRejected=true");
+        }
+
         private static double boundedCorePulse(double wave) {
             double boundedWave=Double.isFinite(wave) ? Math.max(0.0D,Math.min(1.0D,wave)) : 0.0D;
             return GROUND_CORE_PULSE_BASE+GROUND_CORE_PULSE_RANGE*boundedWave;
@@ -414,6 +450,7 @@ public final class RiftClientState {
             verifyTaperProfile();
             verifyGroundContinuityProfile();
             verifyGroundRebuildProfile();
+            verifyGroundRenderRangeProfile();
             verifyGroundAnimationProfile();
             verifyGroundSupportProfile();
             verifySurfaceCacheReuse();
@@ -595,6 +632,7 @@ public final class RiftClientState {
             rebuildProfileLogged=false;
             animationProfileLogged=false;
             rangeRejectLogged=false;
+            rangeProfileLogged=false;
         }
 
         private static void verifyInactiveCacheCleanup(net.minecraft.client.multiplayer.ClientLevel level) {
@@ -622,6 +660,19 @@ public final class RiftClientState {
                 || cachedSteepStepBreaks!=0 || !SURFACE_Y_BY_COLUMN.isEmpty()
                 || SURFACE_CURSOR.getX()!=0 || SURFACE_CURSOR.getY()!=0 || SURFACE_CURSOR.getZ()!=0)
                 throw new IllegalStateException("BLACK FREQUENCY inactive ground mesh cache cleanup regression");
+            // Exercise the same vertical-range cleanup path used by render(), with
+            // a real ClientLevel reference and a populated mesh/sample cache.
+            cachedLevel=level;
+            cachedTick=2L;
+            cachedSegments=List.of(new GroundSegment(new GroundPoint(1,64,2),
+                new GroundPoint(2,64,2),1,0,0,1,1));
+            SURFACE_Y_BY_COLUMN.put(columnKey(1,2),64.0D);
+            boolean verticalRangeCleared=clearGeometryCacheIfOutsideGroundRenderRange(0L,64.01D);
+            if(!verticalRangeCleared || cachedLevel!=null || cachedTick!=Long.MIN_VALUE
+                || !cachedSegments.isEmpty() || !SURFACE_Y_BY_COLUMN.isEmpty())
+                throw new IllegalStateException("BLACK FREQUENCY vertical ground mesh cache cleanup regression");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_RANGE_CACHE_RELEASE_VERIFIED levelReference=true");
             inactiveCacheCleanupLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_INACTIVE_CACHE_CLEANUP_VERIFIED levelReference=true");
@@ -713,12 +764,13 @@ public final class RiftClientState {
             }
             double dy=player.getY()-cachedAnchorSurfaceY;
             double playerDistanceSquared=horizontalDistanceSquared+dy*dy;
-            if(playerDistanceSquared>64.0D*64.0D) {
+            int sampledSurfaceY=cachedAnchorSurfaceY;
+            if(clearGeometryCacheIfOutsideGroundRenderRange(horizontalDistanceSquared,dy)) {
                 if(!rangeRejectLogged) {
                     rangeRejectLogged=true;
                     com.mojang.logging.LogUtils.getLogger().info(
                         "BLACK_FREQUENCY_GROUND_MESH_RANGE_REJECT playerY={} sampledSurfaceY={} distanceSquared={}",
-                        player.getY(),cachedAnchorSurfaceY,playerDistanceSquared);
+                        player.getY(),sampledSurfaceY,playerDistanceSquared);
                 }
                 return;
             }
