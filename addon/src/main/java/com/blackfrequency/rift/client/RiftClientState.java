@@ -100,8 +100,8 @@ public final class RiftClientState {
         private static final int GROUND_REBUILD_VERTICAL_DELTA=2;
         // Reuse these render-thread-only scratch objects between mesh rebuilds.
         // fastutil clear() retains the backing arrays, avoiding a fresh map allocation every 10 ticks.
-        private static final Long2DoubleOpenHashMap SURFACE_Y_BY_COLUMN=
-            new Long2DoubleOpenHashMap(ARM_COUNT*SEGMENTS_PER_ARM);
+        private static final double SURFACE_CACHE_MISS=Double.POSITIVE_INFINITY;
+        private static final Long2DoubleOpenHashMap SURFACE_Y_BY_COLUMN=createSurfaceCache();
         private static final BlockPos.MutableBlockPos SURFACE_CURSOR=
             new BlockPos.MutableBlockPos(0,0,0);
         private static boolean sampleCacheReuseLogged;
@@ -150,6 +150,14 @@ public final class RiftClientState {
         private static int verticallyCulledSurfaceY;
         private static boolean supportFilterLogged;
         private static boolean sampleCursorReuseLogged;
+
+        private static Long2DoubleOpenHashMap createSurfaceCache() {
+            Long2DoubleOpenHashMap cache=new Long2DoubleOpenHashMap(ARM_COUNT*SEGMENTS_PER_ARM);
+            // Valid samples are finite and unsupported columns are NaN, so +infinity
+            // is an unambiguous missing-key sentinel and lets the hot loop use one lookup.
+            cache.defaultReturnValue(SURFACE_CACHE_MISS);
+            return cache;
+        }
         private static boolean inactiveCacheCleanupLogged;
 
         private record GroundPoint(double x,double y,double z) {}
@@ -320,17 +328,6 @@ public final class RiftClientState {
             verticallyCulledAnchorZ=worldAnchorZ;
             verticallyCulledSurfaceY=anchorSurfaceY;
             return true;
-        }
-
-        // A cached surface estimate is safe for an early vertical cull only while
-        // both its ClientLevel identity and fracture anchor still match this frame.
-        // This avoids rebuilding 48 terrain samples just to discover that the camera
-        // is already outside the mesh's 64-block 3D render envelope.
-        private static boolean hasReusableGroundMeshForCull(
-                net.minecraft.client.multiplayer.ClientLevel level,int worldAnchorX,int worldAnchorZ) {
-            return level!=null && cachedLevel==level && cachedTick!=Long.MIN_VALUE
-                && cachedAnchorX==worldAnchorX && cachedAnchorZ==worldAnchorZ
-                && !cachedSegments.isEmpty();
         }
 
         // Once an out-of-range mesh is released, do not rebuild it every frame.
@@ -513,20 +510,22 @@ public final class RiftClientState {
             if(sampleCacheReuseLogged) return;
             long key=columnKey(-17,29);
             SURFACE_Y_BY_COLUMN.clear();
+            boolean missingSentinel=SURFACE_Y_BY_COLUMN.get(key)==SURFACE_CACHE_MISS;
             SURFACE_Y_BY_COLUMN.put(key,Double.NaN);
-            boolean cachedUnsupported=SURFACE_Y_BY_COLUMN.containsKey(key)
-                && Double.isNaN(SURFACE_Y_BY_COLUMN.get(key));
+            boolean cachedUnsupported=Double.isNaN(SURFACE_Y_BY_COLUMN.get(key));
             SURFACE_Y_BY_COLUMN.clear();
-            boolean cleared=SURFACE_Y_BY_COLUMN.isEmpty();
+            boolean cleared=SURFACE_Y_BY_COLUMN.isEmpty()
+                && SURFACE_Y_BY_COLUMN.get(key)==SURFACE_CACHE_MISS;
             SURFACE_Y_BY_COLUMN.put(key,1.25D);
-            boolean reused=SURFACE_Y_BY_COLUMN.containsKey(key)
-                && Math.abs(SURFACE_Y_BY_COLUMN.get(key)-1.25D)<1.0E-9D;
+            boolean reused=Math.abs(SURFACE_Y_BY_COLUMN.get(key)-1.25D)<1.0E-9D;
             SURFACE_Y_BY_COLUMN.clear();
-            if(!(cachedUnsupported && cleared && reused))
+            if(!(missingSentinel && cachedUnsupported && cleared && reused))
                 throw new IllegalStateException("BLACK FREQUENCY reusable ground sample cache regression");
             sampleCacheReuseLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_CACHE_REUSE_VERIFIED retained=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_CACHE_SENTINEL_VERIFIED miss=positiveInfinity unsupported=nan singleLookup=true");
         }
 
         private static GroundMesh buildSegments(
@@ -569,15 +568,15 @@ public final class RiftClientState {
                     }
                     long key=columnKey(blockX,blockZ);
                     double sampledY;
-                    if(SURFACE_Y_BY_COLUMN.containsKey(key)) {
-                        // containsKey is required: NaN is a cached "unsupported"
-                        // column, not a cache miss that should be sampled again.
-                        sampledY=SURFACE_Y_BY_COLUMN.get(key);
-                        cacheHits++;
-                    } else {
+                    sampledY=SURFACE_Y_BY_COLUMN.get(key);
+                    if(sampledY==SURFACE_CACHE_MISS) {
+                        // Unsupported columns are cached as NaN; only the +infinity
+                        // default-return sentinel means this primitive-map key is absent.
                         sampledY=sampleGroundY(level,blockX,blockZ,referenceY,SURFACE_CURSOR);
                         surfaceSamples++;
                         SURFACE_Y_BY_COLUMN.put(key,sampledY);
+                    } else {
+                        cacheHits++;
                     }
                     GroundPoint current=Double.isFinite(sampledY)
                         ? new GroundPoint(x,sampledY,z)
@@ -764,25 +763,6 @@ public final class RiftClientState {
             if(!verticalRangeCleared || cachedLevel!=null || cachedTick!=Long.MIN_VALUE
                 || !cachedSegments.isEmpty() || !SURFACE_Y_BY_COLUMN.isEmpty())
                 throw new IllegalStateException("BLACK FREQUENCY vertical ground mesh cache cleanup regression");
-            cachedLevel=level;
-            cachedTick=3L;
-            cachedAnchorX=1;
-            cachedAnchorZ=2;
-            cachedAnchorSurfaceY=64;
-            cachedSegments=List.of(new GroundSegment(new GroundPoint(1,64,2),
-                new GroundPoint(2,64,2),1,0,0,1,1));
-            boolean sameLevelAndAnchor=hasReusableGroundMeshForCull(level,1,2);
-            boolean changedAnchorRejected=!hasReusableGroundMeshForCull(level,2,2);
-            boolean missingLevelRejected=!hasReusableGroundMeshForCull(null,1,2);
-            boolean cachedSurfacePreCull=sameLevelAndAnchor
-                && clearGeometryCacheIfOutsideGroundRenderRange(0L,64.01D,1,2,cachedAnchorSurfaceY);
-            if(!sameLevelAndAnchor || !changedAnchorRejected || !missingLevelRejected
-                || !cachedSurfacePreCull || cachedLevel!=null || !cachedSegments.isEmpty()
-                || !verticallyCulled || verticallyCulledSurfaceY!=64)
-                throw new IllegalStateException("BLACK FREQUENCY cached-surface pre-cull regression");
-            clearGeometryCacheIfPresent();
-            com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_MESH_CACHED_SURFACE_PRE_CULL_VERIFIED sameLevel=true sameAnchor=true anchorChangeRejected=true outOfRangeCacheReleased=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_RANGE_CACHE_RELEASE_VERIFIED levelReference=true");
             verticallyCulled=false;
@@ -837,21 +817,6 @@ public final class RiftClientState {
             }
             if(shouldSkipGroundMeshBuildWhileVerticallyCulled(
                     worldAnchorX,worldAnchorZ,cameraHorizontalDistanceSquared,camera.y)) return;
-            if(hasReusableGroundMeshForCull(level,worldAnchorX,worldAnchorZ)
-                && clearGeometryCacheIfOutsideGroundRenderRange(
-                    cameraHorizontalDistanceSquared,camera.y-cachedAnchorSurfaceY,
-                    worldAnchorX,worldAnchorZ,cachedAnchorSurfaceY)) {
-                if(!rangeRejectLogged) {
-                    rangeRejectLogged=true;
-                    com.mojang.logging.LogUtils.getLogger().info(
-                        "BLACK_FREQUENCY_GROUND_MESH_RANGE_REJECT cameraY={} sampledSurfaceY={} distanceSquared={}",
-                        camera.y,cachedAnchorSurfaceY,
-                        cameraHorizontalDistanceSquared
-                            +(camera.y-cachedAnchorSurfaceY)*(camera.y-cachedAnchorSurfaceY));
-                }
-                return;
-            }
-
             long tick=level.getGameTime();
             boolean anchorChanged=level!=cachedLevel || worldAnchorX!=cachedAnchorX || worldAnchorZ!=cachedAnchorZ;
             int surfaceReferenceY=cameraBlockY;
