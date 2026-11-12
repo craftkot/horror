@@ -20,6 +20,12 @@ public final class RiftAtmosphere {
         return Float.isFinite(near) && Float.isFinite(far) && far>0.0F;
     }
 
+    // Preserve some vanilla fog color so cloud silhouettes remain readable,
+    // while shifting the atmosphere toward a deep violet instead of near-black.
+    private static float fogColorBlend(float strength,float pulse) {
+        return Math.min(.82F,finiteUnit(strength)*(.72F+.10F*finiteUnit(pulse)));
+    }
+
     private RiftAtmosphere() {}
 
     // Render events run between simulation ticks. Clamp the partial tick so a
@@ -56,11 +62,21 @@ public final class RiftAtmosphere {
             || !validPlanes || nanNearRejected || nanFarRejected
             || infiniteFarRejected || zeroFarRejected)
             throw new IllegalStateException("BLACK FREQUENCY fog input guard regression");
+        float lowPulseBlend=fogColorBlend(1.0F,0.0F);
+        float highPulseBlend=fogColorBlend(1.0F,1.0F);
+        float invalidStrengthBlend=fogColorBlend(Float.NaN,1.0F);
+        if(Math.abs(lowPulseBlend-.72F)>1.0E-6F
+            || Math.abs(highPulseBlend-.82F)>1.0E-6F
+            || invalidStrengthBlend!=0.0F)
+            throw new IllegalStateException("BLACK FREQUENCY fog cloud contrast regression");
         interpolationVerified=true;
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST FOG_INTERPOLATION_VERIFIED");
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST FOG_INPUT_GUARDS_VERIFIED");
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST FOG_CLOUD_CONTRAST_PROFILE_VERIFIED blendMin={} blendMax={}",
+            lowPulseBlend,highPulseBlend);
     }
 
     // Rift packets can outlive a dimension transfer. Never tint the Nether or End.
@@ -78,10 +94,10 @@ public final class RiftAtmosphere {
         verifyFogInterpolation();
         double time=interpolatedGameTime(Minecraft.getInstance().level.getGameTime(),event.getPartialTick());
         float pulse=(float)(.5D+.5D*Math.sin(time*.035D));
-        float blend=Math.min(.96f,f*(.84f+.11f*pulse));
-        event.setRed(event.getRed()*(1f-blend)+(.023f+.006f*pulse)*blend);
-        event.setGreen(event.getGreen()*(1f-blend)+.008f*blend);
-        event.setBlue(event.getBlue()*(1f-blend)+(.065f+.018f*pulse)*blend);
+        float blend=fogColorBlend(f,pulse);
+        event.setRed(event.getRed()*(1f-blend)+(.065f+.018f*pulse)*blend);
+        event.setGreen(event.getGreen()*(1f-blend)+.014f*blend);
+        event.setBlue(event.getBlue()*(1f-blend)+(.14f+.035f*pulse)*blend);
     }
 
     @SubscribeEvent
