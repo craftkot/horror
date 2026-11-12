@@ -2,9 +2,8 @@ package com.blackfrequency.rift.client;
 
 import com.blackfrequency.rift.RiftGeometry;
 import java.util.ArrayList;
-import java.util.HashMap;
+import it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap;
 import java.util.List;
-import java.util.Map;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
@@ -384,7 +383,10 @@ public final class RiftClientState {
             verifyGroundAnimationProfile();
             verifyGroundSupportProfile();
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
-            Map<Long,Double> surfaceYByColumn=new HashMap<>(ARM_COUNT*SEGMENTS_PER_ARM);
+            // Minecraft already ships fastutil. Primitive keys/values avoid boxing
+            // every sampled column during periodic mesh rebuilds.
+            Long2DoubleOpenHashMap surfaceYByColumn=
+                new Long2DoubleOpenHashMap(ARM_COUNT*SEGMENTS_PER_ARM);
             BlockPos.MutableBlockPos surfaceCursor=new BlockPos.MutableBlockPos(
                 worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);
             int surfaceSamples=0;
@@ -409,13 +411,16 @@ public final class RiftClientState {
                         continue;
                     }
                     long key=columnKey(blockX,blockZ);
-                    Double sampledY=surfaceYByColumn.get(key);
-                    if(sampledY==null) {
+                    double sampledY;
+                    if(surfaceYByColumn.containsKey(key)) {
+                        // containsKey is required: NaN is a cached "unsupported"
+                        // column, not a cache miss that should be sampled again.
+                        sampledY=surfaceYByColumn.get(key);
+                        cacheHits++;
+                    } else {
                         sampledY=sampleGroundY(level,blockX,blockZ,referenceY,surfaceCursor);
                         surfaceSamples++;
                         surfaceYByColumn.put(key,sampledY);
-                    } else {
-                        cacheHits++;
                     }
                     GroundPoint current=Double.isFinite(sampledY)
                         ? new GroundPoint(x,sampledY,z)
@@ -447,12 +452,13 @@ public final class RiftClientState {
                 if(result.size()>armStart) activeArms++;
             }
             if(!sampleCursorReuseLogged) {
-                if(surfaceSamples<=0 || surfaceSamples!=surfaceYByColumn.size())
+                if(surfaceSamples<=0 || surfaceSamples!=surfaceYByColumn.size()
+                    || surfaceSamples+cacheHits!=ARM_COUNT*SEGMENTS_PER_ARM)
                     throw new IllegalStateException("BLACK FREQUENCY ground sample cursor reuse regression");
                 sampleCursorReuseLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_CURSOR_REUSE_VERIFIED sampledColumns={} mutableCursors=1",
-                    surfaceSamples);
+                    "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_CURSOR_REUSE_VERIFIED sampledColumns={} cacheHits={} totalSamples={} mutableCursors=1 primitiveCache=true",
+                    surfaceSamples,cacheHits,surfaceSamples+cacheHits);
             }
             return new GroundMesh(List.copyOf(result),activeArms,surfaceYByColumn.size(),cacheHits,
                 steepStepBreaks);
