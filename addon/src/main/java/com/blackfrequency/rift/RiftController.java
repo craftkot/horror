@@ -790,6 +790,37 @@ public final class RiftController {
             && CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_EXPLOSION_PROTECTED");
     }
 
+    /**
+     * Legacy row-major cursors are persisted as offsets. Reject corrupt values
+     * before incrementing them: Integer.MAX_VALUE would wrap and stall the scan.
+     */
+    private static boolean validLegacyFractureCursor(int cursorX,int cursorZ,int cursorY,
+            int minY,int maxY,boolean surfaceFirstScan) {
+        if(cursorX< -RADIUS || cursorX>RADIUS+1
+            || cursorZ< -RADIUS || cursorZ>RADIUS
+            || (cursorX==RADIUS+1 && cursorZ!= -RADIUS)) return false;
+        if(surfaceFirstScan && cursorY==Integer.MIN_VALUE) return true;
+        return maxY>minY && cursorY>=minY && cursorY<maxY;
+    }
+
+    /**
+     * A damaged legacy cursor must stop new terrain edits rather than wrap through
+     * integer space. Existing snapshots remain intact and can still be restored.
+     */
+    private static boolean quarantineInvalidLegacyFractureCursor(State s,int minY,int maxY) {
+        if(!s.initialized || s.centerOutScan || s.restoring || s.restored || s.finished) return false;
+        if(validLegacyFractureCursor(s.cursorX,s.cursorZ,s.cursorY,minY,maxY,s.surfaceFirstScan))
+            return false;
+        LOGGER.warn("BLACK FREQUENCY: invalid legacy fracture cursor x={}, z={}, y={}; stopping further terrain edits",
+            s.cursorX,s.cursorZ,s.cursorY);
+        s.cursorX=RADIUS+1;
+        s.cursorZ=-RADIUS;
+        s.cursorY=minY;
+        s.finished=true;
+        s.setDirty();
+        return true;
+    }
+
     /** Reject overflowing fracture columns before narrowing coordinates to int. */
     private static boolean validFractureColumn(int anchorX,int anchorZ,int offsetX,int offsetZ) {
         long x=(long)anchorX+offsetX,z=(long)anchorZ+offsetZ;
@@ -930,6 +961,31 @@ public final class RiftController {
         State legacy=State.load(legacyTag);
         if(legacy.surfaceFirstScan || legacy.centerOutScan || legacy.cursorY!=12)
             throw new IllegalStateException("CI legacy fracture cursor migration regression");
+        if(!validLegacyFractureCursor(-RADIUS,-RADIUS,-64,-64,320,false)
+            || !validLegacyFractureCursor(RADIUS,RADIUS,319,-64,320,false)
+            || !validLegacyFractureCursor(RADIUS+1,-RADIUS,-64,-64,320,false)
+            || !validLegacyFractureCursor(0,0,Integer.MIN_VALUE,-64,320,true)
+            || validLegacyFractureCursor(0,Integer.MAX_VALUE,12,-64,320,false)
+            || validLegacyFractureCursor(Integer.MIN_VALUE,0,12,-64,320,false)
+            || validLegacyFractureCursor(0,0,Integer.MAX_VALUE,-64,320,false)
+            || validLegacyFractureCursor(RADIUS+1,0,12,-64,320,false)
+            || validLegacyFractureCursor(0,0,Integer.MIN_VALUE,-64,320,false))
+            throw new IllegalStateException("CI legacy fracture cursor bounds regression");
+        State corruptLegacyCursor=new State();
+        corruptLegacyCursor.initialized=true;
+        corruptLegacyCursor.cursorZ=Integer.MAX_VALUE;
+        if(!quarantineInvalidLegacyFractureCursor(corruptLegacyCursor,-64,320)
+            || !corruptLegacyCursor.finished
+            || corruptLegacyCursor.cursorX!=RADIUS+1
+            || corruptLegacyCursor.cursorZ!=-RADIUS)
+            throw new IllegalStateException("CI corrupt legacy fracture cursor was not quarantined");
+        State corruptLegacyY=new State();
+        corruptLegacyY.initialized=true;
+        corruptLegacyY.cursorY=Integer.MAX_VALUE;
+        if(!quarantineInvalidLegacyFractureCursor(corruptLegacyY,-64,320)
+            || !corruptLegacyY.finished)
+            throw new IllegalStateException("CI corrupt legacy fracture height cursor was not quarantined");
+        LOGGER.info("BLACK_FREQUENCY_TEST CORRUPT_LEGACY_FRACTURE_CURSOR_QUARANTINED");
         State modern=new State();
         modern.surfaceFirstScan=true;
         modern.centerOutScan=true;
@@ -2135,6 +2191,9 @@ public final class RiftController {
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_SCAN_ORDER surface-first center-out");
             s.setDirty();
         }
+        if(quarantineInvalidLegacyFractureCursor(s,level.getMinBuildHeight(),level.getMaxBuildHeight())
+            && CI_TEST)
+            LOGGER.info("BLACK_FREQUENCY_TEST LEGACY_FRACTURE_CURSOR_QUARANTINED");
         if(!s.started) {
             // Do not accelerate world generation before the test player has entered.
             // An empty integrated server may still be creating spawn chunks.
