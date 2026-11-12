@@ -33,6 +33,9 @@ public final class RiftSkyRenderer {
     private static final float SKY_TIME_MULTIPLIER_QUANTUM=0.005F;
     private static final double SKY_MAX_WRAP_PHASE_ERROR=0.002D;
     private static ShaderInstance shader;
+    // A reload invalidates the old shader until the replacement is registered.
+    // Cloud suppression must follow the live shader, not a stale non-null reference.
+    private static boolean shaderReady;
     private static boolean firstVisibleFrameLogged;
     private static boolean firstDepthAwareFrameLogged;
     private static boolean firstDepthStateCleanupLogged;
@@ -48,7 +51,7 @@ public final class RiftSkyRenderer {
 
     // Cloud suppression must never hide the vanilla sky when shader loading fails.
     public static boolean isShaderReady() {
-        return shader!=null;
+        return shaderReady && shader!=null;
     }
 
     private static float wrappedDegrees(float angle) {
@@ -146,13 +149,20 @@ public final class RiftSkyRenderer {
     public static final class Registration {
         @SubscribeEvent
         public static void shaders(RegisterShadersEvent event) throws IOException {
+            // RegisterShadersEvent also runs on resource reload. Do not keep
+            // suppressing vanilla clouds while the previous shader is invalidated.
+            shaderReady=false;
+            shader=null;
             verifyRenderThreshold();
             event.registerShader(
                 new ShaderInstance(event.getResourceProvider(),
                     SKY_RIFT_SHADER_ID, DefaultVertexFormat.POSITION),
                 loaded -> {
                     shader=loaded;
+                    shaderReady=true;
                     com.mojang.logging.LogUtils.getLogger().info("BLACK_FREQUENCY_SHADER_READY sky_rift");
+                    if(CI_TEST_MODE) com.mojang.logging.LogUtils.getLogger().info(
+                        "BLACK_FREQUENCY_TEST SKY_SHADER_READY_STATE_VERIFIED");
                 });
         }
     }

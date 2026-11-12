@@ -45,7 +45,8 @@ opts.update({
 # disposable CI client, so use the regular cursor path for deterministic camera capture.
 options_file=MC/"options.txt"
 option_lines=options_file.read_text(encoding="utf-8",errors="replace").splitlines() if options_file.exists() else []
-for option,value in (("rawMouseInput","false"),("mouseSensitivity",str(MOUSE_SENSITIVITY))):
+for option,value in (("rawMouseInput","false"),("mouseSensitivity",str(MOUSE_SENSITIVITY)),
+                     ("pauseOnLostFocus","false")):
     prefix=option+":"
     for index,line in enumerate(option_lines):
         if line.startswith(prefix):
@@ -54,7 +55,11 @@ for option,value in (("rawMouseInput","false"),("mouseSensitivity",str(MOUSE_SEN
     else:
         option_lines.append(prefix+value)
 options_file.write_text("\n".join(option_lines)+"\n",encoding="utf-8")
+option_values={line.split(":",1)[0]:line.split(":",1)[1] for line in option_lines if ":" in line}
+if option_values.get("pauseOnLostFocus")!="false":
+    raise SystemExit("Could not disable Minecraft pauseOnLostFocus for deterministic integrated-server ticks")
 print("WORLD_CAPTURE: raw mouse input disabled for deterministic X11 camera control",flush=True)
+print("WORLD_CAPTURE: pauseOnLostFocus=false to keep restoration ticking during capture",flush=True)
 # Xvfb pointer acceleration makes inverse relative moves drift away from the
 # server-aimed beacon. Disable acceleration so the same pixel delta is reversible.
 xset_path=shutil.which("xset")
@@ -84,10 +89,17 @@ threading.Thread(target=tee,daemon=True).start()
 
 def capture_test_world():
     """Best-effort UI automation; confirm world entrance from the actual client log."""
+    game_window=None
+    def focus_game():
+        if game_window:
+            subprocess.run(["xdotool","windowactivate","--sync",game_window],
+                           stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
     def key(k):
+        focus_game()
         subprocess.run(["xdotool","key","--clearmodifiers",k],check=False)
     def click(x,y):
         # Hold/release explicitly: some GLFW clients ignore xdotool's fast click.
+        focus_game()
         subprocess.run(["xdotool","mousemove","--sync",str(x),str(y)],check=False)
         time.sleep(0.25)
         subprocess.run(["xdotool","mousedown","1"],check=False)
@@ -97,13 +109,16 @@ def capture_test_world():
     shots=ROOT/"client-smoke-artifacts"
     os.makedirs(shots,exist_ok=True)
     window=subprocess.run(["xdotool","search","--onlyvisible","--name","Minecraft"],capture_output=True,text=True).stdout.splitlines()
-    if window:
-        subprocess.run(["xdotool","windowactivate","--sync",window[-1]],check=False)
-        subprocess.run(["xdotool","windowsize",window[-1],"1280","720"],check=False)
-        subprocess.run(["xdotool","windowmove",window[-1],"0","0"],check=False)
+    game_window=window[-1] if window else None
+    if game_window:
+        focus_game()
+        subprocess.run(["xdotool","windowsize",game_window,"1280","720"],check=False)
+        subprocess.run(["xdotool","windowmove",game_window,"0","0"],check=False)
     def snap(name):
         subprocess.run(["scrot","-a","0,0,1280,720",str(shots/name)],check=False)
+        focus_game()
     def move_camera(delta_y):
+        focus_game()
         # GLFW recenters the hidden cursor while the game has mouse capture.
         # getmouselocation then reports the warp, not the XTest motion delivered
         # to Minecraft. Track successful relative-input requests and undo that
@@ -122,6 +137,7 @@ def capture_test_world():
         print("WORLD_CAPTURE_INPUT: camera pitch mouse delta",delta_y,"moved",moved,flush=True)
         return moved
     def move_camera_horizontal(delta_x):
+        focus_game()
         # Keep yaw motion separate from pitch so both can be restored exactly.
         direction=1 if delta_x>0 else -1
         remaining=abs(delta_x)
@@ -511,6 +527,7 @@ def capture_test_world():
             capture_sky_before_beacon()
             snap("beacon-aim-restored.png")
         # Actual mouse input, not a synthetic server event.
+        focus_game()
         subprocess.run(["xdotool","mousedown","3"],check=False)
         time.sleep(0.25)
         subprocess.run(["xdotool","mouseup","3"],check=False)
@@ -1208,6 +1225,9 @@ def capture_test_world():
                 return False
             if "BLACK_FREQUENCY_TEST SKY_RENDER_THRESHOLD_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: client sky-render threshold regression was not executed",flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST SKY_SHADER_READY_STATE_VERIFIED" not in log_after:
+                print("WORLD_CAPTURE_FAIL: shader readiness lifecycle was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST FOG_INTERPOLATION_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: render-rate fog interpolation self-check was not executed",flush=True)
