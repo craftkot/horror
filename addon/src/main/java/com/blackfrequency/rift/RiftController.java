@@ -51,7 +51,12 @@ public final class RiftController {
     // Replace two portal accents per arm with textured crying-obsidian chips.
     private static final int FISSURE_SHARD_SEGMENT_INTERVAL = 6;
     private static final double FISSURE_SAMPLE_SPACING = .39D;
-    private static final int EDIT_BUDGET = 160;
+    // Production spreads terrain writes across more ticks to reduce synchronous chunk-update bursts.
+    // CI keeps the higher deterministic budget so integration fixtures remain short.
+    private static int fractureEditBudget(boolean ciTest) {
+        return ciTest ? 160 : 96;
+    }
+    private static final int EDIT_BUDGET = fractureEditBudget(CI_TEST);
     private static final int MAX_EDITS = 95000;
     // Only disposable CI worlds can stop after a small fracture to test
     // recovery when fewer than 160 blocks were damaged.
@@ -942,6 +947,10 @@ public final class RiftController {
     }
 
     private static void verifySurfaceFirstScanMigration() {
+        if(fractureEditBudget(false)!=96 || fractureEditBudget(true)!=160
+            || EDIT_BUDGET!=fractureEditBudget(CI_TEST))
+            throw new IllegalStateException("CI fracture edit budget selection regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_EDIT_BUDGET_VERIFIED production=96 ci=160 active={}",EDIT_BUDGET);
         int[][] samples={
             {64,-64,320,63},
             {-64,-64,320,-64},
