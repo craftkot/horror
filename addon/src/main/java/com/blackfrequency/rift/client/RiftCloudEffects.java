@@ -11,6 +11,8 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.joml.Matrix4f;
 
+import java.util.Objects;
+
 /**
  * Keep the Overworld's normal effects, but remove its flat cloud layer while
  * the rift is visible so vanilla cloud polygons cannot hide the sky fracture.
@@ -20,6 +22,8 @@ import org.joml.Matrix4f;
 public final class RiftCloudEffects {
     private static final float MIN_VISIBLE_STRENGTH=0.0001F;
     private static final org.slf4j.Logger LOGGER=com.mojang.logging.LogUtils.getLogger();
+    private static final ResourceLocation OVERWORLD_ID=
+        Objects.requireNonNull(ResourceLocation.tryBuild("minecraft","overworld"));
     private static boolean policyVerified;
     private static boolean suppressionLogged;
 
@@ -28,7 +32,7 @@ public final class RiftCloudEffects {
     @SubscribeEvent
     public static void register(RegisterDimensionSpecialEffectsEvent event) {
         verifySuppressionPolicy();
-        event.register(new ResourceLocation("minecraft","overworld"),new RiftOverworldEffects());
+        event.register(OVERWORLD_ID,new RiftOverworldEffects());
     }
 
     private static boolean shouldSuppressVanillaClouds(float strength,boolean shaderReady) {

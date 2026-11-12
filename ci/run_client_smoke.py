@@ -158,11 +158,11 @@ def capture_test_world():
         degrees_per_pixel=factor*factor*factor*8.0*0.15
         return round((target_pitch-current_pitch)/degrees_per_pixel)
     def camera_delta_for_yaw(current_yaw,target_yaw):
-        # Positive X mouse motion decreases Minecraft yaw; use the shortest
+        # Positive X mouse motion increases Minecraft yaw; use the shortest
         # signed correction across the -180/180 boundary.
         factor=MOUSE_SENSITIVITY*0.6+0.2
         degrees_per_pixel=factor*factor*factor*8.0*0.15
-        delta=(current_yaw-target_yaw+180.0)%360.0-180.0
+        delta=(target_yaw-current_yaw+180.0)%360.0-180.0
         return round(delta/degrees_per_pixel)
 
     def wrapped_angle_delta(current,target):
@@ -249,9 +249,9 @@ def capture_test_world():
         camera_delta_for_pitch(26.46307,0.0)<0,
         camera_delta_for_pitch(0.0,-65.0)<0,
         camera_delta_for_pitch(-65.0,26.46307)>0,
-        camera_delta_for_yaw(0.0,-178.0)>0,
-        camera_delta_for_yaw(-178.0,0.0)<0,
-        camera_delta_for_yaw(179.0,-179.0)<0,
+        camera_delta_for_yaw(0.0,-178.0)<0,
+        camera_delta_for_yaw(-178.0,0.0)>0,
+        camera_delta_for_yaw(179.0,-179.0)>0,
     )
     if not all(camera_direction_cases):
         raise RuntimeError("BLACK FREQUENCY camera correction direction regression")
@@ -534,10 +534,28 @@ def capture_test_world():
         beacon_attempts+=1
         last_beacon_attempt=now
         print("WORLD_CAPTURE_INPUT: player right-click attempt",beacon_attempts,flush=True)
+        # The old capture raced the integrated server and often saved the prompt
+        # frame before the real interaction packet reached the server. Wait briefly
+        # for accepted activation and its action-bar response, but keep the sparse
+        # restoration window bounded.
+        interaction_deadline=time.monotonic()+3.0
+        interaction_confirmed=False
+        while time.monotonic()<interaction_deadline and p.poll() is None:
+            interaction_logs=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+            if ("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in interaction_logs
+                    and "BLACK_FREQUENCY_TEST BEACON_START_ACTIONBAR_ONLY" in interaction_logs
+                    and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in interaction_logs):
+                interaction_confirmed=True
+                time.sleep(0.35)
+                break
+            time.sleep(0.1)
+        if interaction_confirmed:
+            print("WORLD_CAPTURE: physical beacon activation confirmed before screenshot",flush=True)
+        else:
+            print("WORLD_CAPTURE_FAIL: physical beacon activation was not logged before screenshot",flush=True)
         snap("beacon-after-right-click.png")
-        # The following loop still requires the server's real interaction marker.
-        # Sky capture is already complete; do not spend the short recovery window
-        # waiting for a second camera pass.
+        # The final world check still independently requires the server's real
+        # interaction marker; the screenshot wait is not a substitute for it.
     time.sleep(2)
     print("WORLD_CAPTURE_INPUT: active window",
         subprocess.run(["xdotool","getactivewindow","getwindowname"],
@@ -711,6 +729,21 @@ def capture_test_world():
                 moved_pitch=move_camera(pitch_delta)
                 restored=True
                 try:
+                    # Do not trust requested mouse deltas: verify the camera that
+                    # Minecraft actually rendered before accepting the fissure frame.
+                    actual_orientation=wait_for_camera_orientation(
+                        target_yaw,target_pitch,tolerance=5.0,timeout=3.0)
+                    if (actual_orientation is None
+                            or abs(wrapped_angle_delta(actual_orientation[0],target_yaw))>5.0
+                            or abs(actual_orientation[1]-target_pitch)>5.0):
+                        terrain_capture_failed=True
+                        print("WORLD_CAPTURE_FAIL: client camera did not reach the fissure target",
+                              "target",round(target_yaw,2),round(target_pitch,2),
+                              "actual",actual_orientation,flush=True)
+                        return
+                    print("WORLD_CAPTURE: fissure camera orientation verified",
+                          "target",round(target_yaw,2),round(target_pitch,2),
+                          "actual",tuple(round(v,2) for v in actual_orientation),flush=True)
                     # Narrative titles last up to six seconds. Let them clear while
                     # the server keeps emitting the fissure, then capture the actual view.
                     time.sleep(6.5)
@@ -1127,6 +1160,13 @@ def capture_test_world():
                 return False
             if "BLACK_FREQUENCY_GROUND_MESH_PARTIAL_TICK_GUARD_VERIFIED finiteClamped=true nonFiniteFallback=zero" not in log_after:
                 print("WORLD_CAPTURE_FAIL: ground fissure animation did not verify finite partial-tick handling",flush=True)
+                return False
+            cloud_source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftCloudEffects.java"
+            cloud_source_text=cloud_source_path.read_text(encoding="utf-8",errors="replace")
+            if ("ResourceLocation.tryBuild(\"minecraft\",\"overworld\")" not in cloud_source_text
+                    or "event.register(OVERWORLD_ID,new RiftOverworldEffects());" not in cloud_source_text
+                    or "new ResourceLocation(\"minecraft\",\"overworld\")" in cloud_source_text):
+                print("WORLD_CAPTURE_FAIL: Overworld effects registration still uses the deprecated ResourceLocation constructor",flush=True)
                 return False
             source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
             source_text=source_path.read_text(encoding="utf-8",errors="replace")
