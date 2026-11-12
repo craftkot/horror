@@ -20,8 +20,8 @@ public final class RiftAtmosphere {
         return Float.isFinite(near) && Float.isFinite(far) && far>0.0F;
     }
 
-    // Preserve some vanilla fog color so cloud silhouettes remain readable,
-    // while shifting the atmosphere toward a deep violet instead of near-black.
+    // Preserve some vanilla fog color for distant terrain. Cloud geometry is
+    // controlled separately; this event only changes the fog color.
     private static float fogColorBlend(float strength,float pulse) {
         return Math.min(.82F,finiteUnit(strength)*(.72F+.10F*finiteUnit(pulse)));
     }
@@ -75,7 +75,7 @@ public final class RiftAtmosphere {
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST FOG_INPUT_GUARDS_VERIFIED");
         com.mojang.logging.LogUtils.getLogger().info(
-            "BLACK_FREQUENCY_TEST FOG_CLOUD_CONTRAST_PROFILE_VERIFIED blendMin={} blendMax={}",
+            "BLACK_FREQUENCY_TEST FOG_COLOR_BLEND_PROFILE_VERIFIED blendMin={} blendMax={}",
             lowPulseBlend,highPulseBlend);
     }
 
