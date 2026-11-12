@@ -951,7 +951,7 @@ def capture_test_world():
                 return False
             rebuild_source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
             rebuild_source=rebuild_source_path.read_text(encoding="utf-8",errors="replace")
-            rebuild_match=re.search(r"REBUILD_INTERVAL\\s*=\\s*(\\d+)L",rebuild_source)
+            rebuild_match=re.search(r"REBUILD_INTERVAL\s*=\s*(\d+)L",rebuild_source)
             if not rebuild_match:
                 print("WORLD_CAPTURE_FAIL: could not read ground mesh rebuild interval from source",flush=True)
                 return False
