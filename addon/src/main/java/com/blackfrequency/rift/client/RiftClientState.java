@@ -322,6 +322,17 @@ public final class RiftClientState {
             return true;
         }
 
+        // A cached surface estimate is safe for an early vertical cull only while
+        // both its ClientLevel identity and fracture anchor still match this frame.
+        // This avoids rebuilding 48 terrain samples just to discover that the camera
+        // is already outside the mesh's 64-block 3D render envelope.
+        private static boolean hasReusableGroundMeshForCull(
+                net.minecraft.client.multiplayer.ClientLevel level,int worldAnchorX,int worldAnchorZ) {
+            return level!=null && cachedLevel==level && cachedTick!=Long.MIN_VALUE
+                && cachedAnchorX==worldAnchorX && cachedAnchorZ==worldAnchorZ
+                && !cachedSegments.isEmpty();
+        }
+
         // Once an out-of-range mesh is released, do not rebuild it every frame.
         // Resume only when the camera returns to the 3D envelope or the anchor changes.
         private static boolean shouldSkipGroundMeshBuildWhileVerticallyCulled(
@@ -753,6 +764,25 @@ public final class RiftClientState {
             if(!verticalRangeCleared || cachedLevel!=null || cachedTick!=Long.MIN_VALUE
                 || !cachedSegments.isEmpty() || !SURFACE_Y_BY_COLUMN.isEmpty())
                 throw new IllegalStateException("BLACK FREQUENCY vertical ground mesh cache cleanup regression");
+            cachedLevel=level;
+            cachedTick=3L;
+            cachedAnchorX=1;
+            cachedAnchorZ=2;
+            cachedAnchorSurfaceY=64;
+            cachedSegments=List.of(new GroundSegment(new GroundPoint(1,64,2),
+                new GroundPoint(2,64,2),1,0,0,1,1));
+            boolean sameLevelAndAnchor=hasReusableGroundMeshForCull(level,1,2);
+            boolean changedAnchorRejected=!hasReusableGroundMeshForCull(level,2,2);
+            boolean missingLevelRejected=!hasReusableGroundMeshForCull(null,1,2);
+            boolean cachedSurfacePreCull=sameLevelAndAnchor
+                && clearGeometryCacheIfOutsideGroundRenderRange(0L,64.01D,1,2,cachedAnchorSurfaceY);
+            if(!sameLevelAndAnchor || !changedAnchorRejected || !missingLevelRejected
+                || !cachedSurfacePreCull || cachedLevel!=null || !cachedSegments.isEmpty()
+                || !verticallyCulled || verticallyCulledSurfaceY!=64)
+                throw new IllegalStateException("BLACK FREQUENCY cached-surface pre-cull regression");
+            clearGeometryCacheIfPresent();
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_CACHED_SURFACE_PRE_CULL_VERIFIED sameLevel=true sameAnchor=true anchorChangeRejected=true outOfRangeCacheReleased=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_RANGE_CACHE_RELEASE_VERIFIED levelReference=true");
             verticallyCulled=false;
@@ -807,6 +837,20 @@ public final class RiftClientState {
             }
             if(shouldSkipGroundMeshBuildWhileVerticallyCulled(
                     worldAnchorX,worldAnchorZ,cameraHorizontalDistanceSquared,camera.y)) return;
+            if(hasReusableGroundMeshForCull(level,worldAnchorX,worldAnchorZ)
+                && clearGeometryCacheIfOutsideGroundRenderRange(
+                    cameraHorizontalDistanceSquared,camera.y-cachedAnchorSurfaceY,
+                    worldAnchorX,worldAnchorZ,cachedAnchorSurfaceY)) {
+                if(!rangeRejectLogged) {
+                    rangeRejectLogged=true;
+                    com.mojang.logging.LogUtils.getLogger().info(
+                        "BLACK_FREQUENCY_GROUND_MESH_RANGE_REJECT cameraY={} sampledSurfaceY={} distanceSquared={}",
+                        camera.y,cachedAnchorSurfaceY,
+                        cameraHorizontalDistanceSquared
+                            +(camera.y-cachedAnchorSurfaceY)*(camera.y-cachedAnchorSurfaceY));
+                }
+                return;
+            }
 
             long tick=level.getGameTime();
             boolean anchorChanged=level!=cachedLevel || worldAnchorX!=cachedAnchorX || worldAnchorZ!=cachedAnchorZ;
