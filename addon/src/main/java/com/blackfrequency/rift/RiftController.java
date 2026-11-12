@@ -1786,10 +1786,16 @@ public final class RiftController {
         // interaction being consumed by the rift. Close only the activated
         // beacon's nearby menu; do not interrupt unrelated inventories.
         BlockPos activatedBeacon=BlockPos.of(s.beaconPos);
+        // Resolve the physical beacon once per restoration tick. All cosmetic
+        // effects below share this loaded-only result; none may force a chunk load.
+        boolean beaconPresent=level.hasChunkAt(activatedBeacon)
+            && level.getBlockState(activatedBeacon).is(Blocks.BEACON);
+        double beaconX=activatedBeacon.getX()+0.5D;
+        double beaconY=activatedBeacon.getY()+0.5D;
+        double beaconZ=activatedBeacon.getZ()+0.5D;
         // Do not close an unrelated beacon menu after the activated beacon
         // has been broken or its chunk unloaded. Neither check loads chunks.
-        if(level.hasChunkAt(activatedBeacon)
-            && level.getBlockState(activatedBeacon).is(Blocks.BEACON)) {
+        if(beaconPresent) {
             for(var player:level.players()) {
                 if(player.containerMenu instanceof net.minecraft.world.inventory.BeaconMenu
                     && player.blockPosition().distSqr(activatedBeacon)<144d) {
@@ -1799,17 +1805,31 @@ public final class RiftController {
             }
         }
         s.restoreTicks=nextNonNegativeTick(s.restoreTicks);
+        if(CI_TEST && s.restoreTicks==1)
+            LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_BEACON_PRESENCE_CACHED present={}",beaconPresent);
+        // The 4-tick ring and 20-tick stabilization pulse use one player scan.
+        // Preserve their distinct vertical centers while avoiding a second stream
+        // traversal on every fifth ring update.
+        boolean hasRingViewer=false;
+        boolean hasStabilizationViewer=false;
+        if(beaconPresent && s.restoreTicks%4==0) {
+            boolean stabilizationDue=s.restoreTicks%20==0;
+            for(var player:level.players()) {
+                if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
+                if(!hasRingViewer
+                    && player.distanceToSqr(beaconX,beaconY,beaconZ)<=128.0D*128.0D)
+                    hasRingViewer=true;
+                if(stabilizationDue && !hasStabilizationViewer
+                    && player.distanceToSqr(beaconX,beaconY+0.6D,beaconZ)<=128.0D*128.0D)
+                    hasStabilizationViewer=true;
+                if(hasRingViewer && (!stabilizationDue || hasStabilizationViewer)) break;
+            }
+        }
         // A visible, bounded stabilization pulse at the activated physical beacon.
         // Only query an already loaded chunk; never resurrect a removed beacon
         // or force chunk generation during recovery.
-        if(s.restoreTicks%20==0 && level.hasChunkAt(activatedBeacon)
-            && level.getBlockState(activatedBeacon).is(Blocks.BEACON)
-            && level.players().stream().anyMatch(player -> player.isAlive()
-                && !player.isRemoved() && !player.isSpectator()
-                && player.distanceToSqr(activatedBeacon.getX()+0.5D,
-                    activatedBeacon.getY()+1.1D,activatedBeacon.getZ()+0.5D)<=128.0D*128.0D)) {
-            double cx=activatedBeacon.getX()+0.5D, cy=activatedBeacon.getY()+1.1D;
-            double cz=activatedBeacon.getZ()+0.5D;
+        if(s.restoreTicks%20==0 && hasStabilizationViewer) {
+            double cx=beaconX, cy=beaconY+0.6D, cz=beaconZ;
             // Contract the recovery vortex as the saved terrain is restored.
             // Clamp corrupt/out-of-range indices so the effect stays bounded.
             double contraction=recoveryVortexContraction(s.restoreIndex,s.snapshots.size());
@@ -1844,7 +1864,7 @@ public final class RiftController {
                     1,0,0,0,0);
             }
             if(CI_TEST && s.restoreTicks==20)
-                LOGGER.info("BLACK_FREQUENCY_TEST BEACON_STABILIZATION_PULSE");
+                LOGGER.info("BLACK_FREQUENCY_TEST BEACON_STABILIZATION_PULSE viewerScan=shared");
         }
         if(CI_TEST && s.restoreTicks==1) verifyBeaconInteractionGuard();
         // Exercise boundary and overflow-safe checks in the disposable
@@ -2038,15 +2058,9 @@ public final class RiftController {
         }
         // Avoid phantom rift rings after a beacon is removed, and never
         // query or generate an unloaded chunk just for cosmetic particles.
-        if(s.restoreTicks%4==0 && level.hasChunkAt(activatedBeacon)
-            && level.getBlockState(activatedBeacon).is(Blocks.BEACON)
-            // Skip cosmetic work when nobody can see the recovery beacon.
-            // This reads only player positions and never requests a chunk.
-            && level.players().stream().anyMatch(player -> player.isAlive()
-                && !player.isRemoved() && !player.isSpectator()
-                && player.distanceToSqr(activatedBeacon.getX()+0.5D,
-                    activatedBeacon.getY()+0.5D,activatedBeacon.getZ()+0.5D)<=128.0D*128.0D)) {
-            BlockPos beacon=activatedBeacon;
+        // Skip cosmetic work when nobody can see the recovery beacon.
+        // The shared viewer scan reads only player positions and never requests a chunk.
+        if(s.restoreTicks%4==0 && hasRingViewer) {
             double angle=s.restoreTicks*.17;
             // A slow breathing ring makes recovery visibly alive without
             // adding particles, world edits, or forced chunk loads.
@@ -2058,8 +2072,8 @@ public final class RiftController {
                 // Counter-rotate the two alternating strands in the horizontal plane too.
                 // Their vertical phases already travel in opposite directions.
                 double theta=angle*(k%2==0 ? 1.0D : -1.0D)+k*Math.PI*.25;
-                double x=beacon.getX()+.5+Math.cos(theta)*radius;
-                double z=beacon.getZ()+.5+Math.sin(theta)*radius;
+                double x=beaconX+Math.cos(theta)*radius;
+                double z=beaconZ+Math.sin(theta)*radius;
                 // Stagger each wisp vertically into a rotating double helix.
                 // Keep the same 16 particles per pulse; avoid the old synchronized
                 // height reset that made the entire ring jump every 80 ticks.
@@ -2067,7 +2081,7 @@ public final class RiftController {
                 // shared phase made both wisps climb and descend in lockstep.
                 double phase=(s.restoreTicks*.045D*(k%2==0 ? 1.0D : -1.0D)
                     + k*Math.PI*.25D)%(Math.PI*2.0D);
-                double y=beacon.getY()+.5D+1.1D*(1.0D+Math.sin(phase));
+                double y=beaconY+1.1D*(1.0D+Math.sin(phase));
                 // Keep both recovery strands violet; WITCH introduces green flecks.
                 var particle=(k&1)==0 ? ParticleTypes.REVERSE_PORTAL : ParticleTypes.DRAGON_BREATH;
                 level.sendParticles(particle,x,y,z,2,.12,.15,.12,.025);
@@ -2075,8 +2089,7 @@ public final class RiftController {
         }
         // A destroyed or unloaded beacon must not leave a phantom recovery glow.
         // hasChunkAt only inspects loaded chunks; it never forces chunk generation.
-        if(s.restoreTicks%10==0 && level.hasChunkAt(activatedBeacon)
-            && level.getBlockState(activatedBeacon).is(Blocks.BEACON)) {
+        if(s.restoreTicks%10==0 && beaconPresent) {
             // The recovery glow belongs to the fracture, not every player in
             // the dimension. Avoid particle traffic for distant or inactive players.
             for(var player:level.players()) {

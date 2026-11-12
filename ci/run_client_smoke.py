@@ -1253,7 +1253,14 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: vanilla clouds were not restored after physical beacon activation",
                       flush=True)
                 return False
-            print("WORLD_CAPTURE: vanilla clouds restored after beacon activation",flush=True)
+            if "BLACK_FREQUENCY_TEST RESTORE_BEACON_PRESENCE_CACHED present=true" not in log_after:
+                print("WORLD_CAPTURE_FAIL: restoration did not confirm the loaded physical beacon",flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST BEACON_STABILIZATION_PULSE viewerScan=shared" not in log_after:
+                print("WORLD_CAPTURE_FAIL: shared nearby-player scan did not emit the beacon stabilization pulse",
+                      flush=True)
+                return False
+            print("WORLD_CAPTURE: cloud fallback and shared physical-beacon viewer scan confirmed",flush=True)
             cleanup_marker="BLACK_FREQUENCY_TEST SKY_DEPTH_STATE_CLEANUP_VERIFIED"
             cleanup_count=log_after.count(cleanup_marker)
             if cleanup_count!=1:
