@@ -1209,6 +1209,9 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST SKY_RENDER_THRESHOLD_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: client sky-render threshold regression was not executed",flush=True)
                 return False
+            if "BLACK_FREQUENCY_TEST FOG_INTERPOLATION_VERIFIED" not in log_after:
+                print("WORLD_CAPTURE_FAIL: render-rate fog interpolation self-check was not executed",flush=True)
+                return False
             cleanup_marker="BLACK_FREQUENCY_TEST SKY_DEPTH_STATE_CLEANUP_VERIFIED"
             cleanup_count=log_after.count(cleanup_marker)
             if cleanup_count!=1:
