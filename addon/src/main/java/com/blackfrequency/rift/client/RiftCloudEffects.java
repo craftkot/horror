@@ -31,21 +31,23 @@ public final class RiftCloudEffects {
         event.register(new ResourceLocation("minecraft","overworld"),new RiftOverworldEffects());
     }
 
-    private static boolean shouldSuppressVanillaClouds(float strength) {
-        return Float.isFinite(strength) && strength>MIN_VISIBLE_STRENGTH;
+    private static boolean shouldSuppressVanillaClouds(float strength,boolean shaderReady) {
+        return shaderReady && Float.isFinite(strength) && strength>MIN_VISIBLE_STRENGTH;
     }
 
     private static void verifySuppressionPolicy() {
         if(policyVerified) return;
-        if(shouldSuppressVanillaClouds(0.0F)
-            || shouldSuppressVanillaClouds(MIN_VISIBLE_STRENGTH)
-            || !shouldSuppressVanillaClouds(MIN_VISIBLE_STRENGTH+0.00001F)
-            || shouldSuppressVanillaClouds(Float.NaN)
-            || shouldSuppressVanillaClouds(Float.POSITIVE_INFINITY)
-            || shouldSuppressVanillaClouds(Float.NEGATIVE_INFINITY))
+        if(shouldSuppressVanillaClouds(0.0F,true)
+            || shouldSuppressVanillaClouds(MIN_VISIBLE_STRENGTH,true)
+            || !shouldSuppressVanillaClouds(MIN_VISIBLE_STRENGTH+0.00001F,true)
+            || shouldSuppressVanillaClouds(MIN_VISIBLE_STRENGTH+0.00001F,false)
+            || shouldSuppressVanillaClouds(Float.NaN,true)
+            || shouldSuppressVanillaClouds(Float.POSITIVE_INFINITY,true)
+            || shouldSuppressVanillaClouds(Float.NEGATIVE_INFINITY,true))
             throw new IllegalStateException("BLACK FREQUENCY vanilla cloud suppression regression");
         policyVerified=true;
         LOGGER.info("BLACK_FREQUENCY_TEST VANILLA_CLOUD_SUPPRESSION_POLICY_VERIFIED");
+        LOGGER.info("BLACK_FREQUENCY_TEST VANILLA_CLOUD_SHADER_FALLBACK_VERIFIED");
     }
 
     private static final class RiftOverworldEffects extends DimensionSpecialEffects.OverworldEffects {
@@ -54,7 +56,8 @@ public final class RiftCloudEffects {
                 double camX,double camY,double camZ,Matrix4f projectionMatrix) {
             if(!level.dimension().equals(Level.OVERWORLD)) return false;
             float strength=RiftClientState.visibleStrength();
-            if(!shouldSuppressVanillaClouds(strength)) {
+            boolean shaderReady=RiftSkyRenderer.isShaderReady();
+            if(!shouldSuppressVanillaClouds(strength,shaderReady)) {
                 if(suppressionLogged) {
                     suppressionLogged=false;
                     LOGGER.info("BLACK_FREQUENCY_CLOUDS_RESTORED");

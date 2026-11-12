@@ -46,6 +46,11 @@ public final class RiftSkyRenderer {
         return Float.isFinite(strength) && strength>MIN_VISIBLE_STRENGTH;
     }
 
+    // Cloud suppression must never hide the vanilla sky when shader loading fails.
+    public static boolean isShaderReady() {
+        return shader!=null;
+    }
+
     private static float wrappedDegrees(float angle) {
         float wrapped=angle%360.0F;
         if(wrapped>=180.0F) wrapped-=360.0F;
