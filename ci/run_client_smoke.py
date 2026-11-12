@@ -1096,7 +1096,7 @@ def capture_test_world():
                       "extent",density_extent,flush=True)
                 return False
             ground_sampling = re.search(
-                r"BLACK_FREQUENCY_GROUND_MESH_SAMPLING_PROFILE_VERIFIED samples=(\\d+) spacing=([0-9.]+) extent=([0-9.]+) radius=(\\d+)",
+                r"BLACK_FREQUENCY_GROUND_MESH_SAMPLING_PROFILE_VERIFIED samples=(\d+) spacing=([0-9.]+) extent=([0-9.]+) radius=(\d+)",
                 log_after)
             if not ground_sampling:
                 print("WORLD_CAPTURE_FAIL: client ground mesh sampling profile was not executed",flush=True)
