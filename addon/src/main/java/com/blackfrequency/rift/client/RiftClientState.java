@@ -795,7 +795,7 @@ public final class RiftClientState {
             int cameraBlockZ=(int)Math.floor(camera.z);
             long cameraHorizontalDistanceSquared=horizontalDistanceSquared(
                 cameraBlockX,cameraBlockZ,worldAnchorX,worldAnchorZ);
-            if(horizontalDistanceSquared>64L*64L) {
+            if(cameraHorizontalDistanceSquared>64L*64L) {
                 clearGeometryCacheIfPresent();
                 return;
             }
