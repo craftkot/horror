@@ -966,6 +966,13 @@ def capture_test_world():
             if "BLACK_FREQUENCY_GROUND_MESH_SURFACE_HEIGHT_VERIFIED" not in final_log:
                 print("WORLD_CAPTURE_FAIL: collision-based ground surface self-check was not executed",flush=True)
                 return False
+            if "BLACK_FREQUENCY_TEST GROUND_MESH_INACTIVE_CACHE_CLEANUP_VERIFIED levelReference=true" not in final_log:
+                print("WORLD_CAPTURE_FAIL: inactive ground mesh cache did not prove ClientLevel reference release",flush=True)
+                return False
+            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=5.6 coreScale=0.82 edgeHalfWidth=0.026"
+            if visual_profile_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: widened ground fissure visual profile self-check was not executed",flush=True)
+                return False
             rebuild_source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
             rebuild_source=rebuild_source_path.read_text(encoding="utf-8",errors="replace")
             rebuild_match=re.search(r"REBUILD_INTERVAL\s*=\s*(\d+)L",rebuild_source)
