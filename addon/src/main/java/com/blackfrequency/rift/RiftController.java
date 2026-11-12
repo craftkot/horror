@@ -44,13 +44,13 @@ public final class RiftController {
         ? Math.max(1L, Math.min(2400L, Long.getLong("blackfrequency.ciTickStep", 2400L))) : 1L;
     private static final int RADIUS = 48;
     private static final String NATURAL_BEACON_ID_TAG = "blackfrequency:natural_recovery_beacon";
-    // Double fissure sampling resolution while preserving 48 dragon-breath motes per pass.
+    // Extend the four-arm ground scar without increasing its 56-particle budget.
     private static final int FISSURE_ARM_COUNT = 4;
     private static final int FISSURE_SEGMENTS_PER_ARM = 12;
     private static final int FISSURE_MOTES_PER_SAMPLE = 1;
     // Replace two portal accents per arm with textured crying-obsidian chips.
     private static final int FISSURE_SHARD_SEGMENT_INTERVAL = 6;
-    private static final double FISSURE_SAMPLE_SPACING = .39D;
+    private static final double FISSURE_SAMPLE_SPACING = .45D;
     // Production spreads terrain writes across more ticks to reduce synchronous chunk-update bursts.
     // CI keeps the higher deterministic budget so integration fixtures remain short.
     private static int fractureEditBudget(boolean ciTest) {
@@ -897,7 +897,7 @@ public final class RiftController {
         if(FISSURE_ARM_COUNT!=4 || samples!=48 || samples*FISSURE_MOTES_PER_SAMPLE!=48
             || FISSURE_MOTES_PER_SAMPLE<1 || !Double.isFinite(FISSURE_SAMPLE_SPACING)
             || FISSURE_SAMPLE_SPACING<=0.0D || FISSURE_SAMPLE_SPACING>0.5D
-            || Math.abs(extent-4.68D)>1.0E-9D || extent>=RADIUS
+            || Math.abs(extent-5.40D)>1.0E-9D || extent>=RADIUS
             || FISSURE_SHARD_SEGMENT_INTERVAL<=0
             || FISSURE_SEGMENTS_PER_ARM%FISSURE_SHARD_SEGMENT_INTERVAL!=0
             || FISSURE_SEGMENTS_PER_ARM/FISSURE_SHARD_SEGMENT_INTERVAL!=2)
