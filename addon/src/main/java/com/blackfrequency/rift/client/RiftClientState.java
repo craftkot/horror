@@ -401,6 +401,12 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_MESH_CAMERA_POSITION_GUARD_VERIFIED nonFiniteRejected=true worldLimitRejected=true");
         }
 
+        private static double boundedRenderPartialTick(double partialTick) {
+            return Double.isFinite(partialTick)
+                ? Math.max(0.0D,Math.min(1.0D,partialTick))
+                : 0.0D;
+        }
+
         private static double boundedCorePulse(double wave) {
             double boundedWave=Double.isFinite(wave) ? Math.max(0.0D,Math.min(1.0D,wave)) : 0.0D;
             return GROUND_CORE_PULSE_BASE+GROUND_CORE_PULSE_RANGE*boundedWave;
@@ -412,16 +418,29 @@ public final class RiftClientState {
             double midpoint=boundedCorePulse(.5D);
             double maximum=boundedCorePulse(1.0D);
             double invalid=boundedCorePulse(Double.NaN);
+            double tickStart=boundedRenderPartialTick(0.0D);
+            double tickEnd=boundedRenderPartialTick(1.0D);
+            double tickBelow=boundedRenderPartialTick(-0.5D);
+            double tickAbove=boundedRenderPartialTick(1.5D);
+            double tickNaN=boundedRenderPartialTick(Double.NaN);
+            double tickPositiveInfinity=boundedRenderPartialTick(Double.POSITIVE_INFINITY);
+            double tickNegativeInfinity=boundedRenderPartialTick(Double.NEGATIVE_INFINITY);
             if(Math.abs(minimum-.10D)>1.0E-9D
                 || Math.abs(midpoint-.21D)>1.0E-9D
                 || Math.abs(maximum-.32D)>1.0E-9D
                 || Math.abs(invalid-minimum)>1.0E-9D
-                || minimum<0.0D || maximum>1.0D)
+                || minimum<0.0D || maximum>1.0D
+                || tickStart!=0.0D || tickEnd!=1.0D
+                || tickBelow!=0.0D || tickAbove!=1.0D
+                || tickNaN!=0.0D || tickPositiveInfinity!=0.0D
+                || tickNegativeInfinity!=0.0D)
                 throw new IllegalStateException("BLACK FREQUENCY ground core pulse regression");
             animationProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_CORE_PULSE_VERIFIED min={} midpoint={} max={} widthScale={}",
                 minimum,midpoint,maximum,.16D);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_PARTIAL_TICK_GUARD_VERIFIED finiteClamped=true nonFiniteFallback=zero");
         }
 
         private static void verifyGroundSupportProfile() {
@@ -890,7 +909,7 @@ public final class RiftClientState {
             RenderSystem.setShaderColor(1.0F,1.0F,1.0F,1.0F);
             try {
                 builder.begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.POSITION_COLOR);
-                double time=tick+event.getPartialTick();
+                double time=(double)tick+boundedRenderPartialTick(event.getPartialTick());
                 float boundedStrength=Math.min(1.0F,strength);
                 for(GroundSegment segment:cachedSegments) {
                     double wave=.5D+.5D*Math.sin(time*.14D+segment.phase());
