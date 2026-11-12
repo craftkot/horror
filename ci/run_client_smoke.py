@@ -1152,8 +1152,10 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST SKY_RENDER_THRESHOLD_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: client sky-render threshold regression was not executed",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST SKY_DEPTH_STATE_CLEANUP_VERIFIED" not in log_after:
-                print("WORLD_CAPTURE_FAIL: sky renderer did not restore the post-level depth state",flush=True)
+            cleanup_marker="BLACK_FREQUENCY_TEST SKY_DEPTH_STATE_CLEANUP_VERIFIED"
+            cleanup_count=log_after.count(cleanup_marker)
+            if cleanup_count!=1:
+                print(f"WORLD_CAPTURE_FAIL: expected one depth-state cleanup marker, observed {cleanup_count}",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SKY_DEPTH_AWARE_DRAW_SUBMITTED stage=after_level" not in log_after:
                 print("WORLD_CAPTURE_FAIL: depth-aware final sky pass was not observed",flush=True)

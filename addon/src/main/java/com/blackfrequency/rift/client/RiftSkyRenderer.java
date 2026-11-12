@@ -35,6 +35,7 @@ public final class RiftSkyRenderer {
     private static ShaderInstance shader;
     private static boolean firstVisibleFrameLogged;
     private static boolean firstDepthAwareFrameLogged;
+    private static boolean firstDepthStateCleanupLogged;
     private static final boolean CI_TEST_MODE=Boolean.getBoolean("blackfrequency.ciTestMode");
     private static float lastCiCameraYaw=Float.NaN;
     private static float lastCiCameraPitch=Float.NaN;
@@ -217,12 +218,16 @@ public final class RiftSkyRenderer {
                 RenderSystem.enableDepthTest();
             }
             if(CI_TEST_MODE && depthAwareDrawSubmitted) {
+                // Keep checking every CI frame, but emit the success marker only once.
                 if(!GL11.glIsEnabled(GL11.GL_DEPTH_TEST)
                     || GL11.glGetInteger(GL11.GL_DEPTH_FUNC)!=GL11.GL_LEQUAL
                     || !GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK))
                     throw new IllegalStateException("BLACK FREQUENCY sky depth state cleanup regression");
-                com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_TEST SKY_DEPTH_STATE_CLEANUP_VERIFIED");
+                if(!firstDepthStateCleanupLogged) {
+                    firstDepthStateCleanupLogged=true;
+                    com.mojang.logging.LogUtils.getLogger().info(
+                        "BLACK_FREQUENCY_TEST SKY_DEPTH_STATE_CLEANUP_VERIFIED");
+                }
             }
             // The smoke-test marker means the draw call returned and the depth
             // contract was restored; entering AFTER_LEVEL alone is not a successful pass.
