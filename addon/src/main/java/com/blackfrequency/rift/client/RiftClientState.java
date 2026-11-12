@@ -286,6 +286,19 @@ public final class RiftClientState {
                 GROUND_REBUILD_VERTICAL_DELTA,REBUILD_INTERVAL,sixTickStable && beforeInterval && interval);
         }
 
+        private static boolean isSafeCameraPosition(Vec3 camera) {
+            return camera!=null
+                && Double.isFinite(camera.x) && Math.abs(camera.x)<=30_000_000.0D
+                && Double.isFinite(camera.y) && Math.abs(camera.y)<=30_000_000.0D
+                && Double.isFinite(camera.z) && Math.abs(camera.z)<=30_000_000.0D;
+        }
+
+        private static long horizontalDistanceSquared(int blockX,int blockZ,int worldAnchorX,int worldAnchorZ) {
+            long dx=(long)blockX-worldAnchorX;
+            long dz=(long)blockZ-worldAnchorZ;
+            return dx*dx+dz*dz;
+        }
+
         // The ground mesh is useful only inside the same 64-block 3D envelope
         // used by its visual culling. Reject non-finite deltas instead of letting
         // NaN bypass the comparison and keep an invisible mesh pinned in memory.
@@ -312,10 +325,10 @@ public final class RiftClientState {
         // Once an out-of-range mesh is released, do not rebuild it every frame.
         // Resume only when the camera returns to the 3D envelope or the anchor changes.
         private static boolean shouldSkipGroundMeshBuildWhileVerticallyCulled(
-                int worldAnchorX,int worldAnchorZ,long horizontalDistanceSquared,double playerY) {
+                int worldAnchorX,int worldAnchorZ,long horizontalDistanceSquared,double cameraY) {
             if(!verticallyCulled) return false;
             if(worldAnchorX!=verticallyCulledAnchorX || worldAnchorZ!=verticallyCulledAnchorZ
-                || isWithinGroundRenderRange(horizontalDistanceSquared,playerY-verticallyCulledSurfaceY)) {
+                || isWithinGroundRenderRange(horizontalDistanceSquared,cameraY-verticallyCulledSurfaceY)) {
                 verticallyCulled=false;
                 verticallyCulledAnchorX=Integer.MIN_VALUE;
                 verticallyCulledAnchorZ=Integer.MIN_VALUE;
@@ -333,9 +346,24 @@ public final class RiftClientState {
             boolean horizontalOutside=!isWithinGroundRenderRange(64L*64L+1L,0.0D);
             boolean nanRejected=!isWithinGroundRenderRange(0L,Double.NaN);
             boolean infinityRejected=!isWithinGroundRenderRange(0L,Double.POSITIVE_INFINITY);
+            boolean finiteCameraAccepted=isSafeCameraPosition(new Vec3(0.5D,65.0D,0.5D));
+            boolean nanCameraRejected=!isSafeCameraPosition(new Vec3(Double.NaN,65.0D,0.5D));
+            boolean infiniteCameraRejected=!isSafeCameraPosition(new Vec3(0.5D,65.0D,Double.POSITIVE_INFINITY));
+            boolean outOfWorldCameraRejected=!isSafeCameraPosition(new Vec3(30_000_001.0D,65.0D,0.5D));
+            int playerBlockX=0;
+            int cameraOutsideBlockX=65;
+            boolean cameraOutsideWhilePlayerNear=
+                horizontalDistanceSquared(cameraOutsideBlockX,0,0,0)>64L*64L
+                && horizontalDistanceSquared(playerBlockX,0,0,0)<=64L*64L;
+            boolean cameraInsideWhilePlayerOutside=
+                horizontalDistanceSquared(0,0,0,0)<=64L*64L
+                && horizontalDistanceSquared(65,0,0,0)>64L*64L;
             if(!(center && horizontalBoundary && verticalBoundary && verticalOutside
                 && horizontalOutside && nanRejected && infinityRejected))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh 3D range regression");
+            if(!(finiteCameraAccepted && nanCameraRejected && infiniteCameraRejected
+                && outOfWorldCameraRejected && cameraOutsideWhilePlayerNear && cameraInsideWhilePlayerOutside))
+                throw new IllegalStateException("BLACK FREQUENCY camera-based ground mesh culling regression");
             verticallyCulled=true;
             verticallyCulledAnchorX=1;
             verticallyCulledAnchorZ=2;
@@ -359,6 +387,10 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_MESH_3D_RANGE_PROFILE_VERIFIED radius=64 horizontalBoundary=true verticalBoundary=true invalidRejected=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_LATCH_VERIFIED stable=true returnRebuild=true anchorChangeRebuild=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_CAMERA_CULL_PROFILE_VERIFIED radius=64 cameraPosition=true playerCameraIndependent=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_CAMERA_POSITION_GUARD_VERIFIED nonFiniteRejected=true worldLimitRejected=true");
         }
 
         private static double boundedCorePulse(double wave) {
@@ -753,9 +785,16 @@ public final class RiftClientState {
             }
             int worldAnchorX=anchorX();
             int worldAnchorZ=anchorZ();
-            long dx=(long)player.blockPosition().getX()-worldAnchorX;
-            long dz=(long)player.blockPosition().getZ()-worldAnchorZ;
-            long horizontalDistanceSquared=dx*dx+dz*dz;
+            Vec3 camera=event.getCamera().getPosition();
+            if(!isSafeCameraPosition(camera)) {
+                clearGeometryCacheIfPresent();
+                return;
+            }
+            int cameraBlockX=(int)Math.floor(camera.x);
+            int cameraBlockY=(int)Math.floor(camera.y);
+            int cameraBlockZ=(int)Math.floor(camera.z);
+            long cameraHorizontalDistanceSquared=horizontalDistanceSquared(
+                cameraBlockX,cameraBlockZ,worldAnchorX,worldAnchorZ);
             if(horizontalDistanceSquared>64L*64L) {
                 clearGeometryCacheIfPresent();
                 return;
@@ -767,11 +806,11 @@ public final class RiftClientState {
                 return;
             }
             if(shouldSkipGroundMeshBuildWhileVerticallyCulled(
-                    worldAnchorX,worldAnchorZ,horizontalDistanceSquared,player.getY())) return;
+                    worldAnchorX,worldAnchorZ,cameraHorizontalDistanceSquared,camera.y)) return;
 
             long tick=level.getGameTime();
             boolean anchorChanged=level!=cachedLevel || worldAnchorX!=cachedAnchorX || worldAnchorZ!=cachedAnchorZ;
-            int surfaceReferenceY=player.blockPosition().getY();
+            int surfaceReferenceY=cameraBlockY;
             int previousReferenceY=cachedReferenceY;
             boolean verticalWindowChanged=previousReferenceY!=Integer.MIN_VALUE
                 && Math.abs((long)surfaceReferenceY-previousReferenceY)>=GROUND_REBUILD_VERTICAL_DELTA;
@@ -817,22 +856,21 @@ public final class RiftClientState {
                 }
                 return;
             }
-            double dy=player.getY()-cachedAnchorSurfaceY;
-            double playerDistanceSquared=horizontalDistanceSquared+dy*dy;
+            double dy=camera.y-cachedAnchorSurfaceY;
+            double cameraDistanceSquared=cameraHorizontalDistanceSquared+dy*dy;
             int sampledSurfaceY=cachedAnchorSurfaceY;
             if(clearGeometryCacheIfOutsideGroundRenderRange(
-                    horizontalDistanceSquared,dy,worldAnchorX,worldAnchorZ,sampledSurfaceY)) {
+                    cameraHorizontalDistanceSquared,dy,worldAnchorX,worldAnchorZ,sampledSurfaceY)) {
                 if(!rangeRejectLogged) {
                     rangeRejectLogged=true;
                     com.mojang.logging.LogUtils.getLogger().info(
-                        "BLACK_FREQUENCY_GROUND_MESH_RANGE_REJECT playerY={} sampledSurfaceY={} distanceSquared={}",
-                        player.getY(),sampledSurfaceY,playerDistanceSquared);
+                        "BLACK_FREQUENCY_GROUND_MESH_RANGE_REJECT cameraY={} sampledSurfaceY={} distanceSquared={}",
+                        camera.y,sampledSurfaceY,cameraDistanceSquared);
                 }
                 return;
             }
 
             Matrix4f matrix=event.getPoseStack().last().pose();
-            Vec3 camera=event.getCamera().getPosition();
             BufferBuilder builder=Tesselator.getInstance().getBuilder();
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();

@@ -978,6 +978,20 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_LATCH_VERIFIED stable=true returnRebuild=true anchorChangeRebuild=true" not in final_log:
                 print("WORLD_CAPTURE_FAIL: vertically culled ground mesh rebuilt or failed to resume at the expected boundary",flush=True)
                 return False
+            if "BLACK_FREQUENCY_TEST GROUND_MESH_CAMERA_CULL_PROFILE_VERIFIED radius=64 cameraPosition=true playerCameraIndependent=true" not in final_log:
+                print("WORLD_CAPTURE_FAIL: ground mesh culling did not verify camera-relative horizontal bounds",flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST GROUND_MESH_CAMERA_POSITION_GUARD_VERIFIED nonFiniteRejected=true worldLimitRejected=true" not in final_log:
+                print("WORLD_CAPTURE_FAIL: invalid camera coordinates were not rejected before terrain sampling",flush=True)
+                return False
+            camera_source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
+            camera_source=camera_source_path.read_text(encoding="utf-8",errors="replace")
+            if ("long cameraHorizontalDistanceSquared=horizontalDistanceSquared(" not in camera_source
+                    or "cameraBlockX,cameraBlockZ,worldAnchorX,worldAnchorZ);" not in camera_source
+                    or "int surfaceReferenceY=cameraBlockY;" not in camera_source
+                    or "double dy=camera.y-cachedAnchorSurfaceY;" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: ground mesh render range is not consistently camera-relative",flush=True)
+                return False
             visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=5.6 coreScale=0.82 edgeHalfWidth=0.026"
             if visual_profile_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: widened ground fissure visual profile self-check was not executed",flush=True)
