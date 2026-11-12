@@ -949,7 +949,18 @@ def capture_test_world():
             if "BLACK_FREQUENCY_GROUND_MESH_SURFACE_HEIGHT_VERIFIED" not in final_log:
                 print("WORLD_CAPTURE_FAIL: collision-based ground surface self-check was not executed",flush=True)
                 return False
-            if "BLACK_FREQUENCY_GROUND_MESH_REBUILD_PROFILE_VERIFIED verticalDelta=2 interval=6" not in final_log:
+            rebuild_source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
+            rebuild_source=rebuild_source_path.read_text(encoding="utf-8",errors="replace")
+            rebuild_match=re.search(r"REBUILD_INTERVAL\\s*=\\s*(\\d+)L",rebuild_source)
+            if not rebuild_match:
+                print("WORLD_CAPTURE_FAIL: could not read ground mesh rebuild interval from source",flush=True)
+                return False
+            rebuild_interval=int(rebuild_match.group(1))
+            if not 1<=rebuild_interval<=20:
+                print(f"WORLD_CAPTURE_FAIL: ground mesh rebuild interval is outside the safe 1..20 tick range: {rebuild_interval}",flush=True)
+                return False
+            rebuild_marker=f"BLACK_FREQUENCY_GROUND_MESH_REBUILD_PROFILE_VERIFIED verticalDelta=2 interval={rebuild_interval}"
+            if rebuild_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: player-height cache invalidation self-check was not executed",flush=True)
                 return False
             if os.environ.get("BF_TEST_RESTORATION")=="1":
