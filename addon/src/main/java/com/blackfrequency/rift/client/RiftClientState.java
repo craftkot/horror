@@ -1,5 +1,6 @@
 package com.blackfrequency.rift.client;
 
+import com.blackfrequency.rift.RiftGeometry;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -89,10 +90,10 @@ public final class RiftClientState {
      * It is cosmetic: it reads only already-loaded client chunks and never edits terrain.
      */
     public static final class GroundRenderer {
-        private static final int RADIUS=48;
-        private static final int ARM_COUNT=4;
-        private static final int SEGMENTS_PER_ARM=12;
-        private static final double SAMPLE_SPACING=.39D;
+        private static final int RADIUS=RiftGeometry.RADIUS;
+        private static final int ARM_COUNT=RiftGeometry.FISSURE_ARM_COUNT;
+        private static final int SEGMENTS_PER_ARM=RiftGeometry.FISSURE_SEGMENTS_PER_ARM;
+        private static final double SAMPLE_SPACING=RiftGeometry.FISSURE_SAMPLE_SPACING;
         // Terrain sampling is throttled; the fissure pulse itself still renders every frame.
         private static final long REBUILD_INTERVAL=6L;
         private static final int GROUND_REBUILD_VERTICAL_DELTA=2;
@@ -132,6 +133,7 @@ public final class RiftClientState {
         private static boolean surfaceHeightProfileLogged;
         private static boolean rebuildProfileLogged;
         private static boolean animationProfileLogged;
+        private static boolean samplingProfileLogged;
         private static boolean rangeRejectLogged;
         private static boolean supportFilterLogged;
         private static boolean sampleCursorReuseLogged;
@@ -150,6 +152,20 @@ public final class RiftClientState {
             double ramp=Math.min(1.0,sample/3.0);
             double tail=Math.min(1.0,(SEGMENTS_PER_ARM-sample+1)/3.0);
             return .5D+.5D*Math.min(ramp,tail);
+        }
+
+        private static void verifyGroundMeshSamplingProfile() {
+            if(samplingProfileLogged) return;
+            int samples=ARM_COUNT*SEGMENTS_PER_ARM;
+            double extent=SEGMENTS_PER_ARM*SAMPLE_SPACING;
+            if(ARM_COUNT!=4 || SEGMENTS_PER_ARM!=12 || samples!=48
+                || !Double.isFinite(SAMPLE_SPACING) || SAMPLE_SPACING<.45D || SAMPLE_SPACING>.5D
+                || Math.abs(extent-5.40D)>1.0E-9D || extent>=RADIUS)
+                throw new IllegalStateException("BLACK FREQUENCY ground mesh sampling profile regression");
+            samplingProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_SAMPLING_PROFILE_VERIFIED samples={} spacing={} extent={} radius={}",
+                samples,SAMPLE_SPACING,extent,RADIUS);
         }
 
         private static void verifyTaperProfile() {
@@ -361,6 +377,7 @@ public final class RiftClientState {
         private static GroundMesh buildSegments(
                 net.minecraft.client.multiplayer.ClientLevel level,int worldAnchorX,int worldAnchorZ,
                 int referenceY) {
+            verifyGroundMeshSamplingProfile();
             verifyTaperProfile();
             verifyGroundContinuityProfile();
             verifyGroundRebuildProfile();

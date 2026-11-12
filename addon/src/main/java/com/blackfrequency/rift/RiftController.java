@@ -42,15 +42,15 @@ public final class RiftController {
     // Only for disposable CI worlds. Never increases Minecraft's global tick rate.
     private static final long TEST_STEP = Boolean.getBoolean("blackfrequency.ciTestMode")
         ? Math.max(1L, Math.min(2400L, Long.getLong("blackfrequency.ciTickStep", 2400L))) : 1L;
-    private static final int RADIUS = 48;
+    // Shared with the client mesh so particles and the rendered ground scar use identical bounds.
+    private static final int RADIUS = RiftGeometry.RADIUS;
     private static final String NATURAL_BEACON_ID_TAG = "blackfrequency:natural_recovery_beacon";
-    // Extend the four-arm ground scar without increasing its 56-particle budget.
-    private static final int FISSURE_ARM_COUNT = 4;
-    private static final int FISSURE_SEGMENTS_PER_ARM = 12;
+    private static final int FISSURE_ARM_COUNT = RiftGeometry.FISSURE_ARM_COUNT;
+    private static final int FISSURE_SEGMENTS_PER_ARM = RiftGeometry.FISSURE_SEGMENTS_PER_ARM;
     private static final int FISSURE_MOTES_PER_SAMPLE = 1;
     // Replace two portal accents per arm with textured crying-obsidian chips.
     private static final int FISSURE_SHARD_SEGMENT_INTERVAL = 6;
-    private static final double FISSURE_SAMPLE_SPACING = .45D;
+    private static final double FISSURE_SAMPLE_SPACING = RiftGeometry.FISSURE_SAMPLE_SPACING;
     // Production spreads terrain writes across more ticks to reduce synchronous chunk-update bursts.
     // CI keeps the higher deterministic budget so integration fixtures remain short.
     private static int fractureEditBudget(boolean ciTest) {

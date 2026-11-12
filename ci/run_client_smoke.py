@@ -1095,6 +1095,24 @@ def capture_test_world():
                       "samples",density_samples,"spacing",density_spacing,
                       "extent",density_extent,flush=True)
                 return False
+            ground_sampling = re.search(
+                r"BLACK_FREQUENCY_GROUND_MESH_SAMPLING_PROFILE_VERIFIED samples=(\\d+) spacing=([0-9.]+) extent=([0-9.]+) radius=(\\d+)",
+                log_after)
+            if not ground_sampling:
+                print("WORLD_CAPTURE_FAIL: client ground mesh sampling profile was not executed",flush=True)
+                return False
+            client_samples=int(ground_sampling.group(1))
+            client_spacing=float(ground_sampling.group(2))
+            client_extent=float(ground_sampling.group(3))
+            client_radius=int(ground_sampling.group(4))
+            if (client_samples!=density_samples
+                    or not math.isclose(client_spacing,density_spacing,rel_tol=0.0,abs_tol=1.0e-9)
+                    or not math.isclose(client_extent,density_extent,rel_tol=0.0,abs_tol=1.0e-9)
+                    or client_radius!=48 or client_extent>=client_radius):
+                print("WORLD_CAPTURE_FAIL: client/server fissure geometry diverged",
+                      "server",density_spacing,density_extent,
+                      "client",client_spacing,client_extent,"radius",client_radius,flush=True)
+                return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=56 dragonBreath=40 reversePortal=8 shards=8" not in log_after:
                 print("WORLD_CAPTURE_FAIL: layered fissure particle budget self-check was not executed",flush=True)
                 return False
