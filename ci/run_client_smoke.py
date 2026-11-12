@@ -1242,8 +1242,23 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST FOG_INPUT_GUARDS_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: non-finite fog inputs were not guarded",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST FOG_COLOR_BLEND_PROFILE_VERIFIED" not in log_after:
-                print("WORLD_CAPTURE_FAIL: violet fog color blend profile was not verified",flush=True)
+            fog_color_profile=re.search(
+                r"BLACK_FREQUENCY_TEST FOG_COLOR_BLEND_PROFILE_VERIFIED blendMin=([0-9.]+) blendMax=([0-9.]+)",
+                log_after)
+            if (not fog_color_profile
+                    or not math.isclose(float(fog_color_profile.group(1)),.66,rel_tol=0.0,abs_tol=1.0e-6)
+                    or not math.isclose(float(fog_color_profile.group(2)),.76,rel_tol=0.0,abs_tol=1.0e-6)):
+                print("WORLD_CAPTURE_FAIL: violet fog blend profile is not the terrain-readable range",flush=True)
+                return False
+            fog_distance_profile=re.search(
+                r"BLACK_FREQUENCY_TEST FOG_DISTANCE_PROFILE_VERIFIED contractionMin=([0-9.]+) contractionMax=([0-9.]+) farFloor=([0-9.]+) farAt256=([0-9.]+)",
+                log_after)
+            if (not fog_distance_profile
+                    or not math.isclose(float(fog_distance_profile.group(1)),.62,rel_tol=0.0,abs_tol=1.0e-6)
+                    or not math.isclose(float(fog_distance_profile.group(2)),.72,rel_tol=0.0,abs_tol=1.0e-6)
+                    or not math.isclose(float(fog_distance_profile.group(3)),36.0,rel_tol=0.0,abs_tol=1.0e-6)
+                    or not math.isclose(float(fog_distance_profile.group(4)),71.68,rel_tol=0.0,abs_tol=1.0e-3)):
+                print("WORLD_CAPTURE_FAIL: terrain fog distance profile regressed",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST VANILLA_CLOUD_SUPPRESSION_POLICY_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: vanilla cloud suppression policy was not verified",flush=True)

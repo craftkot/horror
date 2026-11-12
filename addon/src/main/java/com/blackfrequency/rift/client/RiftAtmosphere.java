@@ -11,6 +11,7 @@ import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid="blackfrequency", bus=Mod.EventBusSubscriber.Bus.FORGE, value=Dist.CLIENT)
 public final class RiftAtmosphere {
     private static boolean interpolationVerified;
+    private static final float MIN_FOG_FAR_DISTANCE=36.0F;
 
     private static float finiteUnit(float value) {
         return Float.isFinite(value) ? Math.max(0.0F,Math.min(1.0F,value)) : 0.0F;
@@ -23,7 +24,15 @@ public final class RiftAtmosphere {
     // Preserve some vanilla fog color for distant terrain. Cloud geometry is
     // controlled separately; this event only changes the fog color.
     private static float fogColorBlend(float strength,float pulse) {
-        return Math.min(.82F,finiteUnit(strength)*(.72F+.10F*finiteUnit(pulse)));
+        return Math.min(.76F,finiteUnit(strength)*(.66F+.10F*finiteUnit(pulse)));
+    }
+
+    private static float fogDistanceContraction(float strength,float pulse) {
+        return Math.min(.72F,finiteUnit(strength)*(.62F+.10F*finiteUnit(pulse)));
+    }
+
+    private static float fogFarDistance(float farInput,float contraction) {
+        return Math.max(MIN_FOG_FAR_DISTANCE,farInput*(1.0F-finiteUnit(contraction)));
     }
 
     private RiftAtmosphere() {}
@@ -65,10 +74,20 @@ public final class RiftAtmosphere {
         float lowPulseBlend=fogColorBlend(1.0F,0.0F);
         float highPulseBlend=fogColorBlend(1.0F,1.0F);
         float invalidStrengthBlend=fogColorBlend(Float.NaN,1.0F);
-        if(Math.abs(lowPulseBlend-.72F)>1.0E-6F
-            || Math.abs(highPulseBlend-.82F)>1.0E-6F
-            || invalidStrengthBlend!=0.0F)
-            throw new IllegalStateException("BLACK FREQUENCY fog cloud contrast regression");
+        float lowPulseContraction=fogDistanceContraction(1.0F,0.0F);
+        float highPulseContraction=fogDistanceContraction(1.0F,1.0F);
+        float invalidStrengthContraction=fogDistanceContraction(Float.NaN,1.0F);
+        float farAt256=fogFarDistance(256.0F,highPulseContraction);
+        float minimumFar=fogFarDistance(16.0F,highPulseContraction);
+        if(Math.abs(lowPulseBlend-.66F)>1.0E-6F
+            || Math.abs(highPulseBlend-.76F)>1.0E-6F
+            || invalidStrengthBlend!=0.0F
+            || Math.abs(lowPulseContraction-.62F)>1.0E-6F
+            || Math.abs(highPulseContraction-.72F)>1.0E-6F
+            || invalidStrengthContraction!=0.0F
+            || Math.abs(farAt256-71.68F)>1.0E-3F
+            || Math.abs(minimumFar-MIN_FOG_FAR_DISTANCE)>1.0E-6F)
+            throw new IllegalStateException("BLACK FREQUENCY fog contrast/distance regression");
         interpolationVerified=true;
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST FOG_INTERPOLATION_VERIFIED");
@@ -77,6 +96,9 @@ public final class RiftAtmosphere {
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST FOG_COLOR_BLEND_PROFILE_VERIFIED blendMin={} blendMax={}",
             lowPulseBlend,highPulseBlend);
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST FOG_DISTANCE_PROFILE_VERIFIED contractionMin={} contractionMax={} farFloor={} farAt256={}",
+            lowPulseContraction,highPulseContraction,MIN_FOG_FAR_DISTANCE,farAt256);
     }
 
     // Rift packets can outlive a dimension transfer. Never tint the Nether or End.
@@ -111,8 +133,8 @@ public final class RiftAtmosphere {
         float nearInput=event.getNearPlaneDistance();
         float farInput=event.getFarPlaneDistance();
         if(!validFogPlanes(nearInput,farInput)) return;
-        float contraction=Math.min(.88f,f*(.76f+.10f*pulse));
-        float far=Math.max(24f,farInput*(1f-contraction));
+        float contraction=fogDistanceContraction(f,pulse);
+        float far=fogFarDistance(farInput,contraction);
         float near=Math.min(Math.max(0.0F,nearInput),far*.22f);
         if(!validFogPlanes(near,far)) return;
         event.setFarPlaneDistance(far);
