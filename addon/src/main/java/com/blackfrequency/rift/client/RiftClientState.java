@@ -145,6 +145,7 @@ public final class RiftClientState {
         private static boolean rangeRejectLogged;
         private static boolean supportFilterLogged;
         private static boolean sampleCursorReuseLogged;
+        private static boolean inactiveCacheCleanupLogged;
 
         private record GroundPoint(double x,double y,double z) {}
         private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,
@@ -408,6 +409,7 @@ public final class RiftClientState {
         private static GroundMesh buildSegments(
                 net.minecraft.client.multiplayer.ClientLevel level,int worldAnchorX,int worldAnchorZ,
                 int referenceY) {
+            verifyInactiveCacheCleanup();
             verifyGroundMeshSamplingProfile();
             verifyTaperProfile();
             verifyGroundContinuityProfile();
@@ -555,7 +557,9 @@ public final class RiftClientState {
                 red,green,blue,alpha);
         }
 
-        private static void clearCache() {
+        private static void clearGeometryCache() {
+            // Release the old ClientLevel and its sampled mesh as soon as the
+            // fissure is no longer relevant to this camera/world.
             cachedLevel=null;
             cachedTick=Long.MIN_VALUE;
             cachedAnchorX=Integer.MIN_VALUE;
@@ -569,6 +573,15 @@ public final class RiftClientState {
             cachedSteepStepBreaks=0;
             SURFACE_Y_BY_COLUMN.clear();
             SURFACE_CURSOR.set(0,0,0);
+        }
+
+        private static void clearGeometryCacheIfPresent() {
+            if(cachedLevel!=null || cachedTick!=Long.MIN_VALUE || !cachedSegments.isEmpty()
+                || !SURFACE_Y_BY_COLUMN.isEmpty()) clearGeometryCache();
+        }
+
+        private static void clearCache() {
+            clearGeometryCache();
             continuityBuildLogged=false;
             continuityProfileLogged=false;
             firstRenderLogged=false;
@@ -584,6 +597,35 @@ public final class RiftClientState {
             rangeRejectLogged=false;
         }
 
+        private static void verifyInactiveCacheCleanup() {
+            if(inactiveCacheCleanupLogged) return;
+            cachedTick=1L;
+            cachedAnchorX=1;
+            cachedAnchorZ=2;
+            cachedAnchorSurfaceY=64;
+            cachedReferenceY=64;
+            cachedSegments=List.of(new GroundSegment(new GroundPoint(1,64,2),
+                new GroundPoint(2,64,2),1,0,0,1,1));
+            cachedArmCount=1;
+            cachedSampledColumns=1;
+            cachedColumnCacheHits=1;
+            cachedSteepStepBreaks=1;
+            SURFACE_Y_BY_COLUMN.put(columnKey(1,2),64.0D);
+            SURFACE_CURSOR.set(1,64,2);
+            clearGeometryCacheIfPresent();
+            if(cachedLevel!=null || cachedTick!=Long.MIN_VALUE
+                || cachedAnchorX!=Integer.MIN_VALUE || cachedAnchorZ!=Integer.MIN_VALUE
+                || cachedAnchorSurfaceY!=0 || cachedReferenceY!=Integer.MIN_VALUE
+                || !cachedSegments.isEmpty() || cachedArmCount!=0
+                || cachedSampledColumns!=0 || cachedColumnCacheHits!=0
+                || cachedSteepStepBreaks!=0 || !SURFACE_Y_BY_COLUMN.isEmpty()
+                || SURFACE_CURSOR.getX()!=0 || SURFACE_CURSOR.getY()!=0 || SURFACE_CURSOR.getZ()!=0)
+                throw new IllegalStateException("BLACK FREQUENCY inactive ground mesh cache cleanup regression");
+            inactiveCacheCleanupLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_INACTIVE_CACHE_CLEANUP_VERIFIED");
+        }
+
         public static void render(RenderLevelStageEvent event) {
             if(!renderEventLogged) {
                 renderEventLogged=true;
@@ -595,15 +637,24 @@ public final class RiftClientState {
             var level=minecraft.level;
             var player=minecraft.player;
             if(level==null || player==null || !level.dimension().equals(Level.OVERWORLD)
-                || !hasAnchor()) return;
+                || !hasAnchor()) {
+                clearGeometryCacheIfPresent();
+                return;
+            }
             float strength=visibleStrength();
-            if(!Float.isFinite(strength) || strength<.08F) return;
+            if(!Float.isFinite(strength) || strength<.08F) {
+                clearGeometryCacheIfPresent();
+                return;
+            }
             int worldAnchorX=anchorX();
             int worldAnchorZ=anchorZ();
             long dx=(long)player.blockPosition().getX()-worldAnchorX;
             long dz=(long)player.blockPosition().getZ()-worldAnchorZ;
             long horizontalDistanceSquared=dx*dx+dz*dz;
-            if(horizontalDistanceSquared>64L*64L) return;
+            if(horizontalDistanceSquared>64L*64L) {
+                clearGeometryCacheIfPresent();
+                return;
+            }
             if(!level.getWorldBorder().isWithinBounds(
                     new BlockPos(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ))
                 || !level.hasChunk(worldAnchorX>>4,worldAnchorZ>>4)) {
