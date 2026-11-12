@@ -98,6 +98,13 @@ public final class RiftClientState {
         // Rebuild twice per second; anchor and two-block vertical changes still invalidate immediately.
         private static final long REBUILD_INTERVAL=10L;
         private static final int GROUND_REBUILD_VERTICAL_DELTA=2;
+        // Reuse these render-thread-only scratch objects between mesh rebuilds.
+        // fastutil clear() retains the backing arrays, avoiding a fresh map allocation every 10 ticks.
+        private static final Long2DoubleOpenHashMap SURFACE_Y_BY_COLUMN=
+            new Long2DoubleOpenHashMap(ARM_COUNT*SEGMENTS_PER_ARM);
+        private static final BlockPos.MutableBlockPos SURFACE_CURSOR=
+            new BlockPos.MutableBlockPos(0,0,0);
+        private static boolean sampleCacheReuseLogged;
         private static net.minecraft.client.multiplayer.ClientLevel cachedLevel;
         private static long cachedTick=Long.MIN_VALUE;
         private static int cachedAnchorX=Integer.MIN_VALUE;
@@ -377,6 +384,26 @@ public final class RiftClientState {
             return ((long)blockX<<32) | (blockZ & 0xffffffffL);
         }
 
+        private static void verifySurfaceCacheReuse() {
+            if(sampleCacheReuseLogged) return;
+            long key=columnKey(-17,29);
+            SURFACE_Y_BY_COLUMN.clear();
+            SURFACE_Y_BY_COLUMN.put(key,Double.NaN);
+            boolean cachedUnsupported=SURFACE_Y_BY_COLUMN.containsKey(key)
+                && Double.isNaN(SURFACE_Y_BY_COLUMN.get(key));
+            SURFACE_Y_BY_COLUMN.clear();
+            boolean cleared=SURFACE_Y_BY_COLUMN.isEmpty();
+            SURFACE_Y_BY_COLUMN.put(key,1.25D);
+            boolean reused=SURFACE_Y_BY_COLUMN.containsKey(key)
+                && Math.abs(SURFACE_Y_BY_COLUMN.get(key)-1.25D)<1.0E-9D;
+            SURFACE_Y_BY_COLUMN.clear();
+            if(!(cachedUnsupported && cleared && reused))
+                throw new IllegalStateException("BLACK FREQUENCY reusable ground sample cache regression");
+            sampleCacheReuseLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_CACHE_REUSE_VERIFIED retained=true");
+        }
+
         private static GroundMesh buildSegments(
                 net.minecraft.client.multiplayer.ClientLevel level,int worldAnchorX,int worldAnchorZ,
                 int referenceY) {
@@ -386,13 +413,12 @@ public final class RiftClientState {
             verifyGroundRebuildProfile();
             verifyGroundAnimationProfile();
             verifyGroundSupportProfile();
+            verifySurfaceCacheReuse();
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
-            // Minecraft already ships fastutil. Primitive keys/values avoid boxing
-            // every sampled column during periodic mesh rebuilds.
-            Long2DoubleOpenHashMap surfaceYByColumn=
-                new Long2DoubleOpenHashMap(ARM_COUNT*SEGMENTS_PER_ARM);
-            BlockPos.MutableBlockPos surfaceCursor=new BlockPos.MutableBlockPos(
-                worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);
+            // The static primitive map and mutable cursor are owned by the render
+            // thread and reused across rebuilds; clear() keeps the map's capacity.
+            SURFACE_Y_BY_COLUMN.clear();
+            SURFACE_CURSOR.set(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);
             int surfaceSamples=0;
             int cacheHits=0;
             int activeArms=0;
@@ -416,15 +442,15 @@ public final class RiftClientState {
                     }
                     long key=columnKey(blockX,blockZ);
                     double sampledY;
-                    if(surfaceYByColumn.containsKey(key)) {
+                    if(SURFACE_Y_BY_COLUMN.containsKey(key)) {
                         // containsKey is required: NaN is a cached "unsupported"
                         // column, not a cache miss that should be sampled again.
-                        sampledY=surfaceYByColumn.get(key);
+                        sampledY=SURFACE_Y_BY_COLUMN.get(key);
                         cacheHits++;
                     } else {
-                        sampledY=sampleGroundY(level,blockX,blockZ,referenceY,surfaceCursor);
+                        sampledY=sampleGroundY(level,blockX,blockZ,referenceY,SURFACE_CURSOR);
                         surfaceSamples++;
-                        surfaceYByColumn.put(key,sampledY);
+                        SURFACE_Y_BY_COLUMN.put(key,sampledY);
                     }
                     GroundPoint current=Double.isFinite(sampledY)
                         ? new GroundPoint(x,sampledY,z)
@@ -456,7 +482,7 @@ public final class RiftClientState {
                 if(result.size()>armStart) activeArms++;
             }
             if(!sampleCursorReuseLogged) {
-                if(surfaceSamples<=0 || surfaceSamples!=surfaceYByColumn.size()
+                if(surfaceSamples<=0 || surfaceSamples!=SURFACE_Y_BY_COLUMN.size()
                     || surfaceSamples+cacheHits!=ARM_COUNT*SEGMENTS_PER_ARM)
                     throw new IllegalStateException("BLACK FREQUENCY ground sample cursor reuse regression");
                 sampleCursorReuseLogged=true;
@@ -464,7 +490,7 @@ public final class RiftClientState {
                     "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_CURSOR_REUSE_VERIFIED sampledColumns={} cacheHits={} totalSamples={} mutableCursors=1 primitiveCache=true",
                     surfaceSamples,cacheHits,surfaceSamples+cacheHits);
             }
-            return new GroundMesh(List.copyOf(result),activeArms,surfaceYByColumn.size(),cacheHits,
+            return new GroundMesh(List.copyOf(result),activeArms,SURFACE_Y_BY_COLUMN.size(),cacheHits,
                 steepStepBreaks);
         }
 
@@ -540,6 +566,8 @@ public final class RiftClientState {
             cachedSampledColumns=0;
             cachedColumnCacheHits=0;
             cachedSteepStepBreaks=0;
+            SURFACE_Y_BY_COLUMN.clear();
+            SURFACE_CURSOR.set(0,0,0);
             continuityBuildLogged=false;
             continuityProfileLogged=false;
             firstRenderLogged=false;

@@ -1068,6 +1068,19 @@ def capture_test_world():
             if "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_CURSOR_REUSE_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: ground sampler did not verify shared mutable cursor reuse",flush=True)
                 return False
+            if "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_CACHE_REUSE_VERIFIED retained=true" not in log_after:
+                print("WORLD_CAPTURE_FAIL: primitive surface cache was not verified for reuse",flush=True)
+                return False
+            source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
+            source_text=source_path.read_text(encoding="utf-8",errors="replace")
+            build_source=re.search(
+                r"private static GroundMesh buildSegments\([\s\S]*?private static int estimateAnchorSurfaceY",
+                source_text)
+            if (not re.search(r"private static final Long2DoubleOpenHashMap SURFACE_Y_BY_COLUMN",source_text)
+                    or not re.search(r"private static final BlockPos\.MutableBlockPos SURFACE_CURSOR",source_text)
+                    or not build_source or "SURFACE_Y_BY_COLUMN.clear();" not in build_source.group(0)):
+                print("WORLD_CAPTURE_FAIL: ground sample scratch objects are not retained and cleared per rebuild",flush=True)
+                return False
             if ("BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_VERIFIED maxStep=1.25" not in log_after
                     or not continuity or abs(float(continuity.group(1))-1.25)>1.0E-9):
                 print("WORLD_CAPTURE_FAIL: ground mesh did not verify its cliff-discontinuity guard",
