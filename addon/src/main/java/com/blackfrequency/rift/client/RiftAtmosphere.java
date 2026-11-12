@@ -32,7 +32,7 @@ public final class RiftAtmosphere {
     }
 
     private static float fogFarDistance(float farInput,float contraction) {
-        return Math.max(MIN_FOG_FAR_DISTANCE,farInput*(1.0F-finiteUnit(contraction)));
+        return Math.min(farInput,Math.max(MIN_FOG_FAR_DISTANCE,farInput*(1.0F-finiteUnit(contraction))));
     }
 
     private RiftAtmosphere() {}
@@ -77,16 +77,18 @@ public final class RiftAtmosphere {
         float lowPulseContraction=fogDistanceContraction(1.0F,0.0F);
         float highPulseContraction=fogDistanceContraction(1.0F,1.0F);
         float invalidStrengthContraction=fogDistanceContraction(Float.NaN,1.0F);
+        float farAt16=fogFarDistance(16.0F,highPulseContraction);
+        float farAt64=fogFarDistance(64.0F,highPulseContraction);
         float farAt256=fogFarDistance(256.0F,highPulseContraction);
-        float minimumFar=fogFarDistance(16.0F,highPulseContraction);
         if(Math.abs(lowPulseBlend-.66F)>1.0E-6F
             || Math.abs(highPulseBlend-.76F)>1.0E-6F
             || invalidStrengthBlend!=0.0F
             || Math.abs(lowPulseContraction-.62F)>1.0E-6F
             || Math.abs(highPulseContraction-.72F)>1.0E-6F
             || invalidStrengthContraction!=0.0F
-            || Math.abs(farAt256-71.68F)>1.0E-3F
-            || Math.abs(minimumFar-MIN_FOG_FAR_DISTANCE)>1.0E-6F)
+            || Math.abs(farAt16-16.0F)>1.0E-6F
+            || Math.abs(farAt64-MIN_FOG_FAR_DISTANCE)>1.0E-6F
+            || Math.abs(farAt256-71.68F)>1.0E-3F)
             throw new IllegalStateException("BLACK FREQUENCY fog contrast/distance regression");
         interpolationVerified=true;
         com.mojang.logging.LogUtils.getLogger().info(
@@ -97,8 +99,8 @@ public final class RiftAtmosphere {
             "BLACK_FREQUENCY_TEST FOG_COLOR_BLEND_PROFILE_VERIFIED blendMin={} blendMax={}",
             lowPulseBlend,highPulseBlend);
         com.mojang.logging.LogUtils.getLogger().info(
-            "BLACK_FREQUENCY_TEST FOG_DISTANCE_PROFILE_VERIFIED contractionMin={} contractionMax={} farFloor={} farAt256={}",
-            lowPulseContraction,highPulseContraction,MIN_FOG_FAR_DISTANCE,farAt256);
+            "BLACK_FREQUENCY_TEST FOG_DISTANCE_PROFILE_VERIFIED contractionMin={} contractionMax={} farFloor={} farAt16={} farAt64={} farAt256={}",
+            lowPulseContraction,highPulseContraction,MIN_FOG_FAR_DISTANCE,farAt16,farAt64,farAt256);
     }
 
     // Rift packets can outlive a dimension transfer. Never tint the Nether or End.

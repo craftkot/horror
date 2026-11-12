@@ -1251,13 +1251,15 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: violet fog blend profile is not the terrain-readable range",flush=True)
                 return False
             fog_distance_profile=re.search(
-                r"BLACK_FREQUENCY_TEST FOG_DISTANCE_PROFILE_VERIFIED contractionMin=([0-9.]+) contractionMax=([0-9.]+) farFloor=([0-9.]+) farAt256=([0-9.]+)",
+                r"BLACK_FREQUENCY_TEST FOG_DISTANCE_PROFILE_VERIFIED contractionMin=([0-9.]+) contractionMax=([0-9.]+) farFloor=([0-9.]+) farAt16=([0-9.]+) farAt64=([0-9.]+) farAt256=([0-9.]+)",
                 log_after)
             if (not fog_distance_profile
                     or not math.isclose(float(fog_distance_profile.group(1)),.62,rel_tol=0.0,abs_tol=1.0e-6)
                     or not math.isclose(float(fog_distance_profile.group(2)),.72,rel_tol=0.0,abs_tol=1.0e-6)
                     or not math.isclose(float(fog_distance_profile.group(3)),36.0,rel_tol=0.0,abs_tol=1.0e-6)
-                    or not math.isclose(float(fog_distance_profile.group(4)),71.68,rel_tol=0.0,abs_tol=1.0e-3)):
+                    or not math.isclose(float(fog_distance_profile.group(4)),16.0,rel_tol=0.0,abs_tol=1.0e-6)
+                    or not math.isclose(float(fog_distance_profile.group(5)),36.0,rel_tol=0.0,abs_tol=1.0e-6)
+                    or not math.isclose(float(fog_distance_profile.group(6)),71.68,rel_tol=0.0,abs_tol=1.0e-3)):
                 print("WORLD_CAPTURE_FAIL: terrain fog distance profile regressed",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST VANILLA_CLOUD_SUPPRESSION_POLICY_VERIFIED" not in log_after:
