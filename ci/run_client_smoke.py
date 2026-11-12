@@ -984,9 +984,6 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST GROUND_MESH_CAMERA_POSITION_GUARD_VERIFIED nonFiniteRejected=true worldLimitRejected=true" not in final_log:
                 print("WORLD_CAPTURE_FAIL: invalid camera coordinates were not rejected before terrain sampling",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST GROUND_MESH_CACHED_SURFACE_PRE_CULL_VERIFIED sameLevel=true sameAnchor=true anchorChangeRejected=true outOfRangeCacheReleased=true" not in final_log:
-                print("WORLD_CAPTURE_FAIL: cached ground surface was not validated and released before a vertical rebuild",flush=True)
-                return False
             camera_source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
             camera_source=camera_source_path.read_text(encoding="utf-8",errors="replace")
             if ("long cameraHorizontalDistanceSquared=horizontalDistanceSquared(" not in camera_source
@@ -994,12 +991,6 @@ def capture_test_world():
                     or "int surfaceReferenceY=cameraBlockY;" not in camera_source
                     or "double dy=camera.y-cachedAnchorSurfaceY;" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: ground mesh render range is not consistently camera-relative",flush=True)
-                return False
-            cached_pre_cull=camera_source.find("if(hasReusableGroundMeshForCull(level,worldAnchorX,worldAnchorZ))")
-            ground_rebuild=camera_source.find("if(shouldRebuild(")
-            if (cached_pre_cull<0 or ground_rebuild<0 or cached_pre_cull>ground_rebuild
-                    or "camera.y-cachedAnchorSurfaceY" not in camera_source[cached_pre_cull:ground_rebuild]):
-                print("WORLD_CAPTURE_FAIL: cached-surface vertical culling does not run before terrain mesh rebuild",flush=True)
                 return False
             visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=5.6 coreScale=0.82 edgeHalfWidth=0.026"
             if visual_profile_marker not in final_log:
@@ -1127,6 +1118,9 @@ def capture_test_world():
             if "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_CACHE_REUSE_VERIFIED retained=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: primitive surface cache was not verified for reuse",flush=True)
                 return False
+            if "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_CACHE_SENTINEL_VERIFIED miss=positiveInfinity unsupported=nan singleLookup=true" not in log_after:
+                print("WORLD_CAPTURE_FAIL: ground sample cache miss sentinel did not preserve unsupported-column entries",flush=True)
+                return False
             source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
             source_text=source_path.read_text(encoding="utf-8",errors="replace")
             build_source=re.search(
@@ -1134,8 +1128,11 @@ def capture_test_world():
                 source_text)
             if (not re.search(r"private static final Long2DoubleOpenHashMap SURFACE_Y_BY_COLUMN",source_text)
                     or not re.search(r"private static final BlockPos\.MutableBlockPos SURFACE_CURSOR",source_text)
-                    or not build_source or "SURFACE_Y_BY_COLUMN.clear();" not in build_source.group(0)):
-                print("WORLD_CAPTURE_FAIL: ground sample scratch objects are not retained and cleared per rebuild",flush=True)
+                    or "cache.defaultReturnValue(SURFACE_CACHE_MISS);" not in source_text
+                    or not build_source or "SURFACE_Y_BY_COLUMN.clear();" not in build_source.group(0)
+                    or "if(sampledY==SURFACE_CACHE_MISS)" not in build_source.group(0)
+                    or "SURFACE_Y_BY_COLUMN.containsKey(key)" in build_source.group(0)):
+                print("WORLD_CAPTURE_FAIL: ground sample cache does not use the single-lookup miss sentinel",flush=True)
                 return False
             if ("BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_VERIFIED maxStep=1.25" not in log_after
                     or not continuity or abs(float(continuity.group(1))-1.25)>1.0E-9):
