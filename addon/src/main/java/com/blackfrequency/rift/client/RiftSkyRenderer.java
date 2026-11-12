@@ -160,11 +160,11 @@ public final class RiftSkyRenderer {
                 RiftClientState.GroundRenderer.render(event);
                 return;
             }
-            // Vanilla clouds are rendered after AFTER_SKY and can obscure the rift.
-            // Composite after opaque terrain has populated depth: the far-plane quad
-            // remains visible over sky/cloud pixels while solid terrain fails LEQUAL.
-            // Later cutout, entity, translucent, weather, and particle passes stay in front.
-            if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_SOLID_BLOCKS)
+            // Clouds are submitted after the solid-block stage in Forge 1.20.1.
+            // Render after weather so the far-plane quad can tint the completed sky,
+            // while terrain and entities already in the depth buffer still occlude it.
+            // The depth mask remains disabled for this pass and is restored in finally.
+            if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_WEATHER)
                 renderRift(event);
         }
 
@@ -236,7 +236,7 @@ public final class RiftSkyRenderer {
             if(CI_TEST_MODE && depthAwareDrawSubmitted && !firstDepthAwareFrameLogged) {
                 firstDepthAwareFrameLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_TEST SKY_DEPTH_AWARE_DRAW_SUBMITTED stage=after_solid_blocks");
+                    "BLACK_FREQUENCY_TEST SKY_DEPTH_AWARE_DRAW_SUBMITTED stage=after_weather");
             }
         }
     }
