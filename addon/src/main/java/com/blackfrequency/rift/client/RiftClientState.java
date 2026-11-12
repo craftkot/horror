@@ -122,9 +122,9 @@ public final class RiftClientState {
         // Do not turn a sharp cliff into a vertical translucent wall.
         private static final double MAX_GROUND_SEGMENT_Y_DELTA=1.25D;
         // Slightly widen the ground seam so it remains legible through partial canopy gaps.
-        private static final double GROUND_GLOW_WIDTH_SCALE=4.8D;
-        private static final double GROUND_CORE_WIDTH_SCALE=.72D;
-        private static final double GROUND_EDGE_HALF_WIDTH=.024D;
+        private static final double GROUND_GLOW_WIDTH_SCALE=5.6D;
+        private static final double GROUND_CORE_WIDTH_SCALE=.82D;
+        private static final double GROUND_EDGE_HALF_WIDTH=.026D;
         // A restrained violet filament pulses inside the dark core without another trig call.
         private static final double GROUND_CORE_PULSE_BASE=.10D;
         private static final double GROUND_CORE_PULSE_RANGE=.22D;
@@ -189,9 +189,9 @@ public final class RiftClientState {
                     "BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED tip={} middle={} end={}",tip,middle,end);
             }
             if(!visualProfileLogged) {
-                if(Math.abs(GROUND_GLOW_WIDTH_SCALE-4.8D)>1.0E-9D
-                    || Math.abs(GROUND_CORE_WIDTH_SCALE-.72D)>1.0E-9D
-                    || Math.abs(GROUND_EDGE_HALF_WIDTH-.024D)>1.0E-9D)
+                if(Math.abs(GROUND_GLOW_WIDTH_SCALE-5.6D)>1.0E-9D
+                    || Math.abs(GROUND_CORE_WIDTH_SCALE-.82D)>1.0E-9D
+                    || Math.abs(GROUND_EDGE_HALF_WIDTH-.026D)>1.0E-9D)
                     throw new IllegalStateException("BLACK FREQUENCY ground mesh visual profile regression");
                 visualProfileLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
@@ -409,7 +409,7 @@ public final class RiftClientState {
         private static GroundMesh buildSegments(
                 net.minecraft.client.multiplayer.ClientLevel level,int worldAnchorX,int worldAnchorZ,
                 int referenceY) {
-            verifyInactiveCacheCleanup();
+            verifyInactiveCacheCleanup(level);
             verifyGroundMeshSamplingProfile();
             verifyTaperProfile();
             verifyGroundContinuityProfile();
@@ -597,8 +597,9 @@ public final class RiftClientState {
             rangeRejectLogged=false;
         }
 
-        private static void verifyInactiveCacheCleanup() {
+        private static void verifyInactiveCacheCleanup(net.minecraft.client.multiplayer.ClientLevel level) {
             if(inactiveCacheCleanupLogged) return;
+            cachedLevel=level;
             cachedTick=1L;
             cachedAnchorX=1;
             cachedAnchorZ=2;
@@ -623,7 +624,7 @@ public final class RiftClientState {
                 throw new IllegalStateException("BLACK FREQUENCY inactive ground mesh cache cleanup regression");
             inactiveCacheCleanupLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_MESH_INACTIVE_CACHE_CLEANUP_VERIFIED");
+                "BLACK_FREQUENCY_TEST GROUND_MESH_INACTIVE_CACHE_CLEANUP_VERIFIED levelReference=true");
         }
 
         public static void render(RenderLevelStageEvent event) {
