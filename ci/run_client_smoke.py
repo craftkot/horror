@@ -1078,7 +1078,7 @@ def capture_test_world():
                       "segments",mesh_segments,"arms",mesh_arms,flush=True)
                 return False
             density = re.search(
-                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples=(\\d+) spacing=([0-9.]+) extent=([0-9.]+)",
+                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples=(\d+) spacing=([0-9.]+) extent=([0-9.]+)",
                 log_after)
             if not density:
                 print("WORLD_CAPTURE_FAIL: fissure density/radius self-check was not executed",flush=True)
