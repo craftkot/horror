@@ -160,9 +160,10 @@ public final class RiftSkyRenderer {
                 RiftClientState.GroundRenderer.render(event);
                 return;
             }
-            // AFTER_LEVEL runs after clouds/weather. A far-plane quad with depth testing
-            // fills only pixels that still belong to the sky; solid geometry keeps its depth.
-            if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_LEVEL)
+            // Draw immediately after the vanilla sky, before clouds and weather.
+            // Later cloud/weather and terrain passes then keep their normal colors and
+            // depth occlusion instead of being darkened by the catastrophe overlay.
+            if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_SKY)
                 renderRift(event);
         }
 
@@ -230,11 +231,11 @@ public final class RiftSkyRenderer {
                 }
             }
             // The smoke-test marker means the draw call returned and the depth
-            // contract was restored; entering AFTER_LEVEL alone is not a successful pass.
+            // contract was restored; entering AFTER_SKY alone is not a successful pass.
             if(CI_TEST_MODE && depthAwareDrawSubmitted && !firstDepthAwareFrameLogged) {
                 firstDepthAwareFrameLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_TEST SKY_DEPTH_AWARE_DRAW_SUBMITTED stage=after_level");
+                    "BLACK_FREQUENCY_TEST SKY_DEPTH_AWARE_DRAW_SUBMITTED stage=after_sky");
             }
         }
     }

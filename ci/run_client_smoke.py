@@ -1214,8 +1214,8 @@ def capture_test_world():
             if cleanup_count!=1:
                 print(f"WORLD_CAPTURE_FAIL: expected one depth-state cleanup marker, observed {cleanup_count}",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST SKY_DEPTH_AWARE_DRAW_SUBMITTED stage=after_level" not in log_after:
-                print("WORLD_CAPTURE_FAIL: depth-aware final sky pass was not observed",flush=True)
+            if "BLACK_FREQUENCY_TEST SKY_DEPTH_AWARE_DRAW_SUBMITTED stage=after_sky" not in log_after:
+                print("WORLD_CAPTURE_FAIL: depth-aware pre-cloud sky pass was not observed",flush=True)
                 return False
             print("WORLD_CAPTURE: accelerated finale, depth-aware sky rendering, and depth-state cleanup confirmed",flush=True)
             return True
