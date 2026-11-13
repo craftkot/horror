@@ -66,6 +66,8 @@ public final class RiftController {
     private static final int RESTORE_HELIX_MOTES_PER_ANCHOR = 2;
     private static final int RESTORE_HELIX_PARTICLE_COUNT =
         RESTORE_HELIX_ANCHOR_COUNT * RESTORE_HELIX_MOTES_PER_ANCHOR;
+    // Let the existing gravity field decay smoothly after beacon activation.
+    private static final int RESTORE_GRAVITY_FADE_TICKS=40;
     private static final int RESTORE_BLOCK_CUE_INTERVAL = 48;
     private static final int RESTORE_BLOCK_CUE_PARTICLE_COUNT = 6;
     private static final int RESTORE_AUDIENCE_PARTICLE_COUNT = 8;
@@ -386,6 +388,22 @@ public final class RiftController {
             if(!controlImpulseApplied
                 || net.minecraft.world.phys.Vec3.ZERO.equals(player.getDeltaMovement()))
                 throw new IllegalStateException("CI lift-zone control probe did not apply an impulse");
+            double halfStrength=restorationGravityScale(RESTORE_GRAVITY_FADE_TICKS/2);
+            player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            boolean fullFadeImpulse=applyRiftGravityImpulse(level,probe,player,1.0D);
+            double fullLift=player.getDeltaMovement().y;
+            player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            boolean halfFadeImpulse=applyRiftGravityImpulse(level,probe,player,halfStrength);
+            double halfLift=player.getDeltaMovement().y;
+            player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            boolean zeroFadeImpulse=applyRiftGravityImpulse(level,probe,player,
+                restorationGravityScale(RESTORE_GRAVITY_FADE_TICKS));
+            double zeroLift=player.getDeltaMovement().y;
+            if(!fullFadeImpulse || !halfFadeImpulse || zeroFadeImpulse
+                || !(fullLift>0.0D) || Math.abs(halfLift-fullLift*halfStrength)>1.0E-9D
+                || Math.abs(zeroLift)>1.0E-9D)
+                throw new IllegalStateException("CI actual player restoration gravity fade scaling regression");
+            LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_PLAYER_IMPULSE_VERIFIED full=true half=true zero=true");
             player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
             player.fallDistance=previousFallDistance;
             player.hurtMarked=previousHurtMarked;
@@ -422,7 +440,13 @@ public final class RiftController {
      */
     private static boolean applyRiftGravityImpulse(
             ServerLevel level,State s,net.minecraft.server.level.ServerPlayer player) {
-        if(!shouldApplyRiftGravity(player)) return false;
+        return applyRiftGravityImpulse(level,s,player,1.0D);
+    }
+
+    private static boolean applyRiftGravityImpulse(
+            ServerLevel level,State s,net.minecraft.server.level.ServerPlayer player,double strength) {
+        if(!shouldApplyRiftGravity(player) || !Double.isFinite(strength) || strength<=0.0D) return false;
+        double impulseStrength=Math.min(1.0D,strength);
         double px=player.getX(),pz=player.getZ();
         double ax=px-s.x,ay=player.getY()-level.getSeaLevel(),az=pz-s.z;
         double distanceSquared=ax*ax+ay*ay+az*az;
@@ -434,27 +458,43 @@ public final class RiftController {
             *Math.cos(pz*.125-s.finaleTicks*.008);
         if(zone>.42) {
             var v=player.getDeltaMovement();
-            double lift=Math.max(.045,Math.min(.19,.11+zone*.07))*fade;
-            double dx=Math.sin(pz*.14+s.finaleTicks*.022)*.035*fade;
-            double dz=Math.cos(px*.13-s.finaleTicks*.018)*.035*fade;
+            double lift=Math.max(.045,Math.min(.19,.11+zone*.07))*fade*impulseStrength;
+            double dx=Math.sin(pz*.14+s.finaleTicks*.022)*.035*fade*impulseStrength;
+            double dz=Math.cos(px*.13-s.finaleTicks*.018)*.035*fade*impulseStrength;
             // Limit only the anomaly's additional drift. Never clamp
             // existing sprint, knockback or mod-provided velocity.
             double nextX=boundedAnomalyVelocity(v.x,dx);
             double nextZ=boundedAnomalyVelocity(v.z,dz);
             player.setDeltaMovement(nextX,boundedLiftVelocity(v.y,lift),nextZ);
             player.hurtMarked=true;
-            if(fade>.25) player.fallDistance=0;
+            if(fade*impulseStrength>.25) player.fallDistance=0;
             return true;
         }
         if(zone<-.68) {
             var v=player.getDeltaMovement();
-            double drag=1.0-.06*fade;
+            double drag=1.0-.06*fade*impulseStrength;
             player.setDeltaMovement(boundedSinkDrag(v.x,drag),
-                boundedSinkVelocity(v.y,-.09*fade),boundedSinkDrag(v.z,drag));
+                boundedSinkVelocity(v.y,-.09*fade*impulseStrength),boundedSinkDrag(v.z,drag));
             player.hurtMarked=true;
             return true;
         }
         return false;
+    }
+
+    /**
+     * Keep the existing anomaly field for a short, persisted tail after beacon
+     * activation. This touches player motion only; it never queries chunks or blocks.
+     */
+    private static void applyRestorationGravityFade(ServerLevel level,State s) {
+        if(s.finaleTicks<=85 || s.restoreTicks%5!=0) return;
+        if(CI_TEST && s.restoreTicks==0)
+            LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_RUNTIME_STARTED ticks={}",
+                RESTORE_GRAVITY_FADE_TICKS);
+        if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest")) return;
+        double strength=restorationGravityScale(s.restoreTicks);
+        if(strength<=0.0D) return;
+        for(var player:level.players())
+            applyRiftGravityImpulse(level,s,player,strength);
     }
 
     private static void verifyBoundedSinkDrag() {
@@ -1265,6 +1305,7 @@ public final class RiftController {
         original.x=12;
         original.z=-7;
         original.edits=1;
+        original.restoreTicks=20;
         original.restoreIndex=0;
         original.restoreScan=0;
         BlockPos pos=new BlockPos(12,64,-7);
@@ -1274,11 +1315,13 @@ public final class RiftController {
         original.snapshots.add(snapshot);
         State loaded=State.load(original.save(new CompoundTag()));
         if(!loaded.started || !loaded.restoring || loaded.edits!=1
-            || loaded.restoreIndex!=0 || loaded.restoreScan!=0
+            || loaded.restoreIndex!=0 || loaded.restoreScan!=0 || loaded.restoreTicks!=20
+            || Math.abs(restorationGravityScale(loaded.restoreTicks)-.5D)>1.0E-9D
             || loaded.snapshots.size()!=1
             || loaded.snapshots.get(0).getLong("pos")!=pos.asLong()
             || !loaded.snapshots.get(0).getCompound("state").equals(snapshot.getCompound("state")))
             throw new IllegalStateException("CI pending terrain snapshot persistence regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_SAVE_ROUNDTRIP_VERIFIED elapsed=20 scale=0.5");
         // A damaged save may contain cursors beyond the serialized list.
         // Recovery must clamp them without discarding the only terrain snapshot.
         CompoundTag damaged=original.save(new CompoundTag());
@@ -1438,6 +1481,35 @@ public final class RiftController {
         double remaining=Math.max(0.0D,Math.min(1.0D,
             ((double)restoreIndex+1.0D)/snapshotCount));
         return 0.75D+0.25D*remaining;
+    }
+
+    /**
+     * Reuse the persisted restoration clock so the gravity tail resumes at the
+     * same strength after a server restart. The scale is always finite and bounded.
+     */
+    private static double restorationGravityScale(int restoreTicks) {
+        if(restoreTicks<=0) return 1.0D;
+        return Math.max(0.0D,1.0D
+            - Math.min(restoreTicks,RESTORE_GRAVITY_FADE_TICKS)/(double)RESTORE_GRAVITY_FADE_TICKS);
+    }
+
+    private static void verifyRestorationGravityFade() {
+        int[] ticks={-1,0,10,20,30,40,Integer.MAX_VALUE};
+        double[] expected={1.0D,1.0D,.75D,.5D,.25D,0.0D,0.0D};
+        for(int i=0;i<ticks.length;i++) {
+            double actual=restorationGravityScale(ticks[i]);
+            if(!Double.isFinite(actual) || actual<0.0D || actual>1.0D
+                || Math.abs(actual-expected[i])>1.0E-9D)
+                throw new IllegalStateException("CI restoration gravity fade profile regression: "+actual);
+        }
+        double previous=1.0D;
+        for(int tick=0;tick<=RESTORE_GRAVITY_FADE_TICKS;tick++) {
+            double actual=restorationGravityScale(tick);
+            if(actual>previous+1.0E-9D)
+                throw new IllegalStateException("CI restoration gravity fade is not monotonic");
+            previous=actual;
+        }
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_PROFILE_VERIFIED ticks=40 start=1.0 midpoint=0.5 end=0.0 monotonic=true");
     }
 
     private static void verifyRecoveryVortexContraction() {
@@ -1718,6 +1790,7 @@ public final class RiftController {
         verifyBoundedSinkVelocity();
         verifyBoundedSinkDrag();
         verifyRiftGravityEligibility();
+        verifyRestorationGravityFade();
         verifyGravityAnomalyParticlePalette();
         verifyPendingSnapshotPersistence();
         verifySparseBeaconSupport();
@@ -2567,7 +2640,11 @@ public final class RiftController {
             }
         }
         if(s.surfaceCueCooldownTicks>0) s.surfaceCueCooldownTicks--;
-        if(s.restoring) { restore(level,s); return; }
+        if(s.restoring) {
+            applyRestorationGravityFade(level,s);
+            restore(level,s);
+            return;
+        }
         // Keep clients synchronized even on old worlds or after the finale.
         if(level.getGameTime()%(s.started && !s.finished ? 10L : 100L)==0) {
             float progress=s.restored ? 0f : s.finished ? 1f : Math.max(0f, Math.min(1f,(s.elapsed-3f*DAY)/(7f*DAY)));
