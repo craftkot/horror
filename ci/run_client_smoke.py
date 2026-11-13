@@ -1038,7 +1038,7 @@ def capture_test_world():
                     or "double time=(double)tick+boundedRenderPartialTick(event.getPartialTick());" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: ground fissure animation does not clamp the renderer partial tick",flush=True)
                 return False
-            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=5.6 coreScale=0.82 edgeHalfWidth=0.026"
+            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=6.4 coreScale=0.95 edgeHalfWidth=0.026 edgeInsideGlow=true"
             if visual_profile_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: widened ground fissure visual profile self-check was not executed",flush=True)
                 return False

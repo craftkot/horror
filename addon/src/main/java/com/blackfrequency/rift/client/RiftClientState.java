@@ -122,8 +122,8 @@ public final class RiftClientState {
         // Do not turn a sharp cliff into a vertical translucent wall.
         private static final double MAX_GROUND_SEGMENT_Y_DELTA=1.25D;
         // Slightly widen the ground seam so it remains legible through partial canopy gaps.
-        private static final double GROUND_GLOW_WIDTH_SCALE=5.6D;
-        private static final double GROUND_CORE_WIDTH_SCALE=.82D;
+        private static final double GROUND_GLOW_WIDTH_SCALE=6.4D;
+        private static final double GROUND_CORE_WIDTH_SCALE=.95D;
         private static final double GROUND_EDGE_HALF_WIDTH=.026D;
         // A restrained violet filament pulses inside the dark core without another trig call.
         private static final double GROUND_CORE_PULSE_BASE=.10D;
@@ -202,13 +202,18 @@ public final class RiftClientState {
                     "BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED tip={} middle={} end={}",tip,middle,end);
             }
             if(!visualProfileLogged) {
-                if(Math.abs(GROUND_GLOW_WIDTH_SCALE-5.6D)>1.0E-9D
-                    || Math.abs(GROUND_CORE_WIDTH_SCALE-.82D)>1.0E-9D
-                    || Math.abs(GROUND_EDGE_HALF_WIDTH-.026D)>1.0E-9D)
+                double minimumHalfWidth=.045D;
+                double glowHalfWidth=minimumHalfWidth*GROUND_GLOW_WIDTH_SCALE;
+                double coreHalfWidth=minimumHalfWidth*GROUND_CORE_WIDTH_SCALE;
+                double outerEdgeExtent=minimumHalfWidth*1.9D+GROUND_EDGE_HALF_WIDTH;
+                if(Math.abs(GROUND_GLOW_WIDTH_SCALE-6.4D)>1.0E-9D
+                    || Math.abs(GROUND_CORE_WIDTH_SCALE-.95D)>1.0E-9D
+                    || Math.abs(GROUND_EDGE_HALF_WIDTH-.026D)>1.0E-9D
+                    || !(coreHalfWidth<outerEdgeExtent && outerEdgeExtent<glowHalfWidth))
                     throw new IllegalStateException("BLACK FREQUENCY ground mesh visual profile regression");
                 visualProfileLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale={} coreScale={} edgeHalfWidth={}",
+                    "BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale={} coreScale={} edgeHalfWidth={} edgeInsideGlow=true",
                     GROUND_GLOW_WIDTH_SCALE,GROUND_CORE_WIDTH_SCALE,GROUND_EDGE_HALF_WIDTH);
             }
             if(!surfaceHeightProfileLogged) {
