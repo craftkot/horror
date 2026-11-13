@@ -1489,13 +1489,18 @@ public final class RiftController {
      */
     private static double restorationGravityScale(int restoreTicks) {
         if(restoreTicks<=0) return 1.0D;
-        return Math.max(0.0D,1.0D
-            - Math.min(restoreTicks,RESTORE_GRAVITY_FADE_TICKS)/(double)RESTORE_GRAVITY_FADE_TICKS);
+        double progress=Math.min(restoreTicks,RESTORE_GRAVITY_FADE_TICKS)
+            /(double)RESTORE_GRAVITY_FADE_TICKS;
+        // Cubic smoothstep softens both ends of the gravity tail. The anomaly
+        // remains perceptible at the start, then releases the player without
+        // an abrupt final impulse drop; endpoints and midpoint stay unchanged.
+        double eased=progress*progress*(3.0D-2.0D*progress);
+        return 1.0D-eased;
     }
 
     private static void verifyRestorationGravityFade() {
         int[] ticks={-1,0,10,20,30,40,Integer.MAX_VALUE};
-        double[] expected={1.0D,1.0D,.75D,.5D,.25D,0.0D,0.0D};
+        double[] expected={1.0D,1.0D,.84375D,.5D,.15625D,0.0D,0.0D};
         for(int i=0;i<ticks.length;i++) {
             double actual=restorationGravityScale(ticks[i]);
             if(!Double.isFinite(actual) || actual<0.0D || actual>1.0D
@@ -1509,6 +1514,12 @@ public final class RiftController {
                 throw new IllegalStateException("CI restoration gravity fade is not monotonic");
             previous=actual;
         }
+        double firstStep=1.0D-restorationGravityScale(1);
+        double lastStep=restorationGravityScale(RESTORE_GRAVITY_FADE_TICKS-1);
+        if(firstStep>=1.0D/RESTORE_GRAVITY_FADE_TICKS
+            || lastStep>=1.0D/RESTORE_GRAVITY_FADE_TICKS
+            || Math.abs(restorationGravityScale(10)+restorationGravityScale(30)-1.0D)>1.0E-9D)
+            throw new IllegalStateException("CI restoration gravity fade easing regression");
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_PROFILE_VERIFIED ticks=40 start=1.0 midpoint=0.5 end=0.0 monotonic=true");
     }
 
