@@ -128,6 +128,10 @@ jobs:
             grep -q 'BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_FULL_PASS_VERIFIED fixturePlayers=2 menusAfterViewer=1 fullPass=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST GRAVITY_ANOMALY_PARTICLE_PALETTE_VERIFIED base=deep-violet accent=bright-violet cached=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_UI_PALETTE_VERIFIED rgb=5714c7 legacyFormatting=false' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_PROFILE_VERIFIED ticks=40 start=1.0 midpoint=0.5 end=0.0 monotonic=true' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_SAVE_ROUNDTRIP_VERIFIED elapsed=20 scale=0.5' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_PLAYER_IMPULSE_VERIFIED full=true half=true zero=true' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_RUNTIME_STARTED ticks=40' world-test.log
             echo 'RESTORE_WRITE_RETRY_VERIFIED: a rejected block write was retained and retried on a later tick'
             echo 'FLOWING_FLUID_RESTORATION_VERIFIED'
             python3 - <<'PY'
