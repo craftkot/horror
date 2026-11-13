@@ -76,6 +76,10 @@ public final class RiftController {
         new DustParticleOptions(new Vector3f(.42F,.08F,.98F),RESTORE_VIOLET_ACCENT_DUST_SCALE);
     private static final double RESTORE_AUDIENCE_SPREAD_XZ=.85D;
     private static final double RESTORE_AUDIENCE_SPREAD_Y=.55D;
+    // Gravity cues reuse the bounded recovery palette instead of bright portal/dragon-breath particles.
+    // These aliases point at cached Dust options; no particle options are allocated during ticks.
+    private static final DustParticleOptions ANOMALY_VIOLET_DUST = RESTORE_VIOLET_DUST;
+    private static final DustParticleOptions ANOMALY_VIOLET_ACCENT_DUST = RESTORE_VIOLET_ACCENT_DUST;
     // Five cached sizes smooth the fissure's spatial pulse without allocating per sample.
     private static final DustParticleOptions FISSURE_VIOLET_DUST_SMALL =
         new DustParticleOptions(new Vector3f(.34F,.08F,.78F),.95F);
@@ -1551,6 +1555,18 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_FULL_PASS_VERIFIED fixturePlayers=2 menusAfterViewer=1 fullPass=true");
     }
 
+    private static void verifyGravityAnomalyParticlePalette() {
+        if(ANOMALY_VIOLET_DUST!=RESTORE_VIOLET_DUST
+            || ANOMALY_VIOLET_ACCENT_DUST!=RESTORE_VIOLET_ACCENT_DUST
+            || !hasDustColor(ANOMALY_VIOLET_DUST,.34F,.08F,.78F)
+            || !hasDustColor(ANOMALY_VIOLET_ACCENT_DUST,.42F,.08F,.98F)
+            || ANOMALY_VIOLET_DUST.getScale()<=0.0F
+            || ANOMALY_VIOLET_DUST.getScale()>=ANOMALY_VIOLET_ACCENT_DUST.getScale()
+            || ANOMALY_VIOLET_ACCENT_DUST.getScale()>.85F)
+            throw new IllegalStateException("CI gravity anomaly Dust palette regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST GRAVITY_ANOMALY_PARTICLE_PALETTE_VERIFIED base=deep-violet accent=bright-violet cached=true");
+    }
+
     private static void verifyRestorationParticleProfile() {
         boolean ringBoundary=shouldEmitRestoreAudiencePulse(RESTORE_RING_INTERVAL_TICKS);
         boolean ringBetween=!shouldEmitRestoreAudiencePulse(RESTORE_RING_INTERVAL_TICKS-1);
@@ -1670,6 +1686,7 @@ public final class RiftController {
         verifyBoundedSinkVelocity();
         verifyBoundedSinkDrag();
         verifyRiftGravityEligibility();
+        verifyGravityAnomalyParticlePalette();
         verifyPendingSnapshotPersistence();
         verifySparseBeaconSupport();
         verifyRestorationProgress();
@@ -2706,20 +2723,18 @@ public final class RiftController {
                 double zone=Math.sin(player.getX()*.115+Math.sin(s.finaleTicks*.011)*1.8)
                            *Math.cos(player.getZ()*.125-s.finaleTicks*.008);
                 if(zone>.42) {
-                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                    // Deep-violet motes mark lift; smaller bright-violet sparks define the edge.
+                    level.sendParticles(ANOMALY_VIOLET_DUST,
                         player.getX(),player.getY()+.5,player.getZ(),
-                        Math.max(1,(int)Math.ceil(9*fade)),2.2,.7,2.2,.11);
-                    // Violet sparks keep the lift field in the catastrophe palette
-                    // instead of introducing bright white END_ROD flashes.
-                    level.sendParticles(ParticleTypes.DRAGON_BREATH,
+                        Math.max(1,(int)Math.ceil(9*fade)),1.5,.55,1.5,.055);
+                    level.sendParticles(ANOMALY_VIOLET_ACCENT_DUST,
                         player.getX(),player.getY()+.3,player.getZ(),
-                        Math.max(1,(int)Math.ceil(3*fade)),1.4,.25,1.4,.04);
+                        Math.max(1,(int)Math.ceil(3*fade)),.9,.25,.9,.025);
                 } else if(zone<-.68) {
-                    // Sinking anomalies now read as purple distortion, not
-                    // ordinary grey fire smoke; keep the same particle budget.
-                    level.sendParticles(ParticleTypes.DRAGON_BREATH,
+                    // Sinking anomalies use the same cached deep-violet palette, not magenta smoke.
+                    level.sendParticles(ANOMALY_VIOLET_DUST,
                         player.getX(),player.getY()+.15,player.getZ(),
-                        Math.max(1,(int)Math.ceil(7*fade)),1.8,.25,1.8,.018);
+                        Math.max(1,(int)Math.ceil(7*fade)),1.25,.25,1.25,.018);
                 }
             }
         }
