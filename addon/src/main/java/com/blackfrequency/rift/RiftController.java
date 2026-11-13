@@ -486,7 +486,9 @@ public final class RiftController {
      * activation. This touches player motion only; it never queries chunks or blocks.
      */
     private static void applyRestorationGravityFade(ServerLevel level,State s) {
-        if(s.finaleTicks<=85 || s.restoreTicks%5!=0) return;
+        // restoreTicks advances once per server tick. Apply each point of the
+        // 40-tick smoothstep curve instead of sampling it only eight times.
+        if(!shouldApplyRestorationGravityFade(s.finaleTicks,s.restoreTicks)) return;
         if(CI_TEST && s.restoreTicks==0)
             LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_RUNTIME_STARTED ticks={}",
                 RESTORE_GRAVITY_FADE_TICKS);
@@ -1487,6 +1489,11 @@ public final class RiftController {
      * Reuse the persisted restoration clock so the gravity tail resumes at the
      * same strength after a server restart. The scale is always finite and bounded.
      */
+    private static boolean shouldApplyRestorationGravityFade(int finaleTicks,int restoreTicks) {
+        return finaleTicks>85 && restoreTicks>=0
+            && restoreTicks<RESTORE_GRAVITY_FADE_TICKS;
+    }
+
     private static double restorationGravityScale(int restoreTicks) {
         if(restoreTicks<=0) return 1.0D;
         double progress=Math.min(restoreTicks,RESTORE_GRAVITY_FADE_TICKS)
@@ -1520,6 +1527,20 @@ public final class RiftController {
             || lastStep>=1.0D/RESTORE_GRAVITY_FADE_TICKS
             || Math.abs(restorationGravityScale(10)+restorationGravityScale(30)-1.0D)>1.0E-9D)
             throw new IllegalStateException("CI restoration gravity fade easing regression");
+        int scheduledUpdates=0;
+        for(int tick=-1;tick<=RESTORE_GRAVITY_FADE_TICKS+1;tick++) {
+            boolean expected=tick>=0 && tick<RESTORE_GRAVITY_FADE_TICKS;
+            boolean actual=shouldApplyRestorationGravityFade(86,tick);
+            if(actual!=expected)
+                throw new IllegalStateException("CI restoration gravity fade cadence regression at tick "+tick);
+            if(actual) scheduledUpdates++;
+        }
+        if(scheduledUpdates!=RESTORE_GRAVITY_FADE_TICKS
+            || shouldApplyRestorationGravityFade(85,0)
+            || shouldApplyRestorationGravityFade(Integer.MIN_VALUE,0))
+            throw new IllegalStateException("CI restoration gravity fade start/end gate regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_CADENCE_VERIFIED ticks={} intervalTicks=1 updates={}",
+            RESTORE_GRAVITY_FADE_TICKS,scheduledUpdates);
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_PROFILE_VERIFIED ticks=40 start=1.0 midpoint=0.5 end=0.0 monotonic=true");
     }
 
