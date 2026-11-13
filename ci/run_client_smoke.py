@@ -1038,9 +1038,16 @@ def capture_test_world():
                     or "double time=(double)tick+boundedRenderPartialTick(event.getPartialTick());" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: ground fissure animation does not clamp the renderer partial tick",flush=True)
                 return False
-            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=6.4 coreScale=0.95 edgeHalfWidth=0.026 edgeInsideGlow=true"
+            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=6.4 coreScale=1.15 edgeHalfWidth=0.026 pulseMin=0.045 pulseMax=0.068 coreInsideEdgeBand=true"
             if visual_profile_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: widened ground fissure visual profile self-check was not executed",flush=True)
+                return False
+            if ("private static final double GROUND_MIN_HALF_WIDTH=.045D;" not in camera_source
+                    or "private static final double GROUND_MAX_HALF_WIDTH=" not in camera_source
+                    or "GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE+GROUND_WIDTH_FLICKER;" not in camera_source
+                    or "double halfWidth=Math.max(GROUND_MIN_HALF_WIDTH," not in camera_source
+                    or "GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE*wave+widthFlicker);" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: tested ground core width range is not the range used by the render pulse",flush=True)
                 return False
             rebuild_source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
             rebuild_source=rebuild_source_path.read_text(encoding="utf-8",errors="replace")

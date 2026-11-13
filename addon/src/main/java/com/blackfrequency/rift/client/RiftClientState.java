@@ -123,7 +123,14 @@ public final class RiftClientState {
         private static final double MAX_GROUND_SEGMENT_Y_DELTA=1.25D;
         // Slightly widen the ground seam so it remains legible through partial canopy gaps.
         private static final double GROUND_GLOW_WIDTH_SCALE=6.4D;
-        private static final double GROUND_CORE_WIDTH_SCALE=.95D;
+        private static final double GROUND_CORE_WIDTH_SCALE=1.15D;
+        // The render pulse is clamped to this interval for every wave/flicker phase.
+        private static final double GROUND_MIN_HALF_WIDTH=.045D;
+        private static final double GROUND_BASE_HALF_WIDTH=.048D;
+        private static final double GROUND_WAVE_HALF_WIDTH_RANGE=.016D;
+        private static final double GROUND_WIDTH_FLICKER=.004D;
+        private static final double GROUND_MAX_HALF_WIDTH=
+            GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE+GROUND_WIDTH_FLICKER;
         private static final double GROUND_EDGE_HALF_WIDTH=.026D;
         // A restrained violet filament pulses inside the dark core without another trig call.
         private static final double GROUND_CORE_PULSE_BASE=.10D;
@@ -202,19 +209,28 @@ public final class RiftClientState {
                     "BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED tip={} middle={} end={}",tip,middle,end);
             }
             if(!visualProfileLogged) {
-                double minimumHalfWidth=.045D;
-                double glowHalfWidth=minimumHalfWidth*GROUND_GLOW_WIDTH_SCALE;
-                double coreHalfWidth=minimumHalfWidth*GROUND_CORE_WIDTH_SCALE;
-                double outerEdgeExtent=minimumHalfWidth*1.9D+GROUND_EDGE_HALF_WIDTH;
+                double minimumHalfWidth=GROUND_MIN_HALF_WIDTH;
+                double maximumHalfWidth=GROUND_MAX_HALF_WIDTH;
+                double minimumGlowHalfWidth=minimumHalfWidth*GROUND_GLOW_WIDTH_SCALE;
+                double minimumCoreHalfWidth=minimumHalfWidth*GROUND_CORE_WIDTH_SCALE;
+                double minimumEdgeInnerHalfWidth=minimumHalfWidth*1.9D-GROUND_EDGE_HALF_WIDTH;
+                double maximumGlowHalfWidth=maximumHalfWidth*GROUND_GLOW_WIDTH_SCALE;
+                double maximumCoreHalfWidth=maximumHalfWidth*GROUND_CORE_WIDTH_SCALE;
+                double maximumEdgeInnerHalfWidth=maximumHalfWidth*1.9D-GROUND_EDGE_HALF_WIDTH;
                 if(Math.abs(GROUND_GLOW_WIDTH_SCALE-6.4D)>1.0E-9D
-                    || Math.abs(GROUND_CORE_WIDTH_SCALE-.95D)>1.0E-9D
+                    || Math.abs(GROUND_CORE_WIDTH_SCALE-1.15D)>1.0E-9D
                     || Math.abs(GROUND_EDGE_HALF_WIDTH-.026D)>1.0E-9D
-                    || !(coreHalfWidth<outerEdgeExtent && outerEdgeExtent<glowHalfWidth))
+                    || Math.abs(maximumHalfWidth-.068D)>1.0E-9D
+                    || !(minimumCoreHalfWidth<minimumEdgeInnerHalfWidth
+                        && minimumEdgeInnerHalfWidth<minimumGlowHalfWidth)
+                    || !(maximumCoreHalfWidth<maximumEdgeInnerHalfWidth
+                        && maximumEdgeInnerHalfWidth<maximumGlowHalfWidth))
                     throw new IllegalStateException("BLACK FREQUENCY ground mesh visual profile regression");
                 visualProfileLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale={} coreScale={} edgeHalfWidth={} edgeInsideGlow=true",
-                    GROUND_GLOW_WIDTH_SCALE,GROUND_CORE_WIDTH_SCALE,GROUND_EDGE_HALF_WIDTH);
+                    "BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale={} coreScale={} edgeHalfWidth={} pulseMin={} pulseMax={} coreInsideEdgeBand=true",
+                    GROUND_GLOW_WIDTH_SCALE,GROUND_CORE_WIDTH_SCALE,GROUND_EDGE_HALF_WIDTH,
+                    minimumHalfWidth,maximumHalfWidth);
             }
             if(!surfaceHeightProfileLogged) {
                 double fullBlock=groundSurfaceOffset(1.0D,Double.NaN);
@@ -920,8 +936,9 @@ public final class RiftClientState {
                     double wave=.5D+.5D*Math.sin(time*.14D+segment.phase());
                     // A slow travelling pulse changes width independently along
                     // the seam; endpoint taper keeps each arm from ending bluntly.
-                    double widthFlicker=.004D*Math.sin(time*.055D+segment.phase()*1.9D);
-                    double halfWidth=Math.max(.045D,.048D+.016D*wave+widthFlicker);
+                    double widthFlicker=GROUND_WIDTH_FLICKER*Math.sin(time*.055D+segment.phase()*1.9D);
+                    double halfWidth=Math.max(GROUND_MIN_HALF_WIDTH,
+                        GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE*wave+widthFlicker);
                     float pulse=(float)(.78D+.22D*Math.sin(time*.19D+segment.phase()));
                     float alpha=boundedStrength*pulse;
                     ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_GLOW_WIDTH_SCALE,
