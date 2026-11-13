@@ -60,6 +60,7 @@ jobs:
           grep -q 'BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED' world-test.log
           # The four-arm fissure's textured edge accents are validated in the server-side layout self-check.
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_LAYOUT_VERIFIED count=8 material=crying_obsidian' world-test.log
+          grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=56 dragonBreath=8 reversePortal=40 shards=8' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_STRUCTURAL_SUPPORT_FILTER_VERIFIED' world-test.log
           python3 - <<'PY'
           import pathlib,re

@@ -1264,7 +1264,7 @@ def capture_test_world():
                       "server",density_spacing,density_extent,
                       "client",client_spacing,client_extent,"radius",client_radius,flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=56 dragonBreath=40 reversePortal=8 shards=8" not in log_after:
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=56 dragonBreath=8 reversePortal=40 shards=8" not in log_after:
                 print("WORLD_CAPTURE_FAIL: layered fissure particle budget self-check was not executed",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_STRUCTURAL_SUPPORT_FILTER_VERIFIED" not in log_after:
@@ -1275,9 +1275,10 @@ def capture_test_world():
                 return False
             if (not fissure or int(fissure.group(1))<32
                     or int(fissure.group(2))+int(fissure.group(3))!=int(fissure.group(1))
-                    or int(fissure.group(3))!=8
+                    or int(fissure.group(2))!=8
+                    or int(fissure.group(3))!=int(fissure.group(1))-8
                     or int(fissure.group(4))!=int(fissure.group(1))+8):
-                print("WORLD_CAPTURE_FAIL: ground fissure particle composition or loaded sample count is invalid",flush=True)
+                print("WORLD_CAPTURE_FAIL: violet-majority ground fissure particle composition or loaded sample count is invalid",flush=True)
                 return False
             shards=re.search(
                 r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARDS_EMITTED count=([0-9]+) material=crying_obsidian",

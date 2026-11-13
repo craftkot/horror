@@ -595,6 +595,14 @@ public final class RiftController {
         }
     }
 
+    // Keep Dragon Breath as sparse hot-violet accents; most fissure motes use
+    // Reverse Portal so the ground scar reads deep violet instead of magenta.
+    private static boolean isDragonBreathFissureAccent(int segment) {
+        return segment>0 && segment%4==0
+            && FISSURE_SHARD_SEGMENT_INTERVAL>0
+            && segment%FISSURE_SHARD_SEGMENT_INTERVAL!=0;
+    }
+
     // A no-leaves heightmap can still stop on a tree trunk or a village roof.
     // Walk down to terrain instead of treating stairs, slabs, walls or other
     // structural surfaces as the ground fracture plane.
@@ -685,9 +693,9 @@ public final class RiftController {
                 if(!isFissureGroundSupport(level.getBlockState(support))) continue;
                 double particleY=fissureParticleY(level,blockX,surfaceY,blockZ);
                 double pulse=Math.sin(phase+segment*.8+arm*.6)*.05;
-                // Keep one primary mote per sample. At the eight shard anchors,
-                // use a slower Reverse Portal mote instead of Dragon Breath to
-                // add a darker violet core without increasing the particle count.
+                // Keep one primary mote per sample. Reverse Portal supplies the
+                // dominant deep-violet line; every fourth non-shard segment keeps
+                // a restrained Dragon Breath accent for contrast.
                 if(segment%FISSURE_SHARD_SEGMENT_INTERVAL==0) {
                     level.sendParticles(ParticleTypes.REVERSE_PORTAL,
                         px,particleY+pulse,pz,1,.035,.012,.035,.008);
@@ -698,10 +706,14 @@ public final class RiftController {
                         Blocks.CRYING_OBSIDIAN.defaultBlockState()),
                         px,particleY+.04+pulse,pz,1,.045,.025,.045,.012);
                     shards++;
-                } else {
+                } else if(isDragonBreathFissureAccent(segment)) {
                     level.sendParticles(ParticleTypes.DRAGON_BREATH,
                         px,particleY+pulse,pz,FISSURE_MOTES_PER_SAMPLE,.045,.025,.045,.003);
                     dragonBreathMotes+=FISSURE_MOTES_PER_SAMPLE;
+                } else {
+                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                        px,particleY+pulse,pz,FISSURE_MOTES_PER_SAMPLE,.035,.012,.035,.008);
+                    reversePortalMotes+=FISSURE_MOTES_PER_SAMPLE;
                 }
                 surfaceYTotal+=particleY;
                 samples++;
@@ -902,14 +914,26 @@ public final class RiftController {
             || FISSURE_SEGMENTS_PER_ARM%FISSURE_SHARD_SEGMENT_INTERVAL!=0
             || FISSURE_SEGMENTS_PER_ARM/FISSURE_SHARD_SEGMENT_INTERVAL!=2)
             throw new IllegalStateException("CI fissure sampling density/radius regression");
-        int shardCount=FISSURE_ARM_COUNT*2;
+        int shardCount=0;
+        int dragonBreathMotes=0;
+        int reversePortalMotes=0;
+        for(int arm=0;arm<FISSURE_ARM_COUNT;arm++) {
+            for(int segment=1;segment<=FISSURE_SEGMENTS_PER_ARM;segment++) {
+                if(segment%FISSURE_SHARD_SEGMENT_INTERVAL==0) {
+                    shardCount++;
+                    reversePortalMotes+=FISSURE_MOTES_PER_SAMPLE;
+                } else if(isDragonBreathFissureAccent(segment)) {
+                    dragonBreathMotes+=FISSURE_MOTES_PER_SAMPLE;
+                } else {
+                    reversePortalMotes+=FISSURE_MOTES_PER_SAMPLE;
+                }
+            }
+        }
         int primaryMotes=samples*FISSURE_MOTES_PER_SAMPLE;
-        int reversePortalMotes=shardCount;
-        int dragonBreathMotes=primaryMotes-reversePortalMotes;
         int totalParticles=primaryMotes+shardCount;
-        if(shardCount!=8 || reversePortalMotes!=8 || dragonBreathMotes!=40
+        if(shardCount!=8 || dragonBreathMotes!=8 || reversePortalMotes!=40
             || totalParticles!=56 || totalParticles>56)
-            throw new IllegalStateException("CI fissure particle budget regression");
+            throw new IllegalStateException("CI violet-majority fissure particle budget regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples={} spacing={} extent={}",
             samples,FISSURE_SAMPLE_SPACING,extent);
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total={} dragonBreath={} reversePortal={} shards={}",
