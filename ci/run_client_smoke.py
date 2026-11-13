@@ -28,7 +28,21 @@ def verify_restoration_particle_source():
     found=[token for token in forbidden if token in body]
     if found:
         raise RuntimeError("BLACK FREQUENCY legacy restoration particles remain: "+", ".join(found))
-    print("WORLD_CAPTURE: restoration source uses cached violet Dust; legacy portal/dragon-breath/end-rod emitters absent",flush=True)
+    if "FISSURE_VIOLET_" in body:
+        raise RuntimeError("BLACK FREQUENCY restoration still uses oversized ground-fissure Dust")
+    if "§d" in source:
+        raise RuntimeError("BLACK FREQUENCY still uses bright magenta formatting in beacon/recovery messages")
+    base_scale=re.search(r"RESTORE_VIOLET_DUST_SCALE\s*=\s*([0-9.]+)F",source)
+    accent_scale=re.search(r"RESTORE_VIOLET_ACCENT_DUST_SCALE\s*=\s*([0-9.]+)F",source)
+    spread_xz=re.search(r"RESTORE_AUDIENCE_SPREAD_XZ\s*=\s*([0-9.]+)D",source)
+    spread_y=re.search(r"RESTORE_AUDIENCE_SPREAD_Y\s*=\s*([0-9.]+)D",source)
+    if not all((base_scale,accent_scale,spread_xz,spread_y)):
+        raise RuntimeError("BLACK FREQUENCY restoration Dust size/spread constants are missing")
+    base,accent,xz,y=map(lambda m:float(m.group(1)),
+                         (base_scale,accent_scale,spread_xz,spread_y))
+    if not (.55<=base<accent<=.85 and 0<xz<=1.0 and 0<y<=.75):
+        raise RuntimeError("BLACK FREQUENCY restoration Dust size/spread exceeds visual bounds")
+    print("WORLD_CAPTURE: restoration uses smaller cached violet Dust, bounded halo and dark-purple UI",flush=True)
 
 verify_restoration_particle_source()
 
@@ -502,7 +516,12 @@ def capture_test_world():
 
     def restoration_palette_passes(metrics):
         return (metrics["legacyMagentaPixels"]<=200
-                and metrics["violetDustPixels"]>=40)
+                and 40<=metrics["violetDustPixels"]<=35000)
+
+    if (not restoration_palette_passes({"legacyMagentaPixels":0,"violetDustPixels":1000})
+            or restoration_palette_passes({"legacyMagentaPixels":0,"violetDustPixels":35001})
+            or restoration_palette_passes({"legacyMagentaPixels":201,"violetDustPixels":1000})):
+        raise RuntimeError("BLACK FREQUENCY restoration palette density guard regression")
 
     def verify_sky_pixels(name, region, minimum, max_green=None):
         from PIL import Image
@@ -1231,6 +1250,10 @@ def capture_test_world():
             if (os.environ.get("BF_TEST_RESTORATION")=="1"
                     and "BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_PROFILE_VERIFIED ring=24 ringIntervalTicks=20 sparks=4 helix=16 helixIntervalTicks=8 blockCue=6 blockIntervalBlocks=48 audience=8 audienceIntervalTicks=20 cachedDust=true" not in log_after):
                 print("WORLD_CAPTURE_FAIL: restoration particle cadence/profile was not verified",flush=True)
+                return False
+            size_marker="BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_SIZE_VERIFIED baseScale=0.62 accentScale=0.78 audienceSpreadXZ=0.85 audienceSpreadY=0.55 cachedDust=true"
+            if os.environ.get("BF_TEST_RESTORATION")=="1" and size_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: bounded restoration particle size/spread was not verified",flush=True)
                 return False
             if os.environ.get("BF_TEST_PLAYER_BEACON")=="1":
                 counts=re.search(r"BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored=([0-9]+) destroyed=([0-9]+) skippedOccupied=([0-9]+)",log_after)
