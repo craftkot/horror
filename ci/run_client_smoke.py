@@ -24,6 +24,15 @@ def verify_restoration_particle_source():
     if start<0 or end<0:
         raise RuntimeError("BLACK FREQUENCY restoration method source boundary regression")
     body=source[start:end]
+    scan_interval=re.search(r"RESTORE_PLAYER_SCAN_INTERVAL_TICKS\s*=\s*(\d+)",source)
+    tick_advance=body.find("s.restoreTicks=nextNonNegativeTick(s.restoreTicks)")
+    scan_gate=body.find("if(shouldScanRestorePlayers(s.restoreTicks,beaconPresent))")
+    player_loop=body.find("for(var player:level.players())")
+    menu_guard=body.find("player.containerMenu instanceof net.minecraft.world.inventory.BeaconMenu")
+    if (not scan_interval or int(scan_interval.group(1))!=4
+            or not (0<=tick_advance<scan_gate<player_loop<=menu_guard)
+            or "if(beaconPresent) {\n            for(var player:level.players())" in body):
+        raise RuntimeError("BLACK FREQUENCY beacon-menu close is not part of the bounded shared player scan")
     forbidden=("ParticleTypes.REVERSE_PORTAL","ParticleTypes.DRAGON_BREATH","ParticleTypes.END_ROD")
     found=[token for token in forbidden if token in body]
     if found:
@@ -1254,6 +1263,10 @@ def capture_test_world():
             size_marker="BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_SIZE_VERIFIED baseScale=0.62 accentScale=0.78 audienceSpreadXZ=0.85 audienceSpreadY=0.55 cachedDust=true"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and size_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: bounded restoration particle size/spread was not verified",flush=True)
+                return False
+            scan_marker="BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_PROFILE_VERIFIED intervalTicks=4 menuClose=shared viewerScan=shared loadedOnly=true"
+            if os.environ.get("BF_TEST_RESTORATION")=="1" and scan_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: beacon-menu closure did not use the shared bounded player scan",flush=True)
                 return False
             if os.environ.get("BF_TEST_PLAYER_BEACON")=="1":
                 counts=re.search(r"BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored=([0-9]+) destroyed=([0-9]+) skippedOccupied=([0-9]+)",log_after)
