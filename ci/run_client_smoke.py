@@ -280,6 +280,7 @@ def capture_test_world():
             or is_ground_fissure_pixel(134,44,150)
             or not is_ground_fissure_pixel(201,66,214)
             or not is_ground_mesh_pixel(194,58,238)
+            or not is_ground_mesh_pixel(158,26,250)
             or is_ground_mesh_pixel(198,0,229)
             or is_ground_mesh_pixel(201,66,214)
             or is_ground_mesh_pixel(142,127,155)):
@@ -1041,6 +1042,16 @@ def capture_test_world():
             visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=6.4 coreScale=1.15 edgeHalfWidth=0.026 pulseMin=0.045 pulseMax=0.068 coreInsideEdgeBand=true"
             if visual_profile_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: widened ground fissure visual profile self-check was not executed",flush=True)
+                return False
+            edge_palette_marker="BLACK_FREQUENCY_GROUND_MESH_EDGE_PALETTE_VERIFIED red=0.62 green=0.1 blue=0.98"
+            if edge_palette_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: violet ground-edge palette self-check was not executed",flush=True)
+                return False
+            if ("private static final float GROUND_EDGE_RED=.62F;" not in camera_source
+                    or "private static final float GROUND_EDGE_GREEN=.10F;" not in camera_source
+                    or "private static final float GROUND_EDGE_BLUE=.98F;" not in camera_source
+                    or "GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE,edgeAlpha);" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: verified violet edge colors are not used by both ground ribbons",flush=True)
                 return False
             if ("private static final double GROUND_MIN_HALF_WIDTH=.045D;" not in camera_source
                     or "private static final double GROUND_MAX_HALF_WIDTH=" not in camera_source

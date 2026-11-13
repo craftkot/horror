@@ -133,6 +133,10 @@ public final class RiftClientState {
         private static final double GROUND_MAX_HALF_WIDTH=
             GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE+GROUND_WIDTH_FLICKER;
         private static final double GROUND_EDGE_HALF_WIDTH=.026D;
+        // Shift the ground rails away from hot magenta toward the sky-rift's deep violet palette.
+        private static final float GROUND_EDGE_RED=.62F;
+        private static final float GROUND_EDGE_GREEN=.10F;
+        private static final float GROUND_EDGE_BLUE=.98F;
         // A restrained violet filament pulses inside the dark core without another trig call.
         private static final double GROUND_CORE_PULSE_BASE=.10D;
         private static final double GROUND_CORE_PULSE_RANGE=.22D;
@@ -222,6 +226,13 @@ public final class RiftClientState {
                     || Math.abs(GROUND_CORE_WIDTH_SCALE-1.15D)>1.0E-9D
                     || Math.abs(GROUND_EDGE_HALF_WIDTH-.026D)>1.0E-9D
                     || Math.abs(maximumHalfWidth-.068D)>1.0E-9D
+                    || !Float.isFinite(GROUND_EDGE_RED) || !Float.isFinite(GROUND_EDGE_GREEN)
+                    || !Float.isFinite(GROUND_EDGE_BLUE)
+                    || GROUND_EDGE_RED<0.0F || GROUND_EDGE_RED>1.0F
+                    || GROUND_EDGE_GREEN<0.0F || GROUND_EDGE_GREEN>1.0F
+                    || GROUND_EDGE_BLUE<0.0F || GROUND_EDGE_BLUE>1.0F
+                    || !(GROUND_EDGE_BLUE>GROUND_EDGE_RED && GROUND_EDGE_RED>GROUND_EDGE_GREEN)
+                    || !(GROUND_EDGE_RED<.78F && GROUND_EDGE_GREEN<.18F)
                     || !(minimumCoreHalfWidth<minimumEdgeInnerHalfWidth
                         && minimumEdgeInnerHalfWidth<minimumGlowHalfWidth)
                     || !(maximumCoreHalfWidth<maximumEdgeInnerHalfWidth
@@ -232,6 +243,9 @@ public final class RiftClientState {
                     "BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale={} coreScale={} edgeHalfWidth={} pulseMin={} pulseMax={} coreInsideEdgeBand=true",
                     GROUND_GLOW_WIDTH_SCALE,GROUND_CORE_WIDTH_SCALE,GROUND_EDGE_HALF_WIDTH,
                     minimumHalfWidth,maximumHalfWidth);
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_GROUND_MESH_EDGE_PALETTE_VERIFIED red={} green={} blue={}",
+                    GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE);
             }
             if(!surfaceHeightProfileLogged) {
                 double fullBlock=groundSurfaceOffset(1.0D,Double.NaN);
@@ -993,9 +1007,9 @@ public final class RiftClientState {
                         .28F,.015F,.62F,alpha*corePulse);
                     float edgeAlpha=Math.min(1.0F,boundedStrength*(.94F*pulse+.06F));
                     ribbon(builder,matrix,camera,segment,halfWidth*1.9D,GROUND_EDGE_HALF_WIDTH,
-                        .78F,.18F,1.0F,edgeAlpha);
+                        GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE,edgeAlpha);
                     ribbon(builder,matrix,camera,segment,-halfWidth*1.9D,GROUND_EDGE_HALF_WIDTH,
-                        .78F,.18F,1.0F,edgeAlpha);
+                        GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE,edgeAlpha);
                 }
                 BufferUploader.drawWithShader(builder.end());
             } finally {
