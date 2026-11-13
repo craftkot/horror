@@ -64,6 +64,16 @@ public final class RiftController {
     private static final int RESTORE_BLOCK_CUE_INTERVAL = 48;
     private static final int RESTORE_BLOCK_CUE_PARTICLE_COUNT = 6;
     private static final int RESTORE_AUDIENCE_PARTICLE_COUNT = 8;
+    // Restoration motes are deliberately smaller than the ground-fissure Dust.
+    // Reuse these options so recovery never allocates a particle option per pulse.
+    private static final float RESTORE_VIOLET_DUST_SCALE=.62F;
+    private static final float RESTORE_VIOLET_ACCENT_DUST_SCALE=.78F;
+    private static final DustParticleOptions RESTORE_VIOLET_DUST =
+        new DustParticleOptions(new Vector3f(.34F,.08F,.78F),RESTORE_VIOLET_DUST_SCALE);
+    private static final DustParticleOptions RESTORE_VIOLET_ACCENT_DUST =
+        new DustParticleOptions(new Vector3f(.42F,.08F,.98F),RESTORE_VIOLET_ACCENT_DUST_SCALE);
+    private static final double RESTORE_AUDIENCE_SPREAD_XZ=.85D;
+    private static final double RESTORE_AUDIENCE_SPREAD_Y=.55D;
     // Five cached sizes smooth the fissure's spatial pulse without allocating per sample.
     private static final DustParticleOptions FISSURE_VIOLET_DUST_SMALL =
         new DustParticleOptions(new Vector3f(.34F,.08F,.78F),.95F);
@@ -1525,16 +1535,26 @@ public final class RiftController {
             && RESTORE_BLOCK_CUE_PARTICLE_COUNT==6
             && RESTORE_AUDIENCE_PARTICLE_COUNT==8;
         boolean cachedPalette=hasDustColor(FISSURE_VIOLET_DUST,.34F,.08F,.78F)
-            && hasDustColor(FISSURE_VIOLET_ACCENT_DUST,.42F,.08F,.98F);
+            && hasDustColor(FISSURE_VIOLET_ACCENT_DUST,.42F,.08F,.98F)
+            && hasDustColor(RESTORE_VIOLET_DUST,.34F,.08F,.78F)
+            && hasDustColor(RESTORE_VIOLET_ACCENT_DUST,.42F,.08F,.98F);
+        boolean boundedRestoreDust=RESTORE_VIOLET_DUST_SCALE>=.55F
+            && RESTORE_VIOLET_DUST_SCALE<RESTORE_VIOLET_ACCENT_DUST_SCALE
+            && RESTORE_VIOLET_ACCENT_DUST_SCALE<=.85F
+            && RESTORE_AUDIENCE_SPREAD_XZ>0.0D && RESTORE_AUDIENCE_SPREAD_XZ<=1.0D
+            && RESTORE_AUDIENCE_SPREAD_Y>0.0D && RESTORE_AUDIENCE_SPREAD_Y<=.75D;
         if(!(ringBoundary && ringBetween && helixBoundary && helixBetween
             && blockBoundary && blockBetween && blockNext && invalidTicks
-            && boundedCounts && cachedPalette))
+            && boundedCounts && cachedPalette && boundedRestoreDust))
             throw new IllegalStateException("CI restoration particle profile regression");
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_PROFILE_VERIFIED ring={} ringIntervalTicks={} sparks={} helix={} helixIntervalTicks={} blockCue={} blockIntervalBlocks={} audience={} audienceIntervalTicks={} cachedDust=true",
             RESTORE_RING_PARTICLE_COUNT,RESTORE_RING_INTERVAL_TICKS,RESTORE_RISING_SPARK_PARTICLE_COUNT,
             RESTORE_HELIX_PARTICLE_COUNT,RESTORE_HELIX_INTERVAL_TICKS,
             RESTORE_BLOCK_CUE_PARTICLE_COUNT,RESTORE_BLOCK_CUE_INTERVAL,
             RESTORE_AUDIENCE_PARTICLE_COUNT,RESTORE_RING_INTERVAL_TICKS);
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_SIZE_VERIFIED baseScale={} accentScale={} audienceSpreadXZ={} audienceSpreadY={} cachedDust=true",
+            RESTORE_VIOLET_DUST_SCALE,RESTORE_VIOLET_ACCENT_DUST_SCALE,
+            RESTORE_AUDIENCE_SPREAD_XZ,RESTORE_AUDIENCE_SPREAD_Y);
     }
 
     private static void verifyBeaconInteractionGuard() {
@@ -2018,7 +2038,7 @@ public final class RiftController {
                         if(nearby.distanceToSqr(pos.getX()+0.5D,
                             pos.getY()+0.5D,pos.getZ()+0.5D)>128.0D*128.0D) continue;
                         nearby.displayClientMessage(Component.literal(
-                            "§d✦ Маяк стабилизации: §f"+pos.getX()+" "+pos.getY()+" "+pos.getZ()+" §7— нажмите ПКМ"),true);
+                            "§5✦ Маяк стабилизации: §f"+pos.getX()+" "+pos.getY()+" "+pos.getZ()+" §7— нажмите ПКМ"),true);
                     }
                     return true;
                 }
@@ -2073,9 +2093,8 @@ public final class RiftController {
         s.restoreTicks=nextNonNegativeTick(s.restoreTicks);
         if(CI_TEST && s.restoreTicks==1)
             LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_BEACON_PRESENCE_CACHED present={}",beaconPresent);
-        // The 4-tick ring and 20-tick stabilization pulse use one player scan.
-        // Preserve their distinct vertical centers while avoiding a second stream
-        // traversal on every fifth ring update.
+        // The 8-tick helix and 20-tick ring/audience pulse share one player scan.
+        // Preserve their distinct vertical centers without a second stream traversal.
         boolean hasRingViewer=false;
         boolean hasStabilizationViewer=false;
         if(beaconPresent && s.restoreTicks%4==0) {
@@ -2114,7 +2133,7 @@ public final class RiftController {
                 double height=(i%2==0?0.0D:0.45D)
                     +0.18D*Math.sin(angle*2.0D+s.restoreTicks*0.035D);
                 DustParticleOptions ringDust=(i&1)==0
-                    ? FISSURE_VIOLET_DUST : FISSURE_VIOLET_ACCENT_DUST;
+                    ? RESTORE_VIOLET_DUST : RESTORE_VIOLET_ACCENT_DUST;
                 level.sendParticles(ringDust,
                     cx+Math.cos(angle)*radius,cy+height,cz+Math.sin(angle)*radius,
                     1,0,0.08D,0,0.015D);
@@ -2125,7 +2144,7 @@ public final class RiftController {
             for(int i=0;i<RESTORE_RISING_SPARK_PARTICLE_COUNT;i++) {
                 double phase=s.restoreTicks*0.055D+i*Math.PI/2.0D;
                 double height=0.25D+((s.restoreTicks*0.04D+i*0.25D)%2.5D);
-                level.sendParticles(FISSURE_VIOLET_ACCENT_DUST,
+                level.sendParticles(RESTORE_VIOLET_ACCENT_DUST,
                     cx+Math.cos(phase)*0.75D*contraction,cy+height,
                     cz+Math.sin(phase)*0.75D*contraction,
                     1,0,0,0,0);
@@ -2153,7 +2172,7 @@ public final class RiftController {
             for(var player:level.players()) {
                 if(player.isAlive() && !player.isRemoved() && !player.isSpectator()
                     && withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z))
-                    player.displayClientMessage(Component.literal("§5✦ §dСТАБИЛИЗАЦИЯ §f"+percent+"% §7— восстановлено "+s.restoredBlocks+" блоков"),true);
+                    player.displayClientMessage(Component.literal("§5✦ §5СТАБИЛИЗАЦИЯ §f"+percent+"% §7— восстановлено "+s.restoredBlocks+" блоков"),true);
             }
         }
         if(s.restoreTicks%10==0) {
@@ -2307,7 +2326,7 @@ public final class RiftController {
                         && s.restoredBlocks==1 && s.restoreIndex>=0)
                         LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_RESTORATION_PROGRESS pending={} restored={}",s.restoreIndex+1,s.restoredBlocks);
                     if(shouldEmitRestoreBlockCue(s.restoredBlocks))
-                        level.sendParticles(FISSURE_VIOLET_DUST,pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5,
+                        level.sendParticles(RESTORE_VIOLET_DUST,pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5,
                             RESTORE_BLOCK_CUE_PARTICLE_COUNT,.45,.45,.45,.07);
                 } else {
                     // Fractures never record air. An unknown block id decoded as
@@ -2352,7 +2371,7 @@ public final class RiftController {
                 double y=beaconY+1.1D*(1.0D+Math.sin(phase));
                 // Counter-rotating strands alternate cached deep and bright violet Dust.
                 DustParticleOptions particle=(k&1)==0
-                    ? FISSURE_VIOLET_DUST : FISSURE_VIOLET_ACCENT_DUST;
+                    ? RESTORE_VIOLET_DUST : RESTORE_VIOLET_ACCENT_DUST;
                 level.sendParticles(particle,x,y,z,RESTORE_HELIX_MOTES_PER_ANCHOR,
                     .12,.15,.12,.025);
             }
@@ -2370,8 +2389,8 @@ public final class RiftController {
                 // State stores only horizontal rift coordinates; the activated
                 // physical beacon supplies the vertical recovery anchor.
                 if(!withinRecoveryAudience(p,s.x,activatedBeacon.getY(),s.z)) continue;
-                level.sendParticles(FISSURE_VIOLET_ACCENT_DUST,p.getX()+.5,p.getY()+1.5,p.getZ()+.5,
-                    RESTORE_AUDIENCE_PARTICLE_COUNT,3,2,3,.03);
+                level.sendParticles(RESTORE_VIOLET_ACCENT_DUST,p.getX()+.5,p.getY()+1.5,p.getZ()+.5,
+                    RESTORE_AUDIENCE_PARTICLE_COUNT,RESTORE_AUDIENCE_SPREAD_XZ,RESTORE_AUDIENCE_SPREAD_Y,RESTORE_AUDIENCE_SPREAD_XZ,.03);
             }
         }
         // Hold the final stabilization glow long enough to be visible in-game.
@@ -2418,9 +2437,9 @@ public final class RiftController {
                 // Completion titles share the tested 3D radius with recovery particles.
                 if(!player.isAlive() || player.isRemoved() || player.isSpectator()
                     || !withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z)) continue;
-                player.displayClientMessage(Component.literal("§d✦ СТАБИЛИЗАЦИЯ 100% §7— восстановлено "+s.restoredBlocks+" блоков; пропущено "+s.skippedOccupied),true);
+                player.displayClientMessage(Component.literal("§5✦ СТАБИЛИЗАЦИЯ 100% §7— восстановлено "+s.restoredBlocks+" блоков; пропущено "+s.skippedOccupied),true);
                 player.connection.send(new ClientboundSetTitleTextPacket(Component.literal(
-                    s.skippedOccupied==0 && s.skippedInvalid==0 ? "§dМИР ВОССТАНОВЛЕН" : "§dСТАБИЛИЗАЦИЯ ЗАВЕРШЕНА")));
+                    s.skippedOccupied==0 && s.skippedInvalid==0 ? "§5МИР ВОССТАНОВЛЕН" : "§5СТАБИЛИЗАЦИЯ ЗАВЕРШЕНА")));
                 player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal(
                     s.skippedOccupied==0 && s.skippedInvalid==0 ? "§7Разлом закрывается" : "§7Пропущено занятых: "+s.skippedOccupied+"; повреждённых записей: "+s.skippedInvalid)));
             }
@@ -2534,7 +2553,7 @@ public final class RiftController {
                         || dx*dx+dz*dz>128L*128L) continue;
                     player.connection.send(new ClientboundSetTitlesAnimationPacket(5, 120, 25));
                     player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§5§lВЫСВОБОЖДЕНИЕ")));
-                    player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§dМир больше не цел.")));
+                    player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§5Мир больше не цел.")));
                 }
             }
             if(level.getGameTime()%20L==0)s.setDirty();
@@ -2709,7 +2728,7 @@ public final class RiftController {
                             && withinRecoveryAudience(player.blockPosition(),
                                 beacon.getX(),beacon.getY(),beacon.getZ()))
                             player.displayClientMessage(Component.literal(
-                                "§d✦ Маяк стабилизации: §f"+beacon.getX()+" "+beacon.getY()+" "+beacon.getZ()+" §7— нажмите ПКМ"),true);
+                                "§5✦ Маяк стабилизации: §f"+beacon.getX()+" "+beacon.getY()+" "+beacon.getZ()+" §7— нажмите ПКМ"),true);
                 }
             }
         }
@@ -2886,7 +2905,7 @@ public final class RiftController {
                     level.setBlock(demoPos,Blocks.BEACON.defaultBlockState(),3);
                 // Do not cover the beacon or sky with a huge test-only title.
                 demoPlayer.displayClientMessage(Component.literal(
-                    "§d✦ Маяк готов — нажмите ПКМ для стабилизации"),true);
+                    "§5✦ Маяк готов — нажмите ПКМ для стабилизации"),true);
             }
             s.beaconPos=demoPos.asLong();
             if(playerInteractionTest)
