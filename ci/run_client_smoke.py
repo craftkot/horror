@@ -55,6 +55,21 @@ def verify_restoration_particle_source():
                          (base_scale,accent_scale,spread_xz,spread_y))
     if not (.55<=base<accent<=.85 and 0<xz<=1.0 and 0<y<=.75):
         raise RuntimeError("BLACK FREQUENCY restoration Dust size/spread exceeds visual bounds")
+    anomaly_start=source.find("// Lightweight visual signatures of the same drifting gravity field.")
+    anomaly_end=source.find("// Recovery must remain available",anomaly_start)
+    if anomaly_start<0 or anomaly_end<0:
+        raise RuntimeError("BLACK FREQUENCY gravity anomaly particle source boundary regression")
+    anomaly_body=source[anomaly_start:anomaly_end]
+    legacy_anomaly_particles=("ParticleTypes.REVERSE_PORTAL","ParticleTypes.DRAGON_BREATH","ParticleTypes.END_ROD")
+    legacy_found=[token for token in legacy_anomaly_particles if token in anomaly_body]
+    if (legacy_found
+            or anomaly_body.count("level.sendParticles(ANOMALY_VIOLET_DUST")!=2
+            or anomaly_body.count("level.sendParticles(ANOMALY_VIOLET_ACCENT_DUST")!=1
+            or "new DustParticleOptions" in anomaly_body
+            or "ANOMALY_VIOLET_DUST = RESTORE_VIOLET_DUST" not in source
+            or "ANOMALY_VIOLET_ACCENT_DUST = RESTORE_VIOLET_ACCENT_DUST" not in source):
+        raise RuntimeError("BLACK FREQUENCY gravity anomaly cues must reuse cached violet Dust")
+    print("WORLD_CAPTURE: gravity anomaly cues use cached deep/bright violet Dust",flush=True)
     print("WORLD_CAPTURE: restoration uses smaller cached violet Dust, bounded halo and dark-purple UI",flush=True)
 
 verify_restoration_particle_source()
@@ -1271,6 +1286,10 @@ def capture_test_world():
             scan_marker="BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_PROFILE_VERIFIED intervalTicks=4 menuClose=shared viewerScan=shared loadedOnly=true"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and scan_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: beacon-menu closure did not use the shared bounded player scan",flush=True)
+                return False
+            anomaly_marker="BLACK_FREQUENCY_TEST GRAVITY_ANOMALY_PARTICLE_PALETTE_VERIFIED base=deep-violet accent=bright-violet cached=true"
+            if os.environ.get("BF_TEST_RESTORATION")=="1" and anomaly_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: cached violet gravity anomaly particle palette was not verified",flush=True)
                 return False
             if os.environ.get("BF_TEST_PLAYER_BEACON")=="1":
                 counts=re.search(r"BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored=([0-9]+) destroyed=([0-9]+) skippedOccupied=([0-9]+)",log_after)
