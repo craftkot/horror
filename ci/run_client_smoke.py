@@ -115,7 +115,14 @@ def capture_test_world():
         subprocess.run(["xdotool","windowsize",game_window,"1280","720"],check=False)
         subprocess.run(["xdotool","windowmove",game_window,"0","0"],check=False)
     def snap(name):
-        subprocess.run(["scrot","-a","0,0,1280,720",str(shots/name)],check=False)
+        path=shots/name
+        # scrot creates a suffixed file instead of overwriting an existing path.
+        # Remove the previous attempt so the artifact always contains the latest frame.
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        subprocess.run(["scrot","-a","0,0,1280,720",str(path)],check=False)
         focus_game()
     def move_camera(delta_y):
         focus_game()
@@ -551,9 +558,11 @@ def capture_test_world():
             time.sleep(0.1)
         if interaction_confirmed:
             print("WORLD_CAPTURE: physical beacon activation confirmed before screenshot",flush=True)
+            snap("beacon-after-right-click.png")
         else:
-            print("WORLD_CAPTURE_FAIL: physical beacon activation was not logged before screenshot",flush=True)
-        snap("beacon-after-right-click.png")
+            # A missed click is recoverable; never publish its stale prompt frame as
+            # evidence of activation. The outer loop will retry after aim recovery.
+            print("WORLD_CAPTURE: after-click screenshot deferred until physical activation is confirmed",flush=True)
         # The final world check still independently requires the server's real
         # interaction marker; the screenshot wait is not a substitute for it.
     time.sleep(2)
@@ -1290,6 +1299,14 @@ def capture_test_world():
                     return False
                 if "BLACK_FREQUENCY_TEST BEACON_START_ACTIONBAR_ONLY" not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon activation did not use the non-obstructive action bar",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST IDLE_BEACON_HINT_LIFECYCLE_VERIFIED idleBoundary=true restorationSuppressed=true completedSuppressed=true acceleratedTickSafe=true" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: idle beacon hint was not suppressed during recovery",flush=True)
+                    return False
+                after_click=shots/"beacon-after-right-click.png"
+                if (not after_click.is_file()
+                        or any(shots.glob("beacon-after-right-click_*.png"))):
+                    print("WORLD_CAPTURE_FAIL: accepted beacon click did not produce one canonical screenshot",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST ACTUAL_PASSENGER_GRAVITY_IMMUNITY_VERIFIED" not in log_after:
                     print("WORLD_CAPTURE_FAIL: actual mounted-player gravity probe did not run",flush=True)

@@ -1293,6 +1293,13 @@ public final class RiftController {
         return true;
     }
 
+    // Idle objective hints must stop as soon as the physical beacon starts recovery.
+    // Otherwise an accelerated CI tick (2400 ticks per server tick) or a coincident
+    // 200-tick hint can overwrite the activation/progress action bar.
+    private static boolean shouldSendIdleBeaconHint(boolean restoring,boolean restored,int finaleTicks) {
+        return !restoring && !restored && finaleTicks%200==0;
+    }
+
     private static void verifyBeaconInteractionGuard() {
         var main=net.minecraft.world.InteractionHand.MAIN_HAND;
         var off=net.minecraft.world.InteractionHand.OFF_HAND;
@@ -1360,6 +1367,15 @@ public final class RiftController {
         verifyPendingSnapshotPersistence();
         verifySparseBeaconSupport();
         verifyRestorationProgress();
+        boolean idleBoundary=shouldSendIdleBeaconHint(false,false,200);
+        boolean idleBetweenBoundaries=!shouldSendIdleBeaconHint(false,false,201);
+        boolean restorationSuppressed=!shouldSendIdleBeaconHint(true,false,200);
+        boolean completedSuppressed=!shouldSendIdleBeaconHint(false,true,200);
+        boolean acceleratedRestorationSuppressed=!shouldSendIdleBeaconHint(true,false,2400);
+        if(!(idleBoundary && idleBetweenBoundaries && restorationSuppressed
+            && completedSuppressed && acceleratedRestorationSuppressed))
+            throw new IllegalStateException("CI idle beacon hint lifecycle regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST IDLE_BEACON_HINT_LIFECYCLE_VERIFIED idleBoundary=true restorationSuppressed=true completedSuppressed=true acceleratedTickSafe=true");
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED");
     }
 
@@ -2432,7 +2448,7 @@ public final class RiftController {
                         level.sendParticles(ParticleTypes.REVERSE_PORTAL,
                             beacon.getX()+.5,beacon.getY()+1.2,beacon.getZ()+.5,
                             6,.28,.45,.28,.015);
-                    if(s.finaleTicks%200==0) for(var player:level.players())
+                    if(shouldSendIdleBeaconHint(s.restoring,s.restored,s.finaleTicks)) for(var player:level.players())
                         if(player.isAlive() && !player.isRemoved() && !player.isSpectator()
                             && withinRecoveryAudience(player.blockPosition(),
                                 beacon.getX(),beacon.getY(),beacon.getZ()))
