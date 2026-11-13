@@ -50,11 +50,15 @@ public final class RiftController {
     private static final int FISSURE_ARM_COUNT = RiftGeometry.FISSURE_ARM_COUNT;
     private static final int FISSURE_SEGMENTS_PER_ARM = RiftGeometry.FISSURE_SEGMENTS_PER_ARM;
     private static final int FISSURE_MOTES_PER_SAMPLE = 1;
-    // Cached size variants add a slow spatial pulse without allocating particle options per sample.
+    // Five cached sizes smooth the fissure's spatial pulse without allocating per sample.
     private static final DustParticleOptions FISSURE_VIOLET_DUST_SMALL =
         new DustParticleOptions(new Vector3f(.34F,.08F,.78F),.95F);
+    private static final DustParticleOptions FISSURE_VIOLET_DUST_MEDIUM_SMALL =
+        new DustParticleOptions(new Vector3f(.34F,.08F,.78F),1.05F);
     private static final DustParticleOptions FISSURE_VIOLET_DUST =
         new DustParticleOptions(new Vector3f(.34F,.08F,.78F),1.15F);
+    private static final DustParticleOptions FISSURE_VIOLET_DUST_MEDIUM_LARGE =
+        new DustParticleOptions(new Vector3f(.34F,.08F,.78F),1.25F);
     private static final DustParticleOptions FISSURE_VIOLET_DUST_LARGE =
         new DustParticleOptions(new Vector3f(.34F,.08F,.78F),1.35F);
     // Replace two portal accents per arm with textured crying-obsidian chips.
@@ -70,9 +74,11 @@ public final class RiftController {
     private static DustParticleOptions fissureDustForWave(double wave) {
         if(!Double.isFinite(wave)) return FISSURE_VIOLET_DUST;
         double bounded=Math.max(-1.0D,Math.min(1.0D,wave));
-        if(bounded< -1.0D/3.0D) return FISSURE_VIOLET_DUST_SMALL;
-        if(bounded> 1.0D/3.0D) return FISSURE_VIOLET_DUST_LARGE;
-        return FISSURE_VIOLET_DUST;
+        if(bounded<-.6D) return FISSURE_VIOLET_DUST_SMALL;
+        if(bounded<-.2D) return FISSURE_VIOLET_DUST_MEDIUM_SMALL;
+        if(bounded<.2D) return FISSURE_VIOLET_DUST;
+        if(bounded<.6D) return FISSURE_VIOLET_DUST_MEDIUM_LARGE;
+        return FISSURE_VIOLET_DUST_LARGE;
     }
 
     private static boolean hasFissureDustColor(DustParticleOptions dust) {
@@ -85,21 +91,33 @@ public final class RiftController {
 
     private static void verifyFissureDustPulseProfile() {
         if(fissureDustForWave(-1.0D)!=FISSURE_VIOLET_DUST_SMALL
+            || fissureDustForWave(-.4D)!=FISSURE_VIOLET_DUST_MEDIUM_SMALL
             || fissureDustForWave(0.0D)!=FISSURE_VIOLET_DUST
+            || fissureDustForWave(.4D)!=FISSURE_VIOLET_DUST_MEDIUM_LARGE
             || fissureDustForWave(1.0D)!=FISSURE_VIOLET_DUST_LARGE
+            || fissureDustForWave(-.6D)!=FISSURE_VIOLET_DUST_MEDIUM_SMALL
+            || fissureDustForWave(-.2D)!=FISSURE_VIOLET_DUST
+            || fissureDustForWave(.2D)!=FISSURE_VIOLET_DUST_MEDIUM_LARGE
+            || fissureDustForWave(.6D)!=FISSURE_VIOLET_DUST_LARGE
             || fissureDustForWave(Double.NaN)!=FISSURE_VIOLET_DUST
             || fissureDustForWave(Double.POSITIVE_INFINITY)!=FISSURE_VIOLET_DUST
+            || fissureDustForWave(Double.NEGATIVE_INFINITY)!=FISSURE_VIOLET_DUST
             || fissurePulseWave(Double.NaN,1,0)!=0.0D
             || !hasFissureDustColor(FISSURE_VIOLET_DUST_SMALL)
+            || !hasFissureDustColor(FISSURE_VIOLET_DUST_MEDIUM_SMALL)
             || !hasFissureDustColor(FISSURE_VIOLET_DUST)
+            || !hasFissureDustColor(FISSURE_VIOLET_DUST_MEDIUM_LARGE)
             || !hasFissureDustColor(FISSURE_VIOLET_DUST_LARGE)
-            || !(FISSURE_VIOLET_DUST_SMALL.getScale()<FISSURE_VIOLET_DUST.getScale()
-                && FISSURE_VIOLET_DUST.getScale()<FISSURE_VIOLET_DUST_LARGE.getScale())
+            || !(FISSURE_VIOLET_DUST_SMALL.getScale()<FISSURE_VIOLET_DUST_MEDIUM_SMALL.getScale()
+                && FISSURE_VIOLET_DUST_MEDIUM_SMALL.getScale()<FISSURE_VIOLET_DUST.getScale()
+                && FISSURE_VIOLET_DUST.getScale()<FISSURE_VIOLET_DUST_MEDIUM_LARGE.getScale()
+                && FISSURE_VIOLET_DUST_MEDIUM_LARGE.getScale()<FISSURE_VIOLET_DUST_LARGE.getScale())
             || FISSURE_VIOLET_DUST_SMALL.getScale()<.9F
             || FISSURE_VIOLET_DUST_LARGE.getScale()>1.4F)
             throw new IllegalStateException("CI fissure Dust pulse profile regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_DUST_PULSE_PROFILE_VERIFIED min={} base={} max={} variants=3",
-            FISSURE_VIOLET_DUST_SMALL.getScale(),FISSURE_VIOLET_DUST.getScale(),
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_DUST_PULSE_PROFILE_VERIFIED min={} low={} base={} high={} max={} variants=5",
+            FISSURE_VIOLET_DUST_SMALL.getScale(),FISSURE_VIOLET_DUST_MEDIUM_SMALL.getScale(),
+            FISSURE_VIOLET_DUST.getScale(),FISSURE_VIOLET_DUST_MEDIUM_LARGE.getScale(),
             FISSURE_VIOLET_DUST_LARGE.getScale());
         verifyFissureTargetSelectionPolicy();
     }

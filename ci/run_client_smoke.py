@@ -1318,7 +1318,7 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_VIOLET_DUST_VERIFIED red=0.34 green=0.08 blue=0.78 scale=1.15" not in log_after:
                 print("WORLD_CAPTURE_FAIL: explicit deep-violet DustParticleOptions color was not verified",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_DUST_PULSE_PROFILE_VERIFIED min=0.95 base=1.15 max=1.35 variants=3" not in log_after:
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_DUST_PULSE_PROFILE_VERIFIED min=0.95 low=1.05 base=1.15 high=1.25 max=1.35 variants=5" not in log_after:
                 print("WORLD_CAPTURE_FAIL: cached fissure dust pulse profile was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=nearest ties=stable invalidRejected=true" not in log_after:
