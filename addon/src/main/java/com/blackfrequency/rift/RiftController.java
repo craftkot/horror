@@ -52,6 +52,18 @@ public final class RiftController {
     private static final int FISSURE_MOTES_PER_SAMPLE = 1;
     private static final int IDLE_BEACON_PULSE_INTERVAL_TICKS = 20;
     private static final int IDLE_BEACON_PULSE_PARTICLE_COUNT = 6;
+    // Recovery effects use cached blue-violet Dust and bounded, deterministic pulses.
+    private static final int RESTORE_RING_INTERVAL_TICKS = 20;
+    private static final int RESTORE_RING_PARTICLE_COUNT = 24;
+    private static final int RESTORE_RISING_SPARK_PARTICLE_COUNT = 4;
+    private static final int RESTORE_HELIX_INTERVAL_TICKS = 8;
+    private static final int RESTORE_HELIX_ANCHOR_COUNT = 8;
+    private static final int RESTORE_HELIX_MOTES_PER_ANCHOR = 2;
+    private static final int RESTORE_HELIX_PARTICLE_COUNT =
+        RESTORE_HELIX_ANCHOR_COUNT * RESTORE_HELIX_MOTES_PER_ANCHOR;
+    private static final int RESTORE_BLOCK_CUE_INTERVAL = 48;
+    private static final int RESTORE_BLOCK_CUE_PARTICLE_COUNT = 6;
+    private static final int RESTORE_AUDIENCE_PARTICLE_COUNT = 8;
     // Five cached sizes smooth the fissure's spatial pulse without allocating per sample.
     private static final DustParticleOptions FISSURE_VIOLET_DUST_SMALL =
         new DustParticleOptions(new Vector3f(.34F,.08F,.78F),.95F);
@@ -91,12 +103,16 @@ public final class RiftController {
         return FISSURE_VIOLET_DUST_LARGE;
     }
 
-    private static boolean hasFissureDustColor(DustParticleOptions dust) {
+    private static boolean hasDustColor(DustParticleOptions dust,float red,float green,float blue) {
         Vector3f color=dust.getColor();
         return Float.isFinite(color.x()) && Float.isFinite(color.y()) && Float.isFinite(color.z())
-            && Math.abs(color.x()-.34F)<1.0E-6F
-            && Math.abs(color.y()-.08F)<1.0E-6F
-            && Math.abs(color.z()-.78F)<1.0E-6F;
+            && Math.abs(color.x()-red)<1.0E-6F
+            && Math.abs(color.y()-green)<1.0E-6F
+            && Math.abs(color.z()-blue)<1.0E-6F;
+    }
+
+    private static boolean hasFissureDustColor(DustParticleOptions dust) {
+        return hasDustColor(dust,.34F,.08F,.78F);
     }
 
     private static void verifyFissureDustPulseProfile() {
@@ -1476,6 +1492,51 @@ public final class RiftController {
         return finaleTicks>0 && finaleTicks%IDLE_BEACON_PULSE_INTERVAL_TICKS==0;
     }
 
+    private static boolean shouldEmitRestoreHelix(int restoreTicks) {
+        return restoreTicks>0 && restoreTicks%RESTORE_HELIX_INTERVAL_TICKS==0;
+    }
+
+    private static boolean shouldEmitRestoreBlockCue(int restoredBlocks) {
+        return restoredBlocks>0 && restoredBlocks%RESTORE_BLOCK_CUE_INTERVAL==0;
+    }
+
+    private static boolean shouldEmitRestoreAudiencePulse(int restoreTicks) {
+        return restoreTicks>0 && restoreTicks%RESTORE_RING_INTERVAL_TICKS==0;
+    }
+
+    private static void verifyRestorationParticleProfile() {
+        boolean ringBoundary=shouldEmitRestoreAudiencePulse(RESTORE_RING_INTERVAL_TICKS);
+        boolean ringBetween=!shouldEmitRestoreAudiencePulse(RESTORE_RING_INTERVAL_TICKS-1);
+        boolean helixBoundary=shouldEmitRestoreHelix(RESTORE_HELIX_INTERVAL_TICKS);
+        boolean helixBetween=!shouldEmitRestoreHelix(RESTORE_HELIX_INTERVAL_TICKS-1);
+        boolean blockBoundary=shouldEmitRestoreBlockCue(RESTORE_BLOCK_CUE_INTERVAL);
+        boolean blockBetween=!shouldEmitRestoreBlockCue(RESTORE_BLOCK_CUE_INTERVAL-1);
+        boolean blockNext=shouldEmitRestoreBlockCue(RESTORE_BLOCK_CUE_INTERVAL*2);
+        boolean invalidTicks=!shouldEmitRestoreHelix(0)
+            && !shouldEmitRestoreHelix(-RESTORE_HELIX_INTERVAL_TICKS)
+            && !shouldEmitRestoreAudiencePulse(0)
+            && !shouldEmitRestoreAudiencePulse(-RESTORE_RING_INTERVAL_TICKS)
+            && !shouldEmitRestoreBlockCue(0)
+            && !shouldEmitRestoreBlockCue(-RESTORE_BLOCK_CUE_INTERVAL);
+        boolean boundedCounts=RESTORE_RING_PARTICLE_COUNT==24
+            && RESTORE_RISING_SPARK_PARTICLE_COUNT==4
+            && RESTORE_HELIX_PARTICLE_COUNT==16
+            && RESTORE_HELIX_PARTICLE_COUNT==RESTORE_HELIX_ANCHOR_COUNT*RESTORE_HELIX_MOTES_PER_ANCHOR
+            && RESTORE_BLOCK_CUE_PARTICLE_COUNT==6
+            && RESTORE_AUDIENCE_PARTICLE_COUNT==8;
+        boolean cachedPalette=hasDustColor(FISSURE_VIOLET_DUST,.34F,.08F,.78F)
+            && hasDustColor(FISSURE_VIOLET_ACCENT_DUST,.42F,.08F,.98F);
+        if(!(ringBoundary && ringBetween && helixBoundary && helixBetween
+            && blockBoundary && blockBetween && blockNext && invalidTicks
+            && boundedCounts && cachedPalette))
+            throw new IllegalStateException("CI restoration particle profile regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_PROFILE_VERIFIED ring={} ringIntervalTicks={} sparks={} helix={} helixIntervalTicks={} blockCue={} blockIntervalBlocks={} audience={} audienceIntervalTicks={} cachedDust=true",
+            RESTORE_RING_PARTICLE_COUNT,RESTORE_RING_INTERVAL_TICKS,RESTORE_RISING_SPARK_PARTICLE_COUNT,
+            RESTORE_HELIX_PARTICLE_COUNT,RESTORE_HELIX_INTERVAL_TICKS,
+            RESTORE_BLOCK_CUE_PARTICLE_COUNT,RESTORE_BLOCK_CUE_INTERVAL,
+            RESTORE_AUDIENCE_PARTICLE_COUNT,RESTORE_RING_INTERVAL_TICKS);
+    }
+
     private static void verifyBeaconInteractionGuard() {
         var main=net.minecraft.world.InteractionHand.MAIN_HAND;
         var off=net.minecraft.world.InteractionHand.OFF_HAND;
@@ -1564,6 +1625,7 @@ public final class RiftController {
             throw new IllegalStateException("CI idle beacon particle cadence regression");
         LOGGER.info("BLACK_FREQUENCY_TEST IDLE_BEACON_PARTICLE_CADENCE_VERIFIED intervalTicks={} particles={} cachedDust=true",
             IDLE_BEACON_PULSE_INTERVAL_TICKS,IDLE_BEACON_PULSE_PARTICLE_COUNT);
+        verifyRestorationParticleProfile();
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED");
     }
 
@@ -2017,7 +2079,7 @@ public final class RiftController {
         boolean hasRingViewer=false;
         boolean hasStabilizationViewer=false;
         if(beaconPresent && s.restoreTicks%4==0) {
-            boolean stabilizationDue=s.restoreTicks%20==0;
+            boolean stabilizationDue=shouldEmitRestoreAudiencePulse(s.restoreTicks);
             for(var player:level.players()) {
                 if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
                 if(!hasRingViewer
@@ -2032,7 +2094,7 @@ public final class RiftController {
         // A visible, bounded stabilization pulse at the activated physical beacon.
         // Only query an already loaded chunk; never resurrect a removed beacon
         // or force chunk generation during recovery.
-        if(s.restoreTicks%20==0 && hasStabilizationViewer) {
+        if(shouldEmitRestoreAudiencePulse(s.restoreTicks) && hasStabilizationViewer) {
             double cx=beaconX, cy=beaconY+0.6D, cz=beaconZ;
             // Contract the recovery vortex as the saved terrain is restored.
             // Clamp corrupt/out-of-range indices so the effect stays bounded.
@@ -2040,7 +2102,7 @@ public final class RiftController {
             // Two contrasting violet particle types distinguish the counter-rotating
             // inner and outer rings without increasing particle count or chunk work.
             // Only 24 particles per second; no terrain edits or chunk loads.
-            for(int i=0;i<24;i++) {
+            for(int i=0;i<RESTORE_RING_PARTICLE_COUNT;i++) {
                 double angle=i*Math.PI/12.0D + (i%2==0 ? 1.0D : -1.0D)*s.restoreTicks*0.045D;
                 // The fracture closes in a slow, bounded violet heartbeat. Keep the
                 // inner and outer rings separated even at maximum contraction.
@@ -2051,18 +2113,19 @@ public final class RiftController {
                 // increasing particle count or modifying nearby blocks.
                 double height=(i%2==0?0.0D:0.45D)
                     +0.18D*Math.sin(angle*2.0D+s.restoreTicks*0.035D);
-                var ringParticle=(i&1)==0 ? ParticleTypes.REVERSE_PORTAL : ParticleTypes.DRAGON_BREATH;
-                level.sendParticles(ringParticle,
+                DustParticleOptions ringDust=(i&1)==0
+                    ? FISSURE_VIOLET_DUST : FISSURE_VIOLET_ACCENT_DUST;
+                level.sendParticles(ringDust,
                     cx+Math.cos(angle)*radius,cy+height,cz+Math.sin(angle)*radius,
                     1,0,0.08D,0,0.015D);
             }
             // Four rising violet sparks connect the ground-level rings to the
             // beacon beam. Deterministic positions avoid per-tick random work;
             // the effect stays inside a 2.3-block radius and 3-block height.
-            for(int i=0;i<4;i++) {
+            for(int i=0;i<RESTORE_RISING_SPARK_PARTICLE_COUNT;i++) {
                 double phase=s.restoreTicks*0.055D+i*Math.PI/2.0D;
                 double height=0.25D+((s.restoreTicks*0.04D+i*0.25D)%2.5D);
-                level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                level.sendParticles(FISSURE_VIOLET_ACCENT_DUST,
                     cx+Math.cos(phase)*0.75D*contraction,cy+height,
                     cz+Math.sin(phase)*0.75D*contraction,
                     1,0,0,0,0);
@@ -2243,8 +2306,9 @@ public final class RiftController {
                     if(CI_TEST && Boolean.getBoolean("blackfrequency.ciDeferredChunkTest")
                         && s.restoredBlocks==1 && s.restoreIndex>=0)
                         LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_RESTORATION_PROGRESS pending={} restored={}",s.restoreIndex+1,s.restoredBlocks);
-                    if(restoredThisTick%12==0)
-                        level.sendParticles(ParticleTypes.REVERSE_PORTAL,pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5,6,.45,.45,.45,.07);
+                    if(shouldEmitRestoreBlockCue(s.restoredBlocks))
+                        level.sendParticles(FISSURE_VIOLET_DUST,pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5,
+                            RESTORE_BLOCK_CUE_PARTICLE_COUNT,.45,.45,.45,.07);
                 } else {
                     // Fractures never record air. An unknown block id decoded as
                     // air is corrupt data, not a successfully restored block.
@@ -2264,7 +2328,7 @@ public final class RiftController {
         // query or generate an unloaded chunk just for cosmetic particles.
         // Skip cosmetic work when nobody can see the recovery beacon.
         // The shared viewer scan reads only player positions and never requests a chunk.
-        if(s.restoreTicks%4==0 && hasRingViewer) {
+        if(shouldEmitRestoreHelix(s.restoreTicks) && hasRingViewer) {
             double angle=s.restoreTicks*.17;
             // A slow breathing ring makes recovery visibly alive without
             // adding particles, world edits, or forced chunk loads.
@@ -2272,7 +2336,7 @@ public final class RiftController {
             // This is cosmetic only: no terrain edits or extra particle packets.
             double radius=(3.4D+0.45D*Math.sin(s.restoreTicks*.055D))
                 * recoveryVortexContraction(s.restoreIndex,s.snapshots.size());
-            for(int k=0;k<8;k++) {
+            for(int k=0;k<RESTORE_HELIX_ANCHOR_COUNT;k++) {
                 // Counter-rotate the two alternating strands in the horizontal plane too.
                 // Their vertical phases already travel in opposite directions.
                 double theta=angle*(k%2==0 ? 1.0D : -1.0D)+k*Math.PI*.25;
@@ -2286,14 +2350,16 @@ public final class RiftController {
                 double phase=(s.restoreTicks*.045D*(k%2==0 ? 1.0D : -1.0D)
                     + k*Math.PI*.25D)%(Math.PI*2.0D);
                 double y=beaconY+1.1D*(1.0D+Math.sin(phase));
-                // Keep both recovery strands violet; WITCH introduces green flecks.
-                var particle=(k&1)==0 ? ParticleTypes.REVERSE_PORTAL : ParticleTypes.DRAGON_BREATH;
-                level.sendParticles(particle,x,y,z,2,.12,.15,.12,.025);
+                // Counter-rotating strands alternate cached deep and bright violet Dust.
+                DustParticleOptions particle=(k&1)==0
+                    ? FISSURE_VIOLET_DUST : FISSURE_VIOLET_ACCENT_DUST;
+                level.sendParticles(particle,x,y,z,RESTORE_HELIX_MOTES_PER_ANCHOR,
+                    .12,.15,.12,.025);
             }
         }
         // A destroyed or unloaded beacon must not leave a phantom recovery glow.
         // hasChunkAt only inspects loaded chunks; it never forces chunk generation.
-        if(s.restoreTicks%10==0 && beaconPresent) {
+        if(shouldEmitRestoreAudiencePulse(s.restoreTicks) && beaconPresent) {
             // The recovery glow belongs to the fracture, not every player in
             // the dimension. Avoid particle traffic for distant or inactive players.
             for(var player:level.players()) {
@@ -2304,7 +2370,8 @@ public final class RiftController {
                 // State stores only horizontal rift coordinates; the activated
                 // physical beacon supplies the vertical recovery anchor.
                 if(!withinRecoveryAudience(p,s.x,activatedBeacon.getY(),s.z)) continue;
-                level.sendParticles(ParticleTypes.END_ROD,p.getX()+.5,p.getY()+1.5,p.getZ()+.5,12,3,2,3,.03);
+                level.sendParticles(FISSURE_VIOLET_ACCENT_DUST,p.getX()+.5,p.getY()+1.5,p.getZ()+.5,
+                    RESTORE_AUDIENCE_PARTICLE_COUNT,3,2,3,.03);
             }
         }
         // Hold the final stabilization glow long enough to be visible in-game.

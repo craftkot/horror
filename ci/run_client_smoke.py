@@ -16,6 +16,22 @@ def parse_fissure_particle_emission(log_text):
     match=FISSURE_PARTICLE_EMISSION_RE.search(log_text)
     return tuple(int(value) for value in match.groups()) if match else None
 
+def verify_restoration_particle_source():
+    source_path=ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftController.java"
+    source=source_path.read_text(encoding="utf-8")
+    start=source.find("    private static void restore(")
+    end=source.find("\n    @SubscribeEvent",start)
+    if start<0 or end<0:
+        raise RuntimeError("BLACK FREQUENCY restoration method source boundary regression")
+    body=source[start:end]
+    forbidden=("ParticleTypes.REVERSE_PORTAL","ParticleTypes.DRAGON_BREATH","ParticleTypes.END_ROD")
+    found=[token for token in forbidden if token in body]
+    if found:
+        raise RuntimeError("BLACK FREQUENCY legacy restoration particles remain: "+", ".join(found))
+    print("WORLD_CAPTURE: restoration source uses cached violet Dust; legacy portal/dragon-breath/end-rod emitters absent",flush=True)
+
+verify_restoration_particle_source()
+
 def valid_fissure_particle_emission(counts):
     if counts is None:
         return False
@@ -468,6 +484,25 @@ def capture_test_world():
                 and metrics["particlePixels"]>=120 and metrics["particleTiles"]>=3
                 and metrics["combinedPixels"]>=160 and metrics["combinedTiles"]>=6
                 and metrics["meshPixels"]>=24 and metrics["meshTiles"]>=2)
+
+    def measure_restoration_palette(frame):
+        width,height=frame.size
+        pixels=frame.load()
+        top,bottom=int(height*.14),int(height*.67)
+        legacy_magenta=violet_dust=0
+        for y in range(top,bottom):
+            for x in range(width):
+                r,g,b=pixels[x,y]
+                if r>150 and b>150 and g<100 and abs(r-b)<90:
+                    legacy_magenta+=1
+                if (is_ground_violet_dust_pixel(r,g,b)
+                        or is_ground_fissure_accent_pixel(r,g,b)):
+                    violet_dust+=1
+        return {"legacyMagentaPixels":legacy_magenta,"violetDustPixels":violet_dust}
+
+    def restoration_palette_passes(metrics):
+        return (metrics["legacyMagentaPixels"]<=200
+                and metrics["violetDustPixels"]>=40)
 
     def verify_sky_pixels(name, region, minimum, max_green=None):
         from PIL import Image
@@ -1178,11 +1213,25 @@ def capture_test_world():
                 if not restoration_shot:
                     print("WORLD_CAPTURE_FAIL: restoration finished without an active gameplay screenshot",flush=True)
                     return False
+                restoration_path=shots/"beacon-restoration-active.png"
+                from PIL import Image
+                with Image.open(restoration_path) as source:
+                    restoration_metrics=measure_restoration_palette(source.convert("RGB"))
+                if not restoration_palette_passes(restoration_metrics):
+                    print("WORLD_CAPTURE_FAIL: restoration particle palette is still magenta or missing violet Dust",
+                          restoration_metrics,flush=True)
+                    return False
+                print("WORLD_CAPTURE: restoration violet Dust palette verified",
+                      restoration_metrics,flush=True)
                 if not terrain_shot:
                     print("WORLD_CAPTURE_FAIL: no player-visible ground fissure was captured",flush=True)
                     return False
                 print("WORLD_CAPTURE: restoration finished in integrated client",flush=True)
             log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+            if (os.environ.get("BF_TEST_RESTORATION")=="1"
+                    and "BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_PROFILE_VERIFIED ring=24 ringIntervalTicks=20 sparks=4 helix=16 helixIntervalTicks=8 blockCue=6 blockIntervalBlocks=48 audience=8 audienceIntervalTicks=20 cachedDust=true" not in log_after):
+                print("WORLD_CAPTURE_FAIL: restoration particle cadence/profile was not verified",flush=True)
+                return False
             if os.environ.get("BF_TEST_PLAYER_BEACON")=="1":
                 counts=re.search(r"BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored=([0-9]+) destroyed=([0-9]+) skippedOccupied=([0-9]+)",log_after)
                 if not counts:
