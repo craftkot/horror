@@ -29,10 +29,14 @@ def verify_restoration_particle_source():
     scan_gate=body.find("if(shouldScanRestorePlayers(s.restoreTicks,beaconPresent))")
     player_loop=body.find("for(var player:level.players())")
     menu_guard=body.find("player.containerMenu instanceof net.minecraft.world.inventory.BeaconMenu")
+    scan_end=body.find("\n        // A visible, bounded stabilization pulse",player_loop)
+    scan_body=body[player_loop:scan_end] if scan_end>player_loop else ""
     if (not scan_interval or int(scan_interval.group(1))!=4
             or not (0<=tick_advance<scan_gate<player_loop<=menu_guard)
-            or "if(beaconPresent) {\n            for(var player:level.players())" in body):
-        raise RuntimeError("BLACK FREQUENCY beacon-menu close is not part of the bounded shared player scan")
+            or "if(beaconPresent) {\n            for(var player:level.players())" in body
+            or not scan_body or "player.closeContainer()" not in scan_body
+            or "playerScan.observe(" not in scan_body or "break;" in scan_body):
+        raise RuntimeError("BLACK FREQUENCY shared player scan must close all beacon menus before finishing")
     forbidden=("ParticleTypes.REVERSE_PORTAL","ParticleTypes.DRAGON_BREATH","ParticleTypes.END_ROD")
     found=[token for token in forbidden if token in body]
     if found:
