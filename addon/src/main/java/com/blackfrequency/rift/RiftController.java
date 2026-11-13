@@ -57,6 +57,8 @@ public final class RiftController {
     private static final int RESTORE_RING_PARTICLE_COUNT = 24;
     private static final int RESTORE_RISING_SPARK_PARTICLE_COUNT = 4;
     private static final int RESTORE_HELIX_INTERVAL_TICKS = 8;
+    // Share one nearby-player pass between beacon-menu closure and visual audience checks.
+    private static final int RESTORE_PLAYER_SCAN_INTERVAL_TICKS = 4;
     private static final int RESTORE_HELIX_ANCHOR_COUNT = 8;
     private static final int RESTORE_HELIX_MOTES_PER_ANCHOR = 2;
     private static final int RESTORE_HELIX_PARTICLE_COUNT =
@@ -1514,6 +1516,11 @@ public final class RiftController {
         return restoreTicks>0 && restoreTicks%RESTORE_RING_INTERVAL_TICKS==0;
     }
 
+    private static boolean shouldScanRestorePlayers(int restoreTicks,boolean beaconPresent) {
+        return beaconPresent && restoreTicks>0
+            && (restoreTicks%RESTORE_PLAYER_SCAN_INTERVAL_TICKS==0 || restoreTicks==Integer.MAX_VALUE);
+    }
+
     private static void verifyRestorationParticleProfile() {
         boolean ringBoundary=shouldEmitRestoreAudiencePulse(RESTORE_RING_INTERVAL_TICKS);
         boolean ringBetween=!shouldEmitRestoreAudiencePulse(RESTORE_RING_INTERVAL_TICKS-1);
@@ -1543,9 +1550,18 @@ public final class RiftController {
             && RESTORE_VIOLET_ACCENT_DUST_SCALE<=.85F
             && RESTORE_AUDIENCE_SPREAD_XZ>0.0D && RESTORE_AUDIENCE_SPREAD_XZ<=1.0D
             && RESTORE_AUDIENCE_SPREAD_Y>0.0D && RESTORE_AUDIENCE_SPREAD_Y<=.75D;
+        boolean playerScanBoundary=shouldScanRestorePlayers(RESTORE_PLAYER_SCAN_INTERVAL_TICKS,true)
+            && shouldScanRestorePlayers(RESTORE_PLAYER_SCAN_INTERVAL_TICKS*2,true);
+        boolean playerScanBetween=!shouldScanRestorePlayers(RESTORE_PLAYER_SCAN_INTERVAL_TICKS-1,true);
+        boolean playerScanWithoutBeacon=!shouldScanRestorePlayers(RESTORE_PLAYER_SCAN_INTERVAL_TICKS,false);
+        boolean playerScanInvalid=!shouldScanRestorePlayers(0,true)
+            && !shouldScanRestorePlayers(-RESTORE_PLAYER_SCAN_INTERVAL_TICKS,true);
+        boolean playerScanSaturated=shouldScanRestorePlayers(Integer.MAX_VALUE,true);
         if(!(ringBoundary && ringBetween && helixBoundary && helixBetween
             && blockBoundary && blockBetween && blockNext && invalidTicks
-            && boundedCounts && cachedPalette && boundedRestoreDust))
+            && boundedCounts && cachedPalette && boundedRestoreDust
+            && playerScanBoundary && playerScanBetween && playerScanWithoutBeacon
+            && playerScanInvalid && playerScanSaturated))
             throw new IllegalStateException("CI restoration particle profile regression");
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_PROFILE_VERIFIED ring={} ringIntervalTicks={} sparks={} helix={} helixIntervalTicks={} blockCue={} blockIntervalBlocks={} audience={} audienceIntervalTicks={} cachedDust=true",
             RESTORE_RING_PARTICLE_COUNT,RESTORE_RING_INTERVAL_TICKS,RESTORE_RISING_SPARK_PARTICLE_COUNT,
@@ -1555,6 +1571,8 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_SIZE_VERIFIED baseScale={} accentScale={} audienceSpreadXZ={} audienceSpreadY={} cachedDust=true",
             RESTORE_VIOLET_DUST_SCALE,RESTORE_VIOLET_ACCENT_DUST_SCALE,
             RESTORE_AUDIENCE_SPREAD_XZ,RESTORE_AUDIENCE_SPREAD_Y);
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_PROFILE_VERIFIED intervalTicks={} menuClose=shared viewerScan=shared loadedOnly=true",
+            RESTORE_PLAYER_SCAN_INTERVAL_TICKS);
     }
 
     private static void verifyBeaconInteractionGuard() {
@@ -2068,38 +2086,29 @@ public final class RiftController {
     }
 
     private static void restore(ServerLevel level,State s) {
-        // Vanilla can open its beacon configuration screen despite the server
-        // interaction being consumed by the rift. Close only the activated
-        // beacon's nearby menu; do not interrupt unrelated inventories.
         BlockPos activatedBeacon=BlockPos.of(s.beaconPos);
-        // Resolve the physical beacon once per restoration tick. All cosmetic
-        // effects below share this loaded-only result; none may force a chunk load.
+        // Resolve the physical beacon once per restoration tick using loaded-only access.
         boolean beaconPresent=level.hasChunkAt(activatedBeacon)
             && level.getBlockState(activatedBeacon).is(Blocks.BEACON);
         double beaconX=activatedBeacon.getX()+0.5D;
         double beaconY=activatedBeacon.getY()+0.5D;
         double beaconZ=activatedBeacon.getZ()+0.5D;
-        // Do not close an unrelated beacon menu after the activated beacon
-        // has been broken or its chunk unloaded. Neither check loads chunks.
-        if(beaconPresent) {
+        s.restoreTicks=nextNonNegativeTick(s.restoreTicks);
+        if(CI_TEST && s.restoreTicks==1)
+            LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_BEACON_PRESENCE_CACHED present={}",beaconPresent);
+        // Close only this recovery beacon's vanilla menu during the same bounded
+        // player pass used by the visual audience checks. A newly opened menu
+        // may remain visible for at most four ticks; no extra per-tick player scan.
+        boolean hasRingViewer=false;
+        boolean hasStabilizationViewer=false;
+        if(shouldScanRestorePlayers(s.restoreTicks,beaconPresent)) {
+            boolean stabilizationDue=shouldEmitRestoreAudiencePulse(s.restoreTicks);
             for(var player:level.players()) {
                 if(player.containerMenu instanceof net.minecraft.world.inventory.BeaconMenu
                     && player.blockPosition().distSqr(activatedBeacon)<144d) {
                     player.closeContainer();
                     if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_MENU_CLOSED");
                 }
-            }
-        }
-        s.restoreTicks=nextNonNegativeTick(s.restoreTicks);
-        if(CI_TEST && s.restoreTicks==1)
-            LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_BEACON_PRESENCE_CACHED present={}",beaconPresent);
-        // The 8-tick helix and 20-tick ring/audience pulse share one player scan.
-        // Preserve their distinct vertical centers without a second stream traversal.
-        boolean hasRingViewer=false;
-        boolean hasStabilizationViewer=false;
-        if(beaconPresent && s.restoreTicks%4==0) {
-            boolean stabilizationDue=shouldEmitRestoreAudiencePulse(s.restoreTicks);
-            for(var player:level.players()) {
                 if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
                 if(!hasRingViewer
                     && player.distanceToSqr(beaconX,beaconY,beaconZ)<=128.0D*128.0D)
