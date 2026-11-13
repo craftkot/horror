@@ -43,8 +43,12 @@ def verify_restoration_particle_source():
         raise RuntimeError("BLACK FREQUENCY legacy restoration particles remain: "+", ".join(found))
     if "FISSURE_VIOLET_" in body:
         raise RuntimeError("BLACK FREQUENCY restoration still uses oversized ground-fissure Dust")
-    if "§d" in source:
-        raise RuntimeError("BLACK FREQUENCY still uses bright magenta formatting in beacon/recovery messages")
+    if "§d" in source or "§5" in source:
+        raise RuntimeError("BLACK FREQUENCY recovery UI still uses legacy magenta formatting codes")
+    if ("private static Component recoveryViolet(String text)" not in source
+            or "TextColor.fromRgb(RECOVERY_UI_VIOLET_RGB)" not in source
+            or not re.search(r"RECOVERY_UI_VIOLET_RGB\s*=\s*0x5714C7",source)):
+        raise RuntimeError("BLACK FREQUENCY recovery UI must use explicit deep-violet RGB")
     base_scale=re.search(r"RESTORE_VIOLET_DUST_SCALE\s*=\s*([0-9.]+)F",source)
     accent_scale=re.search(r"RESTORE_VIOLET_ACCENT_DUST_SCALE\s*=\s*([0-9.]+)F",source)
     spread_xz=re.search(r"RESTORE_AUDIENCE_SPREAD_XZ\s*=\s*([0-9.]+)D",source)
@@ -53,7 +57,7 @@ def verify_restoration_particle_source():
         raise RuntimeError("BLACK FREQUENCY restoration Dust size/spread constants are missing")
     base,accent,xz,y=map(lambda m:float(m.group(1)),
                          (base_scale,accent_scale,spread_xz,spread_y))
-    if not (.55<=base<accent<=.85 and 0<xz<=1.0 and 0<y<=.75):
+    if not (.38<=base<=.48 and .50<=accent<=.62 and base<accent and 0<xz<=1.0 and 0<y<=.75):
         raise RuntimeError("BLACK FREQUENCY restoration Dust size/spread exceeds visual bounds")
     anomaly_start=source.find("// Lightweight visual signatures of the same drifting gravity field.")
     anomaly_end=source.find("// Recovery must remain available",anomaly_start)
@@ -1291,6 +1295,10 @@ def capture_test_world():
             if os.environ.get("BF_TEST_RESTORATION")=="1" and anomaly_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: cached violet gravity anomaly particle palette was not verified",flush=True)
                 return False
+            ui_palette_marker="BLACK_FREQUENCY_TEST RECOVERY_UI_PALETTE_VERIFIED rgb=5714c7 legacyFormatting=false"
+            if os.environ.get("BF_TEST_RESTORATION")=="1" and ui_palette_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: recovery title/action bar did not use the explicit deep-violet RGB palette",flush=True)
+                return False
             if os.environ.get("BF_TEST_PLAYER_BEACON")=="1":
                 counts=re.search(r"BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored=([0-9]+) destroyed=([0-9]+) skippedOccupied=([0-9]+)",log_after)
                 if not counts:
@@ -1448,7 +1456,7 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=56 accentDust=8 violetDust=40 shards=8" not in log_after:
                 print("WORLD_CAPTURE_FAIL: violet-dust fissure particle budget self-check was not executed",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_ACCENT_DUST_VERIFIED red=0.42 green=0.08 blue=0.98 scale=1.35" not in log_after:
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_ACCENT_DUST_VERIFIED red=0.3 green=0.14 blue=0.88 scale=1.35" not in log_after:
                 print("WORLD_CAPTURE_FAIL: bright-violet accent DustParticleOptions was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_VIOLET_DUST_VERIFIED red=0.34 green=0.08 blue=0.78 scale=1.15" not in log_after:
