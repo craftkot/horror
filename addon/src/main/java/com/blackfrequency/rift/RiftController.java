@@ -3,6 +3,7 @@ package com.blackfrequency.rift;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.TextColor;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
@@ -29,6 +30,8 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 /** No commands. Ten days after installing this addon in a world, its finale begins. */
 public final class RiftController {
     private static final org.slf4j.Logger LOGGER = com.mojang.logging.LogUtils.getLogger();
+    // The legacy dark-purple formatting code is magenta; use the actual deep-violet brand color.
+    private static final int RECOVERY_UI_VIOLET_RGB=0x5714C7;
     private static final boolean CI_TEST = Boolean.getBoolean("blackfrequency.ciTestMode");
     // The client smoke test verifies a real beacon click, not player survival under random gravity.
     // Keep its single test player stable before the beacon exists; production physics is unchanged.
@@ -68,12 +71,12 @@ public final class RiftController {
     private static final int RESTORE_AUDIENCE_PARTICLE_COUNT = 8;
     // Restoration motes are deliberately smaller than the ground-fissure Dust.
     // Reuse these options so recovery never allocates a particle option per pulse.
-    private static final float RESTORE_VIOLET_DUST_SCALE=.62F;
-    private static final float RESTORE_VIOLET_ACCENT_DUST_SCALE=.78F;
+    private static final float RESTORE_VIOLET_DUST_SCALE=.42F;
+    private static final float RESTORE_VIOLET_ACCENT_DUST_SCALE=.56F;
     private static final DustParticleOptions RESTORE_VIOLET_DUST =
         new DustParticleOptions(new Vector3f(.34F,.08F,.78F),RESTORE_VIOLET_DUST_SCALE);
     private static final DustParticleOptions RESTORE_VIOLET_ACCENT_DUST =
-        new DustParticleOptions(new Vector3f(.42F,.08F,.98F),RESTORE_VIOLET_ACCENT_DUST_SCALE);
+        new DustParticleOptions(new Vector3f(.30F,.14F,.88F),RESTORE_VIOLET_ACCENT_DUST_SCALE);
     private static final double RESTORE_AUDIENCE_SPREAD_XZ=.85D;
     private static final double RESTORE_AUDIENCE_SPREAD_Y=.55D;
     // Gravity cues reuse the bounded recovery palette instead of bright portal/dragon-breath particles.
@@ -94,7 +97,7 @@ public final class RiftController {
     // Brighter blue-violet Dust replaces the magenta Dragon Breath accents.
     // Reused for every accent sample; no per-particle option allocation.
     private static final DustParticleOptions FISSURE_VIOLET_ACCENT_DUST =
-        new DustParticleOptions(new Vector3f(.42F,.08F,.98F),1.35F);
+        new DustParticleOptions(new Vector3f(.30F,.14F,.88F),1.35F);
     // Replace two portal accents per arm with textured crying-obsidian chips.
     private static final int FISSURE_SHARD_SEGMENT_INTERVAL = 6;
     private static final double FISSURE_SAMPLE_SPACING = RiftGeometry.FISSURE_SAMPLE_SPACING;
@@ -117,6 +120,15 @@ public final class RiftController {
         if(bounded<.2D) return FISSURE_VIOLET_DUST;
         if(bounded<.6D) return FISSURE_VIOLET_DUST_MEDIUM_LARGE;
         return FISSURE_VIOLET_DUST_LARGE;
+    }
+
+    private static Component recoveryViolet(String text) {
+        return Component.literal(text).withStyle(style -> style.withColor(TextColor.fromRgb(RECOVERY_UI_VIOLET_RGB)));
+    }
+
+    private static boolean hasRecoveryViolet(Component component) {
+        TextColor color=component.getStyle().getColor();
+        return color!=null && color.getValue()==RECOVERY_UI_VIOLET_RGB;
     }
 
     private static boolean hasDustColor(DustParticleOptions dust,float red,float green,float blue) {
@@ -682,10 +694,10 @@ public final class RiftController {
             s.naturalBeaconPos=Long.MIN_VALUE;
             s.naturalBeaconId=null;
             s.setDirty();
-            event.getPlayer().displayClientMessage(Component.literal(
+            event.getPlayer().displayClientMessage(recoveryViolet(
                 s.restoring || s.restored
-                    ? "§5✦ Маяк стабилизации рассеялся."
-                    : "§5✦ Маяк стабилизации рассеялся. Новый появится поблизости."),true);
+                    ? "✦ Маяк стабилизации рассеялся."
+                    : "✦ Маяк стабилизации рассеялся. Новый появится поблизости."),true);
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_MINED_NO_DROP x={} y={} z={}",
                 pos.getX(),pos.getY(),pos.getZ());
         }
@@ -1103,9 +1115,9 @@ public final class RiftController {
         float accentScale=FISSURE_VIOLET_ACCENT_DUST.getScale();
         if(!Float.isFinite(accentColor.x()) || !Float.isFinite(accentColor.y())
             || !Float.isFinite(accentColor.z())
-            || Math.abs(accentColor.x()-.42F)>1.0E-6F
-            || Math.abs(accentColor.y()-.08F)>1.0E-6F
-            || Math.abs(accentColor.z()-.98F)>1.0E-6F
+            || Math.abs(accentColor.x()-.30F)>1.0E-6F
+            || Math.abs(accentColor.y()-.14F)>1.0E-6F
+            || Math.abs(accentColor.z()-.88F)>1.0E-6F
             || !Float.isFinite(accentScale) || Math.abs(accentScale-1.35F)>1.0E-6F
             || accentColor.z()<=accentColor.x()*2.0F)
             throw new IllegalStateException("CI fissure violet accent Dust color/scale regression");
@@ -1559,12 +1571,21 @@ public final class RiftController {
         if(ANOMALY_VIOLET_DUST!=RESTORE_VIOLET_DUST
             || ANOMALY_VIOLET_ACCENT_DUST!=RESTORE_VIOLET_ACCENT_DUST
             || !hasDustColor(ANOMALY_VIOLET_DUST,.34F,.08F,.78F)
-            || !hasDustColor(ANOMALY_VIOLET_ACCENT_DUST,.42F,.08F,.98F)
+            || !hasDustColor(ANOMALY_VIOLET_ACCENT_DUST,.30F,.14F,.88F)
             || ANOMALY_VIOLET_DUST.getScale()<=0.0F
             || ANOMALY_VIOLET_DUST.getScale()>=ANOMALY_VIOLET_ACCENT_DUST.getScale()
             || ANOMALY_VIOLET_ACCENT_DUST.getScale()>.85F)
             throw new IllegalStateException("CI gravity anomaly Dust palette regression");
         LOGGER.info("BLACK_FREQUENCY_TEST GRAVITY_ANOMALY_PARTICLE_PALETTE_VERIFIED base=deep-violet accent=bright-violet cached=true");
+    }
+
+    private static void verifyRecoveryUiPalette() {
+        Component title=recoveryViolet("МИР ВОССТАНОВЛЕН");
+        Component actionBar=recoveryViolet("✦ СТАБИЛИЗАЦИЯ 100%");
+        if(!hasRecoveryViolet(title) || !hasRecoveryViolet(actionBar)
+            || !"МИР ВОССТАНОВЛЕН".equals(title.getString()))
+            throw new IllegalStateException("CI recovery UI must use explicit deep-violet RGB, not legacy magenta");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_UI_PALETTE_VERIFIED rgb=5714c7 legacyFormatting=false");
     }
 
     private static void verifyRestorationParticleProfile() {
@@ -1588,12 +1609,14 @@ public final class RiftController {
             && RESTORE_BLOCK_CUE_PARTICLE_COUNT==6
             && RESTORE_AUDIENCE_PARTICLE_COUNT==8;
         boolean cachedPalette=hasDustColor(FISSURE_VIOLET_DUST,.34F,.08F,.78F)
-            && hasDustColor(FISSURE_VIOLET_ACCENT_DUST,.42F,.08F,.98F)
+            && hasDustColor(FISSURE_VIOLET_ACCENT_DUST,.30F,.14F,.88F)
             && hasDustColor(RESTORE_VIOLET_DUST,.34F,.08F,.78F)
-            && hasDustColor(RESTORE_VIOLET_ACCENT_DUST,.42F,.08F,.98F);
-        boolean boundedRestoreDust=RESTORE_VIOLET_DUST_SCALE>=.55F
+            && hasDustColor(RESTORE_VIOLET_ACCENT_DUST,.30F,.14F,.88F);
+        boolean boundedRestoreDust=RESTORE_VIOLET_DUST_SCALE>=.38F
+            && RESTORE_VIOLET_DUST_SCALE<=.48F
             && RESTORE_VIOLET_DUST_SCALE<RESTORE_VIOLET_ACCENT_DUST_SCALE
-            && RESTORE_VIOLET_ACCENT_DUST_SCALE<=.85F
+            && RESTORE_VIOLET_ACCENT_DUST_SCALE>=.50F
+            && RESTORE_VIOLET_ACCENT_DUST_SCALE<=.62F
             && RESTORE_AUDIENCE_SPREAD_XZ>0.0D && RESTORE_AUDIENCE_SPREAD_XZ<=1.0D
             && RESTORE_AUDIENCE_SPREAD_Y>0.0D && RESTORE_AUDIENCE_SPREAD_Y<=.75D;
         boolean playerScanBoundary=shouldScanRestorePlayers(RESTORE_PLAYER_SCAN_INTERVAL_TICKS,true)
@@ -1620,6 +1643,7 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_PROFILE_VERIFIED intervalTicks={} menuClose=shared viewerScan=shared loadedOnly=true",
             RESTORE_PLAYER_SCAN_INTERVAL_TICKS);
         verifyRestorePlayerScanFullPass();
+        verifyRecoveryUiPalette();
     }
 
     private static void verifyBeaconInteractionGuard() {
@@ -1788,7 +1812,7 @@ public final class RiftController {
             if(!player.isAlive() || player.isRemoved() || player.isSpectator()
                 || player.distanceToSqr(pos.getX()+0.5D,pos.getY()+0.5D,pos.getZ()+0.5D)>128.0D*128.0D)
                 continue;
-            player.displayClientMessage(Component.literal("§5✦ Маяк запустил восстановление мира"),true);
+            player.displayClientMessage(recoveryViolet("✦ Маяк запустил восстановление мира"),true);
         }
         if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_START_ACTIONBAR_ONLY");
         event.setCanceled(true);
@@ -2103,8 +2127,8 @@ public final class RiftController {
                         // Squared double distance is safe across world limits.
                         if(nearby.distanceToSqr(pos.getX()+0.5D,
                             pos.getY()+0.5D,pos.getZ()+0.5D)>128.0D*128.0D) continue;
-                        nearby.displayClientMessage(Component.literal(
-                            "§5✦ Маяк стабилизации: §f"+pos.getX()+" "+pos.getY()+" "+pos.getZ()+" §7— нажмите ПКМ"),true);
+                        nearby.displayClientMessage(recoveryViolet(
+                            "✦ Маяк стабилизации: §f"+pos.getX()+" "+pos.getY()+" "+pos.getZ()+" §7— нажмите ПКМ"),true);
                     }
                     return true;
                 }
@@ -2233,7 +2257,7 @@ public final class RiftController {
             for(var player:level.players()) {
                 if(player.isAlive() && !player.isRemoved() && !player.isSpectator()
                     && withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z))
-                    player.displayClientMessage(Component.literal("§5✦ §5СТАБИЛИЗАЦИЯ §f"+percent+"% §7— восстановлено "+s.restoredBlocks+" блоков"),true);
+                    player.displayClientMessage(recoveryViolet("✦ СТАБИЛИЗАЦИЯ §f"+percent+"% §7— восстановлено "+s.restoredBlocks+" блоков"),true);
             }
         }
         if(s.restoreTicks%10==0) {
@@ -2498,9 +2522,9 @@ public final class RiftController {
                 // Completion titles share the tested 3D radius with recovery particles.
                 if(!player.isAlive() || player.isRemoved() || player.isSpectator()
                     || !withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z)) continue;
-                player.displayClientMessage(Component.literal("§5✦ СТАБИЛИЗАЦИЯ 100% §7— восстановлено "+s.restoredBlocks+" блоков; пропущено "+s.skippedOccupied),true);
-                player.connection.send(new ClientboundSetTitleTextPacket(Component.literal(
-                    s.skippedOccupied==0 && s.skippedInvalid==0 ? "§5МИР ВОССТАНОВЛЕН" : "§5СТАБИЛИЗАЦИЯ ЗАВЕРШЕНА")));
+                player.displayClientMessage(recoveryViolet("✦ СТАБИЛИЗАЦИЯ 100% §7— восстановлено "+s.restoredBlocks+" блоков; пропущено "+s.skippedOccupied),true);
+                player.connection.send(new ClientboundSetTitleTextPacket(recoveryViolet(
+                    s.skippedOccupied==0 && s.skippedInvalid==0 ? "МИР ВОССТАНОВЛЕН" : "СТАБИЛИЗАЦИЯ ЗАВЕРШЕНА")));
                 player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal(
                     s.skippedOccupied==0 && s.skippedInvalid==0 ? "§7Разлом закрывается" : "§7Пропущено занятых: "+s.skippedOccupied+"; повреждённых записей: "+s.skippedInvalid)));
             }
@@ -2613,8 +2637,8 @@ public final class RiftController {
                     if(Math.abs(dx)>128L || Math.abs(dz)>128L
                         || dx*dx+dz*dz>128L*128L) continue;
                     player.connection.send(new ClientboundSetTitlesAnimationPacket(5, 120, 25));
-                    player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§5§lВЫСВОБОЖДЕНИЕ")));
-                    player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§5Мир больше не цел.")));
+                    player.connection.send(new ClientboundSetTitleTextPacket(recoveryViolet("§lВЫСВОБОЖДЕНИЕ")));
+                    player.connection.send(new ClientboundSetSubtitleTextPacket(recoveryViolet("Мир больше не цел.")));
                 }
             }
             if(level.getGameTime()%20L==0)s.setDirty();
@@ -2786,8 +2810,8 @@ public final class RiftController {
                         if(player.isAlive() && !player.isRemoved() && !player.isSpectator()
                             && withinRecoveryAudience(player.blockPosition(),
                                 beacon.getX(),beacon.getY(),beacon.getZ()))
-                            player.displayClientMessage(Component.literal(
-                                "§5✦ Маяк стабилизации: §f"+beacon.getX()+" "+beacon.getY()+" "+beacon.getZ()+" §7— нажмите ПКМ"),true);
+                            player.displayClientMessage(recoveryViolet(
+                                "✦ Маяк стабилизации: §f"+beacon.getX()+" "+beacon.getY()+" "+beacon.getZ()+" §7— нажмите ПКМ"),true);
                 }
             }
         }
@@ -2963,8 +2987,8 @@ public final class RiftController {
                 if(!Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest"))
                     level.setBlock(demoPos,Blocks.BEACON.defaultBlockState(),3);
                 // Do not cover the beacon or sky with a huge test-only title.
-                demoPlayer.displayClientMessage(Component.literal(
-                    "§5✦ Маяк готов — нажмите ПКМ для стабилизации"),true);
+                demoPlayer.displayClientMessage(recoveryViolet(
+                    "✦ Маяк готов — нажмите ПКМ для стабилизации"),true);
             }
             s.beaconPos=demoPos.asLong();
             if(playerInteractionTest)
