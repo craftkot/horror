@@ -1222,7 +1222,7 @@ def capture_test_world():
                     or "double tail=Math.min(1.0,(SEGMENTS_PER_ARM-boundedSample)/3.0);" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: ground fissure endpoint taper is not symmetric or bounded",flush=True)
                 return False
-            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=6.4 coreScale=1.15 edgeHalfWidth=0.026 pulseMin=0.045 pulseMax=0.068 coreInsideEdgeBand=true"
+            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=6.8 coreScale=1.15 edgeHalfWidth=0.029 pulseMin=0.045 pulseMax=0.068 coreInsideEdgeBand=true"
             if visual_profile_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: widened ground fissure visual profile self-check was not executed",flush=True)
                 return False
@@ -1230,11 +1230,17 @@ def capture_test_world():
             if edge_palette_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: violet ground-edge palette self-check was not executed",flush=True)
                 return False
-            if ("private static final float GROUND_EDGE_RED=.62F;" not in camera_source
-                    or "private static final float GROUND_EDGE_GREEN=.10F;" not in camera_source
-                    or "private static final float GROUND_EDGE_BLUE=.98F;" not in camera_source
-                    or "GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE,edgeAlpha);" not in camera_source):
-                print("WORLD_CAPTURE_FAIL: verified violet edge colors are not used by both ground ribbons",flush=True)
+            edge_rail_pattern = re.compile(
+                r"ribbon\(builder,matrix,camera,segment,(-?)halfWidth\*1\.9D,GROUND_EDGE_HALF_WIDTH,\\s*"
+                r"GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE,edgeAlpha\);"
+            )
+            edge_rail_offsets = edge_rail_pattern.findall(camera_source)
+            if ("private static final float GROUND_EDGE_RED=.46F;" not in camera_source
+                    or "private static final float GROUND_EDGE_GREEN=.18F;" not in camera_source
+                    or "private static final float GROUND_EDGE_BLUE=.82F;" not in camera_source
+                    or "GROUND_EDGE_HALF_WIDTH=.029D;" not in camera_source
+                    or sorted(edge_rail_offsets) != ["", "-"]):
+                print("WORLD_CAPTURE_FAIL: current violet edge palette is not used by both symmetric ground rails",flush=True)
                 return False
             if ("private static final double GROUND_MIN_HALF_WIDTH=.045D;" not in camera_source
                     or "private static final double GROUND_MAX_HALF_WIDTH=" not in camera_source
@@ -1676,7 +1682,7 @@ while time.time()<deadline:
         subprocess.run(["bash","-lc","mkdir -p client-smoke-artifacts; scrot -a 0,0,1280,720 client-smoke-artifacts/client.png || true"])
         world_ok=capture_test_world()
         if not world_ok:
-            print("CLIENT_SMOKE_FAIL: no integrated world; screenshot is diagnostic only",file=sys.stderr)
+            print("CLIENT_SMOKE_FAIL: integrated-world capture or validation failed; inspect preceding WORLD_CAPTURE_FAIL diagnostics",file=sys.stderr)
             p.terminate()
             sys.exit(1)
         print("CLIENT_SMOKE_PASS: shader registered and integrated singleplayer world created.",flush=True)
