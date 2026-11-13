@@ -50,12 +50,58 @@ public final class RiftController {
     private static final int FISSURE_ARM_COUNT = RiftGeometry.FISSURE_ARM_COUNT;
     private static final int FISSURE_SEGMENTS_PER_ARM = RiftGeometry.FISSURE_SEGMENTS_PER_ARM;
     private static final int FISSURE_MOTES_PER_SAMPLE = 1;
-    // Explicit RGB avoids vanilla portal particles' magenta hue on the ground scar.
+    // Cached size variants add a slow spatial pulse without allocating particle options per sample.
+    private static final DustParticleOptions FISSURE_VIOLET_DUST_SMALL =
+        new DustParticleOptions(new Vector3f(.34F,.08F,.78F),.95F);
     private static final DustParticleOptions FISSURE_VIOLET_DUST =
         new DustParticleOptions(new Vector3f(.34F,.08F,.78F),1.15F);
+    private static final DustParticleOptions FISSURE_VIOLET_DUST_LARGE =
+        new DustParticleOptions(new Vector3f(.34F,.08F,.78F),1.35F);
     // Replace two portal accents per arm with textured crying-obsidian chips.
     private static final int FISSURE_SHARD_SEGMENT_INTERVAL = 6;
     private static final double FISSURE_SAMPLE_SPACING = RiftGeometry.FISSURE_SAMPLE_SPACING;
+
+    private static double fissurePulseWave(double phase,int segment,int arm) {
+        if(!Double.isFinite(phase)) return 0.0D;
+        double wave=Math.sin(phase+segment*.8D+arm*.6D);
+        return Double.isFinite(wave) ? wave : 0.0D;
+    }
+
+    private static DustParticleOptions fissureDustForWave(double wave) {
+        if(!Double.isFinite(wave)) return FISSURE_VIOLET_DUST;
+        double bounded=Math.max(-1.0D,Math.min(1.0D,wave));
+        if(bounded< -1.0D/3.0D) return FISSURE_VIOLET_DUST_SMALL;
+        if(bounded> 1.0D/3.0D) return FISSURE_VIOLET_DUST_LARGE;
+        return FISSURE_VIOLET_DUST;
+    }
+
+    private static boolean hasFissureDustColor(DustParticleOptions dust) {
+        Vector3f color=dust.getColor();
+        return Float.isFinite(color.x()) && Float.isFinite(color.y()) && Float.isFinite(color.z())
+            && Math.abs(color.x()-.34F)<1.0E-6F
+            && Math.abs(color.y()-.08F)<1.0E-6F
+            && Math.abs(color.z()-.78F)<1.0E-6F;
+    }
+
+    private static void verifyFissureDustPulseProfile() {
+        if(fissureDustForWave(-1.0D)!=FISSURE_VIOLET_DUST_SMALL
+            || fissureDustForWave(0.0D)!=FISSURE_VIOLET_DUST
+            || fissureDustForWave(1.0D)!=FISSURE_VIOLET_DUST_LARGE
+            || fissureDustForWave(Double.NaN)!=FISSURE_VIOLET_DUST
+            || fissureDustForWave(Double.POSITIVE_INFINITY)!=FISSURE_VIOLET_DUST
+            || fissurePulseWave(Double.NaN,1,0)!=0.0D
+            || !hasFissureDustColor(FISSURE_VIOLET_DUST_SMALL)
+            || !hasFissureDustColor(FISSURE_VIOLET_DUST)
+            || !hasFissureDustColor(FISSURE_VIOLET_DUST_LARGE)
+            || !(FISSURE_VIOLET_DUST_SMALL.getScale()<FISSURE_VIOLET_DUST.getScale()
+                && FISSURE_VIOLET_DUST.getScale()<FISSURE_VIOLET_DUST_LARGE.getScale())
+            || FISSURE_VIOLET_DUST_SMALL.getScale()<.9F
+            || FISSURE_VIOLET_DUST_LARGE.getScale()>1.4F)
+            throw new IllegalStateException("CI fissure Dust pulse profile regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_DUST_PULSE_PROFILE_VERIFIED min={} base={} max={} variants=3",
+            FISSURE_VIOLET_DUST_SMALL.getScale(),FISSURE_VIOLET_DUST.getScale(),
+            FISSURE_VIOLET_DUST_LARGE.getScale());
+    }
     // Production spreads terrain writes across more ticks to reduce synchronous chunk-update bursts.
     // CI keeps the higher deterministic budget so integration fixtures remain short.
     private static int fractureEditBudget(boolean ciTest) {
@@ -697,12 +743,14 @@ public final class RiftController {
                 BlockPos support=new BlockPos(blockX,surfaceY-1,blockZ);
                 if(!isFissureGroundSupport(level.getBlockState(support))) continue;
                 double particleY=fissureParticleY(level,blockX,surfaceY,blockZ);
-                double pulse=Math.sin(phase+segment*.8+arm*.6)*.05;
-                // Keep one primary mote per sample. Custom DustParticleOptions supply the
-                // dominant deep-violet line; every fourth non-shard segment keeps
-                // a restrained Dragon Breath accent for contrast.
+                double wave=fissurePulseWave(phase,segment,arm);
+                double pulse=wave*.05D;
+                DustParticleOptions dust=fissureDustForWave(wave);
+                // Keep one primary mote per sample. Cached DustParticleOptions supply the
+                // dominant deep-violet line with a slow size pulse; every fourth non-shard
+                // segment keeps a restrained Dragon Breath accent for contrast.
                 if(segment%FISSURE_SHARD_SEGMENT_INTERVAL==0) {
-                    level.sendParticles(FISSURE_VIOLET_DUST,
+                    level.sendParticles(dust,
                         px,particleY+pulse,pz,1,.035,.012,.035,.008);
                     violetDustMotes++;
                     // A slightly wider, faster chip burst makes the textured edge
@@ -716,7 +764,7 @@ public final class RiftController {
                         px,particleY+pulse,pz,FISSURE_MOTES_PER_SAMPLE,.045,.025,.045,.003);
                     dragonBreathMotes+=FISSURE_MOTES_PER_SAMPLE;
                 } else {
-                    level.sendParticles(FISSURE_VIOLET_DUST,
+                    level.sendParticles(dust,
                         px,particleY+pulse,pz,FISSURE_MOTES_PER_SAMPLE,.035,.012,.035,.008);
                     violetDustMotes+=FISSURE_MOTES_PER_SAMPLE;
                 }
@@ -950,6 +998,7 @@ public final class RiftController {
             throw new IllegalStateException("CI fissure violet dust color/scale regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_VIOLET_DUST_VERIFIED red={} green={} blue={} scale={}",
             dustColor.x(),dustColor.y(),dustColor.z(),dustScale);
+        verifyFissureDustPulseProfile();
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples={} spacing={} extent={}",
             samples,FISSURE_SAMPLE_SPACING,extent);
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total={} dragonBreath={} violetDust={} shards={}",
@@ -2383,9 +2432,9 @@ public final class RiftController {
                     if(s.finaleTicks%20==0) {
                         FissureEmission emission=emitSurfaceFissure(level,s,phase);
                         if(CI_TEST && emission.samples()>0 && !s.ciSurfaceFissureLogged) {
-                            LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples={} dragonBreath={} violetDust={} total={} heightmap=motion-blocking-no-leaves ground=terrain-support-filtered averageY={}",
+                            LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples={} dragonBreath={} violetDust={} shards={} total={} heightmap=motion-blocking-no-leaves ground=terrain-support-filtered averageY={}",
                                 emission.samples(),emission.dragonBreathMotes(),emission.violetDustMotes(),
-                                emission.totalParticles(),emission.averageSurfaceY());
+                                emission.shards(),emission.totalParticles(),emission.averageSurfaceY());
                             LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARDS_EMITTED count={} material=crying_obsidian",
                                 emission.shards());
                             s.ciSurfaceFissureLogged=true;
