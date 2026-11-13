@@ -105,6 +105,7 @@ public final class RiftClientState {
         private static final BlockPos.MutableBlockPos SURFACE_CURSOR=
             new BlockPos.MutableBlockPos(0,0,0);
         private static boolean sampleCacheReuseLogged;
+        private static boolean surfaceSearchProfileLogged;
         private static net.minecraft.client.multiplayer.ClientLevel cachedLevel;
         private static long cachedTick=Long.MIN_VALUE;
         private static int cachedAnchorX=Integer.MIN_VALUE;
@@ -498,6 +499,43 @@ public final class RiftClientState {
                 && !state.is(net.minecraft.world.level.block.Blocks.POWDER_SNOW);
         }
 
+        // Search from the camera height downward first: a player standing on the
+        // ground usually finds support in one or two candidates instead of eight
+        // guaranteed empty candidates above the player. Only then inspect higher
+        // terrain, preserving the same bounded vertical window and full coverage.
+        private static int surfaceSearchCandidateY(int sample,int startY,int minSurfaceY,int maxSurfaceY) {
+            int belowCount=startY-minSurfaceY+1;
+            return sample<belowCount
+                ? startY-sample
+                : startY+1+(sample-belowCount);
+        }
+
+        private static void verifySurfaceSearchOrder() {
+            if(surfaceSearchProfileLogged) return;
+            int min=36,reference=68,max=76;
+            int start=Math.max(min,Math.min(max,reference));
+            int candidateCount=max-min+1;
+            boolean[] visited=new boolean[candidateCount];
+            for(int sample=0;sample<candidateCount;sample++) {
+                int candidate=surfaceSearchCandidateY(sample,start,min,max);
+                if(candidate<min || candidate>max || visited[candidate-min])
+                    throw new IllegalStateException("BLACK FREQUENCY ground surface search order regression");
+                visited[candidate-min]=true;
+            }
+            boolean lowClamp=surfaceSearchCandidateY(0,Math.max(20,Math.min(24,10)),20,24)==20;
+            boolean highClamp=surfaceSearchCandidateY(0,Math.max(20,Math.min(24,30)),20,24)==24;
+            if(surfaceSearchCandidateY(0,start,min,max)!=68
+                || surfaceSearchCandidateY(1,start,min,max)!=67
+                || surfaceSearchCandidateY(32,start,min,max)!=36
+                || surfaceSearchCandidateY(33,start,min,max)!=69
+                || surfaceSearchCandidateY(40,start,min,max)!=76
+                || !lowClamp || !highClamp)
+                throw new IllegalStateException("BLACK FREQUENCY ground surface search priority regression");
+            surfaceSearchProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_SURFACE_SEARCH_ORDER_VERIFIED nearestBelowFirst=true bounded=true unique=true");
+        }
+
         private static double sampleGroundY(net.minecraft.client.multiplayer.ClientLevel level,
                 int blockX,int blockZ,int referenceY,BlockPos.MutableBlockPos cursor) {
             // The caller owns one render-thread cursor for the whole mesh rebuild.
@@ -512,7 +550,11 @@ public final class RiftClientState {
             // this finds the ground below canopies without scanning an entire column.
             int maxSurfaceY=Math.min(referenceY+8,level.getMaxBuildHeight()-2);
             int minSurfaceY=Math.max(level.getMinBuildHeight()+1,referenceY-32);
-            for(int candidateY=maxSurfaceY;candidateY>=minSurfaceY;candidateY--) {
+            if(maxSurfaceY<minSurfaceY) return Double.NaN;
+            int startY=Math.max(minSurfaceY,Math.min(maxSurfaceY,referenceY));
+            int candidateCount=maxSurfaceY-minSurfaceY+1;
+            for(int sample=0;sample<candidateCount;sample++) {
+                int candidateY=surfaceSearchCandidateY(sample,startY,minSurfaceY,maxSurfaceY);
                 cursor.set(blockX,candidateY-1,blockZ);
                 BlockState support=level.getBlockState(cursor);
                 if(!isGroundSupport(support) || !support.getFluidState().isEmpty()) continue;
@@ -573,6 +615,7 @@ public final class RiftClientState {
                 int referenceY) {
             verifyInactiveCacheCleanup(level);
             verifyGroundMeshSamplingProfile();
+            verifySurfaceSearchOrder();
             verifyTaperProfile();
             verifyGroundContinuityProfile();
             verifyGroundRebuildProfile();
