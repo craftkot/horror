@@ -1283,7 +1283,7 @@ def capture_test_world():
                     and "BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_PROFILE_VERIFIED ring=24 ringIntervalTicks=20 sparks=4 helix=16 helixIntervalTicks=8 blockCue=6 blockIntervalBlocks=48 audience=8 audienceIntervalTicks=20 cachedDust=true" not in log_after):
                 print("WORLD_CAPTURE_FAIL: restoration particle cadence/profile was not verified",flush=True)
                 return False
-            size_marker="BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_SIZE_VERIFIED baseScale=0.62 accentScale=0.78 audienceSpreadXZ=0.85 audienceSpreadY=0.55 cachedDust=true"
+            size_marker="BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_SIZE_VERIFIED baseScale=0.42 accentScale=0.56 audienceSpreadXZ=0.85 audienceSpreadY=0.55 cachedDust=true"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and size_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: bounded restoration particle size/spread was not verified",flush=True)
                 return False
