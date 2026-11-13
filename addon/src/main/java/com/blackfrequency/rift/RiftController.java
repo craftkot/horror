@@ -1521,6 +1521,36 @@ public final class RiftController {
             && (restoreTicks%RESTORE_PLAYER_SCAN_INTERVAL_TICKS==0 || restoreTicks==Integer.MAX_VALUE);
     }
 
+    // Accumulate viewer state without short-circuiting the real player iteration:
+    // every player must be visited because menu closure is a side effect of this pass.
+    private static final class RestorePlayerScanState {
+        private boolean hasRingViewer;
+        private boolean hasStabilizationViewer;
+        private int playersVisited;
+        private int beaconMenusClosed;
+
+        private void observe(boolean beaconMenuClosed,boolean eligible,
+                boolean ringViewer,boolean stabilizationViewer) {
+            playersVisited++;
+            if(beaconMenuClosed) beaconMenusClosed++;
+            if(!eligible) return;
+            hasRingViewer|=ringViewer;
+            hasStabilizationViewer|=stabilizationViewer;
+        }
+    }
+
+    private static void verifyRestorePlayerScanFullPass() {
+        RestorePlayerScanState scan=new RestorePlayerScanState();
+        // The first player satisfies the ring audience. A later player still
+        // has a beacon menu and is the stabilization viewer; both must be seen.
+        scan.observe(false,true,true,false);
+        scan.observe(true,true,false,true);
+        if(scan.playersVisited!=2 || scan.beaconMenusClosed!=1
+            || !scan.hasRingViewer || !scan.hasStabilizationViewer)
+            throw new IllegalStateException("CI restore player scan stopped before closing later beacon menus");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_FULL_PASS_VERIFIED fixturePlayers=2 menusAfterViewer=1 fullPass=true");
+    }
+
     private static void verifyRestorationParticleProfile() {
         boolean ringBoundary=shouldEmitRestoreAudiencePulse(RESTORE_RING_INTERVAL_TICKS);
         boolean ringBetween=!shouldEmitRestoreAudiencePulse(RESTORE_RING_INTERVAL_TICKS-1);
@@ -1573,6 +1603,7 @@ public final class RiftController {
             RESTORE_AUDIENCE_SPREAD_XZ,RESTORE_AUDIENCE_SPREAD_Y);
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_PROFILE_VERIFIED intervalTicks={} menuClose=shared viewerScan=shared loadedOnly=true",
             RESTORE_PLAYER_SCAN_INTERVAL_TICKS);
+        verifyRestorePlayerScanFullPass();
     }
 
     private static void verifyBeaconInteractionGuard() {
@@ -2099,26 +2130,30 @@ public final class RiftController {
         // Close only this recovery beacon's vanilla menu during the same bounded
         // player pass used by the visual audience checks. A newly opened menu
         // may remain visible for at most four ticks; no extra per-tick player scan.
-        boolean hasRingViewer=false;
-        boolean hasStabilizationViewer=false;
+        RestorePlayerScanState playerScan = new RestorePlayerScanState();
         if(shouldScanRestorePlayers(s.restoreTicks,beaconPresent)) {
             boolean stabilizationDue=shouldEmitRestoreAudiencePulse(s.restoreTicks);
+            // Do not stop after finding a viewer: a later player may still have
+            // the beacon's vanilla menu open and must be closed in this same pass.
             for(var player:level.players()) {
-                if(player.containerMenu instanceof net.minecraft.world.inventory.BeaconMenu
-                    && player.blockPosition().distSqr(activatedBeacon)<144d) {
+                boolean closeBeaconMenu=player.containerMenu instanceof net.minecraft.world.inventory.BeaconMenu
+                    && player.blockPosition().distSqr(activatedBeacon)<144d;
+                if(closeBeaconMenu) {
                     player.closeContainer();
                     if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_MENU_CLOSED");
                 }
-                if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
-                if(!hasRingViewer
-                    && player.distanceToSqr(beaconX,beaconY,beaconZ)<=128.0D*128.0D)
-                    hasRingViewer=true;
-                if(stabilizationDue && !hasStabilizationViewer
-                    && player.distanceToSqr(beaconX,beaconY+0.6D,beaconZ)<=128.0D*128.0D)
-                    hasStabilizationViewer=true;
-                if(hasRingViewer && (!stabilizationDue || hasStabilizationViewer)) break;
+                boolean eligible=player.isAlive() && !player.isRemoved() && !player.isSpectator();
+                boolean ringViewer=eligible
+                    && player.distanceToSqr(beaconX,beaconY,beaconZ)<=128.0D*128.0D;
+                boolean stabilizationViewer=eligible && stabilizationDue
+                    && player.distanceToSqr(beaconX,beaconY+0.6D,beaconZ)<=128.0D*128.0D;
+                playerScan.observe(closeBeaconMenu,eligible,ringViewer,stabilizationViewer);
             }
+            if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_COMPLETED playersVisited={} beaconMenusClosed={} fullPass=true",
+                playerScan.playersVisited,playerScan.beaconMenusClosed);
         }
+        boolean hasRingViewer=playerScan.hasRingViewer;
+        boolean hasStabilizationViewer=playerScan.hasStabilizationViewer;
         // A visible, bounded stabilization pulse at the activated physical beacon.
         // Only query an already loaded chunk; never resurrect a removed beacon
         // or force chunk generation during recovery.
