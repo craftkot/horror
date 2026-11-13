@@ -388,6 +388,7 @@ def capture_test_world():
     # Samples include deep-violet Dust and the darker mesh edge; reject legacy magenta.
     if (is_rift_violet_pixel(142,127,155)
             or not is_rift_violet_pixel(134,44,150)
+            or not is_rift_violet_pixel(117,46,209)
             or is_ground_fissure_pixel(142,127,155)
             or is_ground_fissure_pixel(134,44,150)
             or not is_ground_violet_dust_pixel(87,20,199)
@@ -432,6 +433,8 @@ def capture_test_world():
 
     shader_path=ROOT/"addon"/"src"/"main"/"resources"/"assets"/"blackfrequency"/"shaders"/"core"/"sky_rift.fsh"
     shader_source=shader_path.read_text(encoding="utf-8")
+    if "vec3 edge=vec3(.46,.18,.82);" not in shader_source:
+        raise RuntimeError("BLACK FREQUENCY sky edge palette regression")
     filament_mask_samples=[
         smoothstep01(.025,.18,0.0),
         smoothstep01(.025,.18,.025),
@@ -1561,6 +1564,9 @@ def capture_test_world():
                     return False
                 if "BLACK_FREQUENCY_TEST ACTUAL_PASSENGER_GRAVITY_IMMUNITY_VERIFIED" not in log_after:
                     print("WORLD_CAPTURE_FAIL: actual mounted-player gravity probe did not run",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_PLAYER_IMPULSE_VERIFIED full=true half=true zero=true" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: actual player gravity fade scaling probe did not run",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST PASSENGER_RIFT_IMPULSE_SUPPRESSED_VERIFIED controlImpulse=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: mounted player was not proven immune inside an active lift zone",flush=True)

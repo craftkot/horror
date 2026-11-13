@@ -178,7 +178,8 @@ void main(){
  float zenithRim=zenithWindow*fractureRim(zenithDistance,zenithWidth);
  vec3 background=vec3(.010,.002,.022);
  vec3 violet=vec3(.16,.032,.26);
- vec3 edge=vec3(.72,.24,1.0);
+ // Match the ground fissure's deep violet instead of the old magenta-heavy rim.
+ vec3 edge=vec3(.46,.18,.82);
  vec3 color=background+violet*(corona*.24+upperCorona*.19+lowerCorona*.18+crownCorona*.16+zenithCorona*.11);
  // Fast, localized violet lightning travels along the three major tears.
  // Modulate existing glow masks rather than adding more Voronoi searches.
