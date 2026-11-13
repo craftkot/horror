@@ -600,8 +600,8 @@ public final class RiftController {
         }
     }
 
-    // Keep Dragon Breath as sparse hot-violet accents; most fissure motes use
-    // Reverse Portal so the ground scar reads deep violet instead of magenta.
+    // Keep Dragon Breath as sparse hot-violet accents; explicit Dust particles
+    // provide the controlled deep-violet base color without changing the budget.
     private static boolean isDragonBreathFissureAccent(int segment) {
         return segment>0 && segment%4==0
             && FISSURE_SHARD_SEGMENT_INTERVAL>0
@@ -926,11 +926,11 @@ public final class RiftController {
             for(int segment=1;segment<=FISSURE_SEGMENTS_PER_ARM;segment++) {
                 if(segment%FISSURE_SHARD_SEGMENT_INTERVAL==0) {
                     shardCount++;
-                    reversePortalMotes+=FISSURE_MOTES_PER_SAMPLE;
+                    violetDustMotes+=FISSURE_MOTES_PER_SAMPLE;
                 } else if(isDragonBreathFissureAccent(segment)) {
                     dragonBreathMotes+=FISSURE_MOTES_PER_SAMPLE;
                 } else {
-                    reversePortalMotes+=FISSURE_MOTES_PER_SAMPLE;
+                    violetDustMotes+=FISSURE_MOTES_PER_SAMPLE;
                 }
             }
         }
