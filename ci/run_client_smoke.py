@@ -266,19 +266,25 @@ def capture_test_world():
     def is_rift_violet_pixel(r,g,b):
         # Reject pale lavender UI/death-screen skies; the rift must be saturated violet.
         return r>55 and b>80 and b>g*1.5 and r>g*1.5 and b-r<150
-    def is_ground_fissure_pixel(r,g,b):
-        # Legacy particles are brighter than the dark sky shader behind canopy gaps.
+    def is_ground_violet_dust_pixel(r,g,b):
+        # The explicit DustParticleOptions color is blue-heavy and much darker than the old magenta portal sprites.
+        return 25 <= r <= 125 and g <= 50 and b >= 130 and b-r >= 60 and b > r*1.7
+    def is_ground_fissure_accent_pixel(r,g,b):
+        # Keep the eight bright Dragon Breath accents as a separate, sparse highlight class.
         return r>180 and b>180 and g<85 and r>g*1.5 and b>g*1.5 and abs(r-b)<100
+    def is_ground_fissure_pixel(r,g,b):
+        return is_ground_violet_dust_pixel(r,g,b) or is_ground_fissure_accent_pixel(r,g,b)
     def is_ground_mesh_pixel(r,g,b):
         # The new mesh uses a blue-heavy violet edge, unlike magenta particle sprites.
         return r>145 and b>215 and b-r>28 and 18<g<100
-    # Samples come from real artifacts: pale death-screen lavender, a dark sky leak,
-    # and a bright Dragon Breath mote on the ground.
+    # Samples include the explicit deep-violet dust, legacy magenta sprites, and a restrained Dragon Breath accent.
     if (is_rift_violet_pixel(142,127,155)
             or not is_rift_violet_pixel(134,44,150)
             or is_ground_fissure_pixel(142,127,155)
             or is_ground_fissure_pixel(134,44,150)
-            or not is_ground_fissure_pixel(201,66,214)
+            or not is_ground_violet_dust_pixel(87,20,199)
+            or is_ground_violet_dust_pixel(207,0,239)
+            or not is_ground_fissure_accent_pixel(201,66,214)
             or not is_ground_mesh_pixel(194,58,238)
             or not is_ground_mesh_pixel(158,26,250)
             or is_ground_mesh_pixel(198,0,229)
@@ -369,17 +375,25 @@ def capture_test_world():
         pixels=frame.load()
         left,right=int(width*.20),int(width*.80)
         top,bottom=int(height*.40),int(height*.90)
-        particle_pixels=mesh_pixels=combined_pixels=0
-        particle_tiles=mesh_tiles=combined_tiles=0
+        dust_pixels=accent_pixels=particle_pixels=mesh_pixels=combined_pixels=0
+        dust_tiles=accent_tiles=particle_tiles=mesh_tiles=combined_tiles=0
         tile_size=32
         for tile_y in range(top,bottom,tile_size):
             for tile_x in range(left,right,tile_size):
-                particle_hits=mesh_hits=combined_hits=0
+                dust_hits=accent_hits=particle_hits=mesh_hits=combined_hits=0
                 for y in range(tile_y,min(tile_y+tile_size,bottom)):
                     for x in range(tile_x,min(tile_x+tile_size,right)):
                         r,g,b=pixels[x,y]
-                        particle=is_ground_fissure_pixel(r,g,b)
+                        dust=is_ground_violet_dust_pixel(r,g,b)
+                        accent=is_ground_fissure_accent_pixel(r,g,b)
+                        particle=dust or accent
                         mesh=is_ground_mesh_pixel(r,g,b)
+                        if dust:
+                            dust_pixels+=1
+                            dust_hits+=1
+                        if accent:
+                            accent_pixels+=1
+                            accent_hits+=1
                         if particle:
                             particle_pixels+=1
                             particle_hits+=1
@@ -389,6 +403,10 @@ def capture_test_world():
                         if particle or mesh:
                             combined_pixels+=1
                             combined_hits+=1
+                if dust_hits>=3:
+                    dust_tiles+=1
+                if accent_hits>=3:
+                    accent_tiles+=1
                 if particle_hits>=4:
                     particle_tiles+=1
                 if mesh_hits>=3:
@@ -396,6 +414,10 @@ def capture_test_world():
                 if combined_hits>=4:
                     combined_tiles+=1
         return {
+            "dustPixels":dust_pixels,
+            "dustTiles":dust_tiles,
+            "accentPixels":accent_pixels,
+            "accentTiles":accent_tiles,
             "particlePixels":particle_pixels,
             "particleTiles":particle_tiles,
             "meshPixels":mesh_pixels,
@@ -405,7 +427,9 @@ def capture_test_world():
         }
 
     def ground_visibility_passes(metrics):
-        return (metrics["particlePixels"]>=120 and metrics["particleTiles"]>=3
+        return (metrics["dustPixels"]>=30 and metrics["dustTiles"]>=2
+                and metrics["accentPixels"]>=20 and metrics["accentTiles"]>=1
+                and metrics["particlePixels"]>=120 and metrics["particleTiles"]>=3
                 and metrics["combinedPixels"]>=160 and metrics["combinedTiles"]>=6
                 and metrics["meshPixels"]>=24 and metrics["meshTiles"]>=2)
 
@@ -657,7 +681,7 @@ def capture_test_world():
                     r"BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_EMITTED x=(-?\d+) y=(-?\d+) z=(-?\d+)",
                     logs)
                 particles=re.search(
-                    r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) dragonBreath=(\d+) reversePortal=(\d+) total=(\d+) heightmap=motion-blocking-no-leaves ground=terrain-support-filtered averageY=([-+0-9.eE]+)",
+                    r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) dragonBreath=(\d+) violetDust=(\d+) total=(\d+) heightmap=motion-blocking-no-leaves ground=terrain-support-filtered averageY=([-+0-9.eE]+)",
                     logs)
                 target=re.search(
                     r"BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x=([-+0-9.eE]+) y=([-+0-9.eE]+) z=([-+0-9.eE]+) distanceSquared=([-+0-9.eE]+)",
@@ -1264,8 +1288,11 @@ def capture_test_world():
                       "server",density_spacing,density_extent,
                       "client",client_spacing,client_extent,"radius",client_radius,flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=56 dragonBreath=8 reversePortal=40 shards=8" not in log_after:
-                print("WORLD_CAPTURE_FAIL: layered fissure particle budget self-check was not executed",flush=True)
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=56 dragonBreath=8 violetDust=40 shards=8" not in log_after:
+                print("WORLD_CAPTURE_FAIL: violet-dust fissure particle budget self-check was not executed",flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_VIOLET_DUST_VERIFIED red=0.34 green=0.08 blue=0.78 scale=1.15" not in log_after:
+                print("WORLD_CAPTURE_FAIL: explicit deep-violet DustParticleOptions color was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_STRUCTURAL_SUPPORT_FILTER_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: server did not reject structural blocks as fissure terrain",flush=True)
@@ -1278,7 +1305,7 @@ def capture_test_world():
                     or int(fissure.group(2))!=8
                     or int(fissure.group(3))!=int(fissure.group(1))-8
                     or int(fissure.group(4))!=int(fissure.group(1))+8):
-                print("WORLD_CAPTURE_FAIL: violet-majority ground fissure particle composition or loaded sample count is invalid",flush=True)
+                print("WORLD_CAPTURE_FAIL: deep-violet dust/accent composition or loaded sample count is invalid",flush=True)
                 return False
             shards=re.search(
                 r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARDS_EMITTED count=([0-9]+) material=crying_obsidian",
@@ -1287,7 +1314,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: all eight textured fissure-edge shards were not emitted",
                       flush=True)
                 return False
-            print("WORLD_CAPTURE: bounded layered ground fissure particles verified",fissure.group(1),flush=True)
+            print("WORLD_CAPTURE: deep-violet dust and sparse hot-violet accents verified",fissure.group(1),flush=True)
             print("WORLD_CAPTURE: crying-obsidian fissure-edge shards verified",shards.group(1),flush=True)
             if not fracture_seen:
                 print("WORLD_CAPTURE_FAIL: ground fracture never removed a block",flush=True)
