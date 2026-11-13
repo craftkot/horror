@@ -183,8 +183,13 @@ public final class RiftClientState {
         // Fade both ends of each arm over three samples. The connected ribbons
         // become narrow tips instead of ending as uniform rectangular strips.
         private static double endpointTaper(int sample) {
-            double ramp=Math.min(1.0,sample/3.0);
-            double tail=Math.min(1.0,(SEGMENTS_PER_ARM-sample+1)/3.0);
+            // Clamp both ends to the sampled arm so malformed indices cannot
+            // create a negative or oversized ribbon width.
+            int boundedSample=Math.max(0,Math.min(SEGMENTS_PER_ARM,sample));
+            double ramp=Math.min(1.0,boundedSample/3.0);
+            // The final vertex is sample SEGMENTS_PER_ARM, not SEGMENTS_PER_ARM+1.
+            // Using the same endpoint index on both sides keeps all four arms symmetric.
+            double tail=Math.min(1.0,(SEGMENTS_PER_ARM-boundedSample)/3.0);
             return .5D+.5D*Math.min(ramp,tail);
         }
 
@@ -204,14 +209,27 @@ public final class RiftClientState {
 
         private static void verifyTaperProfile() {
             if(!taperProfileLogged) {
-                double tip=endpointTaper(1);
+                double start=endpointTaper(0);
+                double first=endpointTaper(1);
+                double second=endpointTaper(2);
                 double middle=endpointTaper(SEGMENTS_PER_ARM/2);
+                double secondLast=endpointTaper(SEGMENTS_PER_ARM-2);
+                double last=endpointTaper(SEGMENTS_PER_ARM-1);
                 double end=endpointTaper(SEGMENTS_PER_ARM);
-                if(!(tip<middle && end<middle && Math.abs(tip-end)<1.0E-9D))
+                boolean symmetric=Math.abs(start-end)<1.0E-9D
+                    && Math.abs(first-last)<1.0E-9D
+                    && Math.abs(second-secondLast)<1.0E-9D;
+                boolean rising=start<first && first<second && second<middle;
+                boolean falling=middle>secondLast && secondLast>last && last>end;
+                boolean invalidClamped=endpointTaper(-1)==start
+                    && endpointTaper(SEGMENTS_PER_ARM+1)==end;
+                if(!(symmetric && rising && falling && invalidClamped
+                    && Math.abs(middle-1.0D)<1.0E-9D))
                     throw new IllegalStateException("BLACK FREQUENCY ground mesh taper regression");
                 taperProfileLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED tip={} middle={} end={}",tip,middle,end);
+                    "BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED start={} first={} second={} middle={} secondLast={} last={} end={} symmetric={} invalidClamped={}",
+                    start,first,second,middle,secondLast,last,end,symmetric,invalidClamped);
             }
             if(!visualProfileLogged) {
                 double minimumHalfWidth=GROUND_MIN_HALF_WIDTH;

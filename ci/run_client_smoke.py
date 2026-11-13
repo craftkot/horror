@@ -1089,6 +1089,18 @@ def capture_test_world():
                     or "double time=(double)tick+boundedRenderPartialTick(event.getPartialTick());" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: ground fissure animation does not clamp the renderer partial tick",flush=True)
                 return False
+            taper_match=re.search(
+                r"BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED start=([0-9.eE+-]+) first=([0-9.eE+-]+) second=([0-9.eE+-]+) middle=([0-9.eE+-]+) secondLast=([0-9.eE+-]+) last=([0-9.eE+-]+) end=([0-9.eE+-]+) symmetric=(true|false) invalidClamped=(true|false)",
+                final_log)
+            expected_taper=(.5,2.0/3.0,5.0/6.0,1.0,5.0/6.0,2.0/3.0,.5)
+            if (not taper_match
+                    or any(not math.isclose(float(taper_match.group(i)),expected_taper[i-1],
+                                             rel_tol=0.0,abs_tol=1.0e-9)
+                           for i in range(1,8))
+                    or taper_match.group(8)!="true" or taper_match.group(9)!="true"
+                    or "double tail=Math.min(1.0,(SEGMENTS_PER_ARM-boundedSample)/3.0);" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: ground fissure endpoint taper is not symmetric or bounded",flush=True)
+                return False
             visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=6.4 coreScale=1.15 edgeHalfWidth=0.026 pulseMin=0.045 pulseMax=0.068 coreInsideEdgeBand=true"
             if visual_profile_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: widened ground fissure visual profile self-check was not executed",flush=True)
