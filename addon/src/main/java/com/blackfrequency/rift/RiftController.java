@@ -11,7 +11,9 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
+import org.joml.Vector3f;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
@@ -48,6 +50,9 @@ public final class RiftController {
     private static final int FISSURE_ARM_COUNT = RiftGeometry.FISSURE_ARM_COUNT;
     private static final int FISSURE_SEGMENTS_PER_ARM = RiftGeometry.FISSURE_SEGMENTS_PER_ARM;
     private static final int FISSURE_MOTES_PER_SAMPLE = 1;
+    // Explicit RGB avoids vanilla portal particles' magenta hue on the ground scar.
+    private static final DustParticleOptions FISSURE_VIOLET_DUST =
+        new DustParticleOptions(new Vector3f(.34F,.08F,.78F),1.15F);
     // Replace two portal accents per arm with textured crying-obsidian chips.
     private static final int FISSURE_SHARD_SEGMENT_INTERVAL = 6;
     private static final double FISSURE_SAMPLE_SPACING = RiftGeometry.FISSURE_SAMPLE_SPACING;
@@ -588,10 +593,10 @@ public final class RiftController {
         return beaconPos!=Long.MIN_VALUE && affected.removeIf(pos -> pos.asLong()==beaconPos);
     }
 
-    private record FissureEmission(int samples,int dragonBreathMotes,int reversePortalMotes,
+    private record FissureEmission(int samples,int dragonBreathMotes,int violetDustMotes,
             int shards,double averageSurfaceY) {
         private int totalParticles() {
-            return dragonBreathMotes+reversePortalMotes+shards;
+            return dragonBreathMotes+violetDustMotes+shards;
         }
     }
 
@@ -669,7 +674,7 @@ public final class RiftController {
     private static FissureEmission emitSurfaceFissure(ServerLevel level,State s,double phase) {
         int samples=0;
         int dragonBreathMotes=0;
-        int reversePortalMotes=0;
+        int violetDustMotes=0;
         int shards=0;
         double surfaceYTotal=0.0D;
         for(int arm=0;arm<FISSURE_ARM_COUNT;arm++) {
@@ -693,13 +698,13 @@ public final class RiftController {
                 if(!isFissureGroundSupport(level.getBlockState(support))) continue;
                 double particleY=fissureParticleY(level,blockX,surfaceY,blockZ);
                 double pulse=Math.sin(phase+segment*.8+arm*.6)*.05;
-                // Keep one primary mote per sample. Reverse Portal supplies the
+                // Keep one primary mote per sample. Custom DustParticleOptions supply the
                 // dominant deep-violet line; every fourth non-shard segment keeps
                 // a restrained Dragon Breath accent for contrast.
                 if(segment%FISSURE_SHARD_SEGMENT_INTERVAL==0) {
-                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                    level.sendParticles(FISSURE_VIOLET_DUST,
                         px,particleY+pulse,pz,1,.035,.012,.035,.008);
-                    reversePortalMotes++;
+                    violetDustMotes++;
                     // A slightly wider, faster chip burst makes the textured edge
                     // readable against stone while retaining one chip per anchor.
                     level.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK,
@@ -711,15 +716,15 @@ public final class RiftController {
                         px,particleY+pulse,pz,FISSURE_MOTES_PER_SAMPLE,.045,.025,.045,.003);
                     dragonBreathMotes+=FISSURE_MOTES_PER_SAMPLE;
                 } else {
-                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                    level.sendParticles(FISSURE_VIOLET_DUST,
                         px,particleY+pulse,pz,FISSURE_MOTES_PER_SAMPLE,.035,.012,.035,.008);
-                    reversePortalMotes+=FISSURE_MOTES_PER_SAMPLE;
+                    violetDustMotes+=FISSURE_MOTES_PER_SAMPLE;
                 }
                 surfaceYTotal+=particleY;
                 samples++;
             }
         }
-        return new FissureEmission(samples,dragonBreathMotes,reversePortalMotes,shards,
+        return new FissureEmission(samples,dragonBreathMotes,violetDustMotes,shards,
             samples==0?Double.NaN:surfaceYTotal/samples);
     }
 
@@ -916,7 +921,7 @@ public final class RiftController {
             throw new IllegalStateException("CI fissure sampling density/radius regression");
         int shardCount=0;
         int dragonBreathMotes=0;
-        int reversePortalMotes=0;
+        int violetDustMotes=0;
         for(int arm=0;arm<FISSURE_ARM_COUNT;arm++) {
             for(int segment=1;segment<=FISSURE_SEGMENTS_PER_ARM;segment++) {
                 if(segment%FISSURE_SHARD_SEGMENT_INTERVAL==0) {
@@ -931,13 +936,24 @@ public final class RiftController {
         }
         int primaryMotes=samples*FISSURE_MOTES_PER_SAMPLE;
         int totalParticles=primaryMotes+shardCount;
-        if(shardCount!=8 || dragonBreathMotes!=8 || reversePortalMotes!=40
+        if(shardCount!=8 || dragonBreathMotes!=8 || violetDustMotes!=40
             || totalParticles!=56 || totalParticles>56)
             throw new IllegalStateException("CI violet-majority fissure particle budget regression");
+        Vector3f dustColor=FISSURE_VIOLET_DUST.getColor();
+        float dustScale=FISSURE_VIOLET_DUST.getScale();
+        if(!Float.isFinite(dustColor.x()) || !Float.isFinite(dustColor.y())
+            || !Float.isFinite(dustColor.z()) || dustColor.x()<0.0F || dustColor.x()>1.0F
+            || dustColor.y()<0.0F || dustColor.y()>1.0F || dustColor.z()<0.0F
+            || dustColor.z()>1.0F || dustColor.z()<=dustColor.x()*1.8F
+            || dustColor.y()>0.12F || !Float.isFinite(dustScale)
+            || dustScale<1.0F || dustScale>1.4F)
+            throw new IllegalStateException("CI fissure violet dust color/scale regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_VIOLET_DUST_VERIFIED red={} green={} blue={} scale={}",
+            dustColor.x(),dustColor.y(),dustColor.z(),dustScale);
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples={} spacing={} extent={}",
             samples,FISSURE_SAMPLE_SPACING,extent);
-        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total={} dragonBreath={} reversePortal={} shards={}",
-            totalParticles,dragonBreathMotes,reversePortalMotes,shardCount);
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total={} dragonBreath={} violetDust={} shards={}",
+            totalParticles,dragonBreathMotes,violetDustMotes,shardCount);
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_LAYOUT_VERIFIED count={} material=crying_obsidian",
             shardCount);
     }
@@ -2367,8 +2383,8 @@ public final class RiftController {
                     if(s.finaleTicks%20==0) {
                         FissureEmission emission=emitSurfaceFissure(level,s,phase);
                         if(CI_TEST && emission.samples()>0 && !s.ciSurfaceFissureLogged) {
-                            LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples={} dragonBreath={} reversePortal={} total={} heightmap=motion-blocking-no-leaves ground=terrain-support-filtered averageY={}",
-                                emission.samples(),emission.dragonBreathMotes(),emission.reversePortalMotes(),
+                            LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples={} dragonBreath={} violetDust={} total={} heightmap=motion-blocking-no-leaves ground=terrain-support-filtered averageY={}",
+                                emission.samples(),emission.dragonBreathMotes(),emission.violetDustMotes(),
                                 emission.totalParticles(),emission.averageSurfaceY());
                             LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARDS_EMITTED count={} material=crying_obsidian",
                                 emission.shards());
