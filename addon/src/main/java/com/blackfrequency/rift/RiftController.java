@@ -1529,12 +1529,14 @@ public final class RiftController {
     }
 
     private static boolean shouldEmitRestoreAudiencePulse(int restoreTicks) {
-        return restoreTicks>0 && restoreTicks%RESTORE_RING_INTERVAL_TICKS==0;
+        // Give a newly activated beacon one immediate pulse; later pulses stay rate-limited.
+        return restoreTicks==1 || (restoreTicks>0 && restoreTicks%RESTORE_RING_INTERVAL_TICKS==0);
     }
 
     private static boolean shouldScanRestorePlayers(int restoreTicks,boolean beaconPresent) {
         return beaconPresent && restoreTicks>0
-            && (restoreTicks%RESTORE_PLAYER_SCAN_INTERVAL_TICKS==0 || restoreTicks==Integer.MAX_VALUE);
+            && (restoreTicks==1 || restoreTicks%RESTORE_PLAYER_SCAN_INTERVAL_TICKS==0
+                || restoreTicks==Integer.MAX_VALUE);
     }
 
     // Accumulate viewer state without short-circuiting the real player iteration:
@@ -1589,6 +1591,7 @@ public final class RiftController {
     }
 
     private static void verifyRestorationParticleProfile() {
+        boolean ringInitial=shouldEmitRestoreAudiencePulse(1);
         boolean ringBoundary=shouldEmitRestoreAudiencePulse(RESTORE_RING_INTERVAL_TICKS);
         boolean ringBetween=!shouldEmitRestoreAudiencePulse(RESTORE_RING_INTERVAL_TICKS-1);
         boolean helixBoundary=shouldEmitRestoreHelix(RESTORE_HELIX_INTERVAL_TICKS);
@@ -1619,6 +1622,8 @@ public final class RiftController {
             && RESTORE_VIOLET_ACCENT_DUST_SCALE<=.62F
             && RESTORE_AUDIENCE_SPREAD_XZ>0.0D && RESTORE_AUDIENCE_SPREAD_XZ<=1.0D
             && RESTORE_AUDIENCE_SPREAD_Y>0.0D && RESTORE_AUDIENCE_SPREAD_Y<=.75D;
+        boolean playerScanInitial=shouldScanRestorePlayers(1,true);
+        boolean playerScanInitialWithoutBeacon=!shouldScanRestorePlayers(1,false);
         boolean playerScanBoundary=shouldScanRestorePlayers(RESTORE_PLAYER_SCAN_INTERVAL_TICKS,true)
             && shouldScanRestorePlayers(RESTORE_PLAYER_SCAN_INTERVAL_TICKS*2,true);
         boolean playerScanBetween=!shouldScanRestorePlayers(RESTORE_PLAYER_SCAN_INTERVAL_TICKS-1,true);
@@ -1626,9 +1631,10 @@ public final class RiftController {
         boolean playerScanInvalid=!shouldScanRestorePlayers(0,true)
             && !shouldScanRestorePlayers(-RESTORE_PLAYER_SCAN_INTERVAL_TICKS,true);
         boolean playerScanSaturated=shouldScanRestorePlayers(Integer.MAX_VALUE,true);
-        if(!(ringBoundary && ringBetween && helixBoundary && helixBetween
+        if(!(ringInitial && ringBoundary && ringBetween && helixBoundary && helixBetween
             && blockBoundary && blockBetween && blockNext && invalidTicks
             && boundedCounts && cachedPalette && boundedRestoreDust
+            && playerScanInitial && playerScanInitialWithoutBeacon
             && playerScanBoundary && playerScanBetween && playerScanWithoutBeacon
             && playerScanInvalid && playerScanSaturated))
             throw new IllegalStateException("CI restoration particle profile regression");
@@ -1640,6 +1646,8 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_SIZE_VERIFIED baseScale={} accentScale={} audienceSpreadXZ={} audienceSpreadY={} cachedDust=true",
             RESTORE_VIOLET_DUST_SCALE,RESTORE_VIOLET_ACCENT_DUST_SCALE,
             RESTORE_AUDIENCE_SPREAD_XZ,RESTORE_AUDIENCE_SPREAD_Y);
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_INITIAL_PULSE_POLICY_VERIFIED tick=1 ringParticles={} sparks={} scanOnStart=true loadedOnly=true",
+            RESTORE_RING_PARTICLE_COUNT,RESTORE_RISING_SPARK_PARTICLE_COUNT);
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_PROFILE_VERIFIED intervalTicks={} menuClose=shared viewerScan=shared loadedOnly=true",
             RESTORE_PLAYER_SCAN_INTERVAL_TICKS);
         verifyRestorePlayerScanFullPass();
@@ -2234,6 +2242,9 @@ public final class RiftController {
                     cz+Math.sin(phase)*0.75D*contraction,
                     1,0,0,0,0);
             }
+            if(CI_TEST && s.restoreTicks==1)
+                LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_INITIAL_BEACON_PULSE_EMITTED ring={} sparks={} viewer=true",
+                    RESTORE_RING_PARTICLE_COUNT,RESTORE_RISING_SPARK_PARTICLE_COUNT);
             if(CI_TEST && s.restoreTicks==20)
                 LOGGER.info("BLACK_FREQUENCY_TEST BEACON_STABILIZATION_PULSE viewerScan=shared");
         }

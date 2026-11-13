@@ -25,6 +25,11 @@ def verify_restoration_particle_source():
         raise RuntimeError("BLACK FREQUENCY restoration method source boundary regression")
     body=source[start:end]
     scan_interval=re.search(r"RESTORE_PLAYER_SCAN_INTERVAL_TICKS\s*=\s*(\d+)",source)
+    ring_policy_start=source.find("private static boolean shouldEmitRestoreAudiencePulse")
+    ring_policy_end=source.find("private static boolean shouldScanRestorePlayers",ring_policy_start)
+    scan_policy_end=source.find("private static final class RestorePlayerScanState",ring_policy_end)
+    ring_policy=source[ring_policy_start:ring_policy_end] if ring_policy_start>=0 and ring_policy_end>ring_policy_start else ""
+    scan_policy=source[ring_policy_end:scan_policy_end] if ring_policy_end>=0 and scan_policy_end>ring_policy_end else ""
     tick_advance=body.find("s.restoreTicks=nextNonNegativeTick(s.restoreTicks)")
     scan_gate=body.find("if(shouldScanRestorePlayers(s.restoreTicks,beaconPresent))")
     player_loop=body.find("for(var player:level.players())")
@@ -35,7 +40,12 @@ def verify_restoration_particle_source():
             or not (0<=tick_advance<scan_gate<player_loop<=menu_guard)
             or "if(beaconPresent) {\n            for(var player:level.players())" in body
             or not scan_body or "player.closeContainer()" not in scan_body
-            or "playerScan.observe(" not in scan_body or "break;" in scan_body):
+            or "playerScan.observe(" not in scan_body or "break;" in scan_body
+            or "restoreTicks==1" not in ring_policy
+            or "RESTORE_RING_INTERVAL_TICKS" not in ring_policy
+            or "restoreTicks==1" not in scan_policy
+            or "RESTORE_PLAYER_SCAN_INTERVAL_TICKS" not in scan_policy
+            or "RESTORE_INITIAL_BEACON_PULSE_EMITTED" not in body):
         raise RuntimeError("BLACK FREQUENCY shared player scan must close all beacon menus before finishing")
     forbidden=("ParticleTypes.REVERSE_PORTAL","ParticleTypes.DRAGON_BREATH","ParticleTypes.END_ROD")
     found=[token for token in forbidden if token in body]
@@ -371,9 +381,10 @@ def capture_test_world():
     def is_ground_fissure_pixel(r,g,b):
         return is_ground_violet_dust_pixel(r,g,b) or is_ground_fissure_accent_pixel(r,g,b)
     def is_ground_mesh_pixel(r,g,b):
-        # The new mesh uses a blue-heavy violet edge, unlike magenta particle sprites.
-        return r>145 and b>215 and b-r>28 and 18<g<100
-    # Samples include deep-violet and bright blue-violet Dust, and reject legacy magenta portal sprites.
+        # The mesh edge is a restrained purple, distinct from both cached Dust colors.
+        return (105 <= r <= 155 and 40 <= g <= 100 and b >= 165
+                and b-r >= 45 and b > r*1.25)
+    # Samples include deep-violet Dust and the darker mesh edge; reject legacy magenta.
     if (is_rift_violet_pixel(142,127,155)
             or not is_rift_violet_pixel(134,44,150)
             or is_ground_fissure_pixel(142,127,155)
@@ -383,8 +394,9 @@ def capture_test_world():
             or not is_ground_fissure_accent_pixel(136,35,207)
             or is_ground_fissure_accent_pixel(201,66,214)
             or is_ground_fissure_pixel(201,66,214)
-            or not is_ground_mesh_pixel(194,58,238)
-            or not is_ground_mesh_pixel(158,26,250)
+            or not is_ground_mesh_pixel(117,46,209)
+            or not is_ground_mesh_pixel(130,55,220)
+            or is_ground_mesh_pixel(158,26,250)
             or is_ground_mesh_pixel(198,0,229)
             or is_ground_mesh_pixel(201,66,214)
             or is_ground_mesh_pixel(142,127,155)):
@@ -873,7 +885,14 @@ def capture_test_world():
                 # ray from the safe pad, not at the anchor's possibly hidden cliff face.
                 target_x,target_y,target_z=map(float,target.groups()[:3])
                 player_x,player_y,player_z=map(int,safe_pad.groups())
-                current_yaw,current_pitch=map(float,aim.groups())
+                current_orientation=read_client_camera_rotation()
+                if current_orientation is None:
+                    terrain_capture_failed=True
+                    print("WORLD_CAPTURE_FAIL: current camera rotation telemetry is missing",flush=True)
+                    return
+                current_yaw,current_pitch=current_orientation
+                print("WORLD_CAPTURE: using fresh camera rotation before fissure aim",
+                      round(current_yaw,2),round(current_pitch,2),flush=True)
                 eye_x,eye_y,eye_z=player_x+.5,player_y+1.62,player_z+.5
                 dx,dy,dz=target_x-eye_x,target_y-eye_y,target_z-eye_z
                 horizontal=math.hypot(dx,dz)
@@ -1204,7 +1223,7 @@ def capture_test_world():
             if visual_profile_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: widened ground fissure visual profile self-check was not executed",flush=True)
                 return False
-            edge_palette_marker="BLACK_FREQUENCY_GROUND_MESH_EDGE_PALETTE_VERIFIED red=0.62 green=0.1 blue=0.98"
+            edge_palette_marker="BLACK_FREQUENCY_GROUND_MESH_EDGE_PALETTE_VERIFIED red=0.46 green=0.18 blue=0.82"
             if edge_palette_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: violet ground-edge palette self-check was not executed",flush=True)
                 return False
@@ -1245,16 +1264,19 @@ def capture_test_world():
                 while time.time()<deadline_restore and p.poll() is None:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     try_beacon_click(current)
-                    capture_sky_before_beacon()
+                    initial_pulse_marker="BLACK_FREQUENCY_TEST RESTORE_INITIAL_BEACON_PULSE_EMITTED ring=24 sparks=4 viewer=true"
                     if (not restoration_shot
                             and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current
+                            and initial_pulse_marker in current
                             and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" not in current):
                         snap("beacon-restoration-active.png")
                         restoration_shot=True
+                        print("WORLD_CAPTURE: active restoration captured after the initial beacon pulse",flush=True)
                     if "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" in current:
                         restored=True
                         break
-                    time.sleep(2)
+                    capture_sky_before_beacon()
+                    time.sleep(.1)
                 if restored:
                     snap("beacon-restoration-finished.png")
                 else:

@@ -123,6 +123,7 @@ jobs:
             grep -q 'BLACK_FREQUENCY_TEST RESTORE_WRITE_RETRIED' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST IDLE_BEACON_PARTICLE_CADENCE_VERIFIED intervalTicks=20 particles=6 cachedDust=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_PROFILE_VERIFIED ring=24 ringIntervalTicks=20 sparks=4 helix=16 helixIntervalTicks=8 blockCue=6 blockIntervalBlocks=48 audience=8 audienceIntervalTicks=20 cachedDust=true' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST RESTORE_INITIAL_PULSE_POLICY_VERIFIED tick=1 ringParticles=24 sparks=4 scanOnStart=true loadedOnly=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_PROFILE_VERIFIED intervalTicks=4 menuClose=shared viewerScan=shared loadedOnly=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_FULL_PASS_VERIFIED fixturePlayers=2 menusAfterViewer=1 fullPass=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST GRAVITY_ANOMALY_PARTICLE_PALETTE_VERIFIED base=deep-violet accent=bright-violet cached=true' world-test.log

@@ -134,9 +134,9 @@ public final class RiftClientState {
             GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE+GROUND_WIDTH_FLICKER;
         private static final double GROUND_EDGE_HALF_WIDTH=.026D;
         // Shift the ground rails away from hot magenta toward the sky-rift's deep violet palette.
-        private static final float GROUND_EDGE_RED=.62F;
-        private static final float GROUND_EDGE_GREEN=.10F;
-        private static final float GROUND_EDGE_BLUE=.98F;
+        private static final float GROUND_EDGE_RED=.46F;
+        private static final float GROUND_EDGE_GREEN=.18F;
+        private static final float GROUND_EDGE_BLUE=.82F;
         // A restrained violet filament pulses inside the dark core without another trig call.
         private static final double GROUND_CORE_PULSE_BASE=.10D;
         private static final double GROUND_CORE_PULSE_RANGE=.22D;
@@ -249,8 +249,10 @@ public final class RiftClientState {
                     || GROUND_EDGE_RED<0.0F || GROUND_EDGE_RED>1.0F
                     || GROUND_EDGE_GREEN<0.0F || GROUND_EDGE_GREEN>1.0F
                     || GROUND_EDGE_BLUE<0.0F || GROUND_EDGE_BLUE>1.0F
+                    || Math.abs(GROUND_EDGE_RED-.46F)>1.0E-6F
+                    || Math.abs(GROUND_EDGE_GREEN-.18F)>1.0E-6F
+                    || Math.abs(GROUND_EDGE_BLUE-.82F)>1.0E-6F
                     || !(GROUND_EDGE_BLUE>GROUND_EDGE_RED && GROUND_EDGE_RED>GROUND_EDGE_GREEN)
-                    || !(GROUND_EDGE_RED<.78F && GROUND_EDGE_GREEN<.18F)
                     || !(minimumCoreHalfWidth<minimumEdgeInnerHalfWidth
                         && minimumEdgeInnerHalfWidth<minimumGlowHalfWidth)
                     || !(maximumCoreHalfWidth<maximumEdgeInnerHalfWidth
