@@ -372,12 +372,13 @@ def capture_test_world():
         # Reject pale lavender UI/death-screen skies; the rift must be saturated violet.
         return r>55 and b>80 and b>g*1.5 and r>g*1.5 and b-r<150
     def is_ground_violet_dust_pixel(r,g,b):
-        # The explicit DustParticleOptions color is blue-heavy and much darker than the old magenta portal sprites.
-        return 25 <= r <= 125 and g <= 50 and b >= 130 and b-r >= 60 and b > r*1.7
+        # Base Dust has a low green/red ratio; keep it separate from the brighter accent.
+        return (25 <= r <= 125 and g <= r*.32 and b >= 130
+                and b-r >= 60 and b > r*1.7)
     def is_ground_fissure_accent_pixel(r,g,b):
-        # Bright blue-violet Dust highlight; reject the old magenta portal/Dragon Breath sprites.
-        return (120 <= r <= 175 and 175 <= b <= 225 and g < 80
-                and b-r >= 50 and b > r*1.4)
+        # Accent Dust uses more green relative to red and a higher blue channel.
+        return (25 <= r <= 105 and g >= r*.36 and g <= 80 and b >= 145
+                and b-r >= 70 and b > r*1.7)
     def is_ground_fissure_pixel(r,g,b):
         return is_ground_violet_dust_pixel(r,g,b) or is_ground_fissure_accent_pixel(r,g,b)
     def is_ground_mesh_pixel(r,g,b):
@@ -390,8 +391,10 @@ def capture_test_world():
             or is_ground_fissure_pixel(142,127,155)
             or is_ground_fissure_pixel(134,44,150)
             or not is_ground_violet_dust_pixel(87,20,199)
+            or is_ground_violet_dust_pixel(77,36,224)
             or is_ground_violet_dust_pixel(207,0,239)
-            or not is_ground_fissure_accent_pixel(136,35,207)
+            or not is_ground_fissure_accent_pixel(77,36,224)
+            or is_ground_fissure_accent_pixel(87,20,199)
             or is_ground_fissure_accent_pixel(201,66,214)
             or is_ground_fissure_pixel(201,66,214)
             or not is_ground_mesh_pixel(117,46,209)
