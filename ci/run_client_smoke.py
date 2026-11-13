@@ -303,21 +303,24 @@ def capture_test_world():
         # The explicit DustParticleOptions color is blue-heavy and much darker than the old magenta portal sprites.
         return 25 <= r <= 125 and g <= 50 and b >= 130 and b-r >= 60 and b > r*1.7
     def is_ground_fissure_accent_pixel(r,g,b):
-        # Keep the eight bright Dragon Breath accents as a separate, sparse highlight class.
-        return r>180 and b>180 and g<85 and r>g*1.5 and b>g*1.5 and abs(r-b)<100
+        # Bright blue-violet Dust highlight; reject the old magenta portal/Dragon Breath sprites.
+        return (120 <= r <= 175 and 175 <= b <= 225 and g < 80
+                and b-r >= 50 and b > r*1.4)
     def is_ground_fissure_pixel(r,g,b):
         return is_ground_violet_dust_pixel(r,g,b) or is_ground_fissure_accent_pixel(r,g,b)
     def is_ground_mesh_pixel(r,g,b):
         # The new mesh uses a blue-heavy violet edge, unlike magenta particle sprites.
         return r>145 and b>215 and b-r>28 and 18<g<100
-    # Samples include the explicit deep-violet dust, legacy magenta sprites, and a restrained Dragon Breath accent.
+    # Samples include deep-violet and bright blue-violet Dust, and reject legacy magenta portal sprites.
     if (is_rift_violet_pixel(142,127,155)
             or not is_rift_violet_pixel(134,44,150)
             or is_ground_fissure_pixel(142,127,155)
             or is_ground_fissure_pixel(134,44,150)
             or not is_ground_violet_dust_pixel(87,20,199)
             or is_ground_violet_dust_pixel(207,0,239)
-            or not is_ground_fissure_accent_pixel(201,66,214)
+            or not is_ground_fissure_accent_pixel(136,35,207)
+            or is_ground_fissure_accent_pixel(201,66,214)
+            or is_ground_fissure_pixel(201,66,214)
             or not is_ground_mesh_pixel(194,58,238)
             or not is_ground_mesh_pixel(158,26,250)
             or is_ground_mesh_pixel(198,0,229)
@@ -1400,6 +1403,9 @@ def capture_test_world():
                     return False
                 if "BLACK_FREQUENCY_TEST IDLE_BEACON_HINT_LIFECYCLE_VERIFIED idleBoundary=true restorationSuppressed=true completedSuppressed=true acceleratedTickSafe=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: idle beacon hint was not suppressed during recovery",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST IDLE_BEACON_PARTICLE_CADENCE_VERIFIED intervalTicks=20 particles=6 cachedDust=true" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: idle beacon Dust cadence was not verified",flush=True)
                     return False
                 after_click=shots/"beacon-after-right-click.png"
                 if (not after_click.is_file()

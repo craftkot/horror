@@ -50,6 +50,8 @@ public final class RiftController {
     private static final int FISSURE_ARM_COUNT = RiftGeometry.FISSURE_ARM_COUNT;
     private static final int FISSURE_SEGMENTS_PER_ARM = RiftGeometry.FISSURE_SEGMENTS_PER_ARM;
     private static final int FISSURE_MOTES_PER_SAMPLE = 1;
+    private static final int IDLE_BEACON_PULSE_INTERVAL_TICKS = 20;
+    private static final int IDLE_BEACON_PULSE_PARTICLE_COUNT = 6;
     // Five cached sizes smooth the fissure's spatial pulse without allocating per sample.
     private static final DustParticleOptions FISSURE_VIOLET_DUST_SMALL =
         new DustParticleOptions(new Vector3f(.34F,.08F,.78F),.95F);
@@ -1468,6 +1470,12 @@ public final class RiftController {
         return !restoring && !restored && finaleTicks%200==0;
     }
 
+    // A nearby idle beacon needs only a restrained once-per-second signal.
+    // Keep the check independent of chunk state; callers already require a loaded beacon.
+    private static boolean shouldEmitIdleBeaconParticles(int finaleTicks) {
+        return finaleTicks>0 && finaleTicks%IDLE_BEACON_PULSE_INTERVAL_TICKS==0;
+    }
+
     private static void verifyBeaconInteractionGuard() {
         var main=net.minecraft.world.InteractionHand.MAIN_HAND;
         var off=net.minecraft.world.InteractionHand.OFF_HAND;
@@ -1544,6 +1552,18 @@ public final class RiftController {
             && completedSuppressed && acceleratedRestorationSuppressed))
             throw new IllegalStateException("CI idle beacon hint lifecycle regression");
         LOGGER.info("BLACK_FREQUENCY_TEST IDLE_BEACON_HINT_LIFECYCLE_VERIFIED idleBoundary=true restorationSuppressed=true completedSuppressed=true acceleratedTickSafe=true");
+        boolean idlePulseAtBoundary=shouldEmitIdleBeaconParticles(20);
+        boolean idlePulseBetween=!shouldEmitIdleBeaconParticles(19);
+        boolean idlePulseNextBoundary=shouldEmitIdleBeaconParticles(40);
+        boolean idlePulseZeroSuppressed=!shouldEmitIdleBeaconParticles(0);
+        boolean idlePulseNegativeSuppressed=!shouldEmitIdleBeaconParticles(-20);
+        if(!(idlePulseAtBoundary && idlePulseBetween && idlePulseNextBoundary
+            && idlePulseZeroSuppressed && idlePulseNegativeSuppressed
+            && IDLE_BEACON_PULSE_INTERVAL_TICKS==20
+            && IDLE_BEACON_PULSE_PARTICLE_COUNT==6))
+            throw new IllegalStateException("CI idle beacon particle cadence regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST IDLE_BEACON_PARTICLE_CADENCE_VERIFIED intervalTicks={} particles={} cachedDust=true",
+            IDLE_BEACON_PULSE_INTERVAL_TICKS,IDLE_BEACON_PULSE_PARTICLE_COUNT);
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED");
     }
 
@@ -1919,8 +1939,8 @@ public final class RiftController {
                     // Use the final block position: on snow it can be one block above
                     // the heightmap Y. Logs, particles and hints must agree with the
                     // physical beacon that the player can actually right-click.
-                    // A visible, bounded violet signal marks the newly spawned beacon.
-                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,pos.getX()+.5,pos.getY()+1.2,pos.getZ()+.5,18,.35,.55,.35,.035);
+                    // A visible, bounded blue-violet Dust signal marks the newly spawned beacon.
+                    level.sendParticles(FISSURE_VIOLET_ACCENT_DUST,pos.getX()+.5,pos.getY()+1.2,pos.getZ()+.5,18,.35,.55,.35,.035);
                     if(CI_TEST && Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest"))
                         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_SKY_CLEARANCE_VERIFIED x={} y={} z={} verticalBlocks=12",pos.getX(),pos.getY(),pos.getZ());
                     if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_PLACED x={} y={} z={}",pos.getX(),pos.getY(),pos.getZ());
@@ -2522,7 +2542,7 @@ public final class RiftController {
                     // Keep the existing rising strands as a vertical accent above the crack.
                     for (int strand = 0; strand < 4; strand++) {
                         double angle = phase + strand * Math.PI / 2.0;
-                        level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                        level.sendParticles(FISSURE_VIOLET_ACCENT_DUST,
                             s.x + .5 + Math.cos(angle) * 1.5,
                             plumeY + 1.0 + Math.sin(phase * .7 + strand) * .6,
                             s.z + .5 + Math.sin(angle) * 1.5,
@@ -2606,16 +2626,17 @@ public final class RiftController {
                         : "BLACK_FREQUENCY_TEST NATURAL_BEACON_MISSING x={} y={} z={}",
                         beacon.getX(),beacon.getY(),beacon.getZ());
                 } else {
-                    // The idle beacon is visible only locally. Avoid broadcasting
-                    // six particles every server tick when nobody is nearby.
-                    // Do not load chunks or create entities for cosmetic effects.
-                    if(level.players().stream().anyMatch(player ->
-                        player.isAlive() && !player.isRemoved() && !player.isSpectator()
-                        && player.distanceToSqr(beacon.getX()+.5D,beacon.getY()+1.2D,
-                            beacon.getZ()+.5D)<=64.0D*64.0D))
-                        level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                    // A local cached Dust pulse is enough for an idle objective.
+                    // Six particles once per second replace the old 30-per-second
+                    // portal burst; the loaded-chunk guard above remains unchanged.
+                    if(shouldEmitIdleBeaconParticles(s.finaleTicks)
+                        && level.players().stream().anyMatch(player ->
+                            player.isAlive() && !player.isRemoved() && !player.isSpectator()
+                            && player.distanceToSqr(beacon.getX()+.5D,beacon.getY()+1.2D,
+                                beacon.getZ()+.5D)<=64.0D*64.0D))
+                        level.sendParticles(FISSURE_VIOLET_DUST,
                             beacon.getX()+.5,beacon.getY()+1.2,beacon.getZ()+.5,
-                            6,.28,.45,.28,.015);
+                            IDLE_BEACON_PULSE_PARTICLE_COUNT,.28,.45,.28,.015);
                     if(shouldSendIdleBeaconHint(s.restoring,s.restored,s.finaleTicks)) for(var player:level.players())
                         if(player.isAlive() && !player.isRemoved() && !player.isSpectator()
                             && withinRecoveryAudience(player.blockPosition(),
@@ -2922,7 +2943,7 @@ public final class RiftController {
                     level.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK,original),
                         pos.getX()+.5D,pos.getY()+.82D,pos.getZ()+.5D,
                         4,.22D,.12D,.22D,.035D);
-                    level.sendParticles(ParticleTypes.REVERSE_PORTAL,
+                    level.sendParticles(FISSURE_VIOLET_DUST,
                         pos.getX()+.5D,pos.getY()+.72D,pos.getZ()+.5D,
                         3,.16D,.08D,.16D,.012D);
                     surfaceCueSentThisTick=true;
