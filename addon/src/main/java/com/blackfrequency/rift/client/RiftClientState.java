@@ -352,6 +352,19 @@ public final class RiftClientState {
                 && horizontalDistanceSquared+verticalDelta*verticalDelta<=64.0D*64.0D;
         }
 
+        // Fade the cosmetic ground mesh over the last 16 blocks of its existing
+        // 64-block 3D render envelope. Squared distance avoids a per-frame sqrt.
+        private static double groundDistanceFade(double distanceSquared) {
+            if(!Double.isFinite(distanceSquared) || distanceSquared<0.0D) return 0.0D;
+            double startSquared=48.0D*48.0D;
+            double endSquared=64.0D*64.0D;
+            if(distanceSquared<=startSquared) return 1.0D;
+            if(distanceSquared>=endSquared) return 0.0D;
+            double t=(distanceSquared-startSquared)/(endSquared-startSquared);
+            double smooth=t*t*(3.0D-2.0D*t);
+            return 1.0D-smooth;
+        }
+
         // A vertically distant camera should release the sampled ClientLevel and
         // mesh just like a camera that leaves the horizontal radius.
         private static boolean clearGeometryCacheIfOutsideGroundRenderRange(
@@ -408,6 +421,23 @@ public final class RiftClientState {
             if(!(finiteCameraAccepted && nanCameraRejected && infiniteCameraRejected
                 && outOfWorldCameraRejected && cameraOutsideWhilePlayerNear && cameraInsideWhilePlayerOutside))
                 throw new IllegalStateException("BLACK FREQUENCY camera-based ground mesh culling regression");
+            double fadeStart=groundDistanceFade(48.0D*48.0D);
+            double fadeMid=groundDistanceFade((48.0D*48.0D+64.0D*64.0D)*.5D);
+            double fadeEnd=groundDistanceFade(64.0D*64.0D);
+            double fadeNear=groundDistanceFade(40.0D*40.0D);
+            double fadeFar=groundDistanceFade(65.0D*65.0D);
+            double fadeNaN=groundDistanceFade(Double.NaN);
+            double fadeNegative=groundDistanceFade(-1.0D);
+            double fadeAt56=groundDistanceFade(56.0D*56.0D);
+            double fadeAt60=groundDistanceFade(60.0D*60.0D);
+            if(Math.abs(fadeStart-1.0D)>1.0E-9D
+                || Math.abs(fadeMid-.5D)>1.0E-9D
+                || fadeEnd!=0.0D || fadeNear!=1.0D || fadeFar!=0.0D
+                || fadeNaN!=0.0D || fadeNegative!=0.0D
+                || !(fadeAt56>fadeAt60))
+                throw new IllegalStateException("BLACK FREQUENCY ground mesh distance fade regression");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_DISTANCE_FADE_VERIFIED start=48 end=64 midpoint=0.5 monotonic=true invalidRejected=true");
             verticallyCulled=true;
             verticallyCulledAnchorX=1;
             verticallyCulledAnchorZ=2;
@@ -976,6 +1006,8 @@ public final class RiftClientState {
                 return;
             }
 
+            double rangeFade=groundDistanceFade(cameraDistanceSquared);
+            if(rangeFade<=0.0D) return;
             Matrix4f matrix=event.getPoseStack().last().pose();
             BufferBuilder builder=Tesselator.getInstance().getBuilder();
             RenderSystem.enableBlend();
@@ -988,7 +1020,7 @@ public final class RiftClientState {
             try {
                 builder.begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.POSITION_COLOR);
                 double time=(double)tick+boundedRenderPartialTick(event.getPartialTick());
-                float boundedStrength=Math.min(1.0F,strength);
+                float boundedStrength=(float)(Math.min(1.0F,strength)*rangeFade);
                 for(GroundSegment segment:cachedSegments) {
                     double wave=.5D+.5D*Math.sin(time*.14D+segment.phase());
                     // A slow travelling pulse changes width independently along
