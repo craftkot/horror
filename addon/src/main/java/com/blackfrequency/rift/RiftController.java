@@ -1529,9 +1529,9 @@ public final class RiftController {
             throw new IllegalStateException("CI restoration gravity fade easing regression");
         int scheduledUpdates=0;
         for(int tick=-1;tick<=RESTORE_GRAVITY_FADE_TICKS+1;tick++) {
-            boolean expected=tick>=0 && tick<RESTORE_GRAVITY_FADE_TICKS;
+            boolean expectedUpdate=tick>=0 && tick<RESTORE_GRAVITY_FADE_TICKS;
             boolean actual=shouldApplyRestorationGravityFade(86,tick);
-            if(actual!=expected)
+            if(actual!=expectedUpdate)
                 throw new IllegalStateException("CI restoration gravity fade cadence regression at tick "+tick);
             if(actual) scheduledUpdates++;
         }
