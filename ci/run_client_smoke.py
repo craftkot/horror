@@ -1231,7 +1231,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: violet ground-edge palette self-check was not executed",flush=True)
                 return False
             edge_rail_pattern = re.compile(
-                r"ribbon\(builder,matrix,camera,segment,(-?)halfWidth\*1\.9D,GROUND_EDGE_HALF_WIDTH,\\s*"
+                r"ribbon\(builder,matrix,camera,segment,(-?)halfWidth\*1\.9D,GROUND_EDGE_HALF_WIDTH,\s*"
                 r"GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE,edgeAlpha\);"
             )
             edge_rail_offsets = edge_rail_pattern.findall(camera_source)
