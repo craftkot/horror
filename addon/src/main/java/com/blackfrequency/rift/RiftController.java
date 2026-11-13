@@ -101,6 +101,7 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_DUST_PULSE_PROFILE_VERIFIED min={} base={} max={} variants=3",
             FISSURE_VIOLET_DUST_SMALL.getScale(),FISSURE_VIOLET_DUST.getScale(),
             FISSURE_VIOLET_DUST_LARGE.getScale());
+        verifyFissureTargetSelectionPolicy();
     }
     // Production spreads terrain writes across more ticks to reduce synchronous chunk-update bursts.
     // CI keeps the higher deterministic budget so integration fixtures remain short.
@@ -778,6 +779,27 @@ public final class RiftController {
 
     private record FissureTarget(double x,double y,double z,double distanceSquared) {}
 
+    private static boolean isBetterFissureTarget(double candidateDistanceSquared,
+            double bestDistanceSquared,boolean hasBest) {
+        if(!Double.isFinite(candidateDistanceSquared) || candidateDistanceSquared<0.0D)
+            return false;
+        if(!hasBest) return true;
+        return Double.isFinite(bestDistanceSquared) && bestDistanceSquared>=0.0D
+            && candidateDistanceSquared<bestDistanceSquared;
+    }
+
+    private static void verifyFissureTargetSelectionPolicy() {
+        if(!isBetterFissureTarget(4.0D,Double.NaN,false)
+            || !isBetterFissureTarget(4.0D,16.0D,true)
+            || isBetterFissureTarget(16.0D,4.0D,true)
+            || isBetterFissureTarget(4.0D,4.0D,true)
+            || isBetterFissureTarget(Double.NaN,0.0D,false)
+            || isBetterFissureTarget(-1.0D,0.0D,false)
+            || isBetterFissureTarget(4.0D,Double.NaN,true))
+            throw new IllegalStateException("CI fissure target selection regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=nearest ties=stable invalidRejected=true");
+    }
+
     private static boolean fissureRayChunksLoaded(ServerLevel level,BlockPos from,BlockPos to) {
         int minChunkX=Math.min(from.getX(),to.getX())>>4;
         int maxChunkX=Math.max(from.getX(),to.getX())>>4;
@@ -832,7 +854,8 @@ public final class RiftController {
                     net.minecraft.world.level.ClipContext.Fluid.NONE,viewer));
                 if(hit.getType()!=net.minecraft.world.phys.HitResult.Type.MISS) continue;
                 double distanceSquared=vx*vx+vy*vy+vz*vz;
-                if(best==null || distanceSquared>best.distanceSquared())
+                if(isBetterFissureTarget(distanceSquared,
+                        best==null?Double.NaN:best.distanceSquared(),best!=null))
                     best=new FissureTarget(px,target.y,pz,distanceSquared);
             }
         }
@@ -2681,7 +2704,7 @@ public final class RiftController {
                             ciFissureTargetUnavailableLogged=true;
                         }
                     } else {
-                        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x={} y={} z={} distanceSquared={} selection=farthest",
+                        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x={} y={} z={} distanceSquared={} selection=nearest",
                             visibleFissure.x(),visibleFissure.y(),visibleFissure.z(),visibleFissure.distanceSquared());
                     }
                     // Restore ordinary vanilla gravity only after the player is
