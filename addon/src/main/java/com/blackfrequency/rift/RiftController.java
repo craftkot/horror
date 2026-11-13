@@ -64,6 +64,10 @@ public final class RiftController {
     // Replace two portal accents per arm with textured crying-obsidian chips.
     private static final int FISSURE_SHARD_SEGMENT_INTERVAL = 6;
     private static final double FISSURE_SAMPLE_SPACING = RiftGeometry.FISSURE_SAMPLE_SPACING;
+    // Avoid aiming almost straight down at a mote beside the player: a modest
+    // standoff keeps the particle trail and the surface ribbon in the same view.
+    private static final double FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE = FISSURE_SAMPLE_SPACING*5.0D;
+    private static final double FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE = 6.0D;
 
     private static double fissurePulseWave(double phase,int segment,int arm) {
         if(!Double.isFinite(phase)) return 0.0D;
@@ -795,7 +799,8 @@ public final class RiftController {
             samples==0?Double.NaN:surfaceYTotal/samples);
     }
 
-    private record FissureTarget(double x,double y,double z,double distanceSquared) {}
+    private record FissureTarget(double x,double y,double z,double distanceSquared,
+            double horizontalDistanceSquared) {}
 
     private static boolean isBetterFissureTarget(double candidateDistanceSquared,
             double bestDistanceSquared,boolean hasBest) {
@@ -806,16 +811,33 @@ public final class RiftController {
             && candidateDistanceSquared<bestDistanceSquared;
     }
 
+    private static boolean isFissureTargetHorizontalDistance(double horizontalSquared) {
+        double minimumSquared=FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE*FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE;
+        double maximumSquared=FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE*FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE;
+        return Double.isFinite(horizontalSquared)
+            && horizontalSquared>=minimumSquared && horizontalSquared<=maximumSquared;
+    }
+
     private static void verifyFissureTargetSelectionPolicy() {
+        double minimumSquared=FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE*FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE;
+        double maximumSquared=FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE*FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE;
         if(!isBetterFissureTarget(4.0D,Double.NaN,false)
             || !isBetterFissureTarget(4.0D,16.0D,true)
             || isBetterFissureTarget(16.0D,4.0D,true)
             || isBetterFissureTarget(4.0D,4.0D,true)
             || isBetterFissureTarget(Double.NaN,0.0D,false)
             || isBetterFissureTarget(-1.0D,0.0D,false)
-            || isBetterFissureTarget(4.0D,Double.NaN,true))
+            || isBetterFissureTarget(4.0D,Double.NaN,true)
+            || !isFissureTargetHorizontalDistance(minimumSquared)
+            || !isFissureTargetHorizontalDistance(maximumSquared)
+            || isFissureTargetHorizontalDistance(minimumSquared-1.0E-6D)
+            || isFissureTargetHorizontalDistance(maximumSquared+1.0E-6D)
+            || isFissureTargetHorizontalDistance(Double.NaN)
+            || isFissureTargetHorizontalDistance(Double.POSITIVE_INFINITY)
+            || isFissureTargetHorizontalDistance(-1.0D))
             throw new IllegalStateException("CI fissure target selection regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=nearest ties=stable invalidRejected=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=nearest ties=stable invalidRejected=true minHorizontal={} maxHorizontal={}",
+            FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE,FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE);
     }
 
     private static boolean fissureRayChunksLoaded(ServerLevel level,BlockPos from,BlockPos to) {
@@ -862,10 +884,10 @@ public final class RiftController {
                     px,fissureParticleY(level,blockX,surfaceY,blockZ),pz);
                 double vx=target.x-eye.x,vy=target.y-eye.y,vz=target.z-eye.z;
                 double horizontalSquared=vx*vx+vz*vz;
-                // A beacon can be placed on a higher safe ridge than the
-                // fracture floor. Permit a steep downward view; the loaded-chunk
-                // ray trace below remains the authority on actual visibility.
-                if(horizontalSquared<1.0D || horizontalSquared>36.0D || Math.abs(vy)>24.0D)
+                // Keep a modest horizontal standoff so the view does not point
+                // almost straight down at a particle just beside the player.
+                // The loaded-chunk ray trace remains the authority on visibility.
+                if(!isFissureTargetHorizontalDistance(horizontalSquared) || Math.abs(vy)>24.0D)
                     continue;
                 var hit=level.clip(new net.minecraft.world.level.ClipContext(eye,target,
                     net.minecraft.world.level.ClipContext.Block.COLLIDER,
@@ -874,7 +896,7 @@ public final class RiftController {
                 double distanceSquared=vx*vx+vy*vy+vz*vz;
                 if(isBetterFissureTarget(distanceSquared,
                         best==null?Double.NaN:best.distanceSquared(),best!=null))
-                    best=new FissureTarget(px,target.y,pz,distanceSquared);
+                    best=new FissureTarget(px,target.y,pz,distanceSquared,horizontalSquared);
             }
         }
         return best;
@@ -2722,8 +2744,9 @@ public final class RiftController {
                             ciFissureTargetUnavailableLogged=true;
                         }
                     } else {
-                        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x={} y={} z={} distanceSquared={} selection=nearest",
-                            visibleFissure.x(),visibleFissure.y(),visibleFissure.z(),visibleFissure.distanceSquared());
+                        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x={} y={} z={} distanceSquared={} horizontalDistanceSquared={} selection=nearest",
+                            visibleFissure.x(),visibleFissure.y(),visibleFissure.z(),
+                            visibleFissure.distanceSquared(),visibleFissure.horizontalDistanceSquared());
                     }
                     // Restore ordinary vanilla gravity only after the player is
                     // standing above a loaded, motion-blocking support block.

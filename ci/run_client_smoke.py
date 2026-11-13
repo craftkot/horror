@@ -714,7 +714,7 @@ def capture_test_world():
                     logs)
                 particles=parse_fissure_particle_emission(logs)
                 target=re.search(
-                    r"BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x=([-+0-9.eE]+) y=([-+0-9.eE]+) z=([-+0-9.eE]+) distanceSquared=([-+0-9.eE]+) selection=nearest",
+                    r"BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x=([-+0-9.eE]+) y=([-+0-9.eE]+) z=([-+0-9.eE]+) distanceSquared=([-+0-9.eE]+) horizontalDistanceSquared=([-+0-9.eE]+) selection=nearest",
                     logs)
                 safe_pad=re.search(
                     r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
@@ -761,6 +761,15 @@ def capture_test_world():
                     terrain_capture_failed=True
                     print("WORLD_CAPTURE_FAIL: fissure particle composition/budget mismatch",
                           samples,dragon_breath,violet_dust,shard_count,total_particles,flush=True)
+                    return
+                target_horizontal_squared=float(target.group(5))
+                minimum_target_horizontal_squared=2.25*2.25
+                if (not math.isfinite(target_horizontal_squared)
+                        or target_horizontal_squared<minimum_target_horizontal_squared-1.0E-9
+                        or target_horizontal_squared>36.0+1.0E-9):
+                    terrain_capture_failed=True
+                    print("WORLD_CAPTURE_FAIL: fissure camera target is too close or outside the bounded standoff",
+                          target_horizontal_squared,flush=True)
                     return
                 terrain_capture_attempted=True
                 if samples<32:
