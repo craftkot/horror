@@ -9,7 +9,7 @@ MIN_GROUND_MESH_ARMS=2
 MAX_GROUND_MESH_ARMS=4
 GROUND_MESH_SAMPLES=48
 FISSURE_PARTICLE_EMISSION_RE=re.compile(
-    r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) dragonBreath=(\d+) violetDust=(\d+) shards=(\d+) total=(\d+) heightmap=motion-blocking-no-leaves"
+    r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) accentDust=(\d+) violetDust=(\d+) shards=(\d+) total=(\d+) heightmap=motion-blocking-no-leaves"
 )
 
 def parse_fissure_particle_emission(log_text):
@@ -19,25 +19,26 @@ def parse_fissure_particle_emission(log_text):
 def valid_fissure_particle_emission(counts):
     if counts is None:
         return False
-    samples,dragon_breath,violet_dust,shards,total=counts
+    samples,accent_dust,violet_dust,shards,total=counts
     return (32<=samples<=GROUND_MESH_SAMPLES
-            and 0<=dragon_breath<=8
-            and 0<=violet_dust==samples-dragon_breath
+            and 0<=accent_dust<=8
+            and 0<=violet_dust==samples-accent_dust
             and 0<=shards<=8
             and total==samples+shards and total<=56
             and (samples!=GROUND_MESH_SAMPLES
-                 or (dragon_breath==8 and violet_dust==40 and shards==8)))
+                 or (accent_dust==8 and violet_dust==40 and shards==8)))
 
 _fissure_fixture=(
     "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED "
-    "samples=48 dragonBreath=8 violetDust=40 shards=8 total=56 "
+    "samples=48 accentDust=8 violetDust=40 shards=8 total=56 "
     "heightmap=motion-blocking-no-leaves"
 )
 if (parse_fissure_particle_emission(_fissure_fixture)!=(48,8,40,8,56)
         or not valid_fissure_particle_emission((48,8,40,8,56))
         or not valid_fissure_particle_emission((32,4,28,5,37))
         or valid_fissure_particle_emission((48,8,40,8,57))
-        or parse_fissure_particle_emission(_fissure_fixture.replace("violetDust","reversePortal")) is not None):
+        or parse_fissure_particle_emission(_fissure_fixture.replace("violetDust","reversePortal")) is not None
+        or parse_fissure_particle_emission(_fissure_fixture.replace("accentDust","dragonBreath")) is not None):
     raise RuntimeError("BLACK FREQUENCY fissure particle log/budget parser regression")
 print("WORLD_CAPTURE: fissure particle log schema and budget verified",flush=True)
 MC.mkdir(parents=True,exist_ok=True)
@@ -738,7 +739,7 @@ def capture_test_world():
                 if (not marker or not particles or not target or not safe_pad or not aim or not mesh
                         or "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs):
                     return
-                samples,dragon_breath,violet_dust,shard_count,total_particles=particles
+                samples,accent_dust,violet_dust,shard_count,total_particles=particles
                 mesh_segments=int(mesh.group(1))
                 mesh_arms=int(mesh.group(2))
                 mesh_anchor_x,mesh_anchor_z=map(int,mesh.groups()[2:4])
@@ -760,7 +761,7 @@ def capture_test_world():
                 if not valid_fissure_particle_emission(particles):
                     terrain_capture_failed=True
                     print("WORLD_CAPTURE_FAIL: fissure particle composition/budget mismatch",
-                          samples,dragon_breath,violet_dust,shard_count,total_particles,flush=True)
+                          samples,accent_dust,violet_dust,shard_count,total_particles,flush=True)
                     return
                 target_horizontal_squared=float(target.group(5))
                 minimum_target_horizontal_squared=2.25*2.25
@@ -1333,8 +1334,11 @@ def capture_test_world():
                       "server",density_spacing,density_extent,
                       "client",client_spacing,client_extent,"radius",client_radius,flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=56 dragonBreath=8 violetDust=40 shards=8" not in log_after:
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=56 accentDust=8 violetDust=40 shards=8" not in log_after:
                 print("WORLD_CAPTURE_FAIL: violet-dust fissure particle budget self-check was not executed",flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_ACCENT_DUST_VERIFIED red=0.42 green=0.08 blue=0.98 scale=1.35" not in log_after:
+                print("WORLD_CAPTURE_FAIL: bright-violet accent DustParticleOptions was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_VIOLET_DUST_VERIFIED red=0.34 green=0.08 blue=0.78 scale=1.15" not in log_after:
                 print("WORLD_CAPTURE_FAIL: explicit deep-violet DustParticleOptions color was not verified",flush=True)
@@ -1362,7 +1366,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: all eight textured fissure-edge shards were not emitted",
                       flush=True)
                 return False
-            print("WORLD_CAPTURE: deep-violet dust and sparse hot-violet accents verified",fissure[0],flush=True)
+            print("WORLD_CAPTURE: deep-violet base Dust and bright-violet accent Dust verified",fissure[0],flush=True)
             print("WORLD_CAPTURE: crying-obsidian fissure-edge shards verified",shards.group(1),flush=True)
             if not fracture_seen:
                 print("WORLD_CAPTURE_FAIL: ground fracture never removed a block",flush=True)
