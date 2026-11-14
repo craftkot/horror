@@ -1621,6 +1621,27 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: ground mesh did not verify its cliff-discontinuity guard",
                       flush=True)
                 return False
+            grade_guard_marker=(
+                "BLACK_FREQUENCY_GROUND_MESH_GRADE_GUARD_VERIFIED "
+                "maxGrade=1.25 oneBlockRiseRejected=true snowAccepted=true cliffCapProfile=true"
+            )
+            if grade_guard_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: slope-aware ground fissure guard was not verified",flush=True)
+                return False
+            grade_stats=re.search(
+                r"BLACK_FREQUENCY_GROUND_MESH_GRADE_STATS maxGrade=([-+0-9.eE]+) "
+                r"cliffCaps=(\\d+) unsupportedGapCaps=(\\d+) steepStepsSkipped=(\\d+)",
+                log_after)
+            if (not grade_stats
+                    or abs(float(grade_stats.group(1))-1.25)>1.0E-9
+                    or int(grade_stats.group(2))>int(grade_stats.group(4))):
+                print("WORLD_CAPTURE_FAIL: cliff-end taper accounting is invalid",flush=True)
+                return False
+            if ("private static final double MAX_GROUND_SEGMENT_GRADE=1.25D;" not in camera_source
+                    or "isContinuousGroundStep(previous.y(),current.y(),length)" not in camera_source
+                    or "capLastGroundSegmentAtGap" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: renderer is not using slope-aware continuity and gap caps",flush=True)
+                return False
             mesh_segments=int(ground_mesh.group(1))
             mesh_arms=int(ground_mesh.group(2))
             mesh_columns=int(ground_mesh.group(5))
