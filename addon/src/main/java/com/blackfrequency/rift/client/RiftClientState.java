@@ -1013,8 +1013,10 @@ public final class RiftClientState {
                 clearGeometryCacheIfPresent();
                 return;
             }
-            if(!level.getWorldBorder().isWithinBounds(
-                    new BlockPos(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ))
+            // Reuse the render-thread scratch cursor instead of allocating a BlockPos
+            // on every frame. buildSegments() resets this cursor before sampling.
+            SURFACE_CURSOR.set(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);
+            if(!level.getWorldBorder().isWithinBounds(SURFACE_CURSOR)
                 || !level.hasChunk(worldAnchorX>>4,worldAnchorZ>>4)) {
                 clearCache();
                 return;
