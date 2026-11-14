@@ -19,6 +19,8 @@ def parse_fissure_particle_emission(log_text):
 def verify_restoration_particle_source():
     source_path=ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftController.java"
     source=source_path.read_text(encoding="utf-8")
+    if "FISSURE_SHARD_SEGMENT_INTERVAL = FISSURE_SEGMENTS_PER_ARM" not in source:
+        raise RuntimeError("BLACK FREQUENCY must emit one crying-obsidian shard at each fissure arm's outer tip")
     start=source.find("    private static void restore(")
     end=source.find("\n    @SubscribeEvent",start)
     if start<0 or end<0:
@@ -102,20 +104,20 @@ def valid_fissure_particle_emission(counts):
     return (32<=samples<=GROUND_MESH_SAMPLES
             and 0<=accent_dust<=8
             and 0<=violet_dust==samples-accent_dust
-            and 0<=shards<=8
-            and total==samples+shards and total<=56
+            and 0<=shards<=4
+            and total==samples+shards and total<=52
             and (samples!=GROUND_MESH_SAMPLES
-                 or (accent_dust==8 and violet_dust==40 and shards in (4,8))))
+                 or (accent_dust==8 and violet_dust==40 and shards==4)))
 
 _fissure_fixture=(
     "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED "
-    "samples=48 accentDust=8 violetDust=40 shards=8 total=56 "
+    "samples=48 accentDust=8 violetDust=40 shards=4 total=52 "
     "heightmap=motion-blocking-no-leaves"
 )
-if (parse_fissure_particle_emission(_fissure_fixture)!=(48,8,40,8,56)
-        or not valid_fissure_particle_emission((48,8,40,8,56))
-        or not valid_fissure_particle_emission((32,4,28,5,37))
-        or valid_fissure_particle_emission((48,8,40,8,57))
+if (parse_fissure_particle_emission(_fissure_fixture)!=(48,8,40,4,52)
+        or not valid_fissure_particle_emission((48,8,40,4,52))
+        or not valid_fissure_particle_emission((32,4,28,2,34))
+        or valid_fissure_particle_emission((48,8,40,5,53))
         or parse_fissure_particle_emission(_fissure_fixture.replace("violetDust","reversePortal")) is not None
         or parse_fissure_particle_emission(_fissure_fixture.replace("accentDust","dragonBreath")) is not None):
     raise RuntimeError("BLACK FREQUENCY fissure particle log/budget parser regression")
@@ -1528,10 +1530,7 @@ def capture_test_world():
                       "server",density_spacing,density_extent,
                       "client",client_spacing,client_extent,"radius",client_radius,flush=True)
                 return False
-            budget_markers=(
-                "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=56 accentDust=8 violetDust=40 shards=8",
-                "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=52 accentDust=8 violetDust=40 shards=4")
-            if not any(marker in log_after for marker in budget_markers):
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=52 accentDust=8 violetDust=40 shards=4" not in log_after:
                 print("WORLD_CAPTURE_FAIL: violet-dust fissure particle budget self-check was not executed",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_ACCENT_DUST_VERIFIED red=0.3 green=0.14 blue=0.88 scale=1.35" not in log_after:
@@ -1549,10 +1548,7 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_STRUCTURAL_SUPPORT_FILTER_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: server did not reject structural blocks as fissure terrain",flush=True)
                 return False
-            shard_layout_markers=(
-                "BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_LAYOUT_VERIFIED count=8 material=crying_obsidian",
-                "BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_LAYOUT_VERIFIED count=4 material=crying_obsidian perArm=1 outerTip=true")
-            if not any(marker in log_after for marker in shard_layout_markers):
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_LAYOUT_VERIFIED count=4 material=crying_obsidian perArm=1 outerTip=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: crying-obsidian shard layout self-check was not executed",flush=True)
                 return False
             if not valid_fissure_particle_emission(fissure):
@@ -1562,8 +1558,8 @@ def capture_test_world():
             shards=re.search(
                 r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARDS_EMITTED count=([0-9]+) material=crying_obsidian",
                 log_after)
-            if not shards or int(shards.group(1)) not in (4,8) or int(shards.group(1))!=fissure[3]:
-                print("WORLD_CAPTURE_FAIL: textured fissure-edge shard count does not match the verified layout",
+            if not shards or int(shards.group(1))!=4 or int(shards.group(1))!=fissure[3]:
+                print("WORLD_CAPTURE_FAIL: four outer-tip fissure-edge shards were not emitted",
                       flush=True)
                 return False
             print("WORLD_CAPTURE: deep-violet base Dust and bright-violet accent Dust verified",fissure[0],flush=True)
