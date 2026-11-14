@@ -22,6 +22,22 @@ def verify_restoration_particle_source():
     fissure_start=source.find("private static FissureEmission emitSurfaceFissure(")
     fissure_end=source.find("\n    private static",fissure_start+1)
     fissure_emitter=source[fissure_start:fissure_end] if fissure_start>=0 and fissure_end>fissure_start else ""
+    ground_sampler_start=source.find("private static int findFissureGroundY(")
+    ground_sampler_end=source.find("\\n    /**",ground_sampler_start+1)
+    ground_sampler=source[ground_sampler_start:ground_sampler_end] if ground_sampler_start>=0 and ground_sampler_end>ground_sampler_start else ""
+    particle_height_start=source.find("private static double fissureParticleY(")
+    particle_height_end=source.find("\\n    private static void verifyFissureSurfaceParticleHeight",particle_height_start)
+    particle_height=source[particle_height_start:particle_height_end] if particle_height_start>=0 and particle_height_end>particle_height_start else ""
+    if ("BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();" not in fissure_emitter
+            or "findFissureGroundY(level,blockX,blockZ,cursor)" not in fissure_emitter
+            or "fissureParticleY(level,blockX,surfaceY,blockZ,cursor)" not in fissure_emitter
+            or "new BlockPos(" in fissure_emitter
+            or "new BlockPos(" in ground_sampler
+            or "cursor.set(x,y,z)" not in ground_sampler
+            or "cursor.set(x,y-1,z)" not in ground_sampler
+            or "new BlockPos(" in particle_height
+            or "cursor.set(x,surfaceY,z)" not in particle_height):
+        raise RuntimeError("BLACK FREQUENCY server fissure sampling must reuse one mutable block-position cursor")
     if ("private static final DustParticleOptions FISSURE_VIOLET_EDGE_DUST" not in source
             or "level.sendParticles(FISSURE_VIOLET_EDGE_DUST," not in fissure_emitter
             or "private static final DustParticleOptions SURFACE_FISSURE_ACCENT_DUST" not in source
@@ -106,6 +122,7 @@ def verify_restoration_particle_source():
         raise RuntimeError("BLACK FREQUENCY gravity anomaly cues must reuse cached violet Dust")
     print("WORLD_CAPTURE: gravity anomaly cues use cached deep/bright violet Dust",flush=True)
     print("WORLD_CAPTURE: compact violet fissure edge Dust is cached across pulses",flush=True)
+    print("WORLD_CAPTURE: server fissure sampling reuses one mutable block-position cursor",flush=True)
     print("WORLD_CAPTURE: surface fissure uses a smaller cached accent than recovery cues",flush=True)
     print("WORLD_CAPTURE: restoration uses smaller cached violet Dust, bounded halo and dark-purple UI",flush=True)
 

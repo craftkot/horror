@@ -803,15 +803,17 @@ public final class RiftController {
             && state.getFluidState().isEmpty();
     }
 
-    private static int findFissureGroundY(ServerLevel level,int x,int z) {
+    private static int findFissureGroundY(ServerLevel level,int x,int z,BlockPos.MutableBlockPos cursor) {
         if(!level.hasChunk(x>>4,z>>4)) return Integer.MIN_VALUE;
         int y=level.getHeight(
             net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,x,z);
         int min=level.getMinBuildHeight();
         for(int depth=0;depth<32 && y>min+1;depth++,y--) {
-            BlockState surface=level.getBlockState(new BlockPos(x,y,z));
+            cursor.set(x,y,z);
+            BlockState surface=level.getBlockState(cursor);
             if(!isFissureSurfaceAvailable(surface)) return Integer.MIN_VALUE;
-            if(isFissureGroundSupport(level.getBlockState(new BlockPos(x,y-1,z)))) return y;
+            cursor.set(x,y-1,z);
+            if(isFissureGroundSupport(level.getBlockState(cursor))) return y;
         }
         return Integer.MIN_VALUE;
     }
@@ -828,11 +830,12 @@ public final class RiftController {
         return surfaceY+boundedHeight+0.10D;
     }
 
-    private static double fissureParticleY(ServerLevel level,int x,int surfaceY,int z) {
-        BlockPos surface=new BlockPos(x,surfaceY,z);
-        BlockState state=level.getBlockState(surface);
+    private static double fissureParticleY(ServerLevel level,int x,int surfaceY,int z,
+            BlockPos.MutableBlockPos cursor) {
+        cursor.set(x,surfaceY,z);
+        BlockState state=level.getBlockState(cursor);
         double shapeHeight=state.isAir() ? 0.0D
-            : state.getShape(level,surface).max(net.minecraft.core.Direction.Axis.Y);
+            : state.getShape(level,cursor).max(net.minecraft.core.Direction.Axis.Y);
         return fissureSurfaceParticleY(surfaceY,shapeHeight);
     }
 
@@ -852,6 +855,8 @@ public final class RiftController {
      * Every sample is restricted to the rift radius and an already loaded chunk.
      */
     private static FissureEmission emitSurfaceFissure(ServerLevel level,State s,double phase) {
+        // One mutable cursor serves every sample; block-state lookups consume it immediately.
+        BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();
         int samples=0;
         int accentDustMotes=0;
         int violetDustMotes=0;
@@ -868,15 +873,15 @@ public final class RiftController {
                 int blockZ=(int)Math.floor(pz);
                 long dx=blockX-(long)s.x;
                 long dz=blockZ-(long)s.z;
+                cursor.set(blockX,level.getMinBuildHeight(),blockZ);
                 if(dx*dx+dz*dz>(long)RADIUS*RADIUS
-                    || !level.getWorldBorder().isWithinBounds(
-                        new BlockPos(blockX,level.getMinBuildHeight(),blockZ))
+                    || !level.getWorldBorder().isWithinBounds(cursor)
                     || !level.hasChunk(blockX>>4,blockZ>>4)) continue;
-                int surfaceY=findFissureGroundY(level,blockX,blockZ);
+                int surfaceY=findFissureGroundY(level,blockX,blockZ,cursor);
                 if(surfaceY==Integer.MIN_VALUE || surfaceY>=level.getMaxBuildHeight()) continue;
-                BlockPos support=new BlockPos(blockX,surfaceY-1,blockZ);
-                if(!isFissureGroundSupport(level.getBlockState(support))) continue;
-                double particleY=fissureParticleY(level,blockX,surfaceY,blockZ);
+                cursor.set(blockX,surfaceY-1,blockZ);
+                if(!isFissureGroundSupport(level.getBlockState(cursor))) continue;
+                double particleY=fissureParticleY(level,blockX,surfaceY,blockZ,cursor);
                 double wave=fissurePulseWave(phase,segment,arm);
                 double pulse=wave*.05D;
                 DustParticleOptions dust=fissureDustForWave(wave);
