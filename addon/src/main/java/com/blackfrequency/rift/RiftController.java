@@ -62,6 +62,8 @@ public final class RiftController {
     private static final int RESTORE_HELIX_INTERVAL_TICKS = 8;
     // Share one nearby-player pass between beacon-menu closure and visual audience checks.
     private static final int RESTORE_PLAYER_SCAN_INTERVAL_TICKS = 4;
+    // Common phase window for every periodic restoration effect (4, 8, 10, 20 and 40 ticks).
+    private static final int RESTORE_CADENCE_PERIOD_TICKS = 40;
     private static final int RESTORE_HELIX_ANCHOR_COUNT = 8;
     private static final int RESTORE_HELIX_MOTES_PER_ANCHOR = 2;
     private static final int RESTORE_HELIX_PARTICLE_COUNT =
@@ -1639,8 +1641,15 @@ public final class RiftController {
 
     private static boolean shouldScanRestorePlayers(int restoreTicks,boolean beaconPresent) {
         return beaconPresent && restoreTicks>0
-            && (restoreTicks==1 || restoreTicks%RESTORE_PLAYER_SCAN_INTERVAL_TICKS==0
-                || restoreTicks==Integer.MAX_VALUE);
+            && (restoreTicks==1 || restoreTicks%RESTORE_PLAYER_SCAN_INTERVAL_TICKS==0);
+    }
+
+    // A corrupt save can clamp restoreTicks to MAX_VALUE, where a saturating clock
+    // never reaches another modulo boundary. Keep visual and persistence cadence alive
+    // from the world's monotonic tick without changing normal restoration timing.
+    private static int restorationCadenceTick(int restoreTicks,long gameTime) {
+        if(restoreTicks<Integer.MAX_VALUE) return Math.max(0,restoreTicks);
+        return (int)Math.floorMod(gameTime,(long)RESTORE_CADENCE_PERIOD_TICKS)+1;
     }
 
     // Accumulate viewer state without short-circuiting the real player iteration:
@@ -1683,6 +1692,33 @@ public final class RiftController {
             || !scan.hasRingViewer || !scan.hasStabilizationViewer)
             throw new IllegalStateException("CI restore player scan stopped before closing later beacon menus");
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_FULL_PASS_VERIFIED fixturePlayers=2 menusAfterViewer=1 fullPass=true");
+    }
+
+    private static void verifyRestoreCadenceSaturationFallback() {
+        boolean regularClock=restorationCadenceTick(23,7L)==23;
+        boolean negativeClock=restorationCadenceTick(-1,7L)==0;
+        int scans=0,pulses=0,helix=0,overlays=0,checkpoints=0;
+        for(long gameTick=0;gameTick<RESTORE_CADENCE_PERIOD_TICKS;gameTick++) {
+            int cadence=restorationCadenceTick(Integer.MAX_VALUE,gameTick);
+            int expected=(int)gameTick+1;
+            if(cadence!=expected)
+                throw new IllegalStateException("CI saturated restoration cadence phase regression at game tick "+gameTick);
+            if(shouldScanRestorePlayers(cadence,true)) scans++;
+            if(shouldEmitRestoreAudiencePulse(cadence)) pulses++;
+            if(shouldEmitRestoreHelix(cadence)) helix++;
+            if(cadence%10==0) overlays++;
+            if(cadence%40==0) checkpoints++;
+        }
+        boolean commonPeriod=RESTORE_CADENCE_PERIOD_TICKS%RESTORE_PLAYER_SCAN_INTERVAL_TICKS==0
+            && RESTORE_CADENCE_PERIOD_TICKS%RESTORE_HELIX_INTERVAL_TICKS==0
+            && RESTORE_CADENCE_PERIOD_TICKS%RESTORE_RING_INTERVAL_TICKS==0
+            && RESTORE_CADENCE_PERIOD_TICKS%10==0
+            && RESTORE_CADENCE_PERIOD_TICKS%40==0;
+        if(!(regularClock && negativeClock && commonPeriod
+            && scans==11 && pulses==3 && helix==5 && overlays==4 && checkpoints==1))
+            throw new IllegalStateException("CI saturated restoration cadence fallback regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_CADENCE_SATURATION_FALLBACK_VERIFIED periodTicks={} scans={} pulses={} helix={} overlays={} checkpoints={}",
+            RESTORE_CADENCE_PERIOD_TICKS,scans,pulses,helix,overlays,checkpoints);
     }
 
     private static void verifyGravityAnomalyParticlePalette() {
@@ -1746,7 +1782,8 @@ public final class RiftController {
         boolean playerScanWithoutBeacon=!shouldScanRestorePlayers(RESTORE_PLAYER_SCAN_INTERVAL_TICKS,false);
         boolean playerScanInvalid=!shouldScanRestorePlayers(0,true)
             && !shouldScanRestorePlayers(-RESTORE_PLAYER_SCAN_INTERVAL_TICKS,true);
-        boolean playerScanSaturated=shouldScanRestorePlayers(Integer.MAX_VALUE,true);
+        boolean playerScanSaturated=shouldScanRestorePlayers(
+            restorationCadenceTick(Integer.MAX_VALUE,3L),true);
         if(!(ringInitial && ringBoundary && ringBetween && helixBoundary && helixBetween
             && blockBoundary && blockBetween && blockNext && invalidTicks
             && boundedCounts && cachedPalette && boundedRestoreDust
@@ -1767,6 +1804,7 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_PROFILE_VERIFIED intervalTicks={} menuClose=shared viewerScan=shared loadedOnly=true",
             RESTORE_PLAYER_SCAN_INTERVAL_TICKS);
         verifyRestorePlayerScanFullPass();
+        verifyRestoreCadenceSaturationFallback();
         verifyRecoveryUiPalette();
     }
 
@@ -2291,6 +2329,7 @@ public final class RiftController {
         double beaconY=activatedBeacon.getY()+0.5D;
         double beaconZ=activatedBeacon.getZ()+0.5D;
         s.restoreTicks=nextNonNegativeTick(s.restoreTicks);
+        int cadenceTick=restorationCadenceTick(s.restoreTicks,level.getGameTime());
         if(CI_TEST && s.restoreTicks==1)
             LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_BEACON_PRESENCE_CACHED present={}",beaconPresent);
         // Close only this recovery beacon's vanilla menu during the same bounded
@@ -2300,9 +2339,9 @@ public final class RiftController {
         // Avoid allocating its accumulator on the three intervening ticks.
         boolean hasRingViewer=false;
         boolean hasStabilizationViewer=false;
-        if(shouldScanRestorePlayers(s.restoreTicks,beaconPresent)) {
+        if(shouldScanRestorePlayers(cadenceTick,beaconPresent)) {
             RestorePlayerScanState playerScan = new RestorePlayerScanState();
-            boolean stabilizationDue=shouldEmitRestoreAudiencePulse(s.restoreTicks);
+            boolean stabilizationDue=shouldEmitRestoreAudiencePulse(cadenceTick);
             // Do not stop after finding a viewer: a later player may still have
             // the beacon's vanilla menu open and must be closed in this same pass.
             for(var player:level.players()) {
@@ -2327,7 +2366,7 @@ public final class RiftController {
         // A visible, bounded stabilization pulse at the activated physical beacon.
         // Only query an already loaded chunk; never resurrect a removed beacon
         // or force chunk generation during recovery.
-        if(shouldEmitRestoreAudiencePulse(s.restoreTicks) && hasStabilizationViewer) {
+        if(shouldEmitRestoreAudiencePulse(cadenceTick) && hasStabilizationViewer) {
             double cx=beaconX, cy=beaconY+0.6D, cz=beaconZ;
             // Contract the recovery vortex as the saved terrain is restored.
             // Clamp corrupt/out-of-range indices so the effect stays bounded.
@@ -2336,16 +2375,16 @@ public final class RiftController {
             // inner and outer rings without increasing particle count or chunk work.
             // Only 24 particles per second; no terrain edits or chunk loads.
             for(int i=0;i<RESTORE_RING_PARTICLE_COUNT;i++) {
-                double angle=i*Math.PI/12.0D + (i%2==0 ? 1.0D : -1.0D)*s.restoreTicks*0.045D;
+                double angle=i*Math.PI/12.0D + (i%2==0 ? 1.0D : -1.0D)*cadenceTick*0.045D;
                 // The fracture closes in a slow, bounded violet heartbeat. Keep the
                 // inner and outer rings separated even at maximum contraction.
                 double radius=(i%2==0?1.3D:2.1D)
-                    +0.16D*Math.sin(s.restoreTicks*0.025D);
+                    +0.16D*Math.sin(cadenceTick*0.025D);
                 radius*=contraction;
                 // A slow vertical wave makes the rings visibly breathe without
                 // increasing particle count or modifying nearby blocks.
                 double height=(i%2==0?0.0D:0.45D)
-                    +0.18D*Math.sin(angle*2.0D+s.restoreTicks*0.035D);
+                    +0.18D*Math.sin(angle*2.0D+cadenceTick*0.035D);
                 DustParticleOptions ringDust=(i&1)==0
                     ? RESTORE_VIOLET_DUST : RESTORE_VIOLET_ACCENT_DUST;
                 level.sendParticles(ringDust,
@@ -2356,8 +2395,8 @@ public final class RiftController {
             // beacon beam. Deterministic positions avoid per-tick random work;
             // the effect stays inside a 2.3-block radius and 3-block height.
             for(int i=0;i<RESTORE_RISING_SPARK_PARTICLE_COUNT;i++) {
-                double phase=s.restoreTicks*0.055D+i*Math.PI/2.0D;
-                double height=0.25D+((s.restoreTicks*0.04D+i*0.25D)%2.5D);
+                double phase=cadenceTick*0.055D+i*Math.PI/2.0D;
+                double height=0.25D+((cadenceTick*0.04D+i*0.25D)%2.5D);
                 level.sendParticles(RESTORE_VIOLET_ACCENT_DUST,
                     cx+Math.cos(phase)*0.75D*contraction,cy+height,
                     cz+Math.sin(phase)*0.75D*contraction,
@@ -2382,7 +2421,7 @@ public final class RiftController {
                 throw new IllegalStateException("CI restoration bounds guard failed");
             LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_BOUNDS_GUARD_VERIFIED");
         }
-        if(s.restoreTicks%40==0 && !s.snapshots.isEmpty()) {
+        if(cadenceTick%40==0 && !s.snapshots.isEmpty()) {
             int percent=restorationPercent(s.restoreIndex,s.snapshots.size());
             // Restoration is local to the fracture. Do not spam action-bar
             // updates to players exploring distant parts of the Overworld.
@@ -2392,7 +2431,7 @@ public final class RiftController {
                     player.displayClientMessage(recoveryViolet("✦ СТАБИЛИЗАЦИЯ §f"+percent+"% §7— восстановлено "+s.restoredBlocks+" блоков"),true);
             }
         }
-        if(s.restoreTicks%10==0) {
+        if(cadenceTick%10==0) {
             float remaining=s.snapshots.isEmpty()?0f:Math.max(0f,(s.restoreIndex+1f)/s.snapshots.size());
             // The recovery overlay is local to the fracture. Do not send
             // recovery packets to distant, dead, removed or spectator players.
@@ -2564,13 +2603,13 @@ public final class RiftController {
         // query or generate an unloaded chunk just for cosmetic particles.
         // Skip cosmetic work when nobody can see the recovery beacon.
         // The shared viewer scan reads only player positions and never requests a chunk.
-        if(shouldEmitRestoreHelix(s.restoreTicks) && hasRingViewer) {
-            double angle=s.restoreTicks*.17;
+        if(shouldEmitRestoreHelix(cadenceTick) && hasRingViewer) {
+            double angle=cadenceTick*.17;
             // A slow breathing ring makes recovery visibly alive without
             // adding particles, world edits, or forced chunk loads.
             // Keep the outer recovery helix synchronized with the shrinking inner vortex.
             // This is cosmetic only: no terrain edits or extra particle packets.
-            double radius=(3.4D+0.45D*Math.sin(s.restoreTicks*.055D))
+            double radius=(3.4D+0.45D*Math.sin(cadenceTick*.055D))
                 * recoveryVortexContraction(s.restoreIndex,s.snapshots.size());
             for(int k=0;k<RESTORE_HELIX_ANCHOR_COUNT;k++) {
                 // Counter-rotate the two alternating strands in the horizontal plane too.
@@ -2583,7 +2622,7 @@ public final class RiftController {
                 // height reset that made the entire ring jump every 80 ticks.
                 // Opposite angular travel for the two alternating strands; the old
                 // shared phase made both wisps climb and descend in lockstep.
-                double phase=(s.restoreTicks*.045D*(k%2==0 ? 1.0D : -1.0D)
+                double phase=(cadenceTick*.045D*(k%2==0 ? 1.0D : -1.0D)
                     + k*Math.PI*.25D)%(Math.PI*2.0D);
                 double y=beaconY+1.1D*(1.0D+Math.sin(phase));
                 // Counter-rotating strands alternate cached deep and bright violet Dust.
@@ -2595,7 +2634,7 @@ public final class RiftController {
         }
         // A destroyed or unloaded beacon must not leave a phantom recovery glow.
         // hasChunkAt only inspects loaded chunks; it never forces chunk generation.
-        if(shouldEmitRestoreAudiencePulse(s.restoreTicks) && beaconPresent) {
+        if(shouldEmitRestoreAudiencePulse(cadenceTick) && beaconPresent) {
             // The recovery glow belongs to the fracture, not every player in
             // the dimension. Avoid particle traffic for distant or inactive players.
             for(var player:level.players()) {
