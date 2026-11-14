@@ -1297,6 +1297,16 @@ def capture_test_world():
             if rebuild_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: player-height cache invalidation self-check was not executed",flush=True)
                 return False
+            overflow_marker=("BLACK_FREQUENCY_TEST GROUND_MESH_REBUILD_LONG_OVERFLOW_GUARD_VERIFIED "
+                             "forwardExtreme=true nearMaxBefore=true nearMaxAt=true negativeClock=true backwardReset=true")
+            if overflow_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: ground mesh rebuild interval overflow guard was not verified",flush=True)
+                return False
+            if ("previousTick<=Long.MAX_VALUE-REBUILD_INTERVAL" not in rebuild_source
+                    or "tick>=previousTick+REBUILD_INTERVAL" not in rebuild_source
+                    or "tick-previousTick>=REBUILD_INTERVAL" in rebuild_source):
+                print("WORLD_CAPTURE_FAIL: ground mesh rebuild interval is not overflow-safe",flush=True)
+                return False
             if os.environ.get("BF_TEST_RESTORATION")=="1":
                 # A full fracture can reach 95,000 snapshots. Recovery restores at
                 # most 12 blocks per 20 TPS tick (~396s at the cap); leave headroom

@@ -325,8 +325,13 @@ public final class RiftClientState {
 
         private static boolean shouldRebuild(long tick,long previousTick,boolean anchorChanged,
                 int referenceY,int previousReferenceY) {
+            // Avoid signed overflow when a corrupted world clock jumps across the
+            // long range. A saturated previous tick cannot have another interval.
+            boolean intervalElapsed=tick>=previousTick
+                && previousTick<=Long.MAX_VALUE-REBUILD_INTERVAL
+                && tick>=previousTick+REBUILD_INTERVAL;
             return anchorChanged || previousTick==Long.MIN_VALUE || tick<previousTick
-                || tick-previousTick>=REBUILD_INTERVAL
+                || intervalElapsed
                 || previousReferenceY==Integer.MIN_VALUE
                 || Math.abs((long)referenceY-previousReferenceY)>=GROUND_REBUILD_VERTICAL_DELTA;
         }
@@ -341,13 +346,22 @@ public final class RiftClientState {
             boolean beforeInterval=!shouldRebuild(109L,100L,false,65,65);
             boolean interval=shouldRebuild(110L,100L,false,65,65);
             boolean anchor=shouldRebuild(101L,100L,true,65,65);
+            boolean extremeForward=shouldRebuild(Long.MAX_VALUE,-1L,false,65,65);
+            boolean nearMaxBeforeInterval=!shouldRebuild(Long.MAX_VALUE-1L,Long.MAX_VALUE-5L,false,65,65);
+            boolean nearMaxAtInterval=shouldRebuild(Long.MAX_VALUE,Long.MAX_VALUE-10L,false,65,65);
+            boolean negativeClockInterval=shouldRebuild(-1L,-11L,false,65,65);
+            boolean backwardExtremeReset=shouldRebuild(Long.MIN_VALUE+5L,Long.MAX_VALUE-5L,false,65,65);
             if(!(stable && oneBlockStable && twoBlockMove && teleport && sixTickStable
-                && beforeInterval && interval && anchor))
+                && beforeInterval && interval && anchor && extremeForward && nearMaxBeforeInterval
+                && nearMaxAtInterval && negativeClockInterval && backwardExtremeReset))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh rebuild profile regression");
             rebuildProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_REBUILD_PROFILE_VERIFIED verticalDelta={} interval={} boundaryVerified={}",
                 GROUND_REBUILD_VERTICAL_DELTA,REBUILD_INTERVAL,sixTickStable && beforeInterval && interval);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_REBUILD_LONG_OVERFLOW_GUARD_VERIFIED forwardExtreme={} nearMaxBefore={} nearMaxAt={} negativeClock={} backwardReset={}",
+                extremeForward,nearMaxBeforeInterval,nearMaxAtInterval,negativeClockInterval,backwardExtremeReset);
         }
 
         private static boolean isSafeCameraPosition(Vec3 camera) {
