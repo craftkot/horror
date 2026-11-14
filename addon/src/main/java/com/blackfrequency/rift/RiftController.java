@@ -104,6 +104,9 @@ public final class RiftController {
         new DustParticleOptions(new Vector3f(.30F,.14F,.88F),1.35F);
     // Keep one textured chip at each arm's outer tip; inner chips crowd the beacon.
     private static final int FISSURE_SHARD_SEGMENT_INTERVAL = FISSURE_SEGMENTS_PER_ARM;
+    // Block particle options are immutable; reuse the shard descriptor across every fissure pulse.
+    private static final BlockParticleOption FISSURE_OBSIDIAN_SHARD =
+        new BlockParticleOption(ParticleTypes.BLOCK,Blocks.CRYING_OBSIDIAN.defaultBlockState());
     private static final double FISSURE_SAMPLE_SPACING = RiftGeometry.FISSURE_SAMPLE_SPACING;
     // Avoid aiming almost straight down at a mote beside the player: a modest
     // standoff keeps the particle trail and the surface ribbon in the same view.
@@ -872,8 +875,7 @@ public final class RiftController {
                     violetDustMotes++;
                     // A slightly wider, faster chip burst makes the textured edge
                     // readable against stone while retaining one chip per anchor.
-                    level.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK,
-                        Blocks.CRYING_OBSIDIAN.defaultBlockState()),
+                    level.sendParticles(FISSURE_OBSIDIAN_SHARD,
                         px,particleY+.04+pulse,pz,1,.045,.025,.045,.012);
                     shards++;
                 } else if(isAccentFissureDustSegment(segment)) {
@@ -1122,7 +1124,8 @@ public final class RiftController {
             || Math.abs(extent-5.40D)>1.0E-9D || extent>=RADIUS
             || FISSURE_SHARD_SEGMENT_INTERVAL<=0
             || FISSURE_SEGMENTS_PER_ARM%FISSURE_SHARD_SEGMENT_INTERVAL!=0
-            || FISSURE_SHARD_SEGMENT_INTERVAL!=FISSURE_SEGMENTS_PER_ARM)
+            || FISSURE_SHARD_SEGMENT_INTERVAL!=FISSURE_SEGMENTS_PER_ARM
+            || FISSURE_OBSIDIAN_SHARD==null)
             throw new IllegalStateException("CI fissure sampling density/radius regression");
         int shardCount=0;
         int accentDustMotes=0;
@@ -1174,6 +1177,8 @@ public final class RiftController {
             totalParticles,accentDustMotes,violetDustMotes,shardCount);
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_LAYOUT_VERIFIED count={} material=crying_obsidian perArm=1 outerTip=true",
             shardCount);
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_OPTION_CACHE_VERIFIED cached={}",
+            FISSURE_OBSIDIAN_SHARD!=null);
     }
 
     private static void verifySurfaceFractureCue() {
