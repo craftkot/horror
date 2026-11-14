@@ -31,13 +31,20 @@ def verify_restoration_particle_source():
     ring_policy=source[ring_policy_start:ring_policy_end] if ring_policy_start>=0 and ring_policy_end>ring_policy_start else ""
     scan_policy=source[ring_policy_end:scan_policy_end] if ring_policy_end>=0 and scan_policy_end>ring_policy_end else ""
     tick_advance=body.find("s.restoreTicks=nextNonNegativeTick(s.restoreTicks)")
-    scan_gate=body.find("if(shouldScanRestorePlayers(s.restoreTicks,beaconPresent))")
+    cadence_derive=body.find("int cadenceTick=restorationCadenceTick(s.restoreTicks,level.getGameTime())")
+    scan_gate=body.find("if(shouldScanRestorePlayers(cadenceTick,beaconPresent))")
+    cadence_policy_start=source.find("private static int restorationCadenceTick")
+    cadence_policy_end=source.find("private static long restorationAnimationTick",cadence_policy_start)
+    cadence_policy=source[cadence_policy_start:cadence_policy_end] if cadence_policy_start>=0 and cadence_policy_end>cadence_policy_start else ""
     player_loop=body.find("for(var player:level.players())")
     menu_guard=body.find("player.containerMenu instanceof net.minecraft.world.inventory.BeaconMenu")
     scan_end=body.find("\n        // A visible, bounded stabilization pulse",player_loop)
     scan_body=body[player_loop:scan_end] if scan_end>player_loop else ""
     if (not scan_interval or int(scan_interval.group(1))!=4
-            or not (0<=tick_advance<scan_gate<player_loop<=menu_guard)
+            or not (0<=tick_advance<cadence_derive<scan_gate<player_loop<=menu_guard)
+            or "int cadenceTick=restorationCadenceTick(s.restoreTicks,level.getGameTime())" not in body
+            or "Math.floorMod(gameTime,(long)RESTORE_CADENCE_PERIOD_TICKS)" not in cadence_policy
+            or "restoreTicks<Integer.MAX_VALUE" not in cadence_policy
             or "if(beaconPresent) {\n            for(var player:level.players())" in body
             or not scan_body or "player.closeContainer()" not in scan_body
             or "playerScan.observe(" not in scan_body or "break;" in scan_body
@@ -46,7 +53,7 @@ def verify_restoration_particle_source():
             or "restoreTicks==1" not in scan_policy
             or "RESTORE_PLAYER_SCAN_INTERVAL_TICKS" not in scan_policy
             or "RESTORE_INITIAL_BEACON_PULSE_EMITTED" not in body):
-        raise RuntimeError("BLACK FREQUENCY shared player scan must close all beacon menus before finishing")
+        raise RuntimeError("BLACK FREQUENCY cadence-aware shared player scan must close all beacon menus before finishing")
     forbidden=("ParticleTypes.REVERSE_PORTAL","ParticleTypes.DRAGON_BREATH","ParticleTypes.END_ROD")
     found=[token for token in forbidden if token in body]
     if found:

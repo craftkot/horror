@@ -1705,6 +1705,15 @@ public final class RiftController {
         boolean animationClockContinuous=restorationAnimationTick(Integer.MAX_VALUE,39L)==39L
             && restorationAnimationTick(Integer.MAX_VALUE,40L)==40L
             && restorationAnimationTick(23,7L)==23L;
+        // World time is a long persisted by Minecraft. Keep the fallback well-defined
+        // even if a damaged or manually edited save contains an extreme clock value.
+        boolean extremeClockBounds=
+            restorationCadenceTick(Integer.MAX_VALUE,Long.MIN_VALUE)
+                ==(int)Math.floorMod(Long.MIN_VALUE,(long)RESTORE_CADENCE_PERIOD_TICKS)+1
+            && restorationCadenceTick(Integer.MAX_VALUE,Long.MAX_VALUE)
+                ==(int)Math.floorMod(Long.MAX_VALUE,(long)RESTORE_CADENCE_PERIOD_TICKS)+1
+            && restorationAnimationTick(Integer.MAX_VALUE,Long.MIN_VALUE)==0L
+            && restorationAnimationTick(Integer.MAX_VALUE,Long.MAX_VALUE)==Long.MAX_VALUE;
         int scans=0,pulses=0,helix=0,overlays=0,checkpoints=0;
         for(long gameTick=0;gameTick<RESTORE_CADENCE_PERIOD_TICKS;gameTick++) {
             int cadence=restorationCadenceTick(Integer.MAX_VALUE,gameTick);
@@ -1722,11 +1731,11 @@ public final class RiftController {
             && RESTORE_CADENCE_PERIOD_TICKS%RESTORE_RING_INTERVAL_TICKS==0
             && RESTORE_CADENCE_PERIOD_TICKS%10==0
             && RESTORE_CADENCE_PERIOD_TICKS%40==0;
-        if(!(regularClock && negativeClock && animationClockContinuous && commonPeriod
+        if(!(regularClock && negativeClock && animationClockContinuous && extremeClockBounds && commonPeriod
             && scans==11 && pulses==3 && helix==5 && overlays==4 && checkpoints==1))
             throw new IllegalStateException("CI saturated restoration cadence fallback regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_CADENCE_SATURATION_FALLBACK_VERIFIED periodTicks={} scans={} pulses={} helix={} overlays={} checkpoints={} animationContinuous={}",
-            RESTORE_CADENCE_PERIOD_TICKS,scans,pulses,helix,overlays,checkpoints,animationClockContinuous);
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_CADENCE_SATURATION_FALLBACK_VERIFIED periodTicks={} scans={} pulses={} helix={} overlays={} checkpoints={} animationContinuous={} extremeClockBounds={}",
+            RESTORE_CADENCE_PERIOD_TICKS,scans,pulses,helix,overlays,checkpoints,animationClockContinuous,extremeClockBounds);
     }
 
     private static void verifyGravityAnomalyParticlePalette() {
