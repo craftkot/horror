@@ -972,6 +972,8 @@ public final class RiftController {
             net.minecraft.server.level.ServerPlayer viewer) {
         if(viewer==null || !viewer.isAlive() || viewer.isRemoved()) return null;
         net.minecraft.world.phys.Vec3 eye=viewer.getEyePosition();
+        BlockPos viewerPosition=viewer.blockPosition();
+        BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();
         FissureTarget best=null;
         for(int arm=0;arm<FISSURE_ARM_COUNT;arm++) {
             double angle=arm*Math.PI/2.0D;
@@ -982,18 +984,18 @@ public final class RiftController {
                 double pz=s.z+.5D+Math.sin(angle)*distance+Math.cos(angle)*bend;
                 int blockX=(int)Math.floor(px),blockZ=(int)Math.floor(pz);
                 long dx=(long)blockX-s.x,dz=(long)blockZ-s.z;
+                cursor.set(blockX,level.getMinBuildHeight(),blockZ);
                 if(dx*dx+dz*dz>(long)RADIUS*RADIUS
-                    || !level.getWorldBorder().isWithinBounds(
-                        new BlockPos(blockX,level.getMinBuildHeight(),blockZ))
+                    || !level.getWorldBorder().isWithinBounds(cursor)
                     || !level.hasChunk(blockX>>4,blockZ>>4)) continue;
-                int surfaceY=findFissureGroundY(level,blockX,blockZ);
-                if(surfaceY==Integer.MIN_VALUE || surfaceY>=level.getMaxBuildHeight()
-                    || !isFissureGroundSupport(level.getBlockState(new BlockPos(blockX,surfaceY-1,blockZ))))
-                    continue;
-                BlockPos rayTarget=new BlockPos(blockX,surfaceY,blockZ);
-                if(!fissureRayChunksLoaded(level,viewer.blockPosition(),rayTarget)) continue;
+                int surfaceY=findFissureGroundY(level,blockX,blockZ,cursor);
+                if(surfaceY==Integer.MIN_VALUE || surfaceY>=level.getMaxBuildHeight()) continue;
+                cursor.set(blockX,surfaceY-1,blockZ);
+                if(!isFissureGroundSupport(level.getBlockState(cursor))) continue;
+                cursor.set(blockX,surfaceY,blockZ);
+                if(!fissureRayChunksLoaded(level,viewerPosition,cursor)) continue;
                 net.minecraft.world.phys.Vec3 target=new net.minecraft.world.phys.Vec3(
-                    px,fissureParticleY(level,blockX,surfaceY,blockZ),pz);
+                    px,fissureParticleY(level,blockX,surfaceY,blockZ,cursor),pz);
                 double vx=target.x-eye.x,vy=target.y-eye.y,vz=target.z-eye.z;
                 double horizontalSquared=vx*vx+vz*vz;
                 // Keep a modest horizontal standoff so the view does not point
@@ -2916,7 +2918,8 @@ public final class RiftController {
         // the raw no-leaves heightmap can otherwise place the plume on village roofs.
         if (!s.restoring && s.finaleTicks > 85 && s.finaleTicks % 10 == 0
             && level.hasChunk(s.x >> 4, s.z >> 4)) {
-            int surfaceY=findFissureGroundY(level,s.x,s.z);
+            BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();
+            int surfaceY=findFissureGroundY(level,s.x,s.z,cursor);
             if(surfaceY!=Integer.MIN_VALUE) {
                 double plumeY=surfaceY+1.0;
                 boolean witnessed = false;

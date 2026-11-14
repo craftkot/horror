@@ -28,6 +28,16 @@ def verify_restoration_particle_source():
     particle_height_start=source.find("private static double fissureParticleY(")
     particle_height_end=source.find("\n    private static void verifyFissureSurfaceParticleHeight",particle_height_start)
     particle_height=source[particle_height_start:particle_height_end] if particle_height_start>=0 and particle_height_end>particle_height_start else ""
+    target_start=source.find("private static FissureTarget findVisibleFissureTarget(")
+    target_end=source.find("\n    // Run after ordinary explosion modifiers",target_start+1)
+    target_body=source[target_start:target_end] if target_start>=0 and target_end>target_start else ""
+    if (("BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();" not in target_body
+            or "findFissureGroundY(level,blockX,blockZ,cursor)" not in target_body
+            or "fissureParticleY(level,blockX,surfaceY,blockZ,cursor)" not in target_body
+            or "fissureRayChunksLoaded(level,viewerPosition,cursor)" not in target_body
+            or "new BlockPos(" in target_body
+            or "findFissureGroundY(level,s.x,s.z)" in source):
+        raise RuntimeError("BLACK FREQUENCY visible fissure target must reuse its loaded-only sample cursor")
     if ("BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();" not in fissure_emitter
             or "findFissureGroundY(level,blockX,blockZ,cursor)" not in fissure_emitter
             or "fissureParticleY(level,blockX,surfaceY,blockZ,cursor)" not in fissure_emitter
