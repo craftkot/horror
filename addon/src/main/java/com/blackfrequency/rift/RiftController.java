@@ -102,11 +102,11 @@ public final class RiftController {
     // Reused for every accent sample; no per-particle option allocation.
     private static final DustParticleOptions FISSURE_VIOLET_ACCENT_DUST =
         new DustParticleOptions(new Vector3f(.30F,.14F,.88F),1.35F);
-    // Keep one textured chip at each arm's outer tip; inner chips crowd the beacon.
-    private static final int FISSURE_SHARD_SEGMENT_INTERVAL = FISSURE_SEGMENTS_PER_ARM;
-    // Block particle options are immutable; reuse the shard descriptor across every fissure pulse.
-    private static final BlockParticleOption FISSURE_OBSIDIAN_SHARD =
-        new BlockParticleOption(ParticleTypes.BLOCK,Blocks.CRYING_OBSIDIAN.defaultBlockState());
+    // Keep one compact violet fleck at each arm's outer tip; block-textured chips overwhelm the camera.
+    private static final int FISSURE_OUTER_ACCENT_SEGMENT_INTERVAL = FISSURE_SEGMENTS_PER_ARM;
+    // A small cached Dust accent replaces the oversized crying-obsidian block particle.
+    private static final DustParticleOptions FISSURE_VIOLET_EDGE_DUST =
+        new DustParticleOptions(new Vector3f(.42F,.18F,.92F),.62F);
     private static final double FISSURE_SAMPLE_SPACING = RiftGeometry.FISSURE_SAMPLE_SPACING;
     // Avoid aiming almost straight down at a mote beside the player: a modest
     // standoff keeps the particle trail and the surface ribbon in the same view.
@@ -760,9 +760,9 @@ public final class RiftController {
     }
 
     private record FissureEmission(int samples,int accentDustMotes,int violetDustMotes,
-            int shards,double averageSurfaceY) {
+            int edgeDustMotes,double averageSurfaceY) {
         private int totalParticles() {
-            return accentDustMotes+violetDustMotes+shards;
+            return accentDustMotes+violetDustMotes+edgeDustMotes;
         }
     }
 
@@ -770,8 +770,8 @@ public final class RiftController {
     // particle family, keeping the whole surface fissure inside the violet palette.
     private static boolean isAccentFissureDustSegment(int segment) {
         return segment>0 && segment%4==0
-            && FISSURE_SHARD_SEGMENT_INTERVAL>0
-            && segment%FISSURE_SHARD_SEGMENT_INTERVAL!=0;
+            && FISSURE_OUTER_ACCENT_SEGMENT_INTERVAL>0
+            && segment%FISSURE_OUTER_ACCENT_SEGMENT_INTERVAL!=0;
     }
 
     // A no-leaves heightmap can still stop on a tree trunk or a village roof.
@@ -841,7 +841,7 @@ public final class RiftController {
         int samples=0;
         int accentDustMotes=0;
         int violetDustMotes=0;
-        int shards=0;
+        int edgeDustMotes=0;
         double surfaceYTotal=0.0D;
         for(int arm=0;arm<FISSURE_ARM_COUNT;arm++) {
             double angle=arm*Math.PI/2.0;
@@ -866,18 +866,15 @@ public final class RiftController {
                 double wave=fissurePulseWave(phase,segment,arm);
                 double pulse=wave*.05D;
                 DustParticleOptions dust=fissureDustForWave(wave);
-                // Keep one primary mote per sample. Cached DustParticleOptions supply the
-                // dominant deep-violet line with a slow size pulse; every fourth non-shard
-                // segment uses a brighter blue-violet Dust accent for contrast.
-                if(segment%FISSURE_SHARD_SEGMENT_INTERVAL==0) {
+                // One cached primary mote per sample keeps the deep-violet fissure continuous.
+                // The outer tip adds a compact Dust fleck instead of an oversized block-texture square.
+                if(segment%FISSURE_OUTER_ACCENT_SEGMENT_INTERVAL==0) {
                     level.sendParticles(dust,
                         px,particleY+pulse,pz,1,.035,.012,.035,.008);
                     violetDustMotes++;
-                    // A slightly wider, faster chip burst makes the textured edge
-                    // readable against stone while retaining one chip per anchor.
-                    level.sendParticles(FISSURE_OBSIDIAN_SHARD,
-                        px,particleY+.04+pulse,pz,1,.045,.025,.045,.012);
-                    shards++;
+                    level.sendParticles(FISSURE_VIOLET_EDGE_DUST,
+                        px,particleY+.025D+pulse,pz,1,.025D,.012D,.025D,.004D);
+                    edgeDustMotes++;
                 } else if(isAccentFissureDustSegment(segment)) {
                     level.sendParticles(FISSURE_VIOLET_ACCENT_DUST,
                         px,particleY+pulse,pz,FISSURE_MOTES_PER_SAMPLE,.045,.025,.045,.006);
@@ -891,7 +888,7 @@ public final class RiftController {
                 samples++;
             }
         }
-        return new FissureEmission(samples,accentDustMotes,violetDustMotes,shards,
+        return new FissureEmission(samples,accentDustMotes,violetDustMotes,edgeDustMotes,
             samples==0?Double.NaN:surfaceYTotal/samples);
     }
 
@@ -1122,18 +1119,18 @@ public final class RiftController {
             || FISSURE_MOTES_PER_SAMPLE<1 || !Double.isFinite(FISSURE_SAMPLE_SPACING)
             || FISSURE_SAMPLE_SPACING<=0.0D || FISSURE_SAMPLE_SPACING>0.5D
             || Math.abs(extent-5.40D)>1.0E-9D || extent>=RADIUS
-            || FISSURE_SHARD_SEGMENT_INTERVAL<=0
-            || FISSURE_SEGMENTS_PER_ARM%FISSURE_SHARD_SEGMENT_INTERVAL!=0
-            || FISSURE_SHARD_SEGMENT_INTERVAL!=FISSURE_SEGMENTS_PER_ARM
-            || FISSURE_OBSIDIAN_SHARD==null)
+            || FISSURE_OUTER_ACCENT_SEGMENT_INTERVAL<=0
+            || FISSURE_SEGMENTS_PER_ARM%FISSURE_OUTER_ACCENT_SEGMENT_INTERVAL!=0
+            || FISSURE_OUTER_ACCENT_SEGMENT_INTERVAL!=FISSURE_SEGMENTS_PER_ARM
+            || FISSURE_VIOLET_EDGE_DUST==null)
             throw new IllegalStateException("CI fissure sampling density/radius regression");
-        int shardCount=0;
+        int edgeDustCount=0;
         int accentDustMotes=0;
         int violetDustMotes=0;
         for(int arm=0;arm<FISSURE_ARM_COUNT;arm++) {
             for(int segment=1;segment<=FISSURE_SEGMENTS_PER_ARM;segment++) {
-                if(segment%FISSURE_SHARD_SEGMENT_INTERVAL==0) {
-                    shardCount++;
+                if(segment%FISSURE_OUTER_ACCENT_SEGMENT_INTERVAL==0) {
+                    edgeDustCount++;
                     violetDustMotes+=FISSURE_MOTES_PER_SAMPLE;
                 } else if(isAccentFissureDustSegment(segment)) {
                     accentDustMotes+=FISSURE_MOTES_PER_SAMPLE;
@@ -1143,8 +1140,8 @@ public final class RiftController {
             }
         }
         int primaryMotes=samples*FISSURE_MOTES_PER_SAMPLE;
-        int totalParticles=primaryMotes+shardCount;
-        if(shardCount!=FISSURE_ARM_COUNT || accentDustMotes!=8 || violetDustMotes!=40
+        int totalParticles=primaryMotes+edgeDustCount;
+        if(edgeDustCount!=FISSURE_ARM_COUNT || accentDustMotes!=8 || violetDustMotes!=40
             || totalParticles!=52 || totalParticles>52)
             throw new IllegalStateException("CI violet-majority fissure particle budget regression");
         Vector3f dustColor=FISSURE_VIOLET_DUST.getColor();
@@ -1170,15 +1167,23 @@ public final class RiftController {
             throw new IllegalStateException("CI fissure violet accent Dust color/scale regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_ACCENT_DUST_VERIFIED red={} green={} blue={} scale={}",
             accentColor.x(),accentColor.y(),accentColor.z(),accentScale);
+        Vector3f edgeColor=FISSURE_VIOLET_EDGE_DUST.getColor();
+        float edgeScale=FISSURE_VIOLET_EDGE_DUST.getScale();
+        if(!hasDustColor(FISSURE_VIOLET_EDGE_DUST,.42F,.18F,.92F)
+            || !Float.isFinite(edgeScale) || Math.abs(edgeScale-.62F)>1.0E-6F
+            || edgeScale>=.75F)
+            throw new IllegalStateException("CI compact fissure edge Dust color/scale regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_VERIFIED red={} green={} blue={} scale={}",
+            edgeColor.x(),edgeColor.y(),edgeColor.z(),edgeScale);
         verifyFissureDustPulseProfile();
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples={} spacing={} extent={}",
             samples,FISSURE_SAMPLE_SPACING,extent);
-        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total={} accentDust={} violetDust={} shards={}",
-            totalParticles,accentDustMotes,violetDustMotes,shardCount);
-        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_LAYOUT_VERIFIED count={} material=crying_obsidian perArm=1 outerTip=true",
-            shardCount);
-        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_OPTION_CACHE_VERIFIED cached={}",
-            FISSURE_OBSIDIAN_SHARD!=null);
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total={} accentDust={} violetDust={} edgeDust={}",
+            totalParticles,accentDustMotes,violetDustMotes,edgeDustCount);
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_LAYOUT_VERIFIED count={} color=violet perArm=1 outerTip=true",
+            edgeDustCount);
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_CACHE_VERIFIED cached={} scale={}",
+            FISSURE_VIOLET_EDGE_DUST!=null,FISSURE_VIOLET_EDGE_DUST.getScale());
     }
 
     private static void verifySurfaceFractureCue() {
@@ -2900,11 +2905,11 @@ public final class RiftController {
                     if(s.finaleTicks%20==0) {
                         FissureEmission emission=emitSurfaceFissure(level,s,phase);
                         if(CI_TEST && emission.samples()>0 && !s.ciSurfaceFissureLogged) {
-                            LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples={} accentDust={} violetDust={} shards={} total={} heightmap=motion-blocking-no-leaves ground=terrain-support-filtered averageY={}",
+                            LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples={} accentDust={} violetDust={} edgeDust={} total={} heightmap=motion-blocking-no-leaves ground=terrain-support-filtered averageY={}",
                                 emission.samples(),emission.accentDustMotes(),emission.violetDustMotes(),
-                                emission.shards(),emission.totalParticles(),emission.averageSurfaceY());
-                            LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARDS_EMITTED count={} material=crying_obsidian",
-                                emission.shards());
+                                emission.edgeDustMotes(),emission.totalParticles(),emission.averageSurfaceY());
+                            LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_EMITTED count={} material=dust scale={}",
+                                emission.edgeDustMotes(),FISSURE_VIOLET_EDGE_DUST.getScale());
                             s.ciSurfaceFissureLogged=true;
                         }
                     }
