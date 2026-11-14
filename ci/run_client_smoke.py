@@ -732,14 +732,18 @@ def capture_test_world():
     print("WORLD_CAPTURE: full-Dust/no-accent and edge-accent ground visibility profiles verified",flush=True)
 
     def is_compact_restoration_dust_component(component_size,width,height):
-        # Real Dust sprites in the captured beacon frame can form connected
-        # 300px clusters. Reject the larger 41x51 sky-rift ribbon by shape,
-        # not by an arbitrary 128-pixel cutoff.
-        return (24<=component_size<=512 and 8<=width<=32 and 8<=height<=32)
+        # Fog and the sparse-world camera can render a real Dust mote only 6-7
+        # pixels wide. Keep the 24px noise floor, but reject broad sky-rift ribbons
+        # by shape instead of requiring an unnecessarily wide particle sprite.
+        return (24<=component_size<=512 and 6<=width<=32 and 6<=height<=32)
 
     if (not is_compact_restoration_dust_component(300,20,25)
+            or not is_compact_restoration_dust_component(44,7,11)
+            or not is_compact_restoration_dust_component(39,7,10)
+            or is_compact_restoration_dust_component(18,6,6)
             or is_compact_restoration_dust_component(1130,41,51)
             or is_compact_restoration_dust_component(300,33,24)
+            or is_compact_restoration_dust_component(300,24,33)
             or is_compact_restoration_dust_component(23,20,25)
             or is_compact_restoration_dust_component(513,26,25)):
         raise RuntimeError("BLACK FREQUENCY restoration Dust component classifier regression")
