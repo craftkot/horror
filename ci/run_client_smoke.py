@@ -1276,8 +1276,11 @@ def capture_test_world():
                 snap("recovery-beacon-ground-context.png")
                 return False
             final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-            if "BLACK_FREQUENCY_GROUND_MESH_SURFACE_HEIGHT_VERIFIED" not in final_log:
-                print("WORLD_CAPTURE_FAIL: collision-based ground surface self-check was not executed",flush=True)
+            if "BLACK_FREQUENCY_GROUND_MESH_SURFACE_OUTLINE_HEIGHT_VERIFIED" not in final_log:
+                print("WORLD_CAPTURE_FAIL: outline-based ground surface height self-check was not executed",flush=True)
+                return False
+            if "BLACK_FREQUENCY_GROUND_MESH_PLANT_OUTLINE_HEIGHT_VERIFIED" not in final_log:
+                print("WORLD_CAPTURE_FAIL: real tall-grass outline height was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST GROUND_MESH_INACTIVE_CACHE_CLEANUP_VERIFIED levelReference=true" not in final_log:
                 print("WORLD_CAPTURE_FAIL: inactive ground mesh cache did not prove ClientLevel reference release",flush=True)

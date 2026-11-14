@@ -151,6 +151,7 @@ public final class RiftClientState {
         private static boolean visualProfileLogged;
         private static boolean surfaceWindowLogged;
         private static boolean surfaceHeightProfileLogged;
+        private static boolean plantOutlineProfileLogged;
         private static boolean rebuildProfileLogged;
         private static boolean animationProfileLogged;
         private static boolean samplingProfileLogged;
@@ -269,20 +270,20 @@ public final class RiftClientState {
             }
             if(!surfaceHeightProfileLogged) {
                 double fullBlock=groundSurfaceOffset(1.0D,Double.NaN);
-                double tallGrass=groundSurfaceOffset(1.0D,Double.NaN);
+                double tallGrassOutline=groundSurfaceOffset(1.0D,.8125D);
                 double snowLayer=groundSurfaceOffset(1.0D,.125D);
                 double bottomSlab=groundSurfaceOffset(.5D,Double.NaN);
                 double invalidCover=groundSurfaceOffset(.75D,Double.POSITIVE_INFINITY);
                 if(Math.abs(fullBlock-1.0D)>1.0E-9D
-                    || Math.abs(tallGrass-1.0D)>1.0E-9D
+                    || Math.abs(tallGrassOutline-1.8125D)>1.0E-9D
                     || Math.abs(snowLayer-1.125D)>1.0E-9D
                     || Math.abs(bottomSlab-.5D)>1.0E-9D
                     || Math.abs(invalidCover-.75D)>1.0E-9D)
-                    throw new IllegalStateException("BLACK FREQUENCY ground surface collision-height regression");
+                    throw new IllegalStateException("BLACK FREQUENCY ground surface outline-height regression");
                 surfaceHeightProfileLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_GROUND_MESH_SURFACE_HEIGHT_VERIFIED fullBlock={} tallGrass={} snowLayer={} bottomSlab={} invalidFallback={}",
-                    fullBlock,tallGrass,snowLayer,bottomSlab,invalidCover);
+                    "BLACK_FREQUENCY_GROUND_MESH_SURFACE_OUTLINE_HEIGHT_VERIFIED fullBlock={} tallGrassOutline={} snowLayer={} bottomSlab={} invalidFallback={}",
+                    fullBlock,tallGrassOutline,snowLayer,bottomSlab,invalidCover);
             }
         }
 
@@ -292,12 +293,33 @@ public final class RiftClientState {
                 : fallback;
         }
 
-        // Non-colliding plants have an outline shape but no physical top surface.
-        // Only a collision-bearing cover may raise the fissure above its support.
-        private static double groundSurfaceOffset(double supportHeight,double coverCollisionHeight) {
+        // Match the server particle sampler: use the visible surface outline even
+        // when vegetation has no collision shape, so the client ribbon is not buried
+        // below tall grass while server motes already sit above its canopy.
+        private static double groundSurfaceOffset(double supportHeight,double coverShapeHeight) {
             double supportTop=boundedShapeHeight(supportHeight,1.0D);
-            if(!Double.isFinite(coverCollisionHeight)) return supportTop;
-            return 1.0D+boundedShapeHeight(coverCollisionHeight,0.0D);
+            if(!Double.isFinite(coverShapeHeight)) return supportTop;
+            return 1.0D+boundedShapeHeight(coverShapeHeight,0.0D);
+        }
+
+        private static void verifyGroundPlantOutlineProfile(
+                net.minecraft.client.multiplayer.ClientLevel level,BlockPos.MutableBlockPos cursor,
+                int blockX,int blockZ,int referenceY) {
+            if(plantOutlineProfileLogged) return;
+            cursor.set(blockX,referenceY,blockZ);
+            BlockState tallGrass=net.minecraft.world.level.block.Blocks.TALL_GRASS.defaultBlockState();
+            var outline=tallGrass.getShape(level,cursor);
+            double outlineHeight=outline.isEmpty()
+                ? Double.NaN : outline.max(Direction.Axis.Y);
+            double surfaceOffset=groundSurfaceOffset(1.0D,outlineHeight);
+            if(!Double.isFinite(outlineHeight) || outlineHeight<=0.0D
+                || !Double.isFinite(surfaceOffset)
+                || Math.abs(surfaceOffset-(1.0D+outlineHeight))>1.0E-9D)
+                throw new IllegalStateException("BLACK FREQUENCY ground plant outline height regression");
+            plantOutlineProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_PLANT_OUTLINE_HEIGHT_VERIFIED tallGrassOutline={} surfaceOffset={} serverAligned=true",
+                outlineHeight,surfaceOffset);
         }
 
         // Adjacent samples may be connected only when their real support heights
@@ -665,10 +687,12 @@ public final class RiftClientState {
                 // an otherwise valid ground sample in forests. Stateful fixtures
                 // are excluded even when their collision shape does not block motion.
                 if(!isGroundSurfaceAvailable(surface)) continue;
-                var coverCollision=surface.getCollisionShape(level,cursor);
-                double coverHeight=coverCollision.isEmpty()
+                // Use the outline, not only collision geometry: grass and flowers
+                // are non-colliding but visibly cover the ground-level ribbon.
+                var coverShape=surface.getShape(level,cursor);
+                double coverHeight=coverShape.isEmpty()
                     ? Double.NaN
-                    : coverCollision.max(Direction.Axis.Y);
+                    : coverShape.max(Direction.Axis.Y);
 
                 cursor.set(blockX,candidateY+1,blockZ);
                 BlockState head=level.getBlockState(cursor);
@@ -711,6 +735,7 @@ public final class RiftClientState {
                 int referenceY) {
             verifyInactiveCacheCleanup(level);
             verifyGroundMeshSamplingProfile();
+            verifyGroundPlantOutlineProfile(level,SURFACE_CURSOR,worldAnchorX,worldAnchorZ,referenceY);
             verifySurfaceSearchOrder();
             verifyTaperProfile();
             verifyGroundContinuityProfile();
