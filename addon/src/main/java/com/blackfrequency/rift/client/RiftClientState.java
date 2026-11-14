@@ -555,15 +555,26 @@ public final class RiftClientState {
                 && !isGroundSupport(net.minecraft.world.level.block.Blocks.OAK_FENCE_GATE.defaultBlockState())
                 && !isGroundSupport(net.minecraft.world.level.block.Blocks.OAK_DOOR.defaultBlockState())
                 && !isGroundSupport(net.minecraft.world.level.block.Blocks.OAK_TRAPDOOR.defaultBlockState());
-            if(!(naturalGrass && naturalStone && rejectsStructures))
+            boolean rejectsBlockEntities=
+                !isGroundSupport(net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState())
+                && !isGroundSupport(net.minecraft.world.level.block.Blocks.FURNACE.defaultBlockState())
+                && !isGroundSupport(net.minecraft.world.level.block.Blocks.BEACON.defaultBlockState())
+                && !isGroundSurfaceAvailable(net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState())
+                && !isGroundSurfaceAvailable(net.minecraft.world.level.block.Blocks.FURNACE.defaultBlockState())
+                && !isGroundSurfaceAvailable(net.minecraft.world.level.block.Blocks.BEACON.defaultBlockState())
+                && isGroundSurfaceAvailable(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+            if(!(naturalGrass && naturalStone && rejectsStructures && rejectsBlockEntities))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh terrain/structure filter regression");
             supportFilterLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_STRUCTURAL_SUPPORT_FILTER_VERIFIED");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_BLOCK_ENTITY_FILTER_VERIFIED support=true surface=true");
         }
 
         private static boolean isGroundSupport(BlockState state) {
             return state.blocksMotion()
+                && !state.hasBlockEntity()
                 && !state.is(BlockTags.LOGS)
                 && !state.is(BlockTags.LEAVES)
                 && !state.is(BlockTags.PLANKS)
@@ -575,6 +586,12 @@ public final class RiftClientState {
                 && !state.is(BlockTags.DOORS)
                 && !state.is(BlockTags.TRAPDOORS)
                 && !state.is(net.minecraft.world.level.block.Blocks.POWDER_SNOW);
+        }
+
+        private static boolean isGroundSurfaceAvailable(BlockState surface) {
+            return !surface.hasBlockEntity()
+                && !surface.blocksMotion()
+                && surface.getFluidState().isEmpty();
         }
 
         // Search from the camera height downward first: a player standing on the
@@ -645,8 +662,9 @@ public final class RiftClientState {
                 BlockState surface=level.getBlockState(cursor);
                 // The ribbon is coplanar with the ground. Canopy and low overhangs
                 // above it should occlude naturally through depth testing, not reject
-                // an otherwise valid ground sample in forests.
-                if(surface.blocksMotion() || !surface.getFluidState().isEmpty()) continue;
+                // an otherwise valid ground sample in forests. Stateful fixtures
+                // are excluded even when their collision shape does not block motion.
+                if(!isGroundSurfaceAvailable(surface)) continue;
                 var coverCollision=surface.getCollisionShape(level,cursor);
                 double coverHeight=coverCollision.isEmpty()
                     ? Double.NaN
