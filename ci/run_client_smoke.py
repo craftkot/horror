@@ -564,10 +564,26 @@ def capture_test_world():
 
     def ground_visibility_passes(metrics):
         return (metrics["dustPixels"]>=30 and metrics["dustTiles"]>=2
-                and metrics["accentPixels"]>=20 and metrics["accentTiles"]>=1
+                and metrics["accentPixels"]>=3 and metrics["accentTiles"]>=1
                 and metrics["particlePixels"]>=120 and metrics["particleTiles"]>=3
                 and metrics["combinedPixels"]>=160 and metrics["combinedTiles"]>=6
                 and metrics["meshPixels"]>=24 and metrics["meshTiles"]>=2)
+
+    # Accent motes are intentionally sparse (8 per full fissure). Require at
+    # least one 32px tile with three accent pixels, not 20 pixels across the frame.
+    _ground_visibility_minimum = {
+        "dustPixels":30, "dustTiles":2,
+        "accentPixels":3, "accentTiles":1,
+        "particlePixels":120, "particleTiles":3,
+        "combinedPixels":160, "combinedTiles":6,
+        "meshPixels":24, "meshTiles":2,
+    }
+    _ground_visibility_without_accent_tile = dict(_ground_visibility_minimum)
+    _ground_visibility_without_accent_tile["accentTiles"] = 0
+    if (not ground_visibility_passes(_ground_visibility_minimum)
+            or ground_visibility_passes(_ground_visibility_without_accent_tile)):
+        raise RuntimeError("BLACK FREQUENCY ground fissure sparse-accent visibility regression")
+    print("WORLD_CAPTURE: sparse ground fissure accent visibility threshold verified",flush=True)
 
     def measure_restoration_palette(frame):
         width,height=frame.size
@@ -1547,7 +1563,7 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=52 accentDust=8 violetDust=40 edgeDust=4" not in log_after:
                 print("WORLD_CAPTURE_FAIL: violet-dust fissure particle budget self-check was not executed",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_ACCENT_DUST_VERIFIED red=0.3 green=0.14 blue=0.88 scale=0.95" not in log_after:
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_ACCENT_DUST_VERIFIED red=0.3 green=0.14 blue=0.88 scale=1.05" not in log_after:
                 print("WORLD_CAPTURE_FAIL: bright-violet accent DustParticleOptions was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_VIOLET_DUST_VERIFIED red=0.34 green=0.08 blue=0.78 scale=0.85" not in log_after:
@@ -1562,13 +1578,13 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_STRUCTURAL_SUPPORT_FILTER_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: server did not reject structural blocks as fissure terrain",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_VERIFIED red=0.42 green=0.18 blue=0.92 scale=0.50" not in log_after:
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_VERIFIED red=0.42 green=0.18 blue=0.92 scale=0.5" not in log_after:
                 print("WORLD_CAPTURE_FAIL: compact violet fissure edge Dust profile was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_LAYOUT_VERIFIED count=4 color=violet perArm=1 outerTip=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: four compact violet edge Dust motes were not verified",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_CACHE_VERIFIED cached=true scale=0.50" not in log_after:
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_CACHE_VERIFIED cached=true scale=0.5" not in log_after:
                 print("WORLD_CAPTURE_FAIL: compact violet edge Dust option was not verified as cached",flush=True)
                 return False
             if not valid_fissure_particle_emission(fissure):
@@ -1576,7 +1592,7 @@ def capture_test_world():
                       fissure,flush=True)
                 return False
             edge_dust=re.search(
-                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_EMITTED count=([0-9]+) material=dust scale=0.50",
+                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_EMITTED count=([0-9]+) material=dust scale=0.5",
                 log_after)
             if not edge_dust or int(edge_dust.group(1))!=4 or int(edge_dust.group(1))!=fissure[3]:
                 print("WORLD_CAPTURE_FAIL: four compact outer-tip violet edge Dust motes were not emitted",

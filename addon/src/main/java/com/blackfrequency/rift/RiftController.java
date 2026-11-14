@@ -101,7 +101,7 @@ public final class RiftController {
     // Brighter blue-violet Dust replaces the magenta Dragon Breath accents.
     // Reused for every accent sample; no per-particle option allocation.
     private static final DustParticleOptions FISSURE_VIOLET_ACCENT_DUST =
-        new DustParticleOptions(new Vector3f(.30F,.14F,.88F),.95F);
+        new DustParticleOptions(new Vector3f(.30F,.14F,.88F),1.05F);
     // Keep one compact violet fleck at each arm's outer tip; block-textured chips overwhelm the camera.
     private static final int FISSURE_OUTER_ACCENT_SEGMENT_INTERVAL = FISSURE_SEGMENTS_PER_ARM;
     // A small cached Dust accent replaces the oversized crying-obsidian block particle.
@@ -1173,7 +1173,7 @@ public final class RiftController {
             || Math.abs(accentColor.x()-.30F)>1.0E-6F
             || Math.abs(accentColor.y()-.14F)>1.0E-6F
             || Math.abs(accentColor.z()-.88F)>1.0E-6F
-            || !Float.isFinite(accentScale) || Math.abs(accentScale-.95F)>1.0E-6F
+            || !Float.isFinite(accentScale) || Math.abs(accentScale-1.05F)>1.0E-6F
             || accentColor.z()<=accentColor.x()*2.0F)
             throw new IllegalStateException("CI fissure violet accent Dust color/scale regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_ACCENT_DUST_VERIFIED red={} green={} blue={} scale={}",
