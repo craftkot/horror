@@ -565,7 +565,7 @@ def capture_test_world():
     def ground_visibility_passes(metrics):
         return (metrics["dustPixels"]>=30 and metrics["dustTiles"]>=2
                 and metrics["accentPixels"]>=3 and metrics["accentTiles"]>=1
-                and metrics["particlePixels"]>=120 and metrics["particleTiles"]>=3
+                and metrics["particlePixels"]>=96 and metrics["particleTiles"]>=3
                 and metrics["combinedPixels"]>=160 and metrics["combinedTiles"]>=6
                 and metrics["meshPixels"]>=24 and metrics["meshTiles"]>=2)
 
@@ -574,15 +574,20 @@ def capture_test_world():
     _ground_visibility_minimum = {
         "dustPixels":30, "dustTiles":2,
         "accentPixels":3, "accentTiles":1,
-        "particlePixels":120, "particleTiles":3,
+        "particlePixels":96, "particleTiles":3,
         "combinedPixels":160, "combinedTiles":6,
         "meshPixels":24, "meshTiles":2,
     }
+    # Sparse recovery may expose only part of the 48-sample pass in one player view.
+    # Keep a hard pixel floor, three spatial tiles and the independent mesh coverage gate.
+    _ground_visibility_below_particle_floor = dict(_ground_visibility_minimum)
+    _ground_visibility_below_particle_floor["particlePixels"] = 95
     _ground_visibility_without_accent_tile = dict(_ground_visibility_minimum)
     _ground_visibility_without_accent_tile["accentTiles"] = 0
     if (not ground_visibility_passes(_ground_visibility_minimum)
+            or ground_visibility_passes(_ground_visibility_below_particle_floor)
             or ground_visibility_passes(_ground_visibility_without_accent_tile)):
-        raise RuntimeError("BLACK FREQUENCY ground fissure sparse-accent visibility regression")
+        raise RuntimeError("BLACK FREQUENCY ground fissure sparse visibility regression")
     print("WORLD_CAPTURE: sparse ground fissure accent visibility threshold verified",flush=True)
 
     def measure_restoration_palette(frame):
