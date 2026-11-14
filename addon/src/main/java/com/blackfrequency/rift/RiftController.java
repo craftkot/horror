@@ -793,7 +793,11 @@ public final class RiftController {
     }
 
     private static boolean isFissureSurfaceAvailable(BlockState state) {
-        return !state.hasBlockEntity();
+        // Match the client mesh: a surface sample must be a non-solid, dry cell,
+        // not a fixture, so server motes and the client ribbon cannot disagree.
+        return !state.hasBlockEntity()
+            && !state.blocksMotion()
+            && state.getFluidState().isEmpty();
     }
 
     private static int findFissureGroundY(ServerLevel level,int x,int z) {
@@ -1214,10 +1218,12 @@ public final class RiftController {
             || isFissureGroundSupport(Blocks.CHEST.defaultBlockState())
             || isFissureGroundSupport(Blocks.FURNACE.defaultBlockState())
             || isFissureGroundSupport(Blocks.BEACON.defaultBlockState())
-            || !isFissureSurfaceAvailable(Blocks.CHEST.defaultBlockState())
-            || !isFissureSurfaceAvailable(Blocks.FURNACE.defaultBlockState())
-            || !isFissureSurfaceAvailable(Blocks.BEACON.defaultBlockState())
+            || isFissureSurfaceAvailable(Blocks.CHEST.defaultBlockState())
+            || isFissureSurfaceAvailable(Blocks.FURNACE.defaultBlockState())
+            || isFissureSurfaceAvailable(Blocks.BEACON.defaultBlockState())
             || !isFissureSurfaceAvailable(Blocks.AIR.defaultBlockState())
+            || isFissureSurfaceAvailable(Blocks.STONE.defaultBlockState())
+            || isFissureSurfaceAvailable(Blocks.WATER.defaultBlockState())
             || !isFissureGroundSupport(Blocks.STONE.defaultBlockState())
             || !isFissureGroundSupport(Blocks.DIRT.defaultBlockState()))
             throw new IllegalStateException("CI fissure terrain/structure filter regression");
