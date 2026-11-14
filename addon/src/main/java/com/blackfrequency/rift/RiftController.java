@@ -70,6 +70,9 @@ public final class RiftController {
         RESTORE_HELIX_ANCHOR_COUNT * RESTORE_HELIX_MOTES_PER_ANCHOR;
     // Let the existing gravity field decay smoothly after beacon activation.
     private static final int RESTORE_GRAVITY_FADE_TICKS=40;
+    // Keep the first recovery halo entirely above the beacon block so the initial pulse
+    // is not hidden inside the beacon model or clipped at its top face.
+    private static final double RESTORE_RING_HEIGHT_OFFSET=1.25D;
     private static final int RESTORE_BLOCK_CUE_INTERVAL = 48;
     private static final int RESTORE_BLOCK_CUE_PARTICLE_COUNT = 6;
     private static final int RESTORE_AUDIENCE_PARTICLE_COUNT = 8;
@@ -1943,6 +1946,9 @@ public final class RiftController {
             && RESTORE_VIOLET_ACCENT_DUST_SCALE<=.82F
             && RESTORE_AUDIENCE_SPREAD_XZ>0.0D && RESTORE_AUDIENCE_SPREAD_XZ<=1.0D
             && RESTORE_AUDIENCE_SPREAD_Y>0.0D && RESTORE_AUDIENCE_SPREAD_Y<=.75D;
+        double minimumRingOffset=RESTORE_RING_HEIGHT_OFFSET-.18D;
+        boolean ringClearsBeaconBlock=Double.isFinite(minimumRingOffset)
+            && minimumRingOffset>1.0D && RESTORE_RING_HEIGHT_OFFSET<=1.5D;
         boolean playerScanInitial=shouldScanRestorePlayers(1,true);
         boolean playerScanInitialWithoutBeacon=!shouldScanRestorePlayers(1,false);
         boolean playerScanBoundary=shouldScanRestorePlayers(RESTORE_PLAYER_SCAN_INTERVAL_TICKS,true)
@@ -1955,7 +1961,7 @@ public final class RiftController {
             restorationCadenceTick(Integer.MAX_VALUE,3L),true);
         if(!(ringInitial && ringBoundary && ringBetween && helixBoundary && helixBetween
             && blockBoundary && blockBetween && blockNext && invalidTicks
-            && boundedCounts && cachedPalette && boundedRestoreDust
+            && boundedCounts && cachedPalette && boundedRestoreDust && ringClearsBeaconBlock
             && playerScanInitial && playerScanInitialWithoutBeacon
             && playerScanBoundary && playerScanBetween && playerScanWithoutBeacon
             && playerScanInvalid && playerScanSaturated))
@@ -1968,6 +1974,8 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_SIZE_VERIFIED baseScale={} accentScale={} audienceSpreadXZ={} audienceSpreadY={} cachedDust=true",
             RESTORE_VIOLET_DUST_SCALE,RESTORE_VIOLET_ACCENT_DUST_SCALE,
             RESTORE_AUDIENCE_SPREAD_XZ,RESTORE_AUDIENCE_SPREAD_Y);
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_RING_CLEARANCE_VERIFIED offset={} minOffset={} clearsBeaconTop=true",
+            RESTORE_RING_HEIGHT_OFFSET,minimumRingOffset);
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_INITIAL_PULSE_POLICY_VERIFIED tick=1 ringParticles={} sparks={} scanOnStart=true loadedOnly=true",
             RESTORE_RING_PARTICLE_COUNT,RESTORE_RISING_SPARK_PARTICLE_COUNT);
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_PROFILE_VERIFIED intervalTicks={} menuClose=shared viewerScan=shared loadedOnly=true",
@@ -2538,7 +2546,8 @@ public final class RiftController {
         // Only query an already loaded chunk; never resurrect a removed beacon
         // or force chunk generation during recovery.
         if(shouldEmitRestoreAudiencePulse(cadenceTick) && hasStabilizationViewer) {
-            double cx=beaconX, cy=beaconY+0.6D, cz=beaconZ;
+            double cx=beaconX, ringCenterY=beaconY+RESTORE_RING_HEIGHT_OFFSET,
+                sparkCenterY=beaconY+0.6D, cz=beaconZ;
             // Contract the recovery vortex as the saved terrain is restored.
             // Clamp corrupt/out-of-range indices so the effect stays bounded.
             double contraction=recoveryVortexContraction(s.restoreIndex,s.snapshots.size());
@@ -2559,7 +2568,7 @@ public final class RiftController {
                 DustParticleOptions ringDust=(i&1)==0
                     ? RESTORE_VIOLET_DUST : RESTORE_VIOLET_ACCENT_DUST;
                 level.sendParticles(ringDust,
-                    cx+Math.cos(angle)*radius,cy+height,cz+Math.sin(angle)*radius,
+                    cx+Math.cos(angle)*radius,ringCenterY+height,cz+Math.sin(angle)*radius,
                     1,0,0.08D,0,0.015D);
             }
             // Four rising violet sparks connect the ground-level rings to the
@@ -2569,7 +2578,7 @@ public final class RiftController {
                 double phase=animationTick*0.055D+i*Math.PI/2.0D;
                 double height=0.25D+((animationTick*0.04D+i*0.25D)%2.5D);
                 level.sendParticles(RESTORE_VIOLET_ACCENT_DUST,
-                    cx+Math.cos(phase)*0.75D*contraction,cy+height,
+                    cx+Math.cos(phase)*0.75D*contraction,sparkCenterY+height,
                     cz+Math.sin(phase)*0.75D*contraction,
                     1,0,0,0,0);
             }
