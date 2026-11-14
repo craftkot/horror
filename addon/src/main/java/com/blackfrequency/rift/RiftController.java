@@ -102,8 +102,8 @@ public final class RiftController {
     // Reused for every accent sample; no per-particle option allocation.
     private static final DustParticleOptions FISSURE_VIOLET_ACCENT_DUST =
         new DustParticleOptions(new Vector3f(.30F,.14F,.88F),1.35F);
-    // Replace two portal accents per arm with textured crying-obsidian chips.
-    private static final int FISSURE_SHARD_SEGMENT_INTERVAL = 6;
+    // Keep one textured chip at each arm's outer tip; inner chips crowd the beacon.
+    private static final int FISSURE_SHARD_SEGMENT_INTERVAL = FISSURE_SEGMENTS_PER_ARM;
     private static final double FISSURE_SAMPLE_SPACING = RiftGeometry.FISSURE_SAMPLE_SPACING;
     // Avoid aiming almost straight down at a mote beside the player: a modest
     // standoff keeps the particle trail and the surface ribbon in the same view.
@@ -1122,7 +1122,7 @@ public final class RiftController {
             || Math.abs(extent-5.40D)>1.0E-9D || extent>=RADIUS
             || FISSURE_SHARD_SEGMENT_INTERVAL<=0
             || FISSURE_SEGMENTS_PER_ARM%FISSURE_SHARD_SEGMENT_INTERVAL!=0
-            || FISSURE_SEGMENTS_PER_ARM/FISSURE_SHARD_SEGMENT_INTERVAL!=2)
+            || FISSURE_SHARD_SEGMENT_INTERVAL!=FISSURE_SEGMENTS_PER_ARM)
             throw new IllegalStateException("CI fissure sampling density/radius regression");
         int shardCount=0;
         int accentDustMotes=0;
@@ -1141,8 +1141,8 @@ public final class RiftController {
         }
         int primaryMotes=samples*FISSURE_MOTES_PER_SAMPLE;
         int totalParticles=primaryMotes+shardCount;
-        if(shardCount!=8 || accentDustMotes!=8 || violetDustMotes!=40
-            || totalParticles!=56 || totalParticles>56)
+        if(shardCount!=FISSURE_ARM_COUNT || accentDustMotes!=8 || violetDustMotes!=40
+            || totalParticles!=52 || totalParticles>52)
             throw new IllegalStateException("CI violet-majority fissure particle budget regression");
         Vector3f dustColor=FISSURE_VIOLET_DUST.getColor();
         float dustScale=FISSURE_VIOLET_DUST.getScale();
@@ -1172,7 +1172,7 @@ public final class RiftController {
             samples,FISSURE_SAMPLE_SPACING,extent);
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total={} accentDust={} violetDust={} shards={}",
             totalParticles,accentDustMotes,violetDustMotes,shardCount);
-        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_LAYOUT_VERIFIED count={} material=crying_obsidian",
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_LAYOUT_VERIFIED count={} material=crying_obsidian perArm=1 outerTip=true",
             shardCount);
     }
 
