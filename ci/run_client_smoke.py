@@ -68,6 +68,20 @@ def verify_restoration_particle_source():
     if start<0 or end<0:
         raise RuntimeError("BLACK FREQUENCY restoration method source boundary regression")
     body=source[start:end]
+    state_start=source.find("private static final class State extends SavedData")
+    state_end=source.find("static State load",state_start)
+    state_fields=source[state_start:state_end] if state_start>=0 and state_end>state_start else ""
+    save_start=source.find("@Override public CompoundTag save",state_end)
+    save_end=source.find("return n;",save_start)
+    save_body=source[save_start:save_end] if save_start>=0 and save_end>save_start else ""
+    if ("final BlockPos.MutableBlockPos restoreCursor = new BlockPos.MutableBlockPos();" not in state_fields
+            or 'long packedPosition=entry.getLong("pos");' not in body
+            or "BlockPos.MutableBlockPos pos=s.restoreCursor;" not in body
+            or "pos.set(BlockPos.getX(packedPosition),BlockPos.getY(packedPosition),BlockPos.getZ(packedPosition));" not in body
+            or 'BlockPos.of(entry.getLong("pos"))' in body
+            or "restoreCursor" in save_body
+            or "RESTORE_POSITION_CURSOR_REUSE_VERIFIED sameInstance=true packedCoordinates=true transient=true" not in source):
+        raise RuntimeError("BLACK FREQUENCY restoration must reuse a transient mutable snapshot-position cursor without serializing it")
     scan_interval=re.search(r"RESTORE_PLAYER_SCAN_INTERVAL_TICKS\s*=\s*(\d+)",source)
     ring_policy_start=source.find("private static boolean shouldEmitRestoreAudiencePulse")
     ring_policy_end=source.find("private static boolean shouldScanRestorePlayers",ring_policy_start)

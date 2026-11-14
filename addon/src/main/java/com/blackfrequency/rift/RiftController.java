@@ -625,6 +625,9 @@ public final class RiftController {
         // Reuse the transient audience/menu accumulator across restoration scans.
         // It is intentionally not serialized; each SavedData instance owns its own scratch state.
         final RestorePlayerScanState restorePlayerScan = new RestorePlayerScanState();
+        // Reuse one transient packed-position decoder for the bounded snapshot scan.
+        // The mutable cursor never escapes restore() and is intentionally not saved to NBT.
+        final BlockPos.MutableBlockPos restoreCursor = new BlockPos.MutableBlockPos();
         // Reuse the small per-tick retry set during recovery instead of allocating
         // a new HashSet on every server tick. It is transient and never persisted.
         final java.util.Set<Long> restoreFailedWrites = new java.util.HashSet<>();
@@ -1781,6 +1784,25 @@ public final class RiftController {
             || !scan.hasRingViewer || !scan.hasStabilizationViewer)
             throw new IllegalStateException("CI restore player scan was not reusable after reset");
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_REUSE_VERIFIED sameInstance=true staleStateCleared=true");
+        verifyRestorePositionCursorReuse();
+    }
+
+    private static void verifyRestorePositionCursorReuse() {
+        State owner=new State();
+        BlockPos.MutableBlockPos cursor=owner.restoreCursor;
+        BlockPos[] samples={
+            new BlockPos(-30_000_000,-64,30_000_000),
+            new BlockPos(0,319,0),
+            new BlockPos(30_000_000,0,-30_000_000)
+        };
+        for(BlockPos expected:samples) {
+            long packed=expected.asLong();
+            cursor.set(BlockPos.getX(packed),BlockPos.getY(packed),BlockPos.getZ(packed));
+            if(owner.restoreCursor!=cursor || cursor.getX()!=expected.getX()
+                || cursor.getY()!=expected.getY() || cursor.getZ()!=expected.getZ())
+                throw new IllegalStateException("CI restore snapshot cursor decode/reuse regression");
+        }
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_POSITION_CURSOR_REUSE_VERIFIED sameInstance=true packedCoordinates=true transient=true");
     }
 
     private static void verifyRestoreCadenceSaturationFallback() {
@@ -2578,7 +2600,9 @@ public final class RiftController {
                 checks++;
                 continue;
             }
-            BlockPos pos=BlockPos.of(entry.getLong("pos"));
+            long packedPosition=entry.getLong("pos");
+            BlockPos.MutableBlockPos pos=s.restoreCursor;
+            pos.set(BlockPos.getX(packedPosition),BlockPos.getY(packedPosition),BlockPos.getZ(packedPosition));
             checks++;
             // Validate saved coordinates before querying chunk availability.
             // Malformed snapshots outside the bounded fracture must be retired
