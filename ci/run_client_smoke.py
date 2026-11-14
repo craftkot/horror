@@ -37,6 +37,11 @@ def verify_restoration_particle_source():
     if ("CI_BEACON_PAD_FLOOR_Y_OFFSET=1;" not in source
             or "CI_BEACON_PAD_PLAYER_Y_OFFSET=2;" not in source
             or "CI_BEACON_PAD_STANDOFF_Z=1.75D;" not in source
+            or "CI_BEACON_PAD_LAST_SOLID_ROW_DZ=-2;" not in source
+            or "CI_BEACON_PAD_STANDOFF_Z+.5D" not in source
+            or "dz<=CI_BEACON_PAD_LAST_SOLID_ROW_DZ" not in pad_body
+            or "ciBeaconSightlineHitsBeacon(level,demoPlayer,demoPos)" not in pad_body
+            or "BEACON_SIGHTLINE_VERIFIED" not in pad_body
             or "demoPos.offset(dx,CI_BEACON_PAD_FLOOR_Y_OFFSET,dz)" not in pad_body
             or "Math.abs(padDx)>RADIUS" not in pad_body
             or "Math.abs(padDz)>RADIUS" not in pad_body
@@ -376,6 +381,19 @@ def capture_test_world():
             return None
         return yaw,pitch
 
+    def read_beacon_aim(log_text=None):
+        if log_text is None:
+            log_text=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+        matches=list(re.finditer(
+            r"BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)",
+            log_text))
+        if not matches:
+            return None
+        yaw,pitch=map(float,matches[-1].groups())
+        if not math.isfinite(yaw) or not math.isfinite(pitch):
+            return None
+        return yaw,pitch
+
     def wait_for_camera_rotation(target_pitch=None,tolerance=2.5,timeout=1.5):
         deadline=time.monotonic()+timeout
         last=read_client_camera_rotation()
@@ -436,10 +454,38 @@ def capture_test_world():
                 return last
         return last if last is not None else read_client_camera_rotation()
 
+    def aim_camera_at_beacon(log_text=None):
+        target=read_beacon_aim(log_text)
+        if target is None:
+            print("WORLD_CAPTURE: beacon aim telemetry is not ready; deferring click",flush=True)
+            return False
+        current=read_client_camera_rotation()
+        if current is None:
+            print("WORLD_CAPTURE: rendered camera telemetry is not ready; deferring beacon click",flush=True)
+            return False
+        if (abs(wrapped_angle_delta(current[0],target[0]))>3.0
+                or abs(current[1]-target[1])>3.0):
+            current=restore_camera_orientation(target[0],target[1])
+        if (current is None
+                or abs(wrapped_angle_delta(current[0],target[0]))>3.0
+                or abs(current[1]-target[1])>3.0):
+            print("WORLD_CAPTURE_FAIL: rendered camera did not reach the physical beacon",
+                  current,"expected",target,flush=True)
+            return False
+        print("WORLD_CAPTURE: physical beacon camera aim verified",
+              round(current[0],2),round(current[1],2),flush=True)
+        return True
+
     camera_sample="BLACK_FREQUENCY_TEST CLIENT_CAMERA_ROTATION yaw=179.0 pitch=26.5"
     if (read_client_camera_rotation(camera_sample)!=(179.0,26.5)
             or abs(wrapped_angle_delta(-179.0,179.0)-2.0)>1.0E-9):
         raise RuntimeError("BLACK FREQUENCY client camera telemetry parser regression")
+    beacon_aim_sample="BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=-7.6293945E-6 pitch=54.20249"
+    parsed_beacon_aim=read_beacon_aim(beacon_aim_sample)
+    if (parsed_beacon_aim is None
+            or abs(parsed_beacon_aim[0]+7.6293945E-6)>1.0E-9
+            or abs(parsed_beacon_aim[1]-54.20249)>1.0E-6):
+        raise RuntimeError("BLACK FREQUENCY beacon aim telemetry parser regression")
     camera_direction_cases=(
         camera_delta_for_pitch(26.46307,0.0)<0,
         camera_delta_for_pitch(0.0,-65.0)<0,
@@ -450,7 +496,7 @@ def capture_test_world():
     )
     if not all(camera_direction_cases):
         raise RuntimeError("BLACK FREQUENCY camera correction direction regression")
-    print("WORLD_CAPTURE: client camera telemetry and correction directions verified",flush=True)
+    print("WORLD_CAPTURE: client camera telemetry, beacon aim parser and correction directions verified",flush=True)
     def is_rift_violet_pixel(r,g,b):
         # Reject pale lavender UI/death-screen skies; the rift must be saturated violet.
         return r>55 and b>80 and b>g*1.5 and r>g*1.5 and b-r<150
@@ -828,8 +874,9 @@ def capture_test_world():
     beacon_attempts=0
     beacon_ready_at=None
     last_beacon_attempt=0
+    beacon_aim_verified=False
     def try_beacon_click(logs):
-        nonlocal beacon_attempts,beacon_ready_at,last_beacon_attempt
+        nonlocal beacon_attempts,beacon_ready_at,last_beacon_attempt,beacon_aim_verified
         if os.environ.get("BF_TEST_PLAYER_BEACON")!="1":
             return
         # Do not begin mouse automation until the server confirms that the
@@ -842,6 +889,8 @@ def capture_test_world():
         if "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in logs:
             return
         if "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs:
+            return
+        if "BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" not in logs:
             return
         if (os.environ.get("BF_TEST_NATURAL_BEACON")=="1"
                 and "BLACK_FREQUENCY_TEST BEACON_SKY_CLEARANCE_VERIFIED" not in logs):
@@ -857,14 +906,18 @@ def capture_test_world():
         retry_delay=0.75 if "BLACK_FREQUENCY_TEST PLAYER_BEACON_AIM_RECOVERED_AFTER_MISS" in logs else 2.0
         if now-beacon_ready_at<1.5 or now-last_beacon_attempt<retry_delay or beacon_attempts>=8:
             return
-        if beacon_attempts==0:
-            snap("beacon-before-right-click.png")
-        # Capture the active rift while the physical beacon is ready but before
-        # the right-click starts restoration. Sparse recovery can finish in only
-        # a few seconds, much faster than two llvmpipe screenshots can be saved.
+        # Capture the active rift before clicking, then aim back at the server's
+        # measured beacon rotation. Restoring the fissure/sky view is not a valid
+        # substitute for aiming at the physical block.
         if not sky_capture_attempted:
             capture_sky_before_beacon()
-            snap("beacon-aim-restored.png")
+        fresh_logs=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else logs
+        if not aim_camera_at_beacon(fresh_logs):
+            return
+        beacon_aim_verified=True
+        if beacon_attempts==0:
+            snap("beacon-before-right-click.png")
+        snap("beacon-aim-restored.png")
         # Actual mouse input, not a synthetic server event.
         focus_game()
         subprocess.run(["xdotool","mousedown","3"],check=False)
@@ -995,7 +1048,7 @@ def capture_test_world():
                     r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
                     logs)
                 pad_profile=re.search(
-                    r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset=1 playerOffset=2 standoff=1\.75 distanceSquared=([-+0-9.eE]+) padBlocks=(\d+) withinReach=true beamColumnUntouched=true withinRiftRadius=true",
+                    r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset=1 playerOffset=2 standoff=1\.75 lastSolidRowDz=-2 distanceSquared=([-+0-9.eE]+) padBlocks=(\d+) withinReach=true beamColumnUntouched=true withinRiftRadius=true",
                     logs)
                 aim=re.search(
                     r"BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)",
@@ -1014,7 +1067,8 @@ def capture_test_world():
                               "segments",pending_segments,"arms",pending_arms,flush=True)
                         return
                 if (not marker or not particles or not target or not safe_pad or not pad_profile or not aim or not mesh
-                        or "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs):
+                        or "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs
+                        or "BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" not in logs):
                     return
                 samples,accent_dust,violet_dust,edge_dust_count,total_particles=particles
                 mesh_segments=int(mesh.group(1))
@@ -1785,6 +1839,12 @@ def capture_test_world():
                         r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=-?\d+ y=-?\d+ z=-?\d+ support=solid fallDistance=0\.0",
                         log_after):
                     print("WORLD_CAPTURE_FAIL: player was not reset onto a verified safe beacon pad",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: server did not verify a loaded-only line of sight to the physical beacon",flush=True)
+                    return False
+                if not beacon_aim_verified:
+                    print("WORLD_CAPTURE_FAIL: client camera was not restored to the measured physical beacon aim",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon was not activated by actual player right-click",flush=True)
