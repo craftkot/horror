@@ -504,6 +504,11 @@ def capture_test_world():
         # Base Dust has a low green/red ratio; keep it separate from the brighter accent.
         return (25 <= r <= 125 and g <= r*.32 and b >= 130
                 and b-r >= 60 and b > r*1.7)
+    def is_ground_shaded_violet_dust_pixel(r,g,b):
+        # In-game fog/particle lighting darkens the same cached Dust option.
+        # Keep this lower-intensity range separate from the ground-frame classifier.
+        return (25 <= r <= 90 and g <= r*.60 and b >= 115
+                and b-r >= 60 and b > r*1.7)
     def is_ground_fissure_accent_pixel(r,g,b):
         # Accent Dust uses more green relative to red and a higher blue channel.
         return (25 <= r <= 105 and g >= r*.36 and g <= 80 and b >= 145
@@ -521,6 +526,11 @@ def capture_test_world():
             or is_ground_fissure_pixel(142,127,155)
             or is_ground_fissure_pixel(134,44,150)
             or not is_ground_violet_dust_pixel(87,20,199)
+            or not is_ground_shaded_violet_dust_pixel(42,18,125)
+            or not is_ground_shaded_violet_dust_pixel(53,24,130)
+            or not is_ground_shaded_violet_dust_pixel(59,26,161)
+            or is_ground_shaded_violet_dust_pixel(42,30,125)
+            or is_ground_shaded_violet_dust_pixel(42,18,100)
             or is_ground_violet_dust_pixel(77,36,224)
             or is_ground_violet_dust_pixel(207,0,239)
             or not is_ground_fissure_accent_pixel(77,36,224)
@@ -672,21 +682,20 @@ def capture_test_world():
         }
 
     def ground_visibility_passes(metrics):
-        # Accept either the full Dust plume or a sparse edge-accent view. The
-        # latter is important on uneven grass: the ribbon can be clear while
-        # most motes are occluded, but a mesh-only frame is never sufficient.
+        # Accept either a dense base-Dust plume or a sparse bright edge accent.
+        # The ribbon still has to be visible in multiple tiles; particles alone
+        # and mesh-only frames are both insufficient.
         visible_mesh=(metrics["combinedPixels"]>=160 and metrics["combinedTiles"]>=6
                       and metrics["meshPixels"]>=24 and metrics["meshTiles"]>=2)
-        full_plume=(metrics["dustPixels"]>=30 and metrics["dustTiles"]>=2
-                    and metrics["accentPixels"]>=3 and metrics["accentTiles"]>=1
+        full_plume=(metrics["dustPixels"]>=96 and metrics["dustTiles"]>=3
                     and metrics["particlePixels"]>=96 and metrics["particleTiles"]>=3)
         edge_accent=(metrics["accentPixels"]>=3 and metrics["accentTiles"]>=1
                      and metrics["particlePixels"]>=8 and metrics["particleTiles"]>=1)
         return visible_mesh and (full_plume or edge_accent)
 
-    _ground_visibility_minimum = {
-        "dustPixels":30, "dustTiles":2,
-        "accentPixels":3, "accentTiles":1,
+    _ground_visibility_full_plume_no_accent = {
+        "dustPixels":96, "dustTiles":3,
+        "accentPixels":0, "accentTiles":0,
         "particlePixels":96, "particleTiles":3,
         "combinedPixels":160, "combinedTiles":6,
         "meshPixels":24, "meshTiles":2,
@@ -700,6 +709,11 @@ def capture_test_world():
         "combinedPixels":6186, "combinedTiles":27,
         "meshPixels":6176, "meshTiles":27,
     }
+    _ground_visibility_below_full_plume_floor = dict(_ground_visibility_full_plume_no_accent)
+    _ground_visibility_below_full_plume_floor["dustPixels"] = 95
+    _ground_visibility_below_full_plume_floor["dustTiles"] = 2
+    _ground_visibility_below_full_plume_floor["particlePixels"] = 95
+    _ground_visibility_below_full_plume_floor["particleTiles"] = 2
     _ground_visibility_below_edge_floor = dict(_ground_visibility_edge_only)
     _ground_visibility_below_edge_floor["particlePixels"] = 7
     _ground_visibility_below_edge_floor["particleTiles"] = 0
@@ -708,13 +722,14 @@ def capture_test_world():
     _ground_visibility_without_mesh = dict(_ground_visibility_edge_only)
     _ground_visibility_without_mesh["meshPixels"] = 23
     _ground_visibility_without_mesh["meshTiles"] = 1
-    if (not ground_visibility_passes(_ground_visibility_minimum)
+    if (not ground_visibility_passes(_ground_visibility_full_plume_no_accent)
             or not ground_visibility_passes(_ground_visibility_edge_only)
+            or ground_visibility_passes(_ground_visibility_below_full_plume_floor)
             or ground_visibility_passes(_ground_visibility_below_edge_floor)
             or ground_visibility_passes(_ground_visibility_without_accent_tile)
             or ground_visibility_passes(_ground_visibility_without_mesh)):
         raise RuntimeError("BLACK FREQUENCY ground fissure sparse visibility regression")
-    print("WORLD_CAPTURE: full-plume and edge-accent ground visibility profiles verified",flush=True)
+    print("WORLD_CAPTURE: full-Dust/no-accent and edge-accent ground visibility profiles verified",flush=True)
 
     def is_compact_restoration_dust_component(component_size,width,height):
         # Real Dust sprites in the captured beacon frame can form connected
@@ -745,6 +760,7 @@ def capture_test_world():
                 if r>150 and b>150 and g<100 and abs(r-b)<90:
                     legacy_magenta+=1
                 if (is_ground_violet_dust_pixel(r,g,b)
+                        or is_ground_shaded_violet_dust_pixel(r,g,b)
                         or is_ground_fissure_accent_pixel(r,g,b)):
                     violet_points.add((x,y))
         # Dust sprites form small clusters; connected ribbons from the sky
