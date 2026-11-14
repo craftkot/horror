@@ -19,6 +19,13 @@ def parse_fissure_particle_emission(log_text):
 def verify_restoration_particle_source():
     source_path=ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftController.java"
     source=source_path.read_text(encoding="utf-8")
+    fissure_start=source.find("private static FissureEmission emitSurfaceFissure(")
+    fissure_end=source.find("\n    private static",fissure_start+1)
+    fissure_emitter=source[fissure_start:fissure_end] if fissure_start>=0 and fissure_end>fissure_start else ""
+    if ("private static final BlockParticleOption FISSURE_OBSIDIAN_SHARD" not in source
+            or "level.sendParticles(FISSURE_OBSIDIAN_SHARD," not in fissure_emitter
+            or "new BlockParticleOption(" in fissure_emitter):
+        raise RuntimeError("BLACK FREQUENCY fissure shard particle option must be cached outside the per-pulse emitter")
     if "FISSURE_SHARD_SEGMENT_INTERVAL = FISSURE_SEGMENTS_PER_ARM" not in source:
         raise RuntimeError("BLACK FREQUENCY must emit one crying-obsidian shard at each fissure arm's outer tip")
     start=source.find("    private static void restore(")
@@ -93,6 +100,7 @@ def verify_restoration_particle_source():
             or "ANOMALY_VIOLET_ACCENT_DUST = RESTORE_VIOLET_ACCENT_DUST" not in source):
         raise RuntimeError("BLACK FREQUENCY gravity anomaly cues must reuse cached violet Dust")
     print("WORLD_CAPTURE: gravity anomaly cues use cached deep/bright violet Dust",flush=True)
+    print("WORLD_CAPTURE: fissure shard particle option is cached across pulses",flush=True)
     print("WORLD_CAPTURE: restoration uses smaller cached violet Dust, bounded halo and dark-purple UI",flush=True)
 
 verify_restoration_particle_source()
@@ -1550,6 +1558,9 @@ def capture_test_world():
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_LAYOUT_VERIFIED count=4 material=crying_obsidian perArm=1 outerTip=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: crying-obsidian shard layout self-check was not executed",flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_SHARD_OPTION_CACHE_VERIFIED cached=true" not in log_after:
+                print("WORLD_CAPTURE_FAIL: fissure shard particle option was not verified as cached",flush=True)
                 return False
             if not valid_fissure_particle_emission(fissure):
                 print("WORLD_CAPTURE_FAIL: deep-violet dust/accent composition or loaded sample count is invalid",
