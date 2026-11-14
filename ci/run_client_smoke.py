@@ -57,8 +57,12 @@ def verify_restoration_particle_source():
             or ("Blocks.CRYING_"+"OBSIDIAN.defaultBlockState()") in source
             or "new DustParticleOptions(" in fissure_emitter):
         raise RuntimeError("BLACK FREQUENCY fissure outer tips must use one cached compact violet Dust option")
-    if "FISSURE_OUTER_ACCENT_SEGMENT_INTERVAL = FISSURE_SEGMENTS_PER_ARM" not in source:
-        raise RuntimeError("BLACK FREQUENCY must keep one compact violet edge mote at each fissure arm's outer tip")
+    if ("private static boolean isOutermostValidFissureSample(int segment,int previousSegment)" not in source
+            or "if(isOutermostValidFissureSample(segment,edgeCandidateSegment))" not in fissure_emitter
+            or "if(hasEdgeCandidate)" not in fissure_emitter
+            or "edgeFallbackArms++" not in fissure_emitter
+            or "segment<FISSURE_SEGMENTS_PER_ARM" not in source):
+        raise RuntimeError("BLACK FREQUENCY must emit one compact edge mote at each arm's furthest valid sample")
     start=source.find("    private static void restore(")
     end=source.find("\n    @SubscribeEvent",start)
     if start<0 or end<0:
@@ -1648,10 +1652,12 @@ def capture_test_world():
                       fissure,flush=True)
                 return False
             edge_dust=re.search(
-                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_EMITTED count=([0-9]+) material=dust scale=0.5",
+                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_EMITTED count=([0-9]+) material=dust scale=0.5 fallbackArms=([0-9]+)",
                 log_after)
-            if not edge_dust or int(edge_dust.group(1))!=4 or int(edge_dust.group(1))!=fissure[3]:
-                print("WORLD_CAPTURE_FAIL: four compact outer-tip violet edge Dust motes were not emitted",
+            if (not edge_dust or int(edge_dust.group(1))!=4
+                    or int(edge_dust.group(1))!=fissure[3]
+                    or not 0<=int(edge_dust.group(2))<=4):
+                print("WORLD_CAPTURE_FAIL: one compact edge Dust mote per valid fissure arm was not emitted",
                       flush=True)
                 return False
             print("WORLD_CAPTURE: deep-violet base Dust and bright-violet accent Dust verified",fissure[0],flush=True)
