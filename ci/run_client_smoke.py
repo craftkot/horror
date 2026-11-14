@@ -1323,6 +1323,18 @@ def capture_test_world():
                 return False
             camera_source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
             camera_source=camera_source_path.read_text(encoding="utf-8",errors="replace")
+            ground_render_start=camera_source.find("public static void render(RenderLevelStageEvent event) {")
+            ground_render_end=camera_source.find("\n        private static",ground_render_start+1)
+            ground_render=(camera_source[ground_render_start:ground_render_end]
+                           if ground_render_start>=0 and ground_render_end>ground_render_start else "")
+            cursor_set=ground_render.find("SURFACE_CURSOR.set(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);")
+            border_check=ground_render.find("isWithinBounds(SURFACE_CURSOR)")
+            if ("private static final BlockPos.MutableBlockPos SURFACE_CURSOR=" not in camera_source
+                    or not ground_render or cursor_set<0 or border_check<cursor_set
+                    or "new BlockPos(" in ground_render):
+                print("WORLD_CAPTURE_FAIL: ground render anchor guard must reuse its render-thread cursor without per-frame BlockPos allocation",flush=True)
+                return False
+            print("WORLD_CAPTURE: ground render anchor guard reuses its mutable cursor; no per-frame BlockPos allocation",flush=True)
             if ("long cameraHorizontalDistanceSquared=horizontalDistanceSquared(" not in camera_source
                     or "cameraBlockX,cameraBlockZ,worldAnchorX,worldAnchorZ);" not in camera_source
                     or "int surfaceReferenceY=cameraBlockY;" not in camera_source
