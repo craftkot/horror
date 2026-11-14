@@ -23,10 +23,10 @@ def verify_restoration_particle_source():
     fissure_end=source.find("\n    private static",fissure_start+1)
     fissure_emitter=source[fissure_start:fissure_end] if fissure_start>=0 and fissure_end>fissure_start else ""
     ground_sampler_start=source.find("private static int findFissureGroundY(")
-    ground_sampler_end=source.find("\\n    /**",ground_sampler_start+1)
+    ground_sampler_end=source.find("\n    /**",ground_sampler_start+1)
     ground_sampler=source[ground_sampler_start:ground_sampler_end] if ground_sampler_start>=0 and ground_sampler_end>ground_sampler_start else ""
     particle_height_start=source.find("private static double fissureParticleY(")
-    particle_height_end=source.find("\\n    private static void verifyFissureSurfaceParticleHeight",particle_height_start)
+    particle_height_end=source.find("\n    private static void verifyFissureSurfaceParticleHeight",particle_height_start)
     particle_height=source[particle_height_start:particle_height_end] if particle_height_start>=0 and particle_height_end>particle_height_start else ""
     if ("BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();" not in fissure_emitter
             or "findFissureGroundY(level,blockX,blockZ,cursor)" not in fissure_emitter
