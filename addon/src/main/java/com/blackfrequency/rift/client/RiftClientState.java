@@ -122,9 +122,9 @@ public final class RiftClientState {
         private static final int MIN_RENDERED_ARMS=2;
         // Do not turn a sharp cliff into a vertical translucent wall.
         private static final double MAX_GROUND_SEGMENT_Y_DELTA=1.25D;
-        // Slightly widen the ground seam so it remains legible through partial canopy gaps.
-        private static final double GROUND_GLOW_WIDTH_SCALE=6.8D;
-        private static final double GROUND_CORE_WIDTH_SCALE=1.15D;
+        // Broaden the violet halo and dark core without adding draw calls or vertices.
+        private static final double GROUND_GLOW_WIDTH_SCALE=7.6D;
+        private static final double GROUND_CORE_WIDTH_SCALE=1.22D;
         // The render pulse is clamped to this interval for every wave/flicker phase.
         private static final double GROUND_MIN_HALF_WIDTH=.045D;
         private static final double GROUND_BASE_HALF_WIDTH=.048D;
@@ -241,8 +241,8 @@ public final class RiftClientState {
                 double maximumGlowHalfWidth=maximumHalfWidth*GROUND_GLOW_WIDTH_SCALE;
                 double maximumCoreHalfWidth=maximumHalfWidth*GROUND_CORE_WIDTH_SCALE;
                 double maximumEdgeInnerHalfWidth=maximumHalfWidth*1.9D-GROUND_EDGE_HALF_WIDTH;
-                if(Math.abs(GROUND_GLOW_WIDTH_SCALE-6.8D)>1.0E-9D
-                    || Math.abs(GROUND_CORE_WIDTH_SCALE-1.15D)>1.0E-9D
+                if(Math.abs(GROUND_GLOW_WIDTH_SCALE-7.6D)>1.0E-9D
+                    || Math.abs(GROUND_CORE_WIDTH_SCALE-1.22D)>1.0E-9D
                     || Math.abs(GROUND_EDGE_HALF_WIDTH-.029D)>1.0E-9D
                     || Math.abs(maximumHalfWidth-.068D)>1.0E-9D
                     || !Float.isFinite(GROUND_EDGE_RED) || !Float.isFinite(GROUND_EDGE_GREEN)

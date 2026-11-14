@@ -1393,9 +1393,13 @@ def capture_test_world():
                     or "double tail=Math.min(1.0,(SEGMENTS_PER_ARM-boundedSample)/3.0);" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: ground fissure endpoint taper is not symmetric or bounded",flush=True)
                 return False
-            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=6.8 coreScale=1.15 edgeHalfWidth=0.029 pulseMin=0.045 pulseMax=0.068 coreInsideEdgeBand=true"
+            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=7.6 coreScale=1.22 edgeHalfWidth=0.029 pulseMin=0.045 pulseMax=0.068 coreInsideEdgeBand=true"
             if visual_profile_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: widened ground fissure visual profile self-check was not executed",flush=True)
+                return False
+            if ("GROUND_GLOW_WIDTH_SCALE=7.6D;" not in camera_source
+                    or "GROUND_CORE_WIDTH_SCALE=1.22D;" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: wider ground fissure halo/core constants are not active",flush=True)
                 return False
             edge_palette_marker="BLACK_FREQUENCY_GROUND_MESH_EDGE_PALETTE_VERIFIED red=0.46 green=0.18 blue=0.82"
             if edge_palette_marker not in final_log:
