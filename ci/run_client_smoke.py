@@ -1324,7 +1324,7 @@ def capture_test_world():
             camera_source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
             camera_source=camera_source_path.read_text(encoding="utf-8",errors="replace")
             ground_render_start=camera_source.find("public static void render(RenderLevelStageEvent event) {")
-            ground_render_end=camera_source.find("\n        private static",ground_render_start+1)
+            ground_render_end=camera_source.find("\n    }\n",ground_render_start+1)
             ground_render=(camera_source[ground_render_start:ground_render_end]
                            if ground_render_start>=0 and ground_render_end>ground_render_start else "")
             cursor_set=ground_render.find("SURFACE_CURSOR.set(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);")
