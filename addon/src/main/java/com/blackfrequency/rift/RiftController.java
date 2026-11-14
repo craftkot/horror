@@ -2631,7 +2631,7 @@ public final class RiftController {
                 // height reset that made the entire ring jump every 80 ticks.
                 // Opposite angular travel for the two alternating strands; the old
                 // shared phase made both wisps climb and descend in lockstep.
-                double phase=(cadenceTick*.045D*(k%2==0 ? 1.0D : -1.0D)
+                double phase=(animationTick*.045D*(k%2==0 ? 1.0D : -1.0D)
                     + k*Math.PI*.25D)%(Math.PI*2.0D);
                 double y=beaconY+1.1D*(1.0D+Math.sin(phase));
                 // Counter-rotating strands alternate cached deep and bright violet Dust.
