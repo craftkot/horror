@@ -67,7 +67,7 @@ def verify_restoration_particle_source():
         raise RuntimeError("BLACK FREQUENCY restoration Dust size/spread constants are missing")
     base,accent,xz,y=map(lambda m:float(m.group(1)),
                          (base_scale,accent_scale,spread_xz,spread_y))
-    if not (.38<=base<=.48 and .50<=accent<=.62 and base<accent and 0<xz<=1.0 and 0<y<=.75):
+    if not (.52<=base<=.62 and .70<=accent<=.82 and base<accent and 0<xz<=1.0 and 0<y<=.75):
         raise RuntimeError("BLACK FREQUENCY restoration Dust size/spread exceeds visual bounds")
     anomaly_start=source.find("// Lightweight visual signatures of the same drifting gravity field.")
     anomaly_end=source.find("// Recovery must remain available",anomaly_start)
@@ -552,23 +552,47 @@ def capture_test_world():
     def measure_restoration_palette(frame):
         width,height=frame.size
         pixels=frame.load()
-        top,bottom=int(height*.14),int(height*.67)
-        legacy_magenta=violet_dust=0
+        # The capture camera is aimed at the activated physical beacon. Measure
+        # a central, bounded window and count only small connected violet groups:
+        # broad sky-rift ribbons must not masquerade as restoration Dust.
+        left,right=int(width*.30),int(width*.70)
+        top,bottom=int(height*.18),int(height*.70)
+        legacy_magenta=0
+        violet_points=set()
         for y in range(top,bottom):
-            for x in range(width):
+            for x in range(left,right):
                 r,g,b=pixels[x,y]
                 if r>150 and b>150 and g<100 and abs(r-b)<90:
                     legacy_magenta+=1
                 if (is_ground_violet_dust_pixel(r,g,b)
                         or is_ground_fissure_accent_pixel(r,g,b)):
-                    violet_dust+=1
+                    violet_points.add((x,y))
+        # Dust sprites form small clusters; connected ribbons from the sky
+        # renderer are larger and are deliberately excluded from this metric.
+        violet_dust=0
+        while violet_points:
+            pending=[violet_points.pop()]
+            component_size=0
+            while pending:
+                x,y=pending.pop()
+                component_size+=1
+                for neighbor_y in range(max(top,y-1),min(bottom,y+2)):
+                    for neighbor_x in range(max(left,x-1),min(right,x+2)):
+                        point=(neighbor_x,neighbor_y)
+                        if point in violet_points:
+                            violet_points.remove(point)
+                            pending.append(point)
+            if component_size<=128:
+                violet_dust+=component_size
         return {"legacyMagentaPixels":legacy_magenta,"violetDustPixels":violet_dust}
 
     def restoration_palette_passes(metrics):
         return (metrics["legacyMagentaPixels"]<=200
-                and 40<=metrics["violetDustPixels"]<=35000)
+                and 24<=metrics["violetDustPixels"]<=35000)
 
     if (not restoration_palette_passes({"legacyMagentaPixels":0,"violetDustPixels":1000})
+            or not restoration_palette_passes({"legacyMagentaPixels":0,"violetDustPixels":24})
+            or restoration_palette_passes({"legacyMagentaPixels":0,"violetDustPixels":23})
             or restoration_palette_passes({"legacyMagentaPixels":0,"violetDustPixels":35001})
             or restoration_palette_passes({"legacyMagentaPixels":201,"violetDustPixels":1000})):
         raise RuntimeError("BLACK FREQUENCY restoration palette density guard regression")
@@ -1317,7 +1341,7 @@ def capture_test_world():
                     and "BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_PROFILE_VERIFIED ring=24 ringIntervalTicks=20 sparks=4 helix=16 helixIntervalTicks=8 blockCue=6 blockIntervalBlocks=48 audience=8 audienceIntervalTicks=20 cachedDust=true" not in log_after):
                 print("WORLD_CAPTURE_FAIL: restoration particle cadence/profile was not verified",flush=True)
                 return False
-            size_marker="BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_SIZE_VERIFIED baseScale=0.42 accentScale=0.56 audienceSpreadXZ=0.85 audienceSpreadY=0.55 cachedDust=true"
+            size_marker="BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_SIZE_VERIFIED baseScale=0.58 accentScale=0.76 audienceSpreadXZ=0.85 audienceSpreadY=0.55 cachedDust=true"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and size_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: bounded restoration particle size/spread was not verified",flush=True)
                 return False

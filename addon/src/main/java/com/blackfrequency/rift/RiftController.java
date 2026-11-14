@@ -73,8 +73,8 @@ public final class RiftController {
     private static final int RESTORE_AUDIENCE_PARTICLE_COUNT = 8;
     // Restoration motes are deliberately smaller than the ground-fissure Dust.
     // Reuse these options so recovery never allocates a particle option per pulse.
-    private static final float RESTORE_VIOLET_DUST_SCALE=.42F;
-    private static final float RESTORE_VIOLET_ACCENT_DUST_SCALE=.56F;
+    private static final float RESTORE_VIOLET_DUST_SCALE=.58F;
+    private static final float RESTORE_VIOLET_ACCENT_DUST_SCALE=.76F;
     private static final DustParticleOptions RESTORE_VIOLET_DUST =
         new DustParticleOptions(new Vector3f(.34F,.08F,.78F),RESTORE_VIOLET_DUST_SCALE);
     private static final DustParticleOptions RESTORE_VIOLET_ACCENT_DUST =
@@ -1719,11 +1719,11 @@ public final class RiftController {
             && hasDustColor(FISSURE_VIOLET_ACCENT_DUST,.30F,.14F,.88F)
             && hasDustColor(RESTORE_VIOLET_DUST,.34F,.08F,.78F)
             && hasDustColor(RESTORE_VIOLET_ACCENT_DUST,.30F,.14F,.88F);
-        boolean boundedRestoreDust=RESTORE_VIOLET_DUST_SCALE>=.38F
-            && RESTORE_VIOLET_DUST_SCALE<=.48F
+        boolean boundedRestoreDust=RESTORE_VIOLET_DUST_SCALE>=.52F
+            && RESTORE_VIOLET_DUST_SCALE<=.62F
             && RESTORE_VIOLET_DUST_SCALE<RESTORE_VIOLET_ACCENT_DUST_SCALE
-            && RESTORE_VIOLET_ACCENT_DUST_SCALE>=.50F
-            && RESTORE_VIOLET_ACCENT_DUST_SCALE<=.62F
+            && RESTORE_VIOLET_ACCENT_DUST_SCALE>=.70F
+            && RESTORE_VIOLET_ACCENT_DUST_SCALE<=.82F
             && RESTORE_AUDIENCE_SPREAD_XZ>0.0D && RESTORE_AUDIENCE_SPREAD_XZ<=1.0D
             && RESTORE_AUDIENCE_SPREAD_Y>0.0D && RESTORE_AUDIENCE_SPREAD_Y<=.75D;
         boolean playerScanInitial=shouldScanRestorePlayers(1,true);
