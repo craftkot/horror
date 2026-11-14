@@ -622,6 +622,9 @@ public final class RiftController {
         boolean ciSparseRecoveryEligibilityLogged;
         boolean ciSurfaceFissureLogged;
         final List<CompoundTag> snapshots = new ArrayList<>();
+        // Reuse the transient audience/menu accumulator across restoration scans.
+        // It is intentionally not serialized; each SavedData instance owns its own scratch state.
+        final RestorePlayerScanState restorePlayerScan = new RestorePlayerScanState();
         // Reuse the small per-tick retry set during recovery instead of allocating
         // a new HashSet on every server tick. It is transient and never persisted.
         final java.util.Set<Long> restoreFailedWrites = new java.util.HashSet<>();
@@ -1726,6 +1729,13 @@ public final class RiftController {
         private int playersVisited;
         private int beaconMenusClosed;
 
+        private void reset() {
+            hasRingViewer=false;
+            hasStabilizationViewer=false;
+            playersVisited=0;
+            beaconMenusClosed=0;
+        }
+
         private void observe(boolean beaconMenuClosed,boolean eligible,
                 boolean ringViewer,boolean stabilizationViewer) {
             playersVisited++;
@@ -1749,7 +1759,8 @@ public final class RiftController {
             throw new IllegalStateException("CI restore player scan cadence count regression: "+scanPasses);
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_ALLOCATION_CADENCE_VERIFIED ticks={} intervalTicks={} scanPasses={}",
             RESTORE_GRAVITY_FADE_TICKS,RESTORE_PLAYER_SCAN_INTERVAL_TICKS,scanPasses);
-        RestorePlayerScanState scan=new RestorePlayerScanState();
+        State scanOwner=new State();
+        RestorePlayerScanState scan=scanOwner.restorePlayerScan;
         // The first player satisfies the ring audience. A later player still
         // has a beacon menu and is the stabilization viewer; both must be seen.
         scan.observe(false,true,true,false);
@@ -1758,6 +1769,18 @@ public final class RiftController {
             || !scan.hasRingViewer || !scan.hasStabilizationViewer)
             throw new IllegalStateException("CI restore player scan stopped before closing later beacon menus");
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_FULL_PASS_VERIFIED fixturePlayers=2 menusAfterViewer=1 fullPass=true");
+        RestorePlayerScanState reused=scanOwner.restorePlayerScan;
+        reused.reset();
+        if(reused!=scan || scanOwner.restorePlayerScan!=scan
+            || scan.playersVisited!=0 || scan.beaconMenusClosed!=0
+            || scan.hasRingViewer || scan.hasStabilizationViewer)
+            throw new IllegalStateException("CI restore player scan reuse/reset regression");
+        scan.observe(false,true,true,false);
+        scan.observe(true,true,false,true);
+        if(scan.playersVisited!=2 || scan.beaconMenusClosed!=1
+            || !scan.hasRingViewer || !scan.hasStabilizationViewer)
+            throw new IllegalStateException("CI restore player scan was not reusable after reset");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_REUSE_VERIFIED sameInstance=true staleStateCleared=true");
     }
 
     private static void verifyRestoreCadenceSaturationFallback() {
@@ -2420,7 +2443,8 @@ public final class RiftController {
         boolean hasRingViewer=false;
         boolean hasStabilizationViewer=false;
         if(shouldScanRestorePlayers(cadenceTick,beaconPresent)) {
-            RestorePlayerScanState playerScan = new RestorePlayerScanState();
+            RestorePlayerScanState playerScan=s.restorePlayerScan;
+            playerScan.reset();
             boolean stabilizationDue=shouldEmitRestoreAudiencePulse(cadenceTick);
             // Do not stop after finding a viewer: a later player may still have
             // the beacon's vanilla menu open and must be closed in this same pass.
