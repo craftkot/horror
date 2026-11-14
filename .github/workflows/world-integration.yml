@@ -62,7 +62,8 @@ jobs:
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_LAYOUT_VERIFIED count=4 color=violet perArm=1 outerTip=true' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_VERIFIED red=0.42 green=0.18 blue=0.92 scale=0.62' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_CACHE_VERIFIED cached=true scale=0.62' world-test.log
-          grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_EMITTED count=4 material=dust scale=0.62' world-test.log
+          # Actual particle delivery requires a player; the headless server has none.
+          # Client Smoke asserts SURFACE_FISSURE_EDGE_DUST_EMITTED against a real client.
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=52 accentDust=8 violetDust=40 edgeDust=4' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_ACCENT_DUST_VERIFIED red=0.3 green=0.14 blue=0.88 scale=1.35' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_VIOLET_DUST_VERIFIED red=0.34 green=0.08 blue=0.78 scale=1.15' world-test.log
