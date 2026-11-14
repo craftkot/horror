@@ -24,6 +24,9 @@ def verify_restoration_particle_source():
     fissure_emitter=source[fissure_start:fissure_end] if fissure_start>=0 and fissure_end>fissure_start else ""
     if ("private static final DustParticleOptions FISSURE_VIOLET_EDGE_DUST" not in source
             or "level.sendParticles(FISSURE_VIOLET_EDGE_DUST," not in fissure_emitter
+            or "private static final DustParticleOptions SURFACE_FISSURE_ACCENT_DUST" not in source
+            or "level.sendParticles(SURFACE_FISSURE_ACCENT_DUST," not in fissure_emitter
+            or "level.sendParticles(FISSURE_VIOLET_ACCENT_DUST," in fissure_emitter
             or ("FISSURE_"+"OBSIDIAN_SHARD") in source
             or ("Blocks.CRYING_"+"OBSIDIAN.defaultBlockState()") in source
             or "new DustParticleOptions(" in fissure_emitter):
@@ -103,6 +106,7 @@ def verify_restoration_particle_source():
         raise RuntimeError("BLACK FREQUENCY gravity anomaly cues must reuse cached violet Dust")
     print("WORLD_CAPTURE: gravity anomaly cues use cached deep/bright violet Dust",flush=True)
     print("WORLD_CAPTURE: compact violet fissure edge Dust is cached across pulses",flush=True)
+    print("WORLD_CAPTURE: surface fissure uses a smaller cached accent than recovery cues",flush=True)
     print("WORLD_CAPTURE: restoration uses smaller cached violet Dust, bounded halo and dark-purple UI",flush=True)
 
 verify_restoration_particle_source()
@@ -1568,7 +1572,7 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=52 accentDust=8 violetDust=40 edgeDust=4" not in log_after:
                 print("WORLD_CAPTURE_FAIL: violet-dust fissure particle budget self-check was not executed",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_ACCENT_DUST_VERIFIED red=0.3 green=0.14 blue=0.88 scale=1.05" not in log_after:
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_ACCENT_DUST_VERIFIED red=0.3 green=0.14 blue=0.88 scale=0.85" not in log_after:
                 print("WORLD_CAPTURE_FAIL: bright-violet accent DustParticleOptions was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_VIOLET_DUST_VERIFIED red=0.34 green=0.08 blue=0.78 scale=0.85" not in log_after:

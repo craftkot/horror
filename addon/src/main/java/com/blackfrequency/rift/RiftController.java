@@ -102,6 +102,9 @@ public final class RiftController {
     // Reused for every accent sample; no per-particle option allocation.
     private static final DustParticleOptions FISSURE_VIOLET_ACCENT_DUST =
         new DustParticleOptions(new Vector3f(.30F,.14F,.88F),1.05F);
+    // Terrain accents stay compact; the larger cached accent remains reserved for recovery cues.
+    private static final DustParticleOptions SURFACE_FISSURE_ACCENT_DUST =
+        new DustParticleOptions(new Vector3f(.30F,.14F,.88F),.85F);
     // Keep one compact violet fleck at each arm's outer tip; block-textured chips overwhelm the camera.
     private static final int FISSURE_OUTER_ACCENT_SEGMENT_INTERVAL = FISSURE_SEGMENTS_PER_ARM;
     // A small cached Dust accent replaces the oversized crying-obsidian block particle.
@@ -887,7 +890,7 @@ public final class RiftController {
                         px,particleY+.025D+pulse,pz,1,.025D,.012D,.025D,.004D);
                     edgeDustMotes++;
                 } else if(isAccentFissureDustSegment(segment)) {
-                    level.sendParticles(FISSURE_VIOLET_ACCENT_DUST,
+                    level.sendParticles(SURFACE_FISSURE_ACCENT_DUST,
                         px,particleY+pulse,pz,FISSURE_MOTES_PER_SAMPLE,.045,.025,.045,.006);
                     accentDustMotes+=FISSURE_MOTES_PER_SAMPLE;
                 } else {
@@ -1166,14 +1169,16 @@ public final class RiftController {
             throw new IllegalStateException("CI fissure violet dust color/scale regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_VIOLET_DUST_VERIFIED red={} green={} blue={} scale={}",
             dustColor.x(),dustColor.y(),dustColor.z(),dustScale);
-        Vector3f accentColor=FISSURE_VIOLET_ACCENT_DUST.getColor();
-        float accentScale=FISSURE_VIOLET_ACCENT_DUST.getScale();
+        Vector3f accentColor=SURFACE_FISSURE_ACCENT_DUST.getColor();
+        float accentScale=SURFACE_FISSURE_ACCENT_DUST.getScale();
         if(!Float.isFinite(accentColor.x()) || !Float.isFinite(accentColor.y())
             || !Float.isFinite(accentColor.z())
             || Math.abs(accentColor.x()-.30F)>1.0E-6F
             || Math.abs(accentColor.y()-.14F)>1.0E-6F
             || Math.abs(accentColor.z()-.88F)>1.0E-6F
-            || !Float.isFinite(accentScale) || Math.abs(accentScale-1.05F)>1.0E-6F
+            || !Float.isFinite(accentScale) || Math.abs(accentScale-.85F)>1.0E-6F
+            || SURFACE_FISSURE_ACCENT_DUST==FISSURE_VIOLET_ACCENT_DUST
+            || accentScale>=FISSURE_VIOLET_ACCENT_DUST.getScale()
             || accentColor.z()<=accentColor.x()*2.0F)
             throw new IllegalStateException("CI fissure violet accent Dust color/scale regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_ACCENT_DUST_VERIFIED red={} green={} blue={} scale={}",
@@ -1813,6 +1818,7 @@ public final class RiftController {
             && RESTORE_AUDIENCE_PARTICLE_COUNT==8;
         boolean cachedPalette=hasDustColor(FISSURE_VIOLET_DUST,.34F,.08F,.78F)
             && hasDustColor(FISSURE_VIOLET_ACCENT_DUST,.30F,.14F,.88F)
+            && Math.abs(FISSURE_VIOLET_ACCENT_DUST.getScale()-1.05F)<1.0E-6F
             && hasDustColor(RESTORE_VIOLET_DUST,.34F,.08F,.78F)
             && hasDustColor(RESTORE_VIOLET_ACCENT_DUST,.30F,.14F,.88F);
         boolean boundedRestoreDust=RESTORE_VIOLET_DUST_SCALE>=.52F

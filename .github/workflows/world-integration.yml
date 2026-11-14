@@ -65,7 +65,7 @@ jobs:
           # Actual particle delivery requires a player; the headless server has none.
           # Client Smoke asserts SURFACE_FISSURE_EDGE_DUST_EMITTED against a real client.
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=52 accentDust=8 violetDust=40 edgeDust=4' world-test.log
-          grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_ACCENT_DUST_VERIFIED red=0.3 green=0.14 blue=0.88 scale=1.05' world-test.log
+          grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_ACCENT_DUST_VERIFIED red=0.3 green=0.14 blue=0.88 scale=0.85' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_VIOLET_DUST_VERIFIED red=0.34 green=0.08 blue=0.78 scale=0.85' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_DUST_PULSE_PROFILE_VERIFIED min=0.65 low=0.75 base=0.85 high=0.95 max=1.05 variants=5' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=nearest ties=stable invalidRejected=true minHorizontal=2.25 maxHorizontal=6.0' world-test.log
