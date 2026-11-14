@@ -656,6 +656,19 @@ def capture_test_world():
         raise RuntimeError("BLACK FREQUENCY ground fissure sparse visibility regression")
     print("WORLD_CAPTURE: full-plume and edge-accent ground visibility profiles verified",flush=True)
 
+    def is_compact_restoration_dust_component(component_size,width,height):
+        # Real Dust sprites in the captured beacon frame can form connected
+        # 300px clusters. Reject the larger 41x51 sky-rift ribbon by shape,
+        # not by an arbitrary 128-pixel cutoff.
+        return (24<=component_size<=512 and 8<=width<=32 and 8<=height<=32)
+
+    if (not is_compact_restoration_dust_component(300,20,25)
+            or is_compact_restoration_dust_component(1130,41,51)
+            or is_compact_restoration_dust_component(300,33,24)
+            or is_compact_restoration_dust_component(23,20,25)
+            or is_compact_restoration_dust_component(513,26,25)):
+        raise RuntimeError("BLACK FREQUENCY restoration Dust component classifier regression")
+
     def measure_restoration_palette(frame):
         width,height=frame.size
         pixels=frame.load()
@@ -680,16 +693,25 @@ def capture_test_world():
         while violet_points:
             pending=[violet_points.pop()]
             component_size=0
+            min_x=min_y=10**9
+            max_x=max_y=-(10**9)
             while pending:
                 x,y=pending.pop()
                 component_size+=1
+                min_x=min(min_x,x)
+                min_y=min(min_y,y)
+                max_x=max(max_x,x)
+                max_y=max(max_y,y)
                 for neighbor_y in range(max(top,y-1),min(bottom,y+2)):
                     for neighbor_x in range(max(left,x-1),min(right,x+2)):
                         point=(neighbor_x,neighbor_y)
                         if point in violet_points:
                             violet_points.remove(point)
                             pending.append(point)
-            if component_size<=128:
+            component_width=max_x-min_x+1
+            component_height=max_y-min_y+1
+            if is_compact_restoration_dust_component(
+                    component_size,component_width,component_height):
                 violet_dust+=component_size
         return {"legacyMagentaPixels":legacy_magenta,"violetDustPixels":violet_dust}
 
