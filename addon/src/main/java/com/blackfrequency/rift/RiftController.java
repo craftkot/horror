@@ -1022,9 +1022,10 @@ public final class RiftController {
             net.minecraft.world.phys.Vec3.atCenterOf(beacon),
             net.minecraft.world.level.ClipContext.Block.OUTLINE,
             net.minecraft.world.level.ClipContext.Fluid.NONE,player));
+        // Level.clip already returns a BlockHitResult in Minecraft 1.20.1.
+        // A MISS is represented by its hit type, so no redundant pattern test is needed.
         return hit.getType()==net.minecraft.world.phys.HitResult.Type.BLOCK
-            && hit instanceof net.minecraft.world.phys.BlockHitResult blockHit
-            && blockHit.getBlockPos().equals(beacon);
+            && hit.getBlockPos().equals(beacon);
     }
 
     /**
