@@ -775,10 +775,11 @@ public final class RiftController {
     }
 
     // A no-leaves heightmap can still stop on a tree trunk or a village roof.
-    // Walk down to terrain instead of treating stairs, slabs, walls or other
-    // structural surfaces as the ground fracture plane.
+    // Block entities are fixtures, not terrain: never place the fissure ribbon
+    // on top of a chest, furnace, beacon or another stateful block.
     private static boolean isFissureGroundSupport(BlockState state) {
         return state.blocksMotion()
+            && !state.hasBlockEntity()
             && !state.is(net.minecraft.tags.BlockTags.LOGS)
             && !state.is(net.minecraft.tags.BlockTags.LEAVES)
             && !state.is(net.minecraft.tags.BlockTags.PLANKS)
@@ -791,12 +792,18 @@ public final class RiftController {
             && !state.is(net.minecraft.tags.BlockTags.TRAPDOORS);
     }
 
+    private static boolean isFissureSurfaceAvailable(BlockState state) {
+        return !state.hasBlockEntity();
+    }
+
     private static int findFissureGroundY(ServerLevel level,int x,int z) {
         if(!level.hasChunk(x>>4,z>>4)) return Integer.MIN_VALUE;
         int y=level.getHeight(
             net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,x,z);
         int min=level.getMinBuildHeight();
         for(int depth=0;depth<32 && y>min+1;depth++,y--) {
+            BlockState surface=level.getBlockState(new BlockPos(x,y,z));
+            if(!isFissureSurfaceAvailable(surface)) return Integer.MIN_VALUE;
             if(isFissureGroundSupport(level.getBlockState(new BlockPos(x,y-1,z)))) return y;
         }
         return Integer.MIN_VALUE;
@@ -1204,10 +1211,18 @@ public final class RiftController {
             || isFissureGroundSupport(Blocks.OAK_FENCE_GATE.defaultBlockState())
             || isFissureGroundSupport(Blocks.OAK_DOOR.defaultBlockState())
             || isFissureGroundSupport(Blocks.OAK_TRAPDOOR.defaultBlockState())
+            || isFissureGroundSupport(Blocks.CHEST.defaultBlockState())
+            || isFissureGroundSupport(Blocks.FURNACE.defaultBlockState())
+            || isFissureGroundSupport(Blocks.BEACON.defaultBlockState())
+            || !isFissureSurfaceAvailable(Blocks.CHEST.defaultBlockState())
+            || !isFissureSurfaceAvailable(Blocks.FURNACE.defaultBlockState())
+            || !isFissureSurfaceAvailable(Blocks.BEACON.defaultBlockState())
+            || !isFissureSurfaceAvailable(Blocks.AIR.defaultBlockState())
             || !isFissureGroundSupport(Blocks.STONE.defaultBlockState())
             || !isFissureGroundSupport(Blocks.DIRT.defaultBlockState()))
             throw new IllegalStateException("CI fissure terrain/structure filter regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_STRUCTURAL_SUPPORT_FILTER_VERIFIED");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_BLOCK_ENTITY_FILTER_VERIFIED support=true surface=true");
         verifyFissureSurfaceParticleHeight();
         verifyFissureSamplingDensity();
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_GROUND_FILTER_VERIFIED");
