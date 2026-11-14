@@ -799,12 +799,25 @@ def capture_test_world():
         return (metrics["legacyMagentaPixels"]<=200
                 and 24<=metrics["violetDustPixels"]<=35000)
 
-    if (not restoration_palette_passes({"legacyMagentaPixels":0,"violetDustPixels":1000})
+    def restoration_palette_evidence_passes(active_metrics,finished_metrics):
+        # The active frame can be occluded by the disposable safe pad or nearby
+        # village foliage. The completion frame is captured from the same player
+        # view after the bounded recovery pulses have had time to render.
+        # Require real violet Dust in at least one frame; never accept magenta-only.
+        return (restoration_palette_passes(active_metrics)
+                or restoration_palette_passes(finished_metrics))
+
+    _palette_valid={"legacyMagentaPixels":0,"violetDustPixels":1000}
+    _palette_missing={"legacyMagentaPixels":0,"violetDustPixels":0}
+    if (not restoration_palette_passes(_palette_valid)
             or not restoration_palette_passes({"legacyMagentaPixels":0,"violetDustPixels":24})
             or restoration_palette_passes({"legacyMagentaPixels":0,"violetDustPixels":23})
             or restoration_palette_passes({"legacyMagentaPixels":0,"violetDustPixels":35001})
-            or restoration_palette_passes({"legacyMagentaPixels":201,"violetDustPixels":1000})):
-        raise RuntimeError("BLACK FREQUENCY restoration palette density guard regression")
+            or restoration_palette_passes({"legacyMagentaPixels":201,"violetDustPixels":1000})
+            or not restoration_palette_evidence_passes(_palette_valid,_palette_missing)
+            or not restoration_palette_evidence_passes(_palette_missing,_palette_valid)
+            or restoration_palette_evidence_passes(_palette_missing,_palette_missing)):
+        raise RuntimeError("BLACK FREQUENCY restoration palette density/evidence guard regression")
 
     def verify_sky_pixels(name, region, minimum, max_green=None):
         from PIL import Image
@@ -1582,15 +1595,22 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: restoration finished without an active gameplay screenshot",flush=True)
                     return False
                 restoration_path=shots/"beacon-restoration-active.png"
+                finished_restoration_path=shots/"beacon-restoration-finished.png"
                 from PIL import Image
                 with Image.open(restoration_path) as source:
-                    restoration_metrics=measure_restoration_palette(source.convert("RGB"))
-                if not restoration_palette_passes(restoration_metrics):
-                    print("WORLD_CAPTURE_FAIL: restoration particle palette is still magenta or missing violet Dust",
-                          restoration_metrics,flush=True)
+                    active_restoration_metrics=measure_restoration_palette(source.convert("RGB"))
+                with Image.open(finished_restoration_path) as source:
+                    finished_restoration_metrics=measure_restoration_palette(source.convert("RGB"))
+                if not restoration_palette_evidence_passes(
+                        active_restoration_metrics,finished_restoration_metrics):
+                    print("WORLD_CAPTURE_FAIL: neither active nor completion frame shows bounded violet restoration Dust",
+                          {"active":active_restoration_metrics,"finished":finished_restoration_metrics},flush=True)
                     return False
+                palette_frame=("active" if restoration_palette_passes(active_restoration_metrics)
+                               else "finished")
                 print("WORLD_CAPTURE: restoration violet Dust palette verified",
-                      restoration_metrics,flush=True)
+                      {"capture":palette_frame,"active":active_restoration_metrics,
+                       "finished":finished_restoration_metrics},flush=True)
                 if not terrain_shot:
                     print("WORLD_CAPTURE_FAIL: no player-visible ground fissure was captured",flush=True)
                     return False
