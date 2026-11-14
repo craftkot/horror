@@ -1652,6 +1652,11 @@ public final class RiftController {
         return (int)Math.floorMod(gameTime,(long)RESTORE_CADENCE_PERIOD_TICKS)+1;
     }
 
+    // Keep vortex rotation continuous even while the bounded cadence phase wraps every 40 ticks.
+    private static long restorationAnimationTick(int restoreTicks,long gameTime) {
+        return restoreTicks<Integer.MAX_VALUE ? Math.max(0L,(long)restoreTicks) : Math.max(0L,gameTime);
+    }
+
     // Accumulate viewer state without short-circuiting the real player iteration:
     // every player must be visited because menu closure is a side effect of this pass.
     private static final class RestorePlayerScanState {
@@ -1697,6 +1702,9 @@ public final class RiftController {
     private static void verifyRestoreCadenceSaturationFallback() {
         boolean regularClock=restorationCadenceTick(23,7L)==23;
         boolean negativeClock=restorationCadenceTick(-1,7L)==0;
+        boolean animationClockContinuous=restorationAnimationTick(Integer.MAX_VALUE,39L)==39L
+            && restorationAnimationTick(Integer.MAX_VALUE,40L)==40L
+            && restorationAnimationTick(23,7L)==23L;
         int scans=0,pulses=0,helix=0,overlays=0,checkpoints=0;
         for(long gameTick=0;gameTick<RESTORE_CADENCE_PERIOD_TICKS;gameTick++) {
             int cadence=restorationCadenceTick(Integer.MAX_VALUE,gameTick);
@@ -1714,11 +1722,11 @@ public final class RiftController {
             && RESTORE_CADENCE_PERIOD_TICKS%RESTORE_RING_INTERVAL_TICKS==0
             && RESTORE_CADENCE_PERIOD_TICKS%10==0
             && RESTORE_CADENCE_PERIOD_TICKS%40==0;
-        if(!(regularClock && negativeClock && commonPeriod
+        if(!(regularClock && negativeClock && animationClockContinuous && commonPeriod
             && scans==11 && pulses==3 && helix==5 && overlays==4 && checkpoints==1))
             throw new IllegalStateException("CI saturated restoration cadence fallback regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_CADENCE_SATURATION_FALLBACK_VERIFIED periodTicks={} scans={} pulses={} helix={} overlays={} checkpoints={}",
-            RESTORE_CADENCE_PERIOD_TICKS,scans,pulses,helix,overlays,checkpoints);
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_CADENCE_SATURATION_FALLBACK_VERIFIED periodTicks={} scans={} pulses={} helix={} overlays={} checkpoints={} animationContinuous={}",
+            RESTORE_CADENCE_PERIOD_TICKS,scans,pulses,helix,overlays,checkpoints,animationClockContinuous);
     }
 
     private static void verifyGravityAnomalyParticlePalette() {
@@ -2329,6 +2337,7 @@ public final class RiftController {
         double beaconY=activatedBeacon.getY()+0.5D;
         double beaconZ=activatedBeacon.getZ()+0.5D;
         s.restoreTicks=nextNonNegativeTick(s.restoreTicks);
+        long animationTick=restorationAnimationTick(s.restoreTicks,level.getGameTime());
         int cadenceTick=restorationCadenceTick(s.restoreTicks,level.getGameTime());
         if(CI_TEST && s.restoreTicks==1)
             LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_BEACON_PRESENCE_CACHED present={}",beaconPresent);
@@ -2375,16 +2384,16 @@ public final class RiftController {
             // inner and outer rings without increasing particle count or chunk work.
             // Only 24 particles per second; no terrain edits or chunk loads.
             for(int i=0;i<RESTORE_RING_PARTICLE_COUNT;i++) {
-                double angle=i*Math.PI/12.0D + (i%2==0 ? 1.0D : -1.0D)*cadenceTick*0.045D;
+                double angle=i*Math.PI/12.0D + (i%2==0 ? 1.0D : -1.0D)*animationTick*0.045D;
                 // The fracture closes in a slow, bounded violet heartbeat. Keep the
                 // inner and outer rings separated even at maximum contraction.
                 double radius=(i%2==0?1.3D:2.1D)
-                    +0.16D*Math.sin(cadenceTick*0.025D);
+                    +0.16D*Math.sin(animationTick*0.025D);
                 radius*=contraction;
                 // A slow vertical wave makes the rings visibly breathe without
                 // increasing particle count or modifying nearby blocks.
                 double height=(i%2==0?0.0D:0.45D)
-                    +0.18D*Math.sin(angle*2.0D+cadenceTick*0.035D);
+                    +0.18D*Math.sin(angle*2.0D+animationTick*0.035D);
                 DustParticleOptions ringDust=(i&1)==0
                     ? RESTORE_VIOLET_DUST : RESTORE_VIOLET_ACCENT_DUST;
                 level.sendParticles(ringDust,
@@ -2395,8 +2404,8 @@ public final class RiftController {
             // beacon beam. Deterministic positions avoid per-tick random work;
             // the effect stays inside a 2.3-block radius and 3-block height.
             for(int i=0;i<RESTORE_RISING_SPARK_PARTICLE_COUNT;i++) {
-                double phase=cadenceTick*0.055D+i*Math.PI/2.0D;
-                double height=0.25D+((cadenceTick*0.04D+i*0.25D)%2.5D);
+                double phase=animationTick*0.055D+i*Math.PI/2.0D;
+                double height=0.25D+((animationTick*0.04D+i*0.25D)%2.5D);
                 level.sendParticles(RESTORE_VIOLET_ACCENT_DUST,
                     cx+Math.cos(phase)*0.75D*contraction,cy+height,
                     cz+Math.sin(phase)*0.75D*contraction,
@@ -2604,12 +2613,12 @@ public final class RiftController {
         // Skip cosmetic work when nobody can see the recovery beacon.
         // The shared viewer scan reads only player positions and never requests a chunk.
         if(shouldEmitRestoreHelix(cadenceTick) && hasRingViewer) {
-            double angle=cadenceTick*.17;
+            double angle=animationTick*.17;
             // A slow breathing ring makes recovery visibly alive without
             // adding particles, world edits, or forced chunk loads.
             // Keep the outer recovery helix synchronized with the shrinking inner vortex.
             // This is cosmetic only: no terrain edits or extra particle packets.
-            double radius=(3.4D+0.45D*Math.sin(cadenceTick*.055D))
+            double radius=(3.4D+0.45D*Math.sin(animationTick*.055D))
                 * recoveryVortexContraction(s.restoreIndex,s.snapshots.size());
             for(int k=0;k<RESTORE_HELIX_ANCHOR_COUNT;k++) {
                 // Counter-rotate the two alternating strands in the horizontal plane too.
