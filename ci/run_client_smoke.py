@@ -1630,7 +1630,7 @@ def capture_test_world():
                 return False
             grade_stats=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_GRADE_STATS maxGrade=([-+0-9.eE]+) "
-                r"cliffCaps=(\\d+) unsupportedGapCaps=(\\d+) steepStepsSkipped=(\\d+)",
+                r"cliffCaps=(\d+) unsupportedGapCaps=(\d+) steepStepsSkipped=(\d+)",
                 log_after)
             if (not grade_stats
                     or abs(float(grade_stats.group(1))-1.25)>1.0E-9
