@@ -1662,6 +1662,18 @@ public final class RiftController {
     }
 
     private static void verifyRestorePlayerScanFullPass() {
+        int scanPasses=0;
+        for(int tick=1;tick<=RESTORE_GRAVITY_FADE_TICKS;tick++) {
+            boolean expected=tick==1 || tick%RESTORE_PLAYER_SCAN_INTERVAL_TICKS==0;
+            boolean actual=shouldScanRestorePlayers(tick,true);
+            if(actual!=expected)
+                throw new IllegalStateException("CI restore player scan cadence regression at tick "+tick);
+            if(actual) scanPasses++;
+        }
+        if(scanPasses!=11)
+            throw new IllegalStateException("CI restore player scan cadence count regression: "+scanPasses);
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_ALLOCATION_CADENCE_VERIFIED ticks={} intervalTicks={} scanPasses={}",
+            RESTORE_GRAVITY_FADE_TICKS,RESTORE_PLAYER_SCAN_INTERVAL_TICKS,scanPasses);
         RestorePlayerScanState scan=new RestorePlayerScanState();
         // The first player satisfies the ring audience. A later player still
         // has a beacon menu and is the stabilization viewer; both must be seen.
@@ -2284,8 +2296,12 @@ public final class RiftController {
         // Close only this recovery beacon's vanilla menu during the same bounded
         // player pass used by the visual audience checks. A newly opened menu
         // may remain visible for at most four ticks; no extra per-tick player scan.
-        RestorePlayerScanState playerScan = new RestorePlayerScanState();
+        // The audience/menu pass is due only on tick 1 and every four ticks.
+        // Avoid allocating its accumulator on the three intervening ticks.
+        boolean hasRingViewer=false;
+        boolean hasStabilizationViewer=false;
         if(shouldScanRestorePlayers(s.restoreTicks,beaconPresent)) {
+            RestorePlayerScanState playerScan = new RestorePlayerScanState();
             boolean stabilizationDue=shouldEmitRestoreAudiencePulse(s.restoreTicks);
             // Do not stop after finding a viewer: a later player may still have
             // the beacon's vanilla menu open and must be closed in this same pass.
@@ -2305,9 +2321,9 @@ public final class RiftController {
             }
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_COMPLETED playersVisited={} beaconMenusClosed={} fullPass=true",
                 playerScan.playersVisited,playerScan.beaconMenusClosed);
+            hasRingViewer=playerScan.hasRingViewer;
+            hasStabilizationViewer=playerScan.hasStabilizationViewer;
         }
-        boolean hasRingViewer=playerScan.hasRingViewer;
-        boolean hasStabilizationViewer=playerScan.hasStabilizationViewer;
         // A visible, bounded stabilization pulse at the activated physical beacon.
         // Only query an already loaded chunk; never resurrect a removed beacon
         // or force chunk generation during recovery.
