@@ -31,7 +31,7 @@ def verify_restoration_particle_source():
     target_start=source.find("private static FissureTarget findVisibleFissureTarget(")
     target_end=source.find("\n    // Run after ordinary explosion modifiers",target_start+1)
     target_body=source[target_start:target_end] if target_start>=0 and target_end>target_start else ""
-    if (("BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();" not in target_body
+    if ("BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();" not in target_body
             or "findFissureGroundY(level,blockX,blockZ,cursor)" not in target_body
             or "fissureParticleY(level,blockX,surfaceY,blockZ,cursor)" not in target_body
             or "fissureRayChunksLoaded(level,viewerPosition,cursor)" not in target_body
