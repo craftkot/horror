@@ -1502,6 +1502,26 @@ def capture_test_world():
             build_end=camera_source.find("// Use the nearest actually sampled surface point",build_start)
             build_source=(camera_source[build_start:build_end]
                           if build_start>=0 and build_end>build_start else "")
+            sample_offsets_marker=("BLACK_FREQUENCY_GROUND_MESH_SAMPLE_OFFSETS_VERIFIED "
+                                   "samples=48 trigPerRebuild=0 bounded=true phaseCached=true")
+            if sample_offsets_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: precomputed ground sample offsets were not verified",flush=True)
+                return False
+            if ("private record GroundSample(" not in camera_source
+                    or "private static final GroundSample[] GROUND_SAMPLES=createGroundSamples();" not in camera_source
+                    or "private static GroundSample[] createGroundSamples()" not in camera_source
+                    or "private static void verifyGroundSampleCacheProfile()" not in camera_source
+                    or "verifyGroundSampleCacheProfile();" not in build_source
+                    or "GroundSample sample=GROUND_SAMPLES[arm*SEGMENTS_PER_ARM+segment-1];" not in build_source
+                    or "sample.forwardX()" not in build_source
+                    or "sample.bendX()" not in build_source
+                    or "sample.forwardZ()" not in build_source
+                    or "sample.bendZ()" not in build_source
+                    or "sample.phase()" not in build_source
+                    or "Math.sin(" in build_source or "Math.cos(" in build_source):
+                print("WORLD_CAPTURE_FAIL: ground mesh rebuild still calculates fixed sample trigonometry",flush=True)
+                return False
+            print("WORLD_CAPTURE: all 48 ground sample offsets/phases are cached outside the rebuild loop",flush=True)
             ribbon_cache_marker=("BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED "
                                  "staticRgbChannels=12 dynamicAlphaChannels=4 edgeAlphaShared=true")
             if ribbon_cache_marker in final_log:

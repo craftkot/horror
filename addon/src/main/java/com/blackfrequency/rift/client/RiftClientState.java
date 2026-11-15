@@ -186,6 +186,7 @@ public final class RiftClientState {
         private static int verticallyCulledSurfaceY;
         private static boolean supportFilterLogged;
         private static boolean sampleCursorReuseLogged;
+        private static boolean sampleOffsetsProfileLogged;
 
         private static Long2DoubleOpenHashMap createSurfaceCache() {
             Long2DoubleOpenHashMap cache=new Long2DoubleOpenHashMap(ARM_COUNT*SEGMENTS_PER_ARM);
@@ -197,10 +198,33 @@ public final class RiftClientState {
         private static boolean inactiveCacheCleanupLogged;
 
         private record GroundPoint(double x,double y,double z) {}
+        private record GroundSample(double forwardX,double bendX,double forwardZ,double bendZ,double phase) {}
         private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,
                 double phase,double taperA,double taperB) {}
         private record GroundMesh(List<GroundSegment> segments,int activeArms,int sampledColumns,int cacheHits,
                 int steepStepBreaks) {}
+
+        // The four arms and twelve samples per arm never change with the world anchor.
+        // Precompute their trigonometric terms once instead of recalculating them on every mesh rebuild.
+        private static final GroundSample[] GROUND_SAMPLES=createGroundSamples();
+
+        private static GroundSample[] createGroundSamples() {
+            GroundSample[] samples=new GroundSample[ARM_COUNT*SEGMENTS_PER_ARM];
+            for(int arm=0;arm<ARM_COUNT;arm++) {
+                double angle=arm*Math.PI/2.0D;
+                double sinAngle=Math.sin(angle);
+                double cosAngle=Math.cos(angle);
+                for(int segment=1;segment<=SEGMENTS_PER_ARM;segment++) {
+                    double distance=segment*SAMPLE_SPACING;
+                    double bend=Math.sin(segment*.85D+arm*1.1D)*.18D;
+                    samples[arm*SEGMENTS_PER_ARM+segment-1]=new GroundSample(
+                        cosAngle*distance,sinAngle*bend,
+                        sinAngle*distance,cosAngle*bend,
+                        arm*1.7D+segment*.63D);
+                }
+            }
+            return samples;
+        }
 
         private GroundRenderer() {}
 
@@ -229,6 +253,49 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SAMPLING_PROFILE_VERIFIED samples={} spacing={} extent={} radius={}",
                 samples,SAMPLE_SPACING,extent,RADIUS);
+        }
+
+        private static void verifyGroundSampleCacheProfile() {
+            if(sampleOffsetsProfileLogged) return;
+            if(GROUND_SAMPLES.length!=ARM_COUNT*SEGMENTS_PER_ARM)
+                throw new IllegalStateException("BLACK FREQUENCY ground sample cache size regression");
+            int checked=0;
+            for(int arm=0;arm<ARM_COUNT;arm++) {
+                double angle=arm*Math.PI/2.0D;
+                double sinAngle=Math.sin(angle);
+                double cosAngle=Math.cos(angle);
+                for(int segment=1;segment<=SEGMENTS_PER_ARM;segment++) {
+                    GroundSample sample=GROUND_SAMPLES[arm*SEGMENTS_PER_ARM+segment-1];
+                    double distance=segment*SAMPLE_SPACING;
+                    double bend=Math.sin(segment*.85D+arm*1.1D)*.18D;
+                    double forwardX=cosAngle*distance;
+                    double bendX=sinAngle*bend;
+                    double forwardZ=sinAngle*distance;
+                    double bendZ=cosAngle*bend;
+                    double phase=arm*1.7D+segment*.63D;
+                    if(sample==null
+                        || Double.doubleToLongBits(sample.forwardX())!=Double.doubleToLongBits(forwardX)
+                        || Double.doubleToLongBits(sample.bendX())!=Double.doubleToLongBits(bendX)
+                        || Double.doubleToLongBits(sample.forwardZ())!=Double.doubleToLongBits(forwardZ)
+                        || Double.doubleToLongBits(sample.bendZ())!=Double.doubleToLongBits(bendZ)
+                        || Double.doubleToLongBits(sample.phase())!=Double.doubleToLongBits(phase)
+                        || !Double.isFinite(sample.forwardX()) || !Double.isFinite(sample.bendX())
+                        || !Double.isFinite(sample.forwardZ()) || !Double.isFinite(sample.bendZ())
+                        || !Double.isFinite(sample.phase()))
+                        throw new IllegalStateException("BLACK FREQUENCY ground sample cache value regression");
+                    double dx=sample.forwardX()-sample.bendX();
+                    double dz=sample.forwardZ()+sample.bendZ();
+                    if(dx*dx+dz*dz>=(double)RADIUS*RADIUS)
+                        throw new IllegalStateException("BLACK FREQUENCY ground sample escaped fracture radius");
+                    checked++;
+                }
+            }
+            if(checked!=48)
+                throw new IllegalStateException("BLACK FREQUENCY ground sample cache count regression");
+            sampleOffsetsProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_OFFSETS_VERIFIED samples={} trigPerRebuild=0 bounded=true phaseCached=true",
+                checked);
         }
 
         private static void verifyTaperProfile() {
@@ -802,6 +869,7 @@ public final class RiftClientState {
                 int referenceY) {
             verifyInactiveCacheCleanup(level);
             verifyGroundMeshSamplingProfile();
+            verifyGroundSampleCacheProfile();
             verifyGroundPlantOutlineProfile(level,SURFACE_CURSOR,worldAnchorX,worldAnchorZ,referenceY);
             verifySurfaceSearchOrder();
             verifyTaperProfile();
@@ -830,10 +898,9 @@ public final class RiftClientState {
                 GroundPoint previous=null;
                 boolean afterGap=false;
                 for(int segment=1;segment<=SEGMENTS_PER_ARM;segment++) {
-                    double distance=segment*SAMPLE_SPACING;
-                    double bend=Math.sin(segment*.85D+arm*1.1D)*.18D;
-                    double x=worldAnchorX+.5D+Math.cos(angle)*distance-Math.sin(angle)*bend;
-                    double z=worldAnchorZ+.5D+Math.sin(angle)*distance+Math.cos(angle)*bend;
+                    GroundSample sample=GROUND_SAMPLES[arm*SEGMENTS_PER_ARM+segment-1];
+                    double x=worldAnchorX+.5D+sample.forwardX()-sample.bendX();
+                    double z=worldAnchorZ+.5D+sample.forwardZ()+sample.bendZ();
                     int blockX=(int)Math.floor(x);
                     int blockZ=(int)Math.floor(z);
                     long dx=blockX-(long)worldAnchorX;
@@ -875,7 +942,7 @@ public final class RiftClientState {
                             if(isContinuousGroundStep(previous.y(),current.y(),length)) {
                                 double startTaper=afterGap ? CLIFF_BREAK_TAPER : endpointTaper(segment-1);
                                 result.add(new GroundSegment(previous,current,
-                                    -tangentZ/length,tangentX/length,arm*1.7D+segment*.63D,
+                                    -tangentZ/length,tangentX/length,sample.phase(),
                                     startTaper,endpointTaper(segment)));
                                 afterGap=false;
                             } else {
