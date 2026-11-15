@@ -1764,7 +1764,7 @@ def capture_test_world():
                 )
             else:
                 edge_rail_pattern = re.compile(
-                    r"ribbon\(builder,matrix,camera,segment,(-?)halfWidth\*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,\s*"
+                    r"ribbon\(builder,matrix,camera,segment,(-?)halfWidth\*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,\s*"
                     r"GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE,edgeAlpha\);"
                 )
             edge_rail_offsets = edge_rail_pattern.findall(camera_source)
