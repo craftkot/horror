@@ -54,10 +54,17 @@ def verify_restoration_particle_source():
             or client_source.count("RiftGeometry.FISSURE_BEND_AMPLITUDE")<4
             or "CI_BEACON_PAD_FLOOR_Y_OFFSET=1;" not in source
             or "CI_BEACON_PAD_PLAYER_Y_OFFSET=2;" not in source
-            or "CI_BEACON_PAD_STANDOFF=1.75D;" not in source
-            or "CI_BEACON_PAD_GAP_ROW=1;" not in source
-            or "CI_BEACON_PAD_FIRST_SOLID_ROW=2;" not in source
+            or "CI_BEACON_PAD_STANDOFF=3.25D;" not in source
+            or "CI_BEACON_PAD_GAP_ROW=2;" not in source
+            or "CI_BEACON_PAD_FIRST_SOLID_ROW=3;" not in source
             or "CI_BEACON_PAD_LAST_SOLID_ROW=4;" not in source
+            or "CI_BEACON_PLAYER_EYE_HEIGHT=1.62D;" not in source
+            or "ciBeaconSightlineHeightAtBeaconFace()" not in source
+            or "ciBeaconSightlineHeightAtPadInnerFace()" not in source
+            or "Math.abs(distanceSquared-12.8125D)>1.0E-9D" not in source
+            or "beaconEntryY>0.0D && beaconEntryY<1.0D" not in source
+            or "padInnerFaceY>CI_BEACON_PAD_FLOOR_Y_OFFSET+1.0D" not in source
+            or "BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_BLOCKER_DIAGNOSTIC" not in source
             or "CI_BEACON_PAD_FIRST_SOLID_ROW!=CI_BEACON_PAD_GAP_ROW+1" not in source
             or "ciBeaconPadAlongX(int anchorX,int anchorZ,int beaconX,int beaconZ)" not in source
             or "ciBeaconPadAlongX(s.x,s.z,demoPos.getX(),demoPos.getZ())" not in pad_body
