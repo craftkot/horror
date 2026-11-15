@@ -59,11 +59,13 @@ jobs:
           grep -q 'BLACK_FREQUENCY_TEST FRACTURE_PHASE_STARTED' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED' world-test.log
           if [ "$BF_TEST_MODE" = "restoration" ] || [ "$BF_TEST_MODE" = "deferred" ]; then
-            # Snapshot persistence/quarantine checks execute only when CI exercises recovery.
+            # Recovery-only diagnostics are emitted when this mode actually starts restoration.
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_PAYLOAD_QUARANTINE_VERIFIED entries=2 retainedPayload=false' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_RETENTION_BUDGET_VERIFIED' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_AGGREGATE_BUDGET_QUARANTINED' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_RUNTIME_BUDGET_GUARD_VERIFIED' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST RECOVERY_BEACON_VISUAL_ANCHOR_BOUNDS_VERIFIED radius=128 minYInclusive=true maxYExclusive=true worldBorder=true invalidRejected=true' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST RECOVERY_BEACON_POSITION_PRESENCE_VERIFIED missingOrWrongTypeRejected=true originCoordinatePreserved=true fallback=rift-anchor' world-test.log
           fi
           # Compact violet Dust flecks replace oversized block-textured chips at the four outer tips.
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_LAYOUT_VERIFIED count=4 color=violet perArm=1 outerTip=true' world-test.log
@@ -80,8 +82,6 @@ jobs:
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_DUST_PULSE_PROFILE_VERIFIED min=0.65 low=0.75 base=0.85 high=0.95 max=1.05 variants=5' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=nearest ties=stable invalidRejected=true minHorizontal=2.25 maxHorizontal=6.0' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset=1 playerOffset=2 axisPolicy=perpendicular firstSolidRow=3 gapRow=2 lastSolidRow=4 standoff=3.25 distanceSquared=12.8125 padInnerFaceY=2.9 beaconEntryY=0.98 withinReach=true beamColumnUntouched=true perpendicular=true' world-test.log
-          grep -q 'BLACK_FREQUENCY_TEST RECOVERY_BEACON_VISUAL_ANCHOR_BOUNDS_VERIFIED radius=128 minYInclusive=true maxYExclusive=true worldBorder=true invalidRejected=true' world-test.log
-          grep -q 'BLACK_FREQUENCY_TEST RECOVERY_BEACON_POSITION_PRESENCE_VERIFIED missingOrWrongTypeRejected=true originCoordinatePreserved=true fallback=rift-anchor' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST BEACON_RAY_CHUNK_TRAVERSAL_VERIFIED skippedAabbOnlyChunk=true traversedChunkRequired=true negativeDirection=true cornerTouchGuard=true invalidRejected=true' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_STRUCTURAL_SUPPORT_FILTER_VERIFIED' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_BLOCK_ENTITY_FILTER_VERIFIED support=true surface=true' world-test.log
