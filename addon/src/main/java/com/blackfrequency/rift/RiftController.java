@@ -902,7 +902,7 @@ public final class RiftController {
             double cosAngle=Math.cos(angle);
             for(int segment=1;segment<=FISSURE_SEGMENTS_PER_ARM;segment++) {
                 double distance=segment*FISSURE_SAMPLE_SPACING;
-                double bend=Math.sin(segment*.85D+arm*1.1D)*.18D;
+                double bend=Math.sin(segment*.85D+arm*1.1D)*RiftGeometry.FISSURE_BEND_AMPLITUDE;
                 samples[arm*FISSURE_SEGMENTS_PER_ARM+segment-1]=new FissureSample(
                     cosAngle*distance,sinAngle*bend,
                     sinAngle*distance,cosAngle*bend,
@@ -1188,7 +1188,7 @@ public final class RiftController {
             double angle=arm*Math.PI/2.0D;
             for(int segment=1;segment<=FISSURE_SEGMENTS_PER_ARM;segment++) {
                 double distance=segment*FISSURE_SAMPLE_SPACING;
-                double bend=Math.sin(segment*.85D+arm*1.1D)*.18D;
+                double bend=Math.sin(segment*.85D+arm*1.1D)*RiftGeometry.FISSURE_BEND_AMPLITUDE;
                 double px=s.x+.5D+Math.cos(angle)*distance-Math.sin(angle)*bend;
                 double pz=s.z+.5D+Math.sin(angle)*distance+Math.cos(angle)*bend;
                 int blockX=(int)Math.floor(px),blockZ=(int)Math.floor(pz);
@@ -1354,13 +1354,15 @@ public final class RiftController {
             for(int segment=1;segment<=FISSURE_SEGMENTS_PER_ARM;segment++) {
                 FissureSample sample=FISSURE_SAMPLES[arm*FISSURE_SEGMENTS_PER_ARM+segment-1];
                 double distance=segment*FISSURE_SAMPLE_SPACING;
-                double bend=Math.sin(segment*.85D+arm*1.1D)*.18D;
+                double bend=Math.sin(segment*.85D+arm*1.1D)*RiftGeometry.FISSURE_BEND_AMPLITUDE;
                 if(Double.doubleToLongBits(sample.forwardX())!=Double.doubleToLongBits(cosAngle*distance)
                     || Double.doubleToLongBits(sample.bendX())!=Double.doubleToLongBits(sinAngle*bend)
                     || Double.doubleToLongBits(sample.forwardZ())!=Double.doubleToLongBits(sinAngle*distance)
                     || Double.doubleToLongBits(sample.bendZ())!=Double.doubleToLongBits(cosAngle*bend)
                     || Double.doubleToLongBits(sample.segmentPhase())!=Double.doubleToLongBits(segment*.8D)
-                    || Double.doubleToLongBits(sample.armPhase())!=Double.doubleToLongBits(arm*.6D))
+                    || Double.doubleToLongBits(sample.armPhase())!=Double.doubleToLongBits(arm*.6D)
+                    || Math.abs(sample.bendX())>RiftGeometry.FISSURE_BEND_AMPLITUDE
+                    || Math.abs(sample.bendZ())>RiftGeometry.FISSURE_BEND_AMPLITUDE)
                     throw new IllegalStateException("CI fissure sample geometry cache changed the legacy profile");
                 double offsetX=sample.forwardX()-sample.bendX();
                 double offsetZ=sample.forwardZ()+sample.bendZ();
@@ -1384,6 +1386,8 @@ public final class RiftController {
         if(FISSURE_ARM_COUNT!=4 || samples!=48 || samples*FISSURE_MOTES_PER_SAMPLE!=48
             || FISSURE_MOTES_PER_SAMPLE<1 || !Double.isFinite(FISSURE_SAMPLE_SPACING)
             || FISSURE_SAMPLE_SPACING<=0.0D || FISSURE_SAMPLE_SPACING>0.5D
+            || !Double.isFinite(RiftGeometry.FISSURE_BEND_AMPLITUDE)
+            || Math.abs(RiftGeometry.FISSURE_BEND_AMPLITUDE-.24D)>1.0E-9D
             || Math.abs(extent-5.40D)>1.0E-9D || extent>=RADIUS
             || FISSURE_VIOLET_EDGE_DUST==null
             || !isOutermostValidFissureSample(1,0)
@@ -1449,8 +1453,10 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_VERIFIED red={} green={} blue={} scale={}",
             edgeColor.x(),edgeColor.y(),edgeColor.z(),edgeScale);
         verifyFissureDustPulseProfile();
-        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples={} spacing={} extent={}",
-            samples,FISSURE_SAMPLE_SPACING,extent);
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples={} spacing={} extent={} bend={}",
+            samples,FISSURE_SAMPLE_SPACING,extent,RiftGeometry.FISSURE_BEND_AMPLITUDE);
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_BEND_PROFILE_VERIFIED amplitude={} maxOffset={} shared=true",
+            RiftGeometry.FISSURE_BEND_AMPLITUDE,RiftGeometry.FISSURE_BEND_AMPLITUDE);
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total={} accentDust={} violetDust={} edgeDust={}",
             totalParticles,accentDustMotes,violetDustMotes,edgeDustCount);
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_LAYOUT_VERIFIED count={} color=violet perArm=1 outerTip=true",

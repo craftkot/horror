@@ -217,7 +217,7 @@ public final class RiftClientState {
                 double cosAngle=Math.cos(angle);
                 for(int segment=1;segment<=SEGMENTS_PER_ARM;segment++) {
                     double distance=segment*SAMPLE_SPACING;
-                    double bend=Math.sin(segment*.85D+arm*1.1D)*.18D;
+                    double bend=Math.sin(segment*.85D+arm*1.1D)*RiftGeometry.FISSURE_BEND_AMPLITUDE;
                     double phase=arm*1.7D+segment*.63D;
                     samples[arm*SEGMENTS_PER_ARM+segment-1]=new GroundSample(
                         cosAngle*distance,sinAngle*bend,
@@ -250,12 +250,17 @@ public final class RiftClientState {
             double extent=SEGMENTS_PER_ARM*SAMPLE_SPACING;
             if(ARM_COUNT!=4 || SEGMENTS_PER_ARM!=12 || samples!=48
                 || !Double.isFinite(SAMPLE_SPACING) || SAMPLE_SPACING<.45D || SAMPLE_SPACING>.5D
+                || !Double.isFinite(RiftGeometry.FISSURE_BEND_AMPLITUDE)
+                || Math.abs(RiftGeometry.FISSURE_BEND_AMPLITUDE-.24D)>1.0E-9D
                 || Math.abs(extent-5.40D)>1.0E-9D || extent>=RADIUS)
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh sampling profile regression");
             samplingProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_SAMPLING_PROFILE_VERIFIED samples={} spacing={} extent={} radius={}",
-                samples,SAMPLE_SPACING,extent,RADIUS);
+                "BLACK_FREQUENCY_GROUND_MESH_SAMPLING_PROFILE_VERIFIED samples={} spacing={} extent={} radius={} bend={}",
+                samples,SAMPLE_SPACING,extent,RADIUS,RiftGeometry.FISSURE_BEND_AMPLITUDE);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_BEND_PROFILE_VERIFIED amplitude={} maxOffset={} shared=true",
+                RiftGeometry.FISSURE_BEND_AMPLITUDE,RiftGeometry.FISSURE_BEND_AMPLITUDE);
         }
 
         private static void verifyGroundSampleCacheProfile() {
@@ -270,7 +275,7 @@ public final class RiftClientState {
                 for(int segment=1;segment<=SEGMENTS_PER_ARM;segment++) {
                     GroundSample sample=GROUND_SAMPLES[arm*SEGMENTS_PER_ARM+segment-1];
                     double distance=segment*SAMPLE_SPACING;
-                    double bend=Math.sin(segment*.85D+arm*1.1D)*.18D;
+                    double bend=Math.sin(segment*.85D+arm*1.1D)*RiftGeometry.FISSURE_BEND_AMPLITUDE;
                     double forwardX=cosAngle*distance;
                     double bendX=sinAngle*bend;
                     double forwardZ=sinAngle*distance;
@@ -285,6 +290,8 @@ public final class RiftClientState {
                         || Double.doubleToLongBits(sample.bendX())!=Double.doubleToLongBits(bendX)
                         || Double.doubleToLongBits(sample.forwardZ())!=Double.doubleToLongBits(forwardZ)
                         || Double.doubleToLongBits(sample.bendZ())!=Double.doubleToLongBits(bendZ)
+                        || Math.abs(sample.bendX())>RiftGeometry.FISSURE_BEND_AMPLITUDE
+                        || Math.abs(sample.bendZ())>RiftGeometry.FISSURE_BEND_AMPLITUDE
                         || Double.doubleToLongBits(sample.phase())!=Double.doubleToLongBits(phase)
                         || Double.doubleToLongBits(sample.phaseSin())!=Double.doubleToLongBits(phaseSin)
                         || Double.doubleToLongBits(sample.phaseCos())!=Double.doubleToLongBits(phaseCos)

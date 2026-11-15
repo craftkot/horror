@@ -19,6 +19,8 @@ def parse_fissure_particle_emission(log_text):
 def verify_restoration_particle_source():
     source_path=ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftController.java"
     source=source_path.read_text(encoding="utf-8")
+    geometry_contract=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftGeometry.java").read_text(encoding="utf-8")
+    client_source=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"client"/"RiftClientState.java").read_text(encoding="utf-8")
     fissure_start=source.find("private static FissureEmission emitSurfaceFissure(")
     fissure_end=source.find("\n    private static",fissure_start+1)
     fissure_emitter=source[fissure_start:fissure_end] if fissure_start>=0 and fissure_end>fissure_start else ""
@@ -34,7 +36,10 @@ def verify_restoration_particle_source():
     pad_start=source.find('if(playerInteractionTest && Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest"))')
     pad_end=source.find("} else if(playerInteractionTest)",pad_start+1)
     pad_body=source[pad_start:pad_end] if pad_start>=0 and pad_end>pad_start else ""
-    if ("CI_BEACON_PAD_FLOOR_Y_OFFSET=1;" not in source
+    if ("public static final double FISSURE_BEND_AMPLITUDE=.24D;" not in geometry_contract
+            or source.count("RiftGeometry.FISSURE_BEND_AMPLITUDE")<5
+            or client_source.count("RiftGeometry.FISSURE_BEND_AMPLITUDE")<4
+            or "CI_BEACON_PAD_FLOOR_Y_OFFSET=1;" not in source
             or "CI_BEACON_PAD_PLAYER_Y_OFFSET=2;" not in source
             or "CI_BEACON_PAD_STANDOFF=1.75D;" not in source
             or "CI_BEACON_PAD_GAP_ROW=1;" not in source
@@ -2017,7 +2022,7 @@ def capture_test_world():
                       "segments",mesh_segments,"arms",mesh_arms,flush=True)
                 return False
             density = re.search(
-                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples=(\d+) spacing=([0-9.]+) extent=([0-9.]+)",
+                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_DENSITY_VERIFIED samples=(\d+) spacing=([0-9.]+) extent=([0-9.]+) bend=([0-9.]+)",
                 log_after)
             if not density:
                 print("WORLD_CAPTURE_FAIL: fissure density/radius self-check was not executed",flush=True)
@@ -2025,17 +2030,19 @@ def capture_test_world():
             density_samples=int(density.group(1))
             density_spacing=float(density.group(2))
             density_extent=float(density.group(3))
+            density_bend=float(density.group(4))
             if (density_samples!=GROUND_MESH_SAMPLES
                     or density_spacing<0.45 or density_spacing>0.5
                     or not math.isclose(density_extent,12*density_spacing,
                                         rel_tol=0.0,abs_tol=1.0e-9)
-                    or density_extent>=48.0):
+                    or density_extent>=48.0
+                    or not math.isclose(density_bend,.24,rel_tol=0.0,abs_tol=1.0e-9)):
                 print("WORLD_CAPTURE_FAIL: fissure density/radius is outside the verified bounds",
                       "samples",density_samples,"spacing",density_spacing,
                       "extent",density_extent,flush=True)
                 return False
             ground_sampling = re.search(
-                r"BLACK_FREQUENCY_GROUND_MESH_SAMPLING_PROFILE_VERIFIED samples=(\d+) spacing=([0-9.]+) extent=([0-9.]+) radius=(\d+)",
+                r"BLACK_FREQUENCY_GROUND_MESH_SAMPLING_PROFILE_VERIFIED samples=(\d+) spacing=([0-9.]+) extent=([0-9.]+) radius=(\d+) bend=([0-9.]+)",
                 log_after)
             if not ground_sampling:
                 print("WORLD_CAPTURE_FAIL: client ground mesh sampling profile was not executed",flush=True)
@@ -2044,13 +2051,21 @@ def capture_test_world():
             client_spacing=float(ground_sampling.group(2))
             client_extent=float(ground_sampling.group(3))
             client_radius=int(ground_sampling.group(4))
+            client_bend=float(ground_sampling.group(5))
             if (client_samples!=density_samples
                     or not math.isclose(client_spacing,density_spacing,rel_tol=0.0,abs_tol=1.0e-9)
                     or not math.isclose(client_extent,density_extent,rel_tol=0.0,abs_tol=1.0e-9)
-                    or client_radius!=48 or client_extent>=client_radius):
+                    or client_radius!=48 or client_extent>=client_radius
+                    or not math.isclose(client_bend,density_bend,rel_tol=0.0,abs_tol=1.0e-9)):
                 print("WORLD_CAPTURE_FAIL: client/server fissure geometry diverged",
                       "server",density_spacing,density_extent,
                       "client",client_spacing,client_extent,"radius",client_radius,flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_BEND_PROFILE_VERIFIED amplitude=0.24 maxOffset=0.24 shared=true" not in log_after:
+                print("WORLD_CAPTURE_FAIL: server fissure bend profile was not verified",flush=True)
+                return False
+            if "BLACK_FREQUENCY_GROUND_MESH_BEND_PROFILE_VERIFIED amplitude=0.24 maxOffset=0.24 shared=true" not in log_after:
+                print("WORLD_CAPTURE_FAIL: client fissure bend profile was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_SAMPLE_CACHE_VERIFIED samples=48 geometryBitExact=true pulseBitExact=true geometryTrigPerEmission=0 dynamicPulseSin=48 radius=48" not in log_after:
                 print("WORLD_CAPTURE_FAIL: server fissure sample cache was not bit-verified",flush=True)

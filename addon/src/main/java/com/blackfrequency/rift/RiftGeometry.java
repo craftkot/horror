@@ -9,6 +9,8 @@ public final class RiftGeometry {
     public static final int FISSURE_ARM_COUNT=4;
     public static final int FISSURE_SEGMENTS_PER_ARM=12;
     public static final double FISSURE_SAMPLE_SPACING=.45D;
+    // Shared lateral irregularity keeps the ground ribbon and server motes on the same jagged path.
+    public static final double FISSURE_BEND_AMPLITUDE=.24D;
 
     private RiftGeometry() {}
 }
