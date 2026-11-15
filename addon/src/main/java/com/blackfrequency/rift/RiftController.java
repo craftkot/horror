@@ -57,6 +57,10 @@ public final class RiftController {
     private static final int IDLE_BEACON_PULSE_PARTICLE_COUNT = 6;
     // Recovery effects use cached blue-violet Dust and bounded, deterministic pulses.
     private static final int RESTORE_RING_INTERVAL_TICKS = 20;
+    // Completion titles use explicit timings instead of inheriting the finale's title clock.
+    private static final int RESTORE_TITLE_FADE_IN_TICKS=10;
+    private static final int RESTORE_TITLE_STAY_TICKS=80;
+    private static final int RESTORE_TITLE_FADE_OUT_TICKS=20;
     private static final int RESTORE_RING_PARTICLE_COUNT = 24;
     private static final int RESTORE_RISING_SPARK_PARTICLE_COUNT = 4;
     private static final int RESTORE_HELIX_INTERVAL_TICKS = 8;
@@ -2242,6 +2246,9 @@ public final class RiftController {
             && !shouldEmitRestoreAudiencePulse(-RESTORE_RING_INTERVAL_TICKS)
             && !shouldEmitRestoreBlockCue(0)
             && !shouldEmitRestoreBlockCue(-RESTORE_BLOCK_CUE_INTERVAL);
+        boolean completionTitleTiming=RESTORE_TITLE_FADE_IN_TICKS==10
+            && RESTORE_TITLE_STAY_TICKS==80 && RESTORE_TITLE_FADE_OUT_TICKS==20
+            && RESTORE_TITLE_FADE_IN_TICKS+RESTORE_TITLE_STAY_TICKS+RESTORE_TITLE_FADE_OUT_TICKS<=200;
         boolean boundedCounts=RESTORE_RING_PARTICLE_COUNT==24
             && RESTORE_RISING_SPARK_PARTICLE_COUNT==4
             && RESTORE_HELIX_PARTICLE_COUNT==16
@@ -2281,7 +2288,7 @@ public final class RiftController {
             restorationCadenceTick(Integer.MAX_VALUE,3L),true);
         if(!(ringInitial && ringBoundary && ringBetween && helixBoundary && helixBetween
             && blockBoundary && blockBetween && blockNext && invalidTicks
-            && boundedCounts && cachedPalette && boundedRestoreDust && ringClearsBeaconBlock
+            && completionTitleTiming && boundedCounts && cachedPalette && boundedRestoreDust && ringClearsBeaconBlock
             && playerScanInitial && playerScanInitialWithoutBeacon
             && playerScanBoundary && playerScanBetween && playerScanWithoutBeacon
             && playerScanInvalid && playerScanSaturated))
@@ -2291,6 +2298,9 @@ public final class RiftController {
             RESTORE_HELIX_PARTICLE_COUNT,RESTORE_HELIX_INTERVAL_TICKS,
             RESTORE_BLOCK_CUE_PARTICLE_COUNT,RESTORE_BLOCK_CUE_INTERVAL,
             RESTORE_AUDIENCE_PARTICLE_COUNT,RESTORE_RING_INTERVAL_TICKS);
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_TITLE_TIMING_VERIFIED fadeIn={} stay={} fadeOut={} total={} packetBeforeTitle=true",
+            RESTORE_TITLE_FADE_IN_TICKS,RESTORE_TITLE_STAY_TICKS,RESTORE_TITLE_FADE_OUT_TICKS,
+            RESTORE_TITLE_FADE_IN_TICKS+RESTORE_TITLE_STAY_TICKS+RESTORE_TITLE_FADE_OUT_TICKS);
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_SIZE_VERIFIED baseScale={} accentScale={} audienceSpreadXZ={} audienceSpreadY={} cachedDust=true",
             RESTORE_VIOLET_DUST_SCALE,RESTORE_VIOLET_ACCENT_DUST_SCALE,
             RESTORE_AUDIENCE_SPREAD_XZ,RESTORE_AUDIENCE_SPREAD_Y);
@@ -3200,6 +3210,8 @@ public final class RiftController {
                 if(!player.isAlive() || player.isRemoved() || player.isSpectator()
                     || !withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z)) continue;
                 player.displayClientMessage(recoveryViolet("✦ СТАБИЛИЗАЦИЯ 100% §7— восстановлено "+s.restoredBlocks+" блоков; пропущено "+s.skippedOccupied),true);
+                player.connection.send(new ClientboundSetTitlesAnimationPacket(
+                    RESTORE_TITLE_FADE_IN_TICKS,RESTORE_TITLE_STAY_TICKS,RESTORE_TITLE_FADE_OUT_TICKS));
                 player.connection.send(new ClientboundSetTitleTextPacket(recoveryViolet(
                     s.skippedOccupied==0 && s.skippedInvalid==0 ? "МИР ВОССТАНОВЛЕН" : "СТАБИЛИЗАЦИЯ ЗАВЕРШЕНА")));
                 player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal(
