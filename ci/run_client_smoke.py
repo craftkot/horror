@@ -1717,12 +1717,13 @@ def capture_test_world():
                     or "double tail=Math.min(1.0,(SEGMENTS_PER_ARM-boundedSample)/3.0);" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: ground fissure endpoint taper is not symmetric or bounded",flush=True)
                 return False
-            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=5.8 coreScale=1.35 edgeHalfWidth=0.022 pulseMin=0.045 pulseMax=0.068 coreInsideEdgeBand=true"
+            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=5.8 coreScale=1.65 edgeOffsetScale=2.25 edgeHalfWidth=0.022 pulseMin=0.045 pulseMax=0.068 coreInsideEdgeBand=true"
             if visual_profile_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: widened ground fissure visual profile self-check was not executed",flush=True)
                 return False
             if ("GROUND_GLOW_WIDTH_SCALE=5.8D;" not in camera_source
-                    or "GROUND_CORE_WIDTH_SCALE=1.35D;" not in camera_source):
+                    or "GROUND_CORE_WIDTH_SCALE=1.65D;" not in camera_source
+                    or "GROUND_EDGE_OFFSET_SCALE=2.25D;" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: wider ground fissure halo/core constants are not active",flush=True)
                 return False
             edge_palette_marker="BLACK_FREQUENCY_GROUND_MESH_EDGE_PALETTE_VERIFIED red=0.46 green=0.18 blue=0.82"
@@ -1731,12 +1732,12 @@ def capture_test_world():
                 return False
             if ribbon_cache_marker in final_log:
                 edge_rail_pattern = re.compile(
-                    r"ribbon\(builder,matrix,camera,segment,(-?)halfWidth\*1\.9D,GROUND_EDGE_HALF_WIDTH,\s*"
+                    r"ribbon\(builder,matrix,camera,segment,(-?)halfWidth\*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,\s*"
                     r"GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel\);"
                 )
             else:
                 edge_rail_pattern = re.compile(
-                    r"ribbon\(builder,matrix,camera,segment,(-?)halfWidth\*1\.9D,GROUND_EDGE_HALF_WIDTH,\s*"
+                    r"ribbon\(builder,matrix,camera,segment,(-?)halfWidth\*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,\s*"
                     r"GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE,edgeAlpha\);"
                 )
             edge_rail_offsets = edge_rail_pattern.findall(camera_source)

@@ -128,7 +128,9 @@ public final class RiftClientState {
         private static final double CLIFF_BREAK_TAPER=.25D;
         // Keep the violet halo subordinate to a more legible dark fissure core without adding draw calls or vertices.
         private static final double GROUND_GLOW_WIDTH_SCALE=5.8D;
-        private static final double GROUND_CORE_WIDTH_SCALE=1.35D;
+        private static final double GROUND_CORE_WIDTH_SCALE=1.65D;
+        // Move both violet edge rails outward so the wider dark core remains visibly separated.
+        private static final double GROUND_EDGE_OFFSET_SCALE=2.25D;
         // The render pulse is clamped to this interval for every wave/flicker phase.
         private static final double GROUND_MIN_HALF_WIDTH=.045D;
         private static final double GROUND_BASE_HALF_WIDTH=.048D;
@@ -366,12 +368,13 @@ public final class RiftClientState {
                 double maximumHalfWidth=GROUND_MAX_HALF_WIDTH;
                 double minimumGlowHalfWidth=minimumHalfWidth*GROUND_GLOW_WIDTH_SCALE;
                 double minimumCoreHalfWidth=minimumHalfWidth*GROUND_CORE_WIDTH_SCALE;
-                double minimumEdgeInnerHalfWidth=minimumHalfWidth*1.9D-GROUND_EDGE_HALF_WIDTH;
+                double minimumEdgeInnerHalfWidth=minimumHalfWidth*GROUND_EDGE_OFFSET_SCALE-GROUND_EDGE_HALF_WIDTH;
                 double maximumGlowHalfWidth=maximumHalfWidth*GROUND_GLOW_WIDTH_SCALE;
                 double maximumCoreHalfWidth=maximumHalfWidth*GROUND_CORE_WIDTH_SCALE;
-                double maximumEdgeInnerHalfWidth=maximumHalfWidth*1.9D-GROUND_EDGE_HALF_WIDTH;
+                double maximumEdgeInnerHalfWidth=maximumHalfWidth*GROUND_EDGE_OFFSET_SCALE-GROUND_EDGE_HALF_WIDTH;
                 if(Math.abs(GROUND_GLOW_WIDTH_SCALE-5.8D)>1.0E-9D
-                    || Math.abs(GROUND_CORE_WIDTH_SCALE-1.35D)>1.0E-9D
+                    || Math.abs(GROUND_CORE_WIDTH_SCALE-1.65D)>1.0E-9D
+                    || Math.abs(GROUND_EDGE_OFFSET_SCALE-2.25D)>1.0E-9D
                     || Math.abs(GROUND_EDGE_HALF_WIDTH-.022D)>1.0E-9D
                     || Math.abs(maximumHalfWidth-.068D)>1.0E-9D
                     || !Float.isFinite(GROUND_EDGE_RED) || !Float.isFinite(GROUND_EDGE_GREEN)
@@ -390,8 +393,8 @@ public final class RiftClientState {
                     throw new IllegalStateException("BLACK FREQUENCY ground mesh visual profile regression");
                 visualProfileLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale={} coreScale={} edgeHalfWidth={} pulseMin={} pulseMax={} coreInsideEdgeBand=true",
-                    GROUND_GLOW_WIDTH_SCALE,GROUND_CORE_WIDTH_SCALE,GROUND_EDGE_HALF_WIDTH,
+                    "BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale={} coreScale={} edgeOffsetScale={} edgeHalfWidth={} pulseMin={} pulseMax={} coreInsideEdgeBand=true",
+                    GROUND_GLOW_WIDTH_SCALE,GROUND_CORE_WIDTH_SCALE,GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,
                     minimumHalfWidth,maximumHalfWidth);
                 com.mojang.logging.LogUtils.getLogger().info(
                     "BLACK_FREQUENCY_GROUND_MESH_EDGE_PALETTE_VERIFIED red={} green={} blue={}",
@@ -1357,9 +1360,9 @@ public final class RiftClientState {
                         GROUND_CORE_RED_CHANNEL,GROUND_CORE_GREEN_CHANNEL,GROUND_CORE_BLUE_CHANNEL,coreAlphaChannel);
                     ribbon(builder,matrix,camera,segment,0.0D,halfWidth*.16D,
                         GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,filamentAlphaChannel);
-                    ribbon(builder,matrix,camera,segment,halfWidth*1.9D,GROUND_EDGE_HALF_WIDTH,
+                    ribbon(builder,matrix,camera,segment,halfWidth*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,
                         GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel);
-                    ribbon(builder,matrix,camera,segment,-halfWidth*1.9D,GROUND_EDGE_HALF_WIDTH,
+                    ribbon(builder,matrix,camera,segment,-halfWidth*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,
                         GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel);
                 }
                 BufferUploader.drawWithShader(builder.end());
