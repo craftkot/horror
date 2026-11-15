@@ -126,9 +126,9 @@ public final class RiftClientState {
         private static final double MAX_GROUND_SEGMENT_GRADE=1.25D;
         // Narrow both sides of a mesh gap instead of ending with blunt translucent quads.
         private static final double CLIFF_BREAK_TAPER=.25D;
-        // Broaden the violet halo and dark core without adding draw calls or vertices.
-        private static final double GROUND_GLOW_WIDTH_SCALE=7.6D;
-        private static final double GROUND_CORE_WIDTH_SCALE=1.22D;
+        // Keep the violet halo subordinate to a more legible dark fissure core without adding draw calls or vertices.
+        private static final double GROUND_GLOW_WIDTH_SCALE=5.8D;
+        private static final double GROUND_CORE_WIDTH_SCALE=1.35D;
         // The render pulse is clamped to this interval for every wave/flicker phase.
         private static final double GROUND_MIN_HALF_WIDTH=.045D;
         private static final double GROUND_BASE_HALF_WIDTH=.048D;
@@ -136,7 +136,7 @@ public final class RiftClientState {
         private static final double GROUND_WIDTH_FLICKER=.004D;
         private static final double GROUND_MAX_HALF_WIDTH=
             GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE+GROUND_WIDTH_FLICKER;
-        private static final double GROUND_EDGE_HALF_WIDTH=.029D;
+        private static final double GROUND_EDGE_HALF_WIDTH=.022D;
         // Shift the ground rails away from hot magenta toward the sky-rift's deep violet palette.
         private static final float GROUND_EDGE_RED=.46F;
         private static final float GROUND_EDGE_GREEN=.18F;
@@ -264,9 +264,9 @@ public final class RiftClientState {
                 double maximumGlowHalfWidth=maximumHalfWidth*GROUND_GLOW_WIDTH_SCALE;
                 double maximumCoreHalfWidth=maximumHalfWidth*GROUND_CORE_WIDTH_SCALE;
                 double maximumEdgeInnerHalfWidth=maximumHalfWidth*1.9D-GROUND_EDGE_HALF_WIDTH;
-                if(Math.abs(GROUND_GLOW_WIDTH_SCALE-7.6D)>1.0E-9D
-                    || Math.abs(GROUND_CORE_WIDTH_SCALE-1.22D)>1.0E-9D
-                    || Math.abs(GROUND_EDGE_HALF_WIDTH-.029D)>1.0E-9D
+                if(Math.abs(GROUND_GLOW_WIDTH_SCALE-5.8D)>1.0E-9D
+                    || Math.abs(GROUND_CORE_WIDTH_SCALE-1.35D)>1.0E-9D
+                    || Math.abs(GROUND_EDGE_HALF_WIDTH-.022D)>1.0E-9D
                     || Math.abs(maximumHalfWidth-.068D)>1.0E-9D
                     || !Float.isFinite(GROUND_EDGE_RED) || !Float.isFinite(GROUND_EDGE_GREEN)
                     || !Float.isFinite(GROUND_EDGE_BLUE)
