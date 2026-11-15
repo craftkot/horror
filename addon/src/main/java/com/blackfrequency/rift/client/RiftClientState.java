@@ -91,8 +91,10 @@ public final class RiftClientState {
     public static final class GroundRenderer {
         private static final int RADIUS=RiftGeometry.RADIUS;
         private static final int ARM_COUNT=RiftGeometry.FISSURE_ARM_COUNT;
-        private static final int SEGMENTS_PER_ARM=RiftGeometry.FISSURE_SEGMENTS_PER_ARM;
-        private static final double SAMPLE_SPACING=RiftGeometry.FISSURE_SAMPLE_SPACING;
+        // Double the cosmetic mesh density while preserving every server-particle sample at even indices.
+        private static final int SEGMENTS_PER_ARM=RiftGeometry.FISSURE_SEGMENTS_PER_ARM*2;
+        private static final double SAMPLE_SPACING=RiftGeometry.FISSURE_SAMPLE_SPACING*.5D;
+        private static final int GROUND_ENDPOINT_TAPER_SAMPLES=RiftGeometry.FISSURE_SEGMENTS_PER_ARM/2;
         // Terrain sampling is throttled; the fissure pulse itself still renders every frame.
         // Surface sampling may inspect a 40-block vertical window per unique column.
         // Rebuild twice per second; anchor and two-block vertical changes still invalidate immediately.
@@ -123,7 +125,8 @@ public final class RiftClientState {
         // Reject near-vertical interpolated ribbons: grade is measured against the
         // actual horizontal distance between sampled surface points.
         private static final double MAX_GROUND_SEGMENT_Y_DELTA=1.25D;
-        private static final double MAX_GROUND_SEGMENT_GRADE=1.25D;
+        // Keep the same maximum height change per segment after halving sample spacing.
+        private static final double MAX_GROUND_SEGMENT_GRADE=2.5D;
         // Narrow both sides of a mesh gap instead of ending with blunt translucent quads.
         private static final double CLIFF_BREAK_TAPER=.25D;
         // Keep the violet halo subordinate to a more legible dark fissure core without adding draw calls or vertices.
@@ -218,9 +221,10 @@ public final class RiftClientState {
                 double sinAngle=Math.sin(angle);
                 double cosAngle=Math.cos(angle);
                 for(int segment=1;segment<=SEGMENTS_PER_ARM;segment++) {
-                    double distance=segment*SAMPLE_SPACING;
-                    double bend=Math.sin(segment*.85D+arm*1.1D)*RiftGeometry.FISSURE_BEND_AMPLITUDE;
-                    double phase=arm*1.7D+segment*.63D;
+                    double sourceSample=segment*.5D;
+                    double distance=sourceSample*RiftGeometry.FISSURE_SAMPLE_SPACING;
+                    double bend=Math.sin(sourceSample*.85D+arm*1.1D)*RiftGeometry.FISSURE_BEND_AMPLITUDE;
+                    double phase=arm*1.7D+sourceSample*.63D;
                     samples[arm*SEGMENTS_PER_ARM+segment-1]=new GroundSample(
                         cosAngle*distance,sinAngle*bend,
                         sinAngle*distance,cosAngle*bend,phase,
@@ -239,10 +243,9 @@ public final class RiftClientState {
             // Clamp both ends to the sampled arm so malformed indices cannot
             // create a negative or oversized ribbon width.
             int boundedSample=Math.max(0,Math.min(SEGMENTS_PER_ARM,sample));
-            double ramp=Math.min(1.0,boundedSample/3.0);
-            // The final vertex is sample SEGMENTS_PER_ARM, not SEGMENTS_PER_ARM+1.
-            // Using the same endpoint index on both sides keeps all four arms symmetric.
-            double tail=Math.min(1.0,(SEGMENTS_PER_ARM-boundedSample)/3.0);
+            double ramp=Math.min(1.0,boundedSample/(double)GROUND_ENDPOINT_TAPER_SAMPLES);
+            // Preserve the old 1.35-block taper length after doubling mesh sample density.
+            double tail=Math.min(1.0,(SEGMENTS_PER_ARM-boundedSample)/(double)GROUND_ENDPOINT_TAPER_SAMPLES);
             return .5D+.5D*Math.min(ramp,tail);
         }
 
@@ -250,8 +253,10 @@ public final class RiftClientState {
             if(samplingProfileLogged) return;
             int samples=ARM_COUNT*SEGMENTS_PER_ARM;
             double extent=SEGMENTS_PER_ARM*SAMPLE_SPACING;
-            if(ARM_COUNT!=4 || SEGMENTS_PER_ARM!=12 || samples!=48
-                || !Double.isFinite(SAMPLE_SPACING) || SAMPLE_SPACING<.45D || SAMPLE_SPACING>.5D
+            if(ARM_COUNT!=4 || SEGMENTS_PER_ARM!=24 || samples!=96
+                || !Double.isFinite(SAMPLE_SPACING) || SAMPLE_SPACING<.22D || SAMPLE_SPACING>.23D
+                || Math.abs(SAMPLE_SPACING-RiftGeometry.FISSURE_SAMPLE_SPACING*.5D)>1.0E-9D
+                || GROUND_ENDPOINT_TAPER_SAMPLES!=RiftGeometry.FISSURE_SEGMENTS_PER_ARM/2
                 || !Double.isFinite(RiftGeometry.FISSURE_BEND_AMPLITUDE)
                 || Math.abs(RiftGeometry.FISSURE_BEND_AMPLITUDE-.24D)>1.0E-9D
                 || Math.abs(extent-5.40D)>1.0E-9D || extent>=RADIUS)
@@ -270,19 +275,21 @@ public final class RiftClientState {
             if(GROUND_SAMPLES.length!=ARM_COUNT*SEGMENTS_PER_ARM)
                 throw new IllegalStateException("BLACK FREQUENCY ground sample cache size regression");
             int checked=0;
+            boolean evenSamplesAligned=true;
             for(int arm=0;arm<ARM_COUNT;arm++) {
                 double angle=arm*Math.PI/2.0D;
                 double sinAngle=Math.sin(angle);
                 double cosAngle=Math.cos(angle);
                 for(int segment=1;segment<=SEGMENTS_PER_ARM;segment++) {
                     GroundSample sample=GROUND_SAMPLES[arm*SEGMENTS_PER_ARM+segment-1];
-                    double distance=segment*SAMPLE_SPACING;
-                    double bend=Math.sin(segment*.85D+arm*1.1D)*RiftGeometry.FISSURE_BEND_AMPLITUDE;
+                    double sourceSample=segment*.5D;
+                    double distance=sourceSample*RiftGeometry.FISSURE_SAMPLE_SPACING;
+                    double bend=Math.sin(sourceSample*.85D+arm*1.1D)*RiftGeometry.FISSURE_BEND_AMPLITUDE;
                     double forwardX=cosAngle*distance;
                     double bendX=sinAngle*bend;
                     double forwardZ=sinAngle*distance;
                     double bendZ=cosAngle*bend;
-                    double phase=arm*1.7D+segment*.63D;
+                    double phase=arm*1.7D+sourceSample*.63D;
                     double phaseSin=Math.sin(phase);
                     double phaseCos=Math.cos(phase);
                     double flickerPhaseSin=Math.sin(phase*1.9D);
@@ -309,6 +316,20 @@ public final class RiftClientState {
                     double dz=sample.forwardZ()+sample.bendZ();
                     if(dx*dx+dz*dz>=(double)RADIUS*RADIUS)
                         throw new IllegalStateException("BLACK FREQUENCY ground sample escaped fracture radius");
+                    if(segment%2==0) {
+                        int serverSegment=segment/2;
+                        double serverDistance=serverSegment*RiftGeometry.FISSURE_SAMPLE_SPACING;
+                        double serverBend=Math.sin(serverSegment*.85D+arm*1.1D)
+                            *RiftGeometry.FISSURE_BEND_AMPLITUDE;
+                        evenSamplesAligned &= Double.doubleToLongBits(sample.forwardX())
+                                ==Double.doubleToLongBits(cosAngle*serverDistance)
+                            && Double.doubleToLongBits(sample.bendX())
+                                ==Double.doubleToLongBits(sinAngle*serverBend)
+                            && Double.doubleToLongBits(sample.forwardZ())
+                                ==Double.doubleToLongBits(sinAngle*serverDistance)
+                            && Double.doubleToLongBits(sample.bendZ())
+                                ==Double.doubleToLongBits(cosAngle*serverBend);
+                    }
                     // Validate the angle-addition cache against the original per-segment sine formulas.
                     for(double time:new double[]{0.0D,1.0D,20.0D,1234.5D,-120.0D}) {
                         double wave=Math.sin(time*.14D+phase);
@@ -328,8 +349,8 @@ public final class RiftClientState {
                     checked++;
                 }
             }
-            if(checked!=48)
-                throw new IllegalStateException("BLACK FREQUENCY ground sample cache count regression");
+            if(checked!=96 || !evenSamplesAligned)
+                throw new IllegalStateException("BLACK FREQUENCY ground sample cache count/alignment regression");
             sampleOffsetsProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_OFFSETS_VERIFIED samples={} trigPerRebuild=0 bounded=true phaseCached=true",
@@ -337,6 +358,12 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_ANIMATION_PHASE_CACHE_VERIFIED samples={} perFrameTrig=6 legacyPerSegmentTrig=3 equivalent=true",
                 checked);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_DENSITY_VERIFIED meshSamples={} serverSamples={} ratio=2 evenSamplesAligned=true extent={}",
+                checked,checked/2,SEGMENTS_PER_ARM*SAMPLE_SPACING);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_EVEN_SAMPLE_ALIGNMENT_VERIFIED meshSamples={} serverSamples={} aligned=true",
+                checked,checked/2);
         }
 
         private static void verifyTaperProfile() {
@@ -455,8 +482,8 @@ public final class RiftClientState {
         }
 
         // Adjacent samples are connected only when both the height delta and the
-        // actual vertical/horizontal grade are bounded. A one-block rise across one
-        // 0.45-block sample must not become a translucent ramp down a cliff face.
+        // actual vertical/horizontal grade are bounded. The grade doubles with the
+        // halved sample spacing, preserving the previous 0.5625-block rise limit.
         private static boolean isContinuousGroundStep(double fromY,double toY,double horizontalDistance) {
             if(!Double.isFinite(fromY) || !Double.isFinite(toY)
                 || !Double.isFinite(horizontalDistance) || horizontalDistance<=1.0E-5D) return false;

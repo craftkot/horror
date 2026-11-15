@@ -7,7 +7,9 @@ MOUSE_SENSITIVITY=0.6
 MIN_GROUND_MESH_SEGMENTS=8
 MIN_GROUND_MESH_ARMS=2
 MAX_GROUND_MESH_ARMS=4
-GROUND_MESH_SAMPLES=48
+GROUND_MESH_SAMPLES=96
+FISSURE_PARTICLE_SAMPLES=48
+MAX_GROUND_MESH_SEGMENTS=MAX_GROUND_MESH_ARMS*(24-1)
 FISSURE_PARTICLE_EMISSION_RE=re.compile(
     r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) accentDust=(\d+) violetDust=(\d+) edgeDust=(\d+) total=(\d+) heightmap=motion-blocking-no-leaves"
 )
@@ -241,12 +243,12 @@ def valid_fissure_particle_emission(counts):
     if counts is None:
         return False
     samples,accent_dust,violet_dust,edge_dust,total=counts
-    return (32<=samples<=GROUND_MESH_SAMPLES
+    return (32<=samples<=FISSURE_PARTICLE_SAMPLES
             and 0<=accent_dust<=8
             and 0<=violet_dust==samples-accent_dust
             and 0<=edge_dust<=4
             and total==samples+edge_dust and total<=52
-            and (samples!=GROUND_MESH_SAMPLES
+            and (samples!=FISSURE_PARTICLE_SAMPLES
                  or (accent_dust==8 and violet_dust==40 and edge_dust==4)))
 
 _fissure_fixture=(
@@ -1196,6 +1198,7 @@ def capture_test_world():
                           "columns",mesh_columns,"cacheHits",mesh_cache_hits,flush=True)
                     return
                 if (mesh_segments<MIN_GROUND_MESH_SEGMENTS
+                        or mesh_segments>MAX_GROUND_MESH_SEGMENTS
                         or mesh_arms<MIN_GROUND_MESH_ARMS or mesh_arms>MAX_GROUND_MESH_ARMS):
                     terrain_capture_failed=True
                     print("WORLD_CAPTURE_FAIL: client ground mesh is below the shared segment/arm threshold",
@@ -1562,7 +1565,7 @@ def capture_test_world():
             build_source=(camera_source[build_start:build_end]
                           if build_start>=0 and build_end>build_start else "")
             sample_offsets_marker=("BLACK_FREQUENCY_GROUND_MESH_SAMPLE_OFFSETS_VERIFIED "
-                                   "samples=48 trigPerRebuild=0 bounded=true phaseCached=true")
+                                   "samples=96 trigPerRebuild=0 bounded=true phaseCached=true")
             if sample_offsets_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: precomputed ground sample offsets were not verified",flush=True)
                 return False
@@ -1579,9 +1582,9 @@ def capture_test_world():
                     or "Math.sin(" in build_source or "Math.cos(" in build_source):
                 print("WORLD_CAPTURE_FAIL: ground mesh rebuild still calculates fixed sample trigonometry",flush=True)
                 return False
-            print("WORLD_CAPTURE: all 48 ground sample offsets/phases are cached outside the rebuild loop",flush=True)
+            print("WORLD_CAPTURE: all 96 ground mesh sample offsets/phases are cached outside the rebuild loop",flush=True)
             animation_phase_marker=("BLACK_FREQUENCY_GROUND_MESH_ANIMATION_PHASE_CACHE_VERIFIED "
-                                    "samples=48 perFrameTrig=6 legacyPerSegmentTrig=3 equivalent=true")
+                                    "samples=96 perFrameTrig=6 legacyPerSegmentTrig=3 equivalent=true")
             if animation_phase_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: cached animation phase profile was not verified",flush=True)
                 return False
@@ -1708,13 +1711,13 @@ def capture_test_world():
             taper_match=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED start=([0-9.eE+-]+) first=([0-9.eE+-]+) second=([0-9.eE+-]+) middle=([0-9.eE+-]+) secondLast=([0-9.eE+-]+) last=([0-9.eE+-]+) end=([0-9.eE+-]+) symmetric=(true|false) invalidClamped=(true|false)",
                 final_log)
-            expected_taper=(.5,2.0/3.0,5.0/6.0,1.0,5.0/6.0,2.0/3.0,.5)
+            expected_taper=(.5,7.0/12.0,2.0/3.0,1.0,2.0/3.0,7.0/12.0,.5)
             if (not taper_match
                     or any(not math.isclose(float(taper_match.group(i)),expected_taper[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
                            for i in range(1,8))
                     or taper_match.group(8)!="true" or taper_match.group(9)!="true"
-                    or "double tail=Math.min(1.0,(SEGMENTS_PER_ARM-boundedSample)/3.0);" not in camera_source):
+                    or "double tail=Math.min(1.0,(SEGMENTS_PER_ARM-boundedSample)/(double)GROUND_ENDPOINT_TAPER_SAMPLES);" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: ground fissure endpoint taper is not symmetric or bounded",flush=True)
                 return False
             visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=5.8 coreScale=1.65 edgeOffsetScale=2.25 edgeHalfWidth=0.022 pulseMin=0.045 pulseMax=0.068 coreInsideEdgeBand=true"
@@ -2014,14 +2017,14 @@ def capture_test_world():
                     or "SURFACE_Y_BY_COLUMN.containsKey(key)" in build_source.group(0)):
                 print("WORLD_CAPTURE_FAIL: ground sample cache does not use the single-lookup miss sentinel",flush=True)
                 return False
-            if ("BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_VERIFIED maxStep=1.25" not in log_after
+            if ("BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_VERIFIED maxStep=1.25 maxGrade=2.5" not in log_after
                     or not continuity or abs(float(continuity.group(1))-1.25)>1.0E-9):
                 print("WORLD_CAPTURE_FAIL: ground mesh did not verify its cliff-discontinuity guard",
                       flush=True)
                 return False
             grade_guard_marker=(
                 "BLACK_FREQUENCY_GROUND_MESH_GRADE_GUARD_VERIFIED "
-                "maxGrade=1.25 oneBlockRiseRejected=true snowAccepted=true cliffCapProfile=true"
+                "maxGrade=2.5 oneBlockRiseRejected=true snowAccepted=true cliffCapProfile=true"
             )
             if grade_guard_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: slope-aware ground fissure guard was not verified",flush=True)
@@ -2031,11 +2034,11 @@ def capture_test_world():
                 r"cliffCaps=(\d+) unsupportedGapCaps=(\d+) steepStepsSkipped=(\d+)",
                 log_after)
             if (not grade_stats
-                    or abs(float(grade_stats.group(1))-1.25)>1.0E-9
+                    or abs(float(grade_stats.group(1))-2.5)>1.0E-9
                     or int(grade_stats.group(2))>int(grade_stats.group(4))):
                 print("WORLD_CAPTURE_FAIL: cliff-end taper accounting is invalid",flush=True)
                 return False
-            if ("private static final double MAX_GROUND_SEGMENT_GRADE=1.25D;" not in camera_source
+            if ("private static final double MAX_GROUND_SEGMENT_GRADE=2.5D;" not in camera_source
                     or "isContinuousGroundStep(previous.y(),current.y(),length)" not in camera_source
                     or "capLastGroundSegmentAtGap" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: renderer is not using slope-aware continuity and gap caps",flush=True)
@@ -2051,6 +2054,7 @@ def capture_test_world():
                       "columns",mesh_columns,"cacheHits",mesh_cache_hits,flush=True)
                 return False
             if (mesh_segments<MIN_GROUND_MESH_SEGMENTS
+                    or mesh_segments>MAX_GROUND_MESH_SEGMENTS
                     or mesh_arms<MIN_GROUND_MESH_ARMS or mesh_arms>MAX_GROUND_MESH_ARMS):
                 print("WORLD_CAPTURE_FAIL: final ground mesh is below the shared segment/arm threshold",
                       "segments",mesh_segments,"arms",mesh_arms,flush=True)
@@ -2065,7 +2069,7 @@ def capture_test_world():
             density_spacing=float(density.group(2))
             density_extent=float(density.group(3))
             density_bend=float(density.group(4))
-            if (density_samples!=GROUND_MESH_SAMPLES
+            if (density_samples!=FISSURE_PARTICLE_SAMPLES
                     or density_spacing<0.45 or density_spacing>0.5
                     or not math.isclose(density_extent,12*density_spacing,
                                         rel_tol=0.0,abs_tol=1.0e-9)
@@ -2086,12 +2090,13 @@ def capture_test_world():
             client_extent=float(ground_sampling.group(3))
             client_radius=int(ground_sampling.group(4))
             client_bend=float(ground_sampling.group(5))
-            if (client_samples!=density_samples
-                    or not math.isclose(client_spacing,density_spacing,rel_tol=0.0,abs_tol=1.0e-9)
+            if (client_samples!=GROUND_MESH_SAMPLES
+                    or not math.isclose(client_spacing,density_spacing*.5,rel_tol=0.0,abs_tol=1.0e-9)
                     or not math.isclose(client_extent,density_extent,rel_tol=0.0,abs_tol=1.0e-9)
                     or client_radius!=48 or client_extent>=client_radius
-                    or not math.isclose(client_bend,density_bend,rel_tol=0.0,abs_tol=1.0e-9)):
-                print("WORLD_CAPTURE_FAIL: client/server fissure geometry diverged",
+                    or not math.isclose(client_bend,density_bend,rel_tol=0.0,abs_tol=1.0e-9)
+                    or "BLACK_FREQUENCY_GROUND_MESH_DENSITY_VERIFIED meshSamples=96 serverSamples=48 ratio=2 evenSamplesAligned=true extent=5.4" not in log_after):
+                print("WORLD_CAPTURE_FAIL: denser client mesh no longer aligns with the server fissure path",
                       "server",density_spacing,density_extent,
                       "client",client_spacing,client_extent,"radius",client_radius,flush=True)
                 return False
