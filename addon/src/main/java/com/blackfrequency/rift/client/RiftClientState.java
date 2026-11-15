@@ -165,7 +165,7 @@ public final class RiftClientState {
         private static final int GROUND_EDGE_GREEN_CHANNEL=colorChannel(GROUND_EDGE_GREEN);
         private static final int GROUND_EDGE_BLUE_CHANNEL=colorChannel(GROUND_EDGE_BLUE);
         // Keep the halo readable against grass and stone without another draw call or mesh layer.
-        private static final float GROUND_GLOW_ALPHA=.42F;
+        private static final float GROUND_GLOW_ALPHA=.50F;
         // GROUND_GLOW_ALPHA is binary32; allow its widened representation's rounding error.
         private static final double GROUND_GLOW_ALPHA_TOLERANCE=1.0E-7D;
         // A restrained violet filament pulses inside the dark core without another trig call.
@@ -766,9 +766,9 @@ public final class RiftClientState {
             double glowPulseMaximum=.78D+.22D;
             double glowAlphaMinimum=glowPulseMinimum*GROUND_GLOW_ALPHA;
             double glowAlphaMaximum=glowPulseMaximum*GROUND_GLOW_ALPHA;
-            if(!Float.isFinite(GROUND_GLOW_ALPHA) || GROUND_GLOW_ALPHA<.38F || GROUND_GLOW_ALPHA>.45F
-                || Math.abs(glowAlphaMinimum-.2352D)>GROUND_GLOW_ALPHA_TOLERANCE
-                || Math.abs(glowAlphaMaximum-.42D)>GROUND_GLOW_ALPHA_TOLERANCE)
+            if(!Float.isFinite(GROUND_GLOW_ALPHA) || GROUND_GLOW_ALPHA<.48F || GROUND_GLOW_ALPHA>.52F
+                || Math.abs(glowAlphaMinimum-.28D)>GROUND_GLOW_ALPHA_TOLERANCE
+                || Math.abs(glowAlphaMaximum-.50D)>GROUND_GLOW_ALPHA_TOLERANCE)
                 throw new IllegalStateException("BLACK FREQUENCY ground glow alpha profile regression");
             double minimum=boundedCorePulse(0.0D);
             double midpoint=boundedCorePulse(.5D);
