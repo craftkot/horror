@@ -754,7 +754,6 @@ public final class RiftController {
             int snapshotCount=boundedSnapshotCount(saved.size());
             boolean snapshotStateRepaired=false;
             int quarantinedSnapshotPayloads=0;
-            long retainedSnapshotEstimateBytes=0L;
             for(int i=0;i<snapshotCount;i++) {
                 CompoundTag entry=saved.getCompound(i);
                 long candidateEstimate=boundedSnapshotPayloadEstimate(entry);
@@ -774,7 +773,7 @@ public final class RiftController {
             }
             if(quarantinedSnapshotPayloads>0)
                 LOGGER.warn("BLACK FREQUENCY: quarantined {} recovery snapshot payloads; retained estimate {} bytes of {} byte budget",
-                    quarantinedSnapshotPayloads,retainedSnapshotEstimateBytes,MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES);
+                    quarantinedSnapshotPayloads,s.retainedSnapshotEstimateBytes,MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES);
             if(snapshotCount>s.edits) {
                 // The pending snapshots are authoritative when a damaged save
                 // has a smaller edit counter; keep restoration accounting consistent.
@@ -1627,7 +1626,6 @@ public final class RiftController {
             throw new IllegalStateException("CI oversized recovery snapshot payload was retained");
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_PAYLOAD_QUARANTINE_VERIFIED entries=2 retainedPayload=false");
 
-        long stoneSnapshotEstimate=estimatedSnapshotPayloadBytes(snapshot);
         long maximumStoneSnapshotEstimate=stoneSnapshotEstimate*MAX_EDITS;
         boolean retentionBoundaries=withinSnapshotRetentionBudget(0L,MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES)
             && withinSnapshotRetentionBudget(MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES-1L,1L)
