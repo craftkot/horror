@@ -1472,6 +1472,46 @@ def capture_test_world():
             if "BLACK_FREQUENCY_GROUND_MESH_PLANT_OUTLINE_HEIGHT_VERIFIED" not in final_log:
                 print("WORLD_CAPTURE_FAIL: real tall-grass outline height was not verified",flush=True)
                 return False
+            color_profile_marker="BLACK_FREQUENCY_GROUND_MESH_COLOR_CHANNEL_PROFILE_VERIFIED zero=0 half=128 one=255 lowClamp=0 highClamp=255 nonFinite=true"
+            if color_profile_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: per-ribbon color conversion profile was not executed",flush=True)
+                return False
+            glow_alpha_match=re.search(
+                r"BLACK_FREQUENCY_GROUND_MESH_GLOW_ALPHA_VERIFIED multiplier=([0-9.]+) fullStrengthPulseMin=([0-9.]+) fullStrengthPulseMax=([0-9.]+) minAlpha=([0-9.]+) maxAlpha=([0-9.]+)",
+                final_log)
+            expected_glow_alpha=(.42,.56,1.0,.2352,.42)
+            if (not glow_alpha_match
+                    or any(not math.isclose(float(glow_alpha_match.group(i)),expected_glow_alpha[i-1],
+                                             rel_tol=0.0,abs_tol=1.0e-6)
+                           for i in range(1,6))
+                    or "GROUND_GLOW_ALPHA=.42F;" not in camera_source
+                    or "alpha*GROUND_GLOW_ALPHA" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: violet ground halo alpha profile is missing or outside its tested bounds",flush=True)
+                return False
+            vertex_start=camera_source.find("private static void vertex(")
+            vertex_end=camera_source.find("\\n        private static void ribbon(",vertex_start)
+            ribbon_start=camera_source.find("private static void ribbon(",vertex_end)
+            ribbon_end=camera_source.find("\\n        private static void clearGeometryCache()",ribbon_start)
+            vertex_source=(camera_source[vertex_start:vertex_end]
+                           if vertex_start>=0 and vertex_end>vertex_start else "")
+            ribbon_source=(camera_source[ribbon_start:ribbon_end]
+                           if ribbon_start>=0 and ribbon_end>ribbon_start else "")
+            channel_calls=("int redChannel=colorChannel(red);",
+                           "int greenChannel=colorChannel(green);",
+                           "int blueChannel=colorChannel(blue);",
+                           "int alphaChannel=colorChannel(alpha);")
+            build_start=camera_source.find("private static GroundMesh buildSegments(")
+            build_end=camera_source.find("\\n        // Use the nearest actually sampled surface point",build_start)
+            build_source=(camera_source[build_start:build_end]
+                          if build_start>=0 and build_end>build_start else "")
+            if (not vertex_source or ".color(red,green,blue,alpha)" not in vertex_source
+                    or "colorChannel(" in vertex_source or not ribbon_source
+                    or any(ribbon_source.count(call)!=1 for call in channel_calls)
+                    or "redChannel,greenChannel,blueChannel,alphaChannel" not in ribbon_source
+                    or "verifyPackedColorProfile();" not in build_source):
+                print("WORLD_CAPTURE_FAIL: ground ribbon must convert each RGBA channel once per quad and reuse it for all four vertices",flush=True)
+                return False
+            print("WORLD_CAPTURE: ground ribbon RGBA channels are converted once per quad and reused by all vertices",flush=True)
             if "BLACK_FREQUENCY_TEST GROUND_MESH_INACTIVE_CACHE_CLEANUP_VERIFIED levelReference=true" not in final_log:
                 print("WORLD_CAPTURE_FAIL: inactive ground mesh cache did not prove ClientLevel reference release",flush=True)
                 return False
