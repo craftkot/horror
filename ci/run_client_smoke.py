@@ -1498,22 +1498,68 @@ def capture_test_world():
                            if vertex_start>=0 and vertex_end>vertex_start else "")
             ribbon_source=(camera_source[ribbon_start:ribbon_end]
                            if ribbon_start>=0 and ribbon_end>ribbon_start else "")
-            channel_calls=("int redChannel=colorChannel(red);",
-                           "int greenChannel=colorChannel(green);",
-                           "int blueChannel=colorChannel(blue);",
-                           "int alphaChannel=colorChannel(alpha);")
             build_start=camera_source.find("private static GroundMesh buildSegments(")
             build_end=camera_source.find("// Use the nearest actually sampled surface point",build_start)
             build_source=(camera_source[build_start:build_end]
                           if build_start>=0 and build_end>build_start else "")
-            if (not vertex_source or ".color(red,green,blue,alpha)" not in vertex_source
-                    or "colorChannel(" in vertex_source or not ribbon_source
-                    or any(ribbon_source.count(call)!=1 for call in channel_calls)
-                    or "redChannel,greenChannel,blueChannel,alphaChannel" not in ribbon_source
-                    or "verifyPackedColorProfile();" not in build_source):
-                print("WORLD_CAPTURE_FAIL: ground ribbon must convert each RGBA channel once per quad and reuse it for all four vertices",flush=True)
-                return False
-            print("WORLD_CAPTURE: ground ribbon RGBA channels are converted once per quad and reused by all vertices",flush=True)
+            ribbon_cache_marker=("BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED "
+                                 "staticRgbChannels=12 dynamicAlphaChannels=4 edgeAlphaShared=true")
+            if ribbon_cache_marker in final_log:
+                expected_static_channels=(
+                    "private static final int GROUND_GLOW_RED_CHANNEL=colorChannel(.20F);",
+                    "private static final int GROUND_GLOW_GREEN_CHANNEL=colorChannel(.025F);",
+                    "private static final int GROUND_GLOW_BLUE_CHANNEL=colorChannel(.43F);",
+                    "private static final int GROUND_CORE_RED_CHANNEL=colorChannel(.008F);",
+                    "private static final int GROUND_CORE_GREEN_CHANNEL=colorChannel(.001F);",
+                    "private static final int GROUND_CORE_BLUE_CHANNEL=colorChannel(.022F);",
+                    "private static final int GROUND_FILAMENT_RED_CHANNEL=colorChannel(.28F);",
+                    "private static final int GROUND_FILAMENT_GREEN_CHANNEL=colorChannel(.015F);",
+                    "private static final int GROUND_FILAMENT_BLUE_CHANNEL=colorChannel(.62F);",
+                    "private static final int GROUND_EDGE_RED_CHANNEL=colorChannel(GROUND_EDGE_RED);",
+                    "private static final int GROUND_EDGE_GREEN_CHANNEL=colorChannel(GROUND_EDGE_GREEN);",
+                    "private static final int GROUND_EDGE_BLUE_CHANNEL=colorChannel(GROUND_EDGE_BLUE);")
+                dynamic_alpha_calls=(
+                    "int glowAlphaChannel=colorChannel(alpha*GROUND_GLOW_ALPHA);",
+                    "int coreAlphaChannel=colorChannel(alpha*.94F);",
+                    "int filamentAlphaChannel=colorChannel(alpha*corePulse);",
+                    "int edgeAlphaChannel=colorChannel(edgeAlpha);")
+                ribbon_calls=(
+                    "GROUND_GLOW_RED_CHANNEL,GROUND_GLOW_GREEN_CHANNEL,GROUND_GLOW_BLUE_CHANNEL,glowAlphaChannel",
+                    "GROUND_CORE_RED_CHANNEL,GROUND_CORE_GREEN_CHANNEL,GROUND_CORE_BLUE_CHANNEL,coreAlphaChannel",
+                    "GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,filamentAlphaChannel",
+                    "GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel")
+                render_start=camera_source.find("for(GroundSegment segment:cachedSegments)")
+                render_end=camera_source.find("BufferUploader.drawWithShader(builder.end());",render_start)
+                render_source=(camera_source[render_start:render_end]
+                               if render_start>=0 and render_end>render_start else "")
+                if (not vertex_source or ".color(red,green,blue,alpha)" not in vertex_source
+                        or "colorChannel(" in vertex_source or not ribbon_source
+                        or "int redChannel,int greenChannel,int blueChannel,int alphaChannel" not in ribbon_source
+                        or "colorChannel(" in ribbon_source
+                        or ribbon_source.count("redChannel,greenChannel,blueChannel,alphaChannel")!=4
+                        or any(field not in camera_source for field in expected_static_channels)
+                        or any(render_source.count(call)!=1 for call in dynamic_alpha_calls)
+                        or render_source.count("colorChannel(")!=4
+                        or any(call not in render_source for call in ribbon_calls)
+                        or render_source.count("GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel")!=2
+                        or "verifyPackedColorProfile();" not in build_source
+                        or "verifyRibbonColorCacheProfile();" not in build_source):
+                    print("WORLD_CAPTURE_FAIL: ground ribbon must cache 12 static RGB channels and convert only four dynamic alpha channels per segment",flush=True)
+                    return False
+                print("WORLD_CAPTURE: ground ribbon reuses 12 static RGB channels and computes four alpha channels per segment",flush=True)
+            else:
+                channel_calls=("int redChannel=colorChannel(red);",
+                               "int greenChannel=colorChannel(green);",
+                               "int blueChannel=colorChannel(blue);",
+                               "int alphaChannel=colorChannel(alpha);")
+                if (not vertex_source or ".color(red,green,blue,alpha)" not in vertex_source
+                        or "colorChannel(" in vertex_source or not ribbon_source
+                        or any(ribbon_source.count(call)!=1 for call in channel_calls)
+                        or "redChannel,greenChannel,blueChannel,alphaChannel" not in ribbon_source
+                        or "verifyPackedColorProfile();" not in build_source):
+                    print("WORLD_CAPTURE_FAIL: ground ribbon must convert each RGBA channel once per quad and reuse it for all four vertices",flush=True)
+                    return False
+                print("WORLD_CAPTURE: legacy ground ribbon RGBA conversion profile verified",flush=True)
             if "BLACK_FREQUENCY_TEST GROUND_MESH_INACTIVE_CACHE_CLEANUP_VERIFIED levelReference=true" not in final_log:
                 print("WORLD_CAPTURE_FAIL: inactive ground mesh cache did not prove ClientLevel reference release",flush=True)
                 return False
