@@ -1173,32 +1173,117 @@ public final class RiftController {
             CI_BEACON_PAD_FLOOR_Y_OFFSET,CI_BEACON_PAD_PLAYER_Y_OFFSET,
             CI_BEACON_PAD_FIRST_SOLID_ROW,CI_BEACON_PAD_GAP_ROW,CI_BEACON_PAD_LAST_SOLID_ROW,
             CI_BEACON_PAD_STANDOFF,distanceSquared,padInnerFaceY,beaconEntryY);
+        verifyFissureRayChunkTraversalProfile();
     }
 
-    private static boolean fissureRayChunksLoaded(ServerLevel level,BlockPos from,BlockPos to) {
-        int minChunkX=Math.min(from.getX(),to.getX())>>4;
-        int maxChunkX=Math.max(from.getX(),to.getX())>>4;
-        int minChunkZ=Math.min(from.getZ(),to.getZ())>>4;
-        int maxChunkZ=Math.max(from.getZ(),to.getZ())>>4;
-        for(int chunkX=minChunkX;chunkX<=maxChunkX;chunkX++)
-            for(int chunkZ=minChunkZ;chunkZ<=maxChunkZ;chunkZ++)
-                if(!level.hasChunk(chunkX,chunkZ)) return false;
-        return true;
+    @FunctionalInterface
+    private interface LoadedChunkLookup {
+        boolean hasChunk(int chunkX,int chunkZ);
+    }
+
+    /**
+     * Checks only the X/Z chunks crossed by a ray. The previous AABB scan could
+     * reject a visible target because an unrelated diagonal chunk was unloaded.
+     * The lookup is deliberately hasChunk-only: this path must never request a chunk.
+     */
+    private static boolean fissureRayChunksLoaded(net.minecraft.world.phys.Vec3 from,
+            net.minecraft.world.phys.Vec3 to,LoadedChunkLookup chunks) {
+        if(from==null || to==null || chunks==null
+            || !Double.isFinite(from.x) || !Double.isFinite(from.z)
+            || !Double.isFinite(to.x) || !Double.isFinite(to.z)
+            || Math.abs(from.x)>30_000_000.0D || Math.abs(from.z)>30_000_000.0D
+            || Math.abs(to.x)>30_000_000.0D || Math.abs(to.z)>30_000_000.0D) return false;
+
+        double startX=from.x,startZ=from.z,endX=to.x,endZ=to.z;
+        int chunkX=((int)Math.floor(startX))>>4;
+        int chunkZ=((int)Math.floor(startZ))>>4;
+        int endChunkX=((int)Math.floor(endX))>>4;
+        int endChunkZ=((int)Math.floor(endZ))>>4;
+        if(!chunks.hasChunk(chunkX,chunkZ)) return false;
+        if(chunkX==endChunkX && chunkZ==endChunkZ) return true;
+
+        double deltaX=endX-startX,deltaZ=endZ-startZ;
+        int stepX=deltaX>0.0D ? 1 : deltaX<0.0D ? -1 : 0;
+        int stepZ=deltaZ>0.0D ? 1 : deltaZ<0.0D ? -1 : 0;
+        double nextX=stepX==0 ? Double.POSITIVE_INFINITY
+            : ((stepX>0 ? (chunkX+1)*16.0D : chunkX*16.0D)-startX)/deltaX;
+        double nextZ=stepZ==0 ? Double.POSITIVE_INFINITY
+            : ((stepZ>0 ? (chunkZ+1)*16.0D : chunkZ*16.0D)-startZ)/deltaZ;
+        double deltaTX=stepX==0 ? Double.POSITIVE_INFINITY : 16.0D/Math.abs(deltaX);
+        double deltaTZ=stepZ==0 ? Double.POSITIVE_INFINITY : 16.0D/Math.abs(deltaZ);
+        long maxSteps=Math.abs((long)endChunkX-chunkX)
+            +Math.abs((long)endChunkZ-chunkZ)+1L;
+
+        for(long visited=0;visited<maxSteps;visited++) {
+            if(chunkX==endChunkX && chunkZ==endChunkZ) return true;
+            double crossingDelta=nextX-nextZ;
+            if(crossingDelta< -1.0E-12D) {
+                chunkX+=stepX;
+                nextX+=deltaTX;
+            } else if(crossingDelta>1.0E-12D) {
+                chunkZ+=stepZ;
+                nextZ+=deltaTZ;
+            } else {
+                // A ray exactly through a chunk corner touches both side cells.
+                // Check them before entering the diagonal cell to stay conservative.
+                int sideChunkX=chunkX+stepX;
+                int sideChunkZ=chunkZ+stepZ;
+                if(stepX!=0 && !chunks.hasChunk(sideChunkX,chunkZ)) return false;
+                if(stepZ!=0 && !chunks.hasChunk(chunkX,sideChunkZ)) return false;
+                chunkX=sideChunkX;
+                chunkZ=sideChunkZ;
+                nextX+=deltaTX;
+                nextZ+=deltaTZ;
+            }
+            if(!chunks.hasChunk(chunkX,chunkZ)) return false;
+        }
+        return chunkX==endChunkX && chunkZ==endChunkZ;
+    }
+
+    private static void verifyFissureRayChunkTraversalProfile() {
+        boolean skipsUncrossedAabbCell=fissureRayChunksLoaded(
+            new net.minecraft.world.phys.Vec3(15.25D,64.0D,15.0D),
+            new net.minecraft.world.phys.Vec3(16.25D,64.0D,16.9D),
+            (chunkX,chunkZ)->!(chunkX==1 && chunkZ==0));
+        boolean requiresCrossedChunk=!fissureRayChunksLoaded(
+            new net.minecraft.world.phys.Vec3(15.25D,64.0D,15.0D),
+            new net.minecraft.world.phys.Vec3(16.25D,64.0D,16.9D),
+            (chunkX,chunkZ)->!(chunkX==0 && chunkZ==1));
+        boolean negativeDirection=fissureRayChunksLoaded(
+            new net.minecraft.world.phys.Vec3(16.75D,64.0D,16.9D),
+            new net.minecraft.world.phys.Vec3(15.25D,64.0D,15.0D),
+            (chunkX,chunkZ)->true);
+        boolean cornerGuard=!fissureRayChunksLoaded(
+            new net.minecraft.world.phys.Vec3(15.5D,64.0D,15.5D),
+            new net.minecraft.world.phys.Vec3(16.5D,64.0D,16.5D),
+            (chunkX,chunkZ)->!(chunkX==1 && chunkZ==0));
+        boolean invalidRejected=!fissureRayChunksLoaded(
+            new net.minecraft.world.phys.Vec3(Double.NaN,64.0D,0.0D),
+            new net.minecraft.world.phys.Vec3(1.0D,64.0D,1.0D),
+            (chunkX,chunkZ)->true)
+            && !fissureRayChunksLoaded(
+                new net.minecraft.world.phys.Vec3(30_000_001.0D,64.0D,0.0D),
+                new net.minecraft.world.phys.Vec3(1.0D,64.0D,1.0D),
+                (chunkX,chunkZ)->true);
+        if(!(skipsUncrossedAabbCell && requiresCrossedChunk && negativeDirection
+            && cornerGuard && invalidRejected))
+            throw new IllegalStateException("BLACK FREQUENCY loaded-only ray chunk traversal regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RAY_CHUNK_TRAVERSAL_VERIFIED skippedAabbOnlyChunk=true traversedChunkRequired=true negativeDirection=true cornerTouchGuard=true invalidRejected=true");
     }
 
     /** True only when a loaded-only outline ray reaches the actual physical beacon. */
     private static boolean ciBeaconSightlineHitsBeacon(ServerLevel level,
             net.minecraft.server.level.ServerPlayer player,BlockPos beacon) {
         net.minecraft.world.phys.Vec3 eye=player.getEyePosition();
-        if(!fissureRayChunksLoaded(level,BlockPos.containing(eye),beacon)) {
+        net.minecraft.world.phys.Vec3 target=net.minecraft.world.phys.Vec3.atCenterOf(beacon);
+        if(!fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ))) {
             if(CI_TEST && !ciBeaconSightlineFailureLogged) {
                 ciBeaconSightlineFailureLogged=true;
                 LOGGER.warn("BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_BLOCKER_DIAGNOSTIC reason=unloaded-chunk eye={} target={}",eye,beacon);
             }
             return false;
         }
-        var hit=level.clip(new net.minecraft.world.level.ClipContext(eye,
-            net.minecraft.world.phys.Vec3.atCenterOf(beacon),
+        var hit=level.clip(new net.minecraft.world.level.ClipContext(eye,target,
             net.minecraft.world.level.ClipContext.Block.OUTLINE,
             net.minecraft.world.level.ClipContext.Fluid.NONE,player));
         // Level.clip already returns a BlockHitResult in Minecraft 1.20.1.
@@ -1221,7 +1306,6 @@ public final class RiftController {
             net.minecraft.server.level.ServerPlayer viewer) {
         if(viewer==null || !viewer.isAlive() || viewer.isRemoved()) return null;
         net.minecraft.world.phys.Vec3 eye=viewer.getEyePosition();
-        BlockPos viewerPosition=viewer.blockPosition();
         BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();
         FissureTarget best=null;
         for(int arm=0;arm<FISSURE_ARM_COUNT;arm++) {
@@ -1242,9 +1326,9 @@ public final class RiftController {
                 cursor.set(blockX,surfaceY-1,blockZ);
                 if(!isFissureGroundSupport(level.getBlockState(cursor))) continue;
                 cursor.set(blockX,surfaceY,blockZ);
-                if(!fissureRayChunksLoaded(level,viewerPosition,cursor)) continue;
                 net.minecraft.world.phys.Vec3 target=new net.minecraft.world.phys.Vec3(
                     px,fissureParticleY(level,blockX,surfaceY,blockZ,cursor),pz);
+                if(!fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ))) continue;
                 double vx=target.x-eye.x,vy=target.y-eye.y,vz=target.z-eye.z;
                 double horizontalSquared=vx*vx+vz*vz;
                 // Keep a modest horizontal standoff so the view does not point
