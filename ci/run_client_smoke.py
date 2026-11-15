@@ -36,10 +36,14 @@ def verify_restoration_particle_source():
     pad_body=source[pad_start:pad_end] if pad_start>=0 and pad_end>pad_start else ""
     if ("CI_BEACON_PAD_FLOOR_Y_OFFSET=1;" not in source
             or "CI_BEACON_PAD_PLAYER_Y_OFFSET=2;" not in source
-            or "CI_BEACON_PAD_STANDOFF_Z=1.75D;" not in source
-            or "CI_BEACON_PAD_LAST_SOLID_ROW_DZ=-2;" not in source
-            or "CI_BEACON_PAD_STANDOFF_Z+.5D" not in source
-            or "dz<=CI_BEACON_PAD_LAST_SOLID_ROW_DZ" not in pad_body
+            or "CI_BEACON_PAD_STANDOFF=1.75D;" not in source
+            or "CI_BEACON_PAD_GAP_ROW=1;" not in source
+            or "CI_BEACON_PAD_FIRST_SOLID_ROW=2;" not in source
+            or "CI_BEACON_PAD_LAST_SOLID_ROW=4;" not in source
+            or "CI_BEACON_PAD_FIRST_SOLID_ROW!=CI_BEACON_PAD_GAP_ROW+1" not in source
+            or "ciBeaconPadAlongX(int anchorX,int anchorZ,int beaconX,int beaconZ)" not in source
+            or "ciBeaconPadAlongX(s.x,s.z,demoPos.getX(),demoPos.getZ())" not in pad_body
+            or "for(int offset=CI_BEACON_PAD_FIRST_SOLID_ROW;offset<=CI_BEACON_PAD_LAST_SOLID_ROW;offset++)" not in pad_body
             or "ciBeaconSightlineHitsBeacon(level,demoPlayer,demoPos)" not in pad_body
             or "BEACON_SIGHTLINE_VERIFIED" not in pad_body
             or "demoPos.offset(dx,CI_BEACON_PAD_FLOOR_Y_OFFSET,dz)" not in pad_body
@@ -48,8 +52,10 @@ def verify_restoration_particle_source():
             or "level.getWorldBorder().isWithinBounds(floor)" not in pad_body
             or "level.hasChunk(floor.getX()>>4,floor.getZ()>>4)" not in pad_body
             or "demoPos.getY()+CI_BEACON_PAD_PLAYER_Y_OFFSET" not in pad_body
+            or "demoPos.getX()+.5D+padDirectionX*CI_BEACON_PAD_STANDOFF" not in pad_body
+            or "demoPos.getZ()+.5D+padDirectionZ*CI_BEACON_PAD_STANDOFF" not in pad_body
             or "PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED" not in pad_body):
-        raise RuntimeError("BLACK FREQUENCY elevated beacon pad must stay inside the bounded loaded area and within interaction reach")
+        raise RuntimeError("BLACK FREQUENCY elevated perpendicular beacon pad must stay loaded, bounded, visible and within interaction reach")
     if ("BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();" not in target_body
             or "findFissureGroundY(level,blockX,blockZ,cursor)" not in target_body
             or "fissureParticleY(level,blockX,surfaceY,blockZ,cursor)" not in target_body
@@ -1110,6 +1116,10 @@ def capture_test_world():
                 if (terrain_shot or terrain_capture_attempted or terrain_capture_failed
                         or "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in logs):
                     return
+                if "BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_UNAVAILABLE" in logs:
+                    terrain_capture_failed=True
+                    print("WORLD_CAPTURE_FAIL: the safe beacon pad occluded every loaded fissure sample",flush=True)
+                    return
                 marker=re.search(
                     r"BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_EMITTED x=(-?\d+) y=(-?\d+) z=(-?\d+)",
                     logs)
@@ -1121,7 +1131,7 @@ def capture_test_world():
                     r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
                     logs)
                 pad_profile=re.search(
-                    r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset=1 playerOffset=2 standoff=1\.75 lastSolidRowDz=-2 distanceSquared=([-+0-9.eE]+) padBlocks=(\d+) withinReach=true beamColumnUntouched=true withinRiftRadius=true",
+                    r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset=1 playerOffset=2 axis=([XZ]) firstSolidRow=2 gapRow=1 lastSolidRow=4 standoff=1\.75 distanceSquared=([-+0-9.eE]+) padBlocks=(\d+) withinReach=true beamColumnUntouched=true withinRiftRadius=true perpendicular=true",
                     logs)
                 aim=re.search(
                     r"BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)",
@@ -1167,15 +1177,17 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: fissure particle composition/budget mismatch",
                           samples,accent_dust,violet_dust,edge_dust_count,total_particles,flush=True)
                     return
-                pad_distance_squared=float(pad_profile.group(1))
-                pad_block_count=int(pad_profile.group(2))
-                if (not math.isfinite(pad_distance_squared)
+                pad_axis=pad_profile.group(1)
+                pad_distance_squared=float(pad_profile.group(2))
+                pad_block_count=int(pad_profile.group(3))
+                if (pad_axis not in ("X","Z")
+                        or not math.isfinite(pad_distance_squared)
                         or pad_distance_squared<0.0
                         or pad_distance_squared>4.5*4.5
-                        or pad_block_count<1):
+                        or pad_block_count!=9):
                     terrain_capture_failed=True
-                    print("WORLD_CAPTURE_FAIL: elevated beacon pad is outside interaction reach or has no loaded support",
-                          pad_distance_squared,pad_block_count,flush=True)
+                    print("WORLD_CAPTURE_FAIL: perpendicular beacon pad is outside interaction reach or incomplete",
+                          pad_axis,pad_distance_squared,pad_block_count,flush=True)
                     return
                 target_horizontal_squared=float(target.group(5))
                 minimum_target_horizontal_squared=2.25*2.25

@@ -129,13 +129,15 @@ public final class RiftController {
     // standoff keeps the particle trail and the surface ribbon in the same view.
     private static final double FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE = FISSURE_SAMPLE_SPACING*5.0D;
     private static final double FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE = 6.0D;
-    // Raise the disposable client-test pad above nearby terrain so at least one
-    // emitted fissure sample can be viewed without changing the production world.
+    // The disposable CI pad is perpendicular to the anchor-to-beacon vector so
+    // its support blocks cannot hide the ground fissure from the player's camera.
     private static final int CI_BEACON_PAD_FLOOR_Y_OFFSET=1;
     private static final int CI_BEACON_PAD_PLAYER_Y_OFFSET=2;
-    private static final double CI_BEACON_PAD_STANDOFF_Z=1.75D;
-    // Keep the row immediately beside the beacon empty so the player's ray is not blocked by the pad.
-    private static final int CI_BEACON_PAD_LAST_SOLID_ROW_DZ=-2;
+    private static final double CI_BEACON_PAD_STANDOFF=1.75D;
+    // Leave one empty row beside the beacon; the player's support starts at offset 2.
+    private static final int CI_BEACON_PAD_GAP_ROW=1;
+    private static final int CI_BEACON_PAD_FIRST_SOLID_ROW=2;
+    private static final int CI_BEACON_PAD_LAST_SOLID_ROW=4;
     private static final double CI_BEACON_INTERACTION_MAX_DISTANCE=4.5D;
 
     private static double fissurePulseWave(double phase,int segment,int arm) {
@@ -1106,9 +1108,16 @@ public final class RiftController {
         verifyCiBeaconPadProfile();
     }
 
+    private static boolean ciBeaconPadAlongX(int anchorX,int anchorZ,int beaconX,int beaconZ) {
+        long anchorDeltaX=(long)beaconX-anchorX;
+        long anchorDeltaZ=(long)beaconZ-anchorZ;
+        // A Z-dominant anchor offset leaves an X-side pad perpendicular to the fissure.
+        return Math.abs(anchorDeltaZ)>=Math.abs(anchorDeltaX);
+    }
+
     private static double ciBeaconPadDistanceSquared() {
         double vertical=CI_BEACON_PAD_PLAYER_Y_OFFSET-.5D;
-        double horizontal=CI_BEACON_PAD_STANDOFF_Z+.5D;
+        double horizontal=CI_BEACON_PAD_STANDOFF;
         return horizontal*horizontal+vertical*vertical;
     }
 
@@ -1116,15 +1125,25 @@ public final class RiftController {
         double distanceSquared=ciBeaconPadDistanceSquared();
         if(CI_BEACON_PAD_FLOOR_Y_OFFSET!=1
             || CI_BEACON_PAD_PLAYER_Y_OFFSET!=2
-            || Math.abs(CI_BEACON_PAD_STANDOFF_Z-1.75D)>1.0E-9D
-            || CI_BEACON_PAD_LAST_SOLID_ROW_DZ!=-2
+            || Math.abs(CI_BEACON_PAD_STANDOFF-1.75D)>1.0E-9D
+            || CI_BEACON_PAD_GAP_ROW!=1
+            || CI_BEACON_PAD_FIRST_SOLID_ROW!=2
+            || CI_BEACON_PAD_LAST_SOLID_ROW!=4
+            || CI_BEACON_PAD_FIRST_SOLID_ROW!=CI_BEACON_PAD_GAP_ROW+1
+            || CI_BEACON_PAD_LAST_SOLID_ROW<CI_BEACON_PAD_FIRST_SOLID_ROW
+            || !ciBeaconPadAlongX(2,8,2,11)
+            || ciBeaconPadAlongX(2,8,5,8)
+            || !ciBeaconPadAlongX(2,8,5,11)
+            || !ciBeaconPadAlongX(0,Integer.MIN_VALUE,0,Integer.MAX_VALUE)
+            || ciBeaconPadAlongX(Integer.MIN_VALUE,0,Integer.MAX_VALUE,0)
             || !Double.isFinite(distanceSquared)
-            || Math.abs(distanceSquared-7.3125D)>1.0E-9D
+            || Math.abs(distanceSquared-5.3125D)>1.0E-9D
             || distanceSquared>CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE)
-            throw new IllegalStateException("CI beacon pad reach/sightline profile regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset={} playerOffset={} standoff={} lastSolidRowDz={} distanceSquared={} withinReach=true beamColumnUntouched=true withinRiftRadiusGuard=true",
+            throw new IllegalStateException("CI beacon pad reach/perpendicular sightline profile regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset={} playerOffset={} axisPolicy=perpendicular firstSolidRow={} gapRow={} lastSolidRow={} standoff={} distanceSquared={} withinReach=true beamColumnUntouched=true perpendicular=true",
             CI_BEACON_PAD_FLOOR_Y_OFFSET,CI_BEACON_PAD_PLAYER_Y_OFFSET,
-            CI_BEACON_PAD_STANDOFF_Z,CI_BEACON_PAD_LAST_SOLID_ROW_DZ,distanceSquared);
+            CI_BEACON_PAD_FIRST_SOLID_ROW,CI_BEACON_PAD_GAP_ROW,CI_BEACON_PAD_LAST_SOLID_ROW,
+            CI_BEACON_PAD_STANDOFF,distanceSquared);
     }
 
     private static boolean fissureRayChunksLoaded(ServerLevel level,BlockPos from,BlockPos to) {
@@ -3564,33 +3583,40 @@ public final class RiftController {
                         LOGGER.warn("BLACK_FREQUENCY_TEST NATURAL_BEACON_UNAVAILABLE");
                         return;
                     }
-                    // The sparse fixture can spawn beside a village wall. Raise the
-                    // north-side pad by two blocks so the player can see the ground
-                    // fissure over low terrain while remaining well inside beacon reach.
+                    // The sparse fixture can spawn beside a village wall. Put the
+                    // raised pad on the axis perpendicular to the anchor-to-beacon offset:
+                    // a pad extending toward the anchor can hide every visible fissure sample.
                     // Every pad column stays inside the bounded rift radius, world border
                     // and already-loaded chunks; this disposable fixture never force-loads.
+                    boolean padAlongX=ciBeaconPadAlongX(s.x,s.z,demoPos.getX(),demoPos.getZ());
+                    int padDirectionX=padAlongX?1:0;
+                    int padDirectionZ=padAlongX?0:1;
                     int padBlocks=0;
-                    // Leave dz=-1 empty: the previous full pad row intercepted every beacon click.
-                    for(int dz=-4;dz<=CI_BEACON_PAD_LAST_SOLID_ROW_DZ;dz++) for(int dx=-1;dx<=1;dx++) {
-                        BlockPos floor=demoPos.offset(dx,CI_BEACON_PAD_FLOOR_Y_OFFSET,dz);
-                        long padDx=(long)floor.getX()-s.x;
-                        long padDz=(long)floor.getZ()-s.z;
-                        if(Math.abs(padDx)>RADIUS || Math.abs(padDz)>RADIUS
-                            || padDx*padDx+padDz*padDz>(long)RADIUS*RADIUS
-                            || !level.getWorldBorder().isWithinBounds(floor)
-                            || !level.hasChunk(floor.getX()>>4,floor.getZ()>>4)
-                            || floor.getY()<level.getMinBuildHeight()
-                            || (long)floor.getY()+3L>=level.getMaxBuildHeight()) continue;
-                        level.setBlock(floor,Blocks.STONE.defaultBlockState(),3);
-                        if(level.getBlockState(floor).blocksMotion()) padBlocks++;
-                        for(int dy=1;dy<=3;dy++)
-                            level.setBlock(floor.above(dy),Blocks.AIR.defaultBlockState(),3);
-                    }
-                    // Keep the beacon's vertical beam column untouched: all pad
-                    // columns are north of the beacon, never at its X/Z coordinate.
-                    demoPlayer.teleportTo(level,demoPos.getX()+.5D,
+                    // Keep the first row empty for beacon sightline; offset 2 supports the player.
+                    for(int offset=CI_BEACON_PAD_FIRST_SOLID_ROW;offset<=CI_BEACON_PAD_LAST_SOLID_ROW;offset++)
+                        for(int lateral=-1;lateral<=1;lateral++) {
+                            int dx=padAlongX?offset:lateral;
+                            int dz=padAlongX?lateral:offset;
+                            BlockPos floor=demoPos.offset(dx,CI_BEACON_PAD_FLOOR_Y_OFFSET,dz);
+                            long padDx=(long)floor.getX()-s.x;
+                            long padDz=(long)floor.getZ()-s.z;
+                            if(Math.abs(padDx)>RADIUS || Math.abs(padDz)>RADIUS
+                                || padDx*padDx+padDz*padDz>(long)RADIUS*RADIUS
+                                || !level.getWorldBorder().isWithinBounds(floor)
+                                || !level.hasChunk(floor.getX()>>4,floor.getZ()>>4)
+                                || floor.getY()<level.getMinBuildHeight()
+                                || (long)floor.getY()+3L>=level.getMaxBuildHeight()) continue;
+                            level.setBlock(floor,Blocks.STONE.defaultBlockState(),3);
+                            if(level.getBlockState(floor).blocksMotion()) padBlocks++;
+                            for(int dy=1;dy<=3;dy++)
+                                level.setBlock(floor.above(dy),Blocks.AIR.defaultBlockState(),3);
+                        }
+                    // The perpendicular pad leaves the beacon-side row empty and does
+                    // not put support blocks between the player's camera and the fissure.
+                    demoPlayer.teleportTo(level,
+                        demoPos.getX()+.5D+padDirectionX*CI_BEACON_PAD_STANDOFF,
                         demoPos.getY()+CI_BEACON_PAD_PLAYER_Y_OFFSET,
-                        demoPos.getZ()-CI_BEACON_PAD_STANDOFF_Z,0f,0f);
+                        demoPos.getZ()+.5D+padDirectionZ*CI_BEACON_PAD_STANDOFF,0f,0f);
                     // Aim from the player's eyes at the actual beacon hitbox instead of
                     // relying on a fixed pitch that misses on different terrain heights.
                     demoPlayer.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,
@@ -3626,7 +3652,7 @@ public final class RiftController {
                     double beaconDy=demoPlayer.getY()-(demoPos.getY()+.5D);
                     double beaconDz=demoPlayer.getZ()-(demoPos.getZ()+.5D);
                     double beaconDistanceSquared=beaconDx*beaconDx+beaconDy*beaconDy+beaconDz*beaconDz;
-                    boolean beamColumnUntouched=CI_BEACON_PAD_STANDOFF_Z>1.0D;
+                    boolean beamColumnUntouched=CI_BEACON_PAD_STANDOFF>1.0D;
                     if(padBlocks==0 || !supportWithinRiftRadius || !Double.isFinite(beaconDistanceSquared)
                         || beaconDistanceSquared>CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE
                         || !beamColumnUntouched) {
@@ -3634,9 +3660,10 @@ public final class RiftController {
                             padBlocks,beaconDistanceSquared,supportWithinRiftRadius);
                         return;
                     }
-                    LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset={} playerOffset={} standoff={} lastSolidRowDz={} distanceSquared={} padBlocks={} withinReach=true beamColumnUntouched=true withinRiftRadius=true",
-                        CI_BEACON_PAD_FLOOR_Y_OFFSET,CI_BEACON_PAD_PLAYER_Y_OFFSET,
-                        CI_BEACON_PAD_STANDOFF_Z,CI_BEACON_PAD_LAST_SOLID_ROW_DZ,beaconDistanceSquared,padBlocks);
+                    LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset={} playerOffset={} axis={} firstSolidRow={} gapRow={} lastSolidRow={} standoff={} distanceSquared={} padBlocks={} withinReach=true beamColumnUntouched=true withinRiftRadius=true perpendicular=true",
+                        CI_BEACON_PAD_FLOOR_Y_OFFSET,CI_BEACON_PAD_PLAYER_Y_OFFSET,padAlongX?"X":"Z",
+                        CI_BEACON_PAD_FIRST_SOLID_ROW,CI_BEACON_PAD_GAP_ROW,CI_BEACON_PAD_LAST_SOLID_ROW,
+                        CI_BEACON_PAD_STANDOFF,beaconDistanceSquared,padBlocks);
                     FissureTarget visibleFissure=findVisibleFissureTarget(level,s,demoPlayer);
                     if(visibleFissure==null) {
                         if(!ciFissureTargetUnavailableLogged) {
