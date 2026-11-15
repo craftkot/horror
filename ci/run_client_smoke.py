@@ -184,6 +184,15 @@ def verify_restoration_particle_source():
             or not (0<=tick_advance<cadence_derive<scan_gate<player_loop<=menu_guard)
             or "private static boolean isRecoveryBeaconVisualAnchorValid(" not in source
             or not (0<=beacon_anchor_guard<beacon_chunk_lookup)
+            or "boolean beaconPosPresent;" not in state_fields
+            or 's.beaconPosPresent=n.contains("beaconPos",Tag.TAG_LONG);' not in snapshot_load
+            or "if(beaconPosPresent) n.putLong(" not in save_body
+            or 'else n.remove("beaconPos");' not in save_body
+            or "BlockPos activatedBeacon=recoveryVisualAnchor(s,level.getSeaLevel());" not in body
+            or source.count("s.beaconPosPresent=true")<2
+            or "verifyRecoveryBeaconPositionPresence();" not in source
+            or "wrongTypeTag.putString(" not in source
+            or "RECOVERY_BEACON_POSITION_PRESENCE_VERIFIED" not in source
             or "level.getWorldBorder().isWithinBounds(activatedBeacon)" not in body
             or "int cadenceTick=restorationCadenceTick(s.restoreTicks,level.getGameTime())" not in body
             or "Math.floorMod(gameTime,(long)RESTORE_CADENCE_PERIOD_TICKS)" not in cadence_policy
@@ -1928,6 +1937,10 @@ def capture_test_world():
             snapshot_payload_marker="BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_PAYLOAD_QUARANTINE_VERIFIED entries=2 retainedPayload=false"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and snapshot_payload_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: oversized recovery snapshot payload was not quarantined",flush=True)
+                return False
+            beacon_position_marker="BLACK_FREQUENCY_TEST RECOVERY_BEACON_POSITION_PRESENCE_VERIFIED missingOrWrongTypeRejected=true originCoordinatePreserved=true fallback=rift-anchor"
+            if os.environ.get("BF_TEST_RESTORATION")=="1" and beacon_position_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: missing/mistyped saved beacon position was not distinguished from BlockPos.ZERO",flush=True)
                 return False
             snapshot_retention_marker="BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_RETENTION_BUDGET_VERIFIED "
             if os.environ.get("BF_TEST_RESTORATION")=="1" and snapshot_retention_marker not in log_after:
