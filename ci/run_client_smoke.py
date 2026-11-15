@@ -1489,9 +1489,9 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: violet ground halo alpha profile is missing or outside its tested bounds",flush=True)
                 return False
             vertex_start=camera_source.find("private static void vertex(")
-            vertex_end=camera_source.find("\\n        private static void ribbon(",vertex_start)
+            vertex_end=camera_source.find("private static void ribbon(",vertex_start+1)
             ribbon_start=camera_source.find("private static void ribbon(",vertex_end)
-            ribbon_end=camera_source.find("\\n        private static void clearGeometryCache()",ribbon_start)
+            ribbon_end=camera_source.find("private static void clearGeometryCache()",ribbon_start)
             vertex_source=(camera_source[vertex_start:vertex_end]
                            if vertex_start>=0 and vertex_end>vertex_start else "")
             ribbon_source=(camera_source[ribbon_start:ribbon_end]
@@ -1501,7 +1501,7 @@ def capture_test_world():
                            "int blueChannel=colorChannel(blue);",
                            "int alphaChannel=colorChannel(alpha);")
             build_start=camera_source.find("private static GroundMesh buildSegments(")
-            build_end=camera_source.find("\\n        // Use the nearest actually sampled surface point",build_start)
+            build_end=camera_source.find("// Use the nearest actually sampled surface point",build_start)
             build_source=(camera_source[build_start:build_end]
                           if build_start>=0 and build_end>build_start else "")
             if (not vertex_source or ".color(red,green,blue,alpha)" not in vertex_source
