@@ -2001,6 +2001,30 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST PENDING_SNAPSHOT_PERSISTENCE_VERIFIED");
     }
 
+    /**
+     * A persisted activation coordinate is only a visual anchor while it remains
+     * inside the accepted beacon radius, build height and current world border.
+     * Check this before hasChunkAt so corrupt SavedData cannot probe arbitrary chunks.
+     */
+    private static boolean isRecoveryBeaconVisualAnchorValid(BlockPos beacon,
+            int anchorX,int anchorZ,int minBuildHeight,int maxBuildHeight,
+            boolean withinWorldBorder) {
+        return beacon!=null && withinWorldBorder
+            && beacon.getY()>=minBuildHeight && beacon.getY()<maxBuildHeight
+            && beaconWithinAnchor(beacon.getX(),beacon.getZ(),anchorX,anchorZ);
+    }
+
+    private static void verifyRecoveryBeaconVisualAnchorBounds() {
+        if(!isRecoveryBeaconVisualAnchorValid(new BlockPos(128,64,0),0,0,-64,320,true)
+            || isRecoveryBeaconVisualAnchorValid(new BlockPos(129,64,0),0,0,-64,320,true)
+            || !isRecoveryBeaconVisualAnchorValid(new BlockPos(0,-64,0),0,0,-64,320,true)
+            || isRecoveryBeaconVisualAnchorValid(new BlockPos(0,320,0),0,0,-64,320,true)
+            || isRecoveryBeaconVisualAnchorValid(new BlockPos(200,64,0),200,0,-64,320,false)
+            || isRecoveryBeaconVisualAnchorValid(null,0,0,-64,320,true))
+            throw new IllegalStateException("CI recovery beacon visual anchor bounds regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_BEACON_VISUAL_ANCHOR_BOUNDS_VERIFIED radius=128 minYInclusive=true maxYExclusive=true worldBorder=true invalidRejected=true");
+    }
+
     /** Horizontal anchor check with overflow-safe coordinates, independent of beacon height. */
     private static boolean beaconWithinAnchor(int x,int z,int anchorX,int anchorZ) {
         long dx=(long)x-anchorX,dz=(long)z-anchorZ;
@@ -2563,6 +2587,7 @@ public final class RiftController {
                 Integer.MIN_VALUE,0,-64,320))
             throw new IllegalStateException("CI natural recovery beacon anchor bounds regression");
         LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_ANCHOR_BOUNDS_VERIFIED");
+        verifyRecoveryBeaconVisualAnchorBounds();
         verifyNaturalBeaconIdPersistence();
         verifyRecoveryAudienceBounds();
         verifyRecoveryVortexContraction();
@@ -3023,7 +3048,10 @@ public final class RiftController {
     private static void restore(ServerLevel level,State s) {
         BlockPos activatedBeacon=BlockPos.of(s.beaconPos);
         // Resolve the physical beacon once per restoration tick using loaded-only access.
-        boolean beaconPresent=level.hasChunkAt(activatedBeacon)
+        boolean beaconPositionValid=isRecoveryBeaconVisualAnchorValid(activatedBeacon,s.x,s.z,
+            level.getMinBuildHeight(),level.getMaxBuildHeight(),
+            level.getWorldBorder().isWithinBounds(activatedBeacon));
+        boolean beaconPresent=beaconPositionValid && level.hasChunkAt(activatedBeacon)
             && level.getBlockState(activatedBeacon).is(Blocks.BEACON);
         double beaconX=activatedBeacon.getX()+0.5D;
         double beaconY=activatedBeacon.getY()+0.5D;
