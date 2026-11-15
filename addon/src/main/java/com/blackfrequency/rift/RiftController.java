@@ -43,6 +43,7 @@ public final class RiftController {
     // Released only after the replacement beacon's standing pad is verified.
     private static boolean ciPlayerSafePadReady;
     private static boolean ciFissureTargetUnavailableLogged;
+    private static boolean ciBeaconSightlineFailureLogged;
     private static final long DAY = 24000L;
     // Only for disposable CI worlds. Never increases Minecraft's global tick rate.
     private static final long TEST_STEP = Boolean.getBoolean("blackfrequency.ciTestMode")
@@ -133,14 +134,15 @@ public final class RiftController {
     // standoff keeps the particle trail and the surface ribbon in the same view.
     private static final double FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE = FISSURE_SAMPLE_SPACING*5.0D;
     private static final double FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE = 6.0D;
-    // The disposable CI pad is perpendicular to the anchor-to-beacon vector so
-    // its support blocks cannot hide the ground fissure from the player's camera.
+    // The disposable CI pad is perpendicular to the anchor-to-beacon vector.
+    // Two empty near rows let the raised player's eye ray enter the beacon instead of passing above it.
     private static final int CI_BEACON_PAD_FLOOR_Y_OFFSET=1;
     private static final int CI_BEACON_PAD_PLAYER_Y_OFFSET=2;
-    private static final double CI_BEACON_PAD_STANDOFF=1.75D;
-    // Leave one empty row beside the beacon; the player's support starts at offset 2.
-    private static final int CI_BEACON_PAD_GAP_ROW=1;
-    private static final int CI_BEACON_PAD_FIRST_SOLID_ROW=2;
+    private static final double CI_BEACON_PLAYER_EYE_HEIGHT=1.62D;
+    private static final double CI_BEACON_PAD_STANDOFF=3.25D;
+    // Row 2 stays empty; the support platform starts at row 3, outside the beacon sightline.
+    private static final int CI_BEACON_PAD_GAP_ROW=2;
+    private static final int CI_BEACON_PAD_FIRST_SOLID_ROW=3;
     private static final int CI_BEACON_PAD_LAST_SOLID_ROW=4;
     private static final double CI_BEACON_INTERACTION_MAX_DISTANCE=4.5D;
 
@@ -1125,13 +1127,33 @@ public final class RiftController {
         return horizontal*horizontal+vertical*vertical;
     }
 
+    private static double ciBeaconSightlineHeightAtProgress(double horizontalProgress) {
+        double horizontal=CI_BEACON_PAD_STANDOFF;
+        if(!Double.isFinite(horizontal) || horizontal<=0.0D
+            || !Double.isFinite(horizontalProgress)
+            || horizontalProgress<0.0D || horizontalProgress>horizontal) return Double.NaN;
+        double eyeY=CI_BEACON_PAD_PLAYER_Y_OFFSET+CI_BEACON_PLAYER_EYE_HEIGHT;
+        return eyeY+(.5D-eyeY)*(horizontalProgress/horizontal);
+    }
+
+    private static double ciBeaconSightlineHeightAtBeaconFace() {
+        return ciBeaconSightlineHeightAtProgress(CI_BEACON_PAD_STANDOFF-.5D);
+    }
+
+    private static double ciBeaconSightlineHeightAtPadInnerFace() {
+        double innerFaceDistance=CI_BEACON_PAD_STANDOFF-(CI_BEACON_PAD_FIRST_SOLID_ROW-.5D);
+        return ciBeaconSightlineHeightAtProgress(innerFaceDistance);
+    }
+
     private static void verifyCiBeaconPadProfile() {
         double distanceSquared=ciBeaconPadDistanceSquared();
+        double beaconEntryY=ciBeaconSightlineHeightAtBeaconFace();
+        double padInnerFaceY=ciBeaconSightlineHeightAtPadInnerFace();
         if(CI_BEACON_PAD_FLOOR_Y_OFFSET!=1
             || CI_BEACON_PAD_PLAYER_Y_OFFSET!=2
-            || Math.abs(CI_BEACON_PAD_STANDOFF-1.75D)>1.0E-9D
-            || CI_BEACON_PAD_GAP_ROW!=1
-            || CI_BEACON_PAD_FIRST_SOLID_ROW!=2
+            || Math.abs(CI_BEACON_PAD_STANDOFF-3.25D)>1.0E-9D
+            || CI_BEACON_PAD_GAP_ROW!=2
+            || CI_BEACON_PAD_FIRST_SOLID_ROW!=3
             || CI_BEACON_PAD_LAST_SOLID_ROW!=4
             || CI_BEACON_PAD_FIRST_SOLID_ROW!=CI_BEACON_PAD_GAP_ROW+1
             || CI_BEACON_PAD_LAST_SOLID_ROW<CI_BEACON_PAD_FIRST_SOLID_ROW
@@ -1141,13 +1163,16 @@ public final class RiftController {
             || !ciBeaconPadAlongX(0,Integer.MIN_VALUE,0,Integer.MAX_VALUE)
             || ciBeaconPadAlongX(Integer.MIN_VALUE,0,Integer.MAX_VALUE,0)
             || !Double.isFinite(distanceSquared)
-            || Math.abs(distanceSquared-5.3125D)>1.0E-9D
-            || distanceSquared>CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE)
+            || Math.abs(distanceSquared-12.8125D)>1.0E-9D
+            || distanceSquared>CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE
+            || !Double.isFinite(beaconEntryY) || !(beaconEntryY>0.0D && beaconEntryY<1.0D)
+            || !Double.isFinite(padInnerFaceY)
+            || !(padInnerFaceY>CI_BEACON_PAD_FLOOR_Y_OFFSET+1.0D))
             throw new IllegalStateException("CI beacon pad reach/perpendicular sightline profile regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset={} playerOffset={} axisPolicy=perpendicular firstSolidRow={} gapRow={} lastSolidRow={} standoff={} distanceSquared={} withinReach=true beamColumnUntouched=true perpendicular=true",
+        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset={} playerOffset={} axisPolicy=perpendicular firstSolidRow={} gapRow={} lastSolidRow={} standoff={} distanceSquared={} padInnerFaceY={} beaconEntryY={} withinReach=true beamColumnUntouched=true perpendicular=true",
             CI_BEACON_PAD_FLOOR_Y_OFFSET,CI_BEACON_PAD_PLAYER_Y_OFFSET,
             CI_BEACON_PAD_FIRST_SOLID_ROW,CI_BEACON_PAD_GAP_ROW,CI_BEACON_PAD_LAST_SOLID_ROW,
-            CI_BEACON_PAD_STANDOFF,distanceSquared);
+            CI_BEACON_PAD_STANDOFF,distanceSquared,padInnerFaceY,beaconEntryY);
     }
 
     private static boolean fissureRayChunksLoaded(ServerLevel level,BlockPos from,BlockPos to) {
@@ -1165,15 +1190,26 @@ public final class RiftController {
     private static boolean ciBeaconSightlineHitsBeacon(ServerLevel level,
             net.minecraft.server.level.ServerPlayer player,BlockPos beacon) {
         net.minecraft.world.phys.Vec3 eye=player.getEyePosition();
-        if(!fissureRayChunksLoaded(level,BlockPos.containing(eye),beacon)) return false;
+        if(!fissureRayChunksLoaded(level,BlockPos.containing(eye),beacon)) {
+            if(CI_TEST && !ciBeaconSightlineFailureLogged) {
+                ciBeaconSightlineFailureLogged=true;
+                LOGGER.warn("BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_BLOCKER_DIAGNOSTIC reason=unloaded-chunk eye={} target={}",eye,beacon);
+            }
+            return false;
+        }
         var hit=level.clip(new net.minecraft.world.level.ClipContext(eye,
             net.minecraft.world.phys.Vec3.atCenterOf(beacon),
             net.minecraft.world.level.ClipContext.Block.OUTLINE,
             net.minecraft.world.level.ClipContext.Fluid.NONE,player));
         // Level.clip already returns a BlockHitResult in Minecraft 1.20.1.
-        // A MISS is represented by its hit type, so no redundant pattern test is needed.
-        return hit.getType()==net.minecraft.world.phys.HitResult.Type.BLOCK
+        boolean reachesBeacon=hit.getType()==net.minecraft.world.phys.HitResult.Type.BLOCK
             && hit.getBlockPos().equals(beacon);
+        if(!reachesBeacon && CI_TEST && !ciBeaconSightlineFailureLogged) {
+            ciBeaconSightlineFailureLogged=true;
+            LOGGER.warn("BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_BLOCKER_DIAGNOSTIC reason=ray-hit type={} block={} eye={} target={}",
+                hit.getType(),hit.getBlockPos(),eye,beacon);
+        }
+        return reachesBeacon;
     }
 
     /**
