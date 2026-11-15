@@ -37,7 +37,7 @@ def verify_restoration_particle_source():
     pad_end=source.find("} else if(playerInteractionTest)",pad_start+1)
     pad_body=source[pad_start:pad_end] if pad_start>=0 and pad_end>pad_start else ""
     completion_start=source.find("if(s.restoreIndex<0 && s.restoreTicks>=100)")
-    completion_end=source.find("\\n        s.setDirty();",completion_start)
+    completion_end=source.find("\n        s.setDirty();",completion_start)
     completion_body=source[completion_start:completion_end] if completion_start>=0 and completion_end>completion_start else ""
     completion_animation=completion_body.find("ClientboundSetTitlesAnimationPacket(")
     completion_title=completion_body.find("ClientboundSetTitleTextPacket(")
