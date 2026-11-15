@@ -9,7 +9,7 @@ MIN_GROUND_MESH_ARMS=2
 MAX_GROUND_MESH_ARMS=4
 GROUND_MESH_SAMPLES=96
 FISSURE_PARTICLE_SAMPLES=48
-MAX_GROUND_MESH_SEGMENTS=MAX_GROUND_MESH_ARMS*(24-1)
+MAX_GROUND_MESH_SEGMENTS=MAX_GROUND_MESH_ARMS*(GROUND_MESH_SAMPLES//MAX_GROUND_MESH_ARMS-1)
 FISSURE_PARTICLE_EMISSION_RE=re.compile(
     r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) accentDust=(\d+) violetDust=(\d+) edgeDust=(\d+) total=(\d+) heightmap=motion-blocking-no-leaves"
 )
@@ -1201,7 +1201,7 @@ def capture_test_world():
                         or mesh_segments>MAX_GROUND_MESH_SEGMENTS
                         or mesh_arms<MIN_GROUND_MESH_ARMS or mesh_arms>MAX_GROUND_MESH_ARMS):
                     terrain_capture_failed=True
-                    print("WORLD_CAPTURE_FAIL: client ground mesh is below the shared segment/arm threshold",
+                    print("WORLD_CAPTURE_FAIL: client ground mesh is outside the bounded segment/arm budget",
                           "segments",mesh_segments,"arms",mesh_arms,flush=True)
                     return
                 if not valid_fissure_particle_emission(particles):
@@ -2059,7 +2059,7 @@ def capture_test_world():
             if (mesh_segments<MIN_GROUND_MESH_SEGMENTS
                     or mesh_segments>MAX_GROUND_MESH_SEGMENTS
                     or mesh_arms<MIN_GROUND_MESH_ARMS or mesh_arms>MAX_GROUND_MESH_ARMS):
-                print("WORLD_CAPTURE_FAIL: final ground mesh is below the shared segment/arm threshold",
+                print("WORLD_CAPTURE_FAIL: final ground mesh is outside the bounded segment/arm budget",
                       "segments",mesh_segments,"arms",mesh_arms,flush=True)
                 return False
             density = re.search(

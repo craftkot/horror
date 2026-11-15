@@ -210,7 +210,8 @@ public final class RiftClientState {
         private record GroundMesh(List<GroundSegment> segments,int activeArms,int sampledColumns,int cacheHits,
                 int steepStepBreaks) {}
 
-        // The four arms and twelve samples per arm never change with the world anchor.
+        // The four arms and 24 cosmetic mesh samples per arm never change with the world anchor.
+        // Even mesh samples align exactly with the 12 server-side particle samples.
         // Precompute their trigonometric terms once instead of recalculating them on every mesh rebuild.
         private static final GroundSample[] GROUND_SAMPLES=createGroundSamples();
 
@@ -237,8 +238,8 @@ public final class RiftClientState {
 
         private GroundRenderer() {}
 
-        // Fade both ends of each arm over three samples. The connected ribbons
-        // become narrow tips instead of ending as uniform rectangular strips.
+        // Fade both ends of each arm over six mesh samples, preserving the old 1.35-block taper.
+        // The connected ribbons become narrow tips instead of ending as uniform rectangular strips.
         private static double endpointTaper(int sample) {
             // Clamp both ends to the sampled arm so malformed indices cannot
             // create a negative or oversized ribbon width.
