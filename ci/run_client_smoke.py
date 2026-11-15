@@ -171,7 +171,7 @@ def verify_restoration_particle_source():
     tick_advance=body.find("s.restoreTicks=nextNonNegativeTick(s.restoreTicks)")
     cadence_derive=body.find("int cadenceTick=restorationCadenceTick(s.restoreTicks,level.getGameTime())")
     scan_gate=body.find("if(shouldScanRestorePlayers(cadenceTick,beaconPresent))")
-    beacon_anchor_guard=body.find("boolean beaconPositionValid=isRecoveryBeaconVisualAnchorValid(")
+    beacon_anchor_guard=body.find("boolean beaconPositionValid=s.beaconPosPresent")
     beacon_chunk_lookup=body.find("&& level.hasChunkAt(activatedBeacon)",beacon_anchor_guard)
     cadence_policy_start=source.find("private static int restorationCadenceTick")
     cadence_policy_end=source.find("private static long restorationAnimationTick",cadence_policy_start)
