@@ -62,6 +62,12 @@ public final class RiftController {
     private static final int RESTORE_HELIX_INTERVAL_TICKS = 8;
     // Share one nearby-player pass between beacon-menu closure and visual audience checks.
     private static final int RESTORE_PLAYER_SCAN_INTERVAL_TICKS = 4;
+    // The default ServerLevel.sendParticles overload delivers within 32 blocks.
+    // Keep beacon-particle scans aligned with that packet radius; UI/overlay messages
+    // deliberately retain their wider recovery audience.
+    private static final double RESTORE_PARTICLE_VIEW_DISTANCE=32.0D;
+    private static final double RESTORE_PARTICLE_VIEW_DISTANCE_SQR=
+        RESTORE_PARTICLE_VIEW_DISTANCE*RESTORE_PARTICLE_VIEW_DISTANCE;
     // Common phase window for every periodic restoration effect (4, 8, 10, 20 and 40 ticks).
     private static final int RESTORE_CADENCE_PERIOD_TICKS = 40;
     private static final int RESTORE_HELIX_ANCHOR_COUNT = 8;
@@ -1756,6 +1762,27 @@ public final class RiftController {
         return restoreTicks==1 || (restoreTicks>0 && restoreTicks%RESTORE_RING_INTERVAL_TICKS==0);
     }
 
+    private static boolean withinRestoreParticleAudience(double distanceSquared) {
+        return Double.isFinite(distanceSquared)
+            && distanceSquared>=0.0D
+            && distanceSquared<RESTORE_PARTICLE_VIEW_DISTANCE_SQR;
+    }
+
+    private static void verifyRestoreParticleAudienceBounds() {
+        boolean origin=withinRestoreParticleAudience(0.0D);
+        boolean justInside=withinRestoreParticleAudience(Math.nextDown(RESTORE_PARTICLE_VIEW_DISTANCE_SQR));
+        boolean boundaryRejected=!withinRestoreParticleAudience(RESTORE_PARTICLE_VIEW_DISTANCE_SQR);
+        boolean outsideRejected=!withinRestoreParticleAudience(Math.nextUp(RESTORE_PARTICLE_VIEW_DISTANCE_SQR));
+        boolean invalidRejected=!withinRestoreParticleAudience(-1.0D)
+            && !withinRestoreParticleAudience(Double.NaN)
+            && !withinRestoreParticleAudience(Double.POSITIVE_INFINITY)
+            && !withinRestoreParticleAudience(Double.NEGATIVE_INFINITY);
+        if(!(origin && justInside && boundaryRejected && outsideRejected && invalidRejected))
+            throw new IllegalStateException("CI restore particle audience range regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PARTICLE_AUDIENCE_BOUNDS_VERIFIED maxDistance={} maxDistanceSquared={} strictBoundary=true invalidRejected=true",
+            RESTORE_PARTICLE_VIEW_DISTANCE,RESTORE_PARTICLE_VIEW_DISTANCE_SQR);
+    }
+
     private static boolean shouldScanRestorePlayers(int restoreTicks,boolean beaconPresent) {
         return beaconPresent && restoreTicks>0
             && (restoreTicks==1 || restoreTicks%RESTORE_PLAYER_SCAN_INTERVAL_TICKS==0);
@@ -1989,6 +2016,7 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_PROFILE_VERIFIED intervalTicks={} menuClose=shared viewerScan=shared loadedOnly=true",
             RESTORE_PLAYER_SCAN_INTERVAL_TICKS);
         verifyRestorePlayerScanFullPass();
+        verifyRestoreParticleAudienceBounds();
         verifyRestoreCadenceSaturationFallback();
         verifyRecoveryUiPalette();
     }
@@ -2539,10 +2567,12 @@ public final class RiftController {
                     if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_MENU_CLOSED");
                 }
                 boolean eligible=player.isAlive() && !player.isRemoved() && !player.isSpectator();
+                // These beacon effects use the default 32-block particle packet range,
+                // unlike the separate 128-block recovery action-bar/overlay audience.
                 boolean ringViewer=eligible
-                    && player.distanceToSqr(beaconX,beaconY,beaconZ)<=128.0D*128.0D;
+                    && withinRestoreParticleAudience(player.distanceToSqr(beaconX,beaconY,beaconZ));
                 boolean stabilizationViewer=eligible && stabilizationDue
-                    && player.distanceToSqr(beaconX,beaconY+0.6D,beaconZ)<=128.0D*128.0D;
+                    && withinRestoreParticleAudience(player.distanceToSqr(beaconX,beaconY+0.6D,beaconZ));
                 playerScan.observe(closeBeaconMenu,eligible,ringViewer,stabilizationViewer);
             }
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_COMPLETED playersVisited={} beaconMenusClosed={} fullPass=true",

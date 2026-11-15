@@ -131,6 +131,19 @@ def verify_restoration_particle_source():
             or "RESTORE_PLAYER_SCAN_INTERVAL_TICKS" not in scan_policy
             or "RESTORE_INITIAL_BEACON_PULSE_EMITTED" not in body):
         raise RuntimeError("BLACK FREQUENCY cadence-aware shared player scan must close all beacon menus before finishing")
+    particle_distance=re.search(r"RESTORE_PARTICLE_VIEW_DISTANCE\s*=\s*([0-9.]+)D",source)
+    audience_start=source.find("private static boolean withinRestoreParticleAudience(")
+    audience_end=source.find("\n    private static boolean shouldScanRestorePlayers",audience_start)
+    audience_body=source[audience_start:audience_end] if audience_start>=0 and audience_end>audience_start else ""
+    if (not particle_distance or float(particle_distance.group(1))!=32.0
+            or "Double.isFinite(distanceSquared)" not in audience_body
+            or "distanceSquared<RESTORE_PARTICLE_VIEW_DISTANCE_SQR" not in audience_body
+            or "Math.nextDown(RESTORE_PARTICLE_VIEW_DISTANCE_SQR)" not in source
+            or "Math.nextUp(RESTORE_PARTICLE_VIEW_DISTANCE_SQR)" not in source
+            or body.count("withinRestoreParticleAudience(")!=2
+            or "verifyRestoreParticleAudienceBounds();" not in source
+            or "RESTORE_PARTICLE_AUDIENCE_BOUNDS_VERIFIED" not in source):
+        raise RuntimeError("BLACK FREQUENCY beacon particle audience must match the bounded vanilla packet radius")
     forbidden=("ParticleTypes.REVERSE_PORTAL","ParticleTypes.DRAGON_BREATH","ParticleTypes.END_ROD")
     found=[token for token in forbidden if token in body]
     if found:
@@ -1644,6 +1657,10 @@ def capture_test_world():
             if os.environ.get("BF_TEST_RESTORATION")=="1" and scan_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: beacon-menu closure did not use the shared bounded player scan",flush=True)
                 return False
+            particle_audience_marker="BLACK_FREQUENCY_TEST RESTORE_PARTICLE_AUDIENCE_BOUNDS_VERIFIED maxDistance=32.0 maxDistanceSquared=1024.0 strictBoundary=true invalidRejected=true"
+            if os.environ.get("BF_TEST_RESTORATION")=="1" and particle_audience_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: beacon particle audience did not match the bounded packet radius",flush=True)
+                return False
             anomaly_marker="BLACK_FREQUENCY_TEST GRAVITY_ANOMALY_PARTICLE_PALETTE_VERIFIED base=deep-violet accent=bright-violet cached=true"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and anomaly_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: cached violet gravity anomaly particle palette was not verified",flush=True)
@@ -1653,6 +1670,12 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: recovery title/action bar did not use the explicit deep-violet RGB palette",flush=True)
                 return False
             if os.environ.get("BF_TEST_PLAYER_BEACON")=="1":
+                initial_pulse=re.search(
+                    r"BLACK_FREQUENCY_TEST RESTORE_INITIAL_BEACON_PULSE_EMITTED ring=(\d+) sparks=(\d+) viewer=true",
+                    log_after)
+                if not initial_pulse or tuple(map(int,initial_pulse.groups()))!=(24,4):
+                    print("WORLD_CAPTURE_FAIL: the real beacon click did not emit its initial ring and rising sparks",flush=True)
+                    return False
                 counts=re.search(r"BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored=([0-9]+) destroyed=([0-9]+) skippedOccupied=([0-9]+)",log_after)
                 if not counts:
                     print("WORLD_CAPTURE_FAIL: missing final restoration accounting",flush=True)
