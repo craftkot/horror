@@ -214,6 +214,11 @@ public final class RiftController {
     }
     private static final int EDIT_BUDGET = fractureEditBudget(CI_TEST);
     private static final int MAX_EDITS = 95000;
+    // Canonical block-state NBT is tiny; reject nested or oversized payloads before retaining snapshots.
+    private static final int MAX_SNAPSHOT_BLOCK_ID_LENGTH = 256;
+    private static final int MAX_SNAPSHOT_PROPERTY_COUNT = 64;
+    private static final int MAX_SNAPSHOT_PROPERTY_KEY_LENGTH = 128;
+    private static final int MAX_SNAPSHOT_PROPERTY_VALUE_LENGTH = 128;
     // Only disposable CI worlds can stop after a small fracture to test
     // recovery when fewer than 160 blocks were damaged.
     private static final int EFFECTIVE_MAX_EDITS = CI_TEST
@@ -252,6 +257,30 @@ public final class RiftController {
     // Bound the copied queue when loading damaged NBT to avoid unbounded growth.
     private static int boundedSnapshotCount(int value) {
         return Math.max(0,Math.min(MAX_EDITS,value));
+    }
+
+    /** Accept only the compact schema emitted by NbtUtils.writeBlockState. */
+    private static boolean isBoundedSnapshotPayload(CompoundTag entry) {
+        if(entry.getAllKeys().size()!=2
+            || !entry.contains("pos",Tag.TAG_LONG)
+            || !entry.contains("state",Tag.TAG_COMPOUND)) return false;
+        CompoundTag state=entry.getCompound("state");
+        if(!state.contains("Name",Tag.TAG_STRING)) return false;
+        boolean hasProperties=state.contains("Properties");
+        if(state.getAllKeys().size()!=(hasProperties ? 2 : 1)
+            || (hasProperties && !state.contains("Properties",Tag.TAG_COMPOUND))) return false;
+        String blockId=state.getString("Name");
+        if(blockId.isEmpty() || blockId.length()>MAX_SNAPSHOT_BLOCK_ID_LENGTH) return false;
+        if(!hasProperties) return true;
+        CompoundTag properties=state.getCompound("Properties");
+        if(properties.getAllKeys().size()>MAX_SNAPSHOT_PROPERTY_COUNT) return false;
+        for(String key:properties.getAllKeys()) {
+            if(key.isEmpty() || key.length()>MAX_SNAPSHOT_PROPERTY_KEY_LENGTH
+                || !properties.contains(key,Tag.TAG_STRING)) return false;
+            String value=properties.getString(key);
+            if(value.isEmpty() || value.length()>MAX_SNAPSHOT_PROPERTY_VALUE_LENGTH) return false;
+        }
+        return true;
     }
 
     private static long boundedElapsed(long value) {
@@ -689,8 +718,22 @@ public final class RiftController {
             s.naturalBeaconId=n.hasUUID("naturalBeaconId")?n.getUUID("naturalBeaconId"):null;
             ListTag saved=n.getList("snapshots",Tag.TAG_COMPOUND);
             int snapshotCount=boundedSnapshotCount(saved.size());
-            for(int i=0;i<snapshotCount;i++) s.snapshots.add(saved.getCompound(i));
             boolean snapshotStateRepaired=false;
+            int quarantinedSnapshotPayloads=0;
+            for(int i=0;i<snapshotCount;i++) {
+                CompoundTag entry=saved.getCompound(i);
+                if(isBoundedSnapshotPayload(entry)) s.snapshots.add(entry);
+                else {
+                    // Preserve the list index for recovery cursors, but never retain or re-save
+                    // arbitrary nested NBT from a damaged or edited world file.
+                    s.snapshots.add(new CompoundTag());
+                    snapshotStateRepaired=true;
+                    quarantinedSnapshotPayloads++;
+                }
+            }
+            if(quarantinedSnapshotPayloads>0)
+                LOGGER.warn("BLACK FREQUENCY: quarantined {} recovery snapshot payloads outside the bounded block-state schema",
+                    quarantinedSnapshotPayloads);
             if(snapshotCount>s.edits) {
                 // The pending snapshots are authoritative when a damaged save
                 // has a smaller edit counter; keep restoration accounting consistent.
@@ -1497,12 +1540,45 @@ public final class RiftController {
             throw new IllegalStateException("CI excessive saved counters were not bounded");
         LOGGER.info("BLACK_FREQUENCY_TEST CORRUPT_STATE_COUNTERS_SANITIZED");
 
+        // Entry count is not a byte bound: discard unexpected nested data and oversized properties.
+        CompoundTag nestedPayload=new CompoundTag();
+        nestedPayload.putString("blob","x".repeat(4096));
+        CompoundTag nestedEntry=new CompoundTag();
+        nestedEntry.putLong("pos",new BlockPos(12,64,-7).asLong());
+        nestedEntry.put("state",NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
+        nestedEntry.put("payload",nestedPayload);
+        CompoundTag oversizedPropertyState=NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState());
+        CompoundTag oversizedProperties=new CompoundTag();
+        oversizedProperties.putString("facing","n".repeat(MAX_SNAPSHOT_PROPERTY_VALUE_LENGTH+1));
+        oversizedPropertyState.put("Properties",oversizedProperties);
+        CompoundTag oversizedPropertyEntry=new CompoundTag();
+        oversizedPropertyEntry.putLong("pos",new BlockPos(13,64,-7).asLong());
+        oversizedPropertyEntry.put("state",oversizedPropertyState);
+        ListTag untrustedSnapshots=new ListTag();
+        untrustedSnapshots.add(nestedEntry);
+        untrustedSnapshots.add(oversizedPropertyEntry);
+        CompoundTag untrustedSave=new CompoundTag();
+        untrustedSave.putBoolean("restoring",true);
+        untrustedSave.putInt("restoreIndex",1);
+        untrustedSave.putInt("restoreScan",1);
+        untrustedSave.put("snapshots",untrustedSnapshots);
+        State quarantined=State.load(untrustedSave);
+        ListTag rewrittenSnapshots=quarantined.save(new CompoundTag()).getList("snapshots",Tag.TAG_COMPOUND);
+        if(quarantined.snapshots.size()!=2 || quarantined.restoreIndex!=1 || quarantined.restoreScan!=1
+            || rewrittenSnapshots.size()!=2
+            || !rewrittenSnapshots.getCompound(0).getAllKeys().isEmpty()
+            || !rewrittenSnapshots.getCompound(1).getAllKeys().isEmpty())
+            throw new IllegalStateException("CI oversized recovery snapshot payload was retained");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_PAYLOAD_QUARANTINE_VERIFIED entries=2 retainedPayload=false");
+
         // A corrupt NBT list must not grow the recovery queue beyond the same
         // 95,000-entry ceiling enforced by terrain destruction.
         ListTag oversizedSnapshots=new ListTag();
+        CompoundTag safeStoneState=NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState());
         for(int i=0;i<MAX_EDITS+1;i++) {
             CompoundTag entry=new CompoundTag();
             entry.putLong("pos",new BlockPos(i,64,0).asLong());
+            entry.put("state",safeStoneState.copy());
             oversizedSnapshots.add(entry);
         }
         CompoundTag oversizedSave=new CompoundTag();

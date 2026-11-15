@@ -1797,6 +1797,10 @@ def capture_test_world():
                     return False
                 print("WORLD_CAPTURE: recovery ring clears beacon and remains vertically bounded",
                       {"offset":ring_offset,"minOffset":ring_min,"maxOffset":ring_max},flush=True)
+            snapshot_payload_marker="BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_PAYLOAD_QUARANTINE_VERIFIED entries=2 retainedPayload=false"
+            if os.environ.get("BF_TEST_RESTORATION")=="1" and snapshot_payload_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: oversized recovery snapshot payload was not quarantined",flush=True)
+                return False
             scan_marker="BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_PROFILE_VERIFIED intervalTicks=4 menuClose=shared viewerScan=shared loadedOnly=true"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and scan_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: beacon-menu closure did not use the shared bounded player scan",flush=True)
