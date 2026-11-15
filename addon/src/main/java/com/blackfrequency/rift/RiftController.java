@@ -73,6 +73,8 @@ public final class RiftController {
     // Keep the first recovery halo entirely above the beacon block so the initial pulse
     // is not hidden inside the beacon model or clipped at its top face.
     private static final double RESTORE_RING_HEIGHT_OFFSET=1.25D;
+    private static final double RESTORE_RING_OUTER_HEIGHT_OFFSET=.45D;
+    private static final double RESTORE_RING_VERTICAL_WAVE=.18D;
     private static final int RESTORE_BLOCK_CUE_INTERVAL = 48;
     private static final int RESTORE_BLOCK_CUE_PARTICLE_COUNT = 6;
     private static final int RESTORE_AUDIENCE_PARTICLE_COUNT = 8;
@@ -1946,9 +1948,15 @@ public final class RiftController {
             && RESTORE_VIOLET_ACCENT_DUST_SCALE<=.82F
             && RESTORE_AUDIENCE_SPREAD_XZ>0.0D && RESTORE_AUDIENCE_SPREAD_XZ<=1.0D
             && RESTORE_AUDIENCE_SPREAD_Y>0.0D && RESTORE_AUDIENCE_SPREAD_Y<=.75D;
-        double minimumRingOffset=RESTORE_RING_HEIGHT_OFFSET-.18D;
+        double minimumRingOffset=RESTORE_RING_HEIGHT_OFFSET-RESTORE_RING_VERTICAL_WAVE;
+        double maximumRingOffset=RESTORE_RING_HEIGHT_OFFSET+RESTORE_RING_OUTER_HEIGHT_OFFSET
+            +RESTORE_RING_VERTICAL_WAVE;
         boolean ringClearsBeaconBlock=Double.isFinite(minimumRingOffset)
-            && minimumRingOffset>1.0D && RESTORE_RING_HEIGHT_OFFSET<=1.5D;
+            && Double.isFinite(maximumRingOffset)
+            && minimumRingOffset>1.0D && maximumRingOffset<=2.0D
+            && RESTORE_RING_HEIGHT_OFFSET>1.0D && RESTORE_RING_HEIGHT_OFFSET<=1.5D
+            && RESTORE_RING_OUTER_HEIGHT_OFFSET>=0.0D && RESTORE_RING_OUTER_HEIGHT_OFFSET<=0.6D
+            && RESTORE_RING_VERTICAL_WAVE>0.0D && RESTORE_RING_VERTICAL_WAVE<=0.25D;
         boolean playerScanInitial=shouldScanRestorePlayers(1,true);
         boolean playerScanInitialWithoutBeacon=!shouldScanRestorePlayers(1,false);
         boolean playerScanBoundary=shouldScanRestorePlayers(RESTORE_PLAYER_SCAN_INTERVAL_TICKS,true)
@@ -1974,8 +1982,8 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_SIZE_VERIFIED baseScale={} accentScale={} audienceSpreadXZ={} audienceSpreadY={} cachedDust=true",
             RESTORE_VIOLET_DUST_SCALE,RESTORE_VIOLET_ACCENT_DUST_SCALE,
             RESTORE_AUDIENCE_SPREAD_XZ,RESTORE_AUDIENCE_SPREAD_Y);
-        LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_RING_CLEARANCE_VERIFIED offset={} minOffset={} clearsBeaconTop=true",
-            RESTORE_RING_HEIGHT_OFFSET,minimumRingOffset);
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_RING_CLEARANCE_VERIFIED offset={} minOffset={} maxOffset={} clearsBeaconTop=true",
+            RESTORE_RING_HEIGHT_OFFSET,minimumRingOffset,maximumRingOffset);
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_INITIAL_PULSE_POLICY_VERIFIED tick=1 ringParticles={} sparks={} scanOnStart=true loadedOnly=true",
             RESTORE_RING_PARTICLE_COUNT,RESTORE_RISING_SPARK_PARTICLE_COUNT);
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_PROFILE_VERIFIED intervalTicks={} menuClose=shared viewerScan=shared loadedOnly=true",
@@ -2563,8 +2571,8 @@ public final class RiftController {
                 radius*=contraction;
                 // A slow vertical wave makes the rings visibly breathe without
                 // increasing particle count or modifying nearby blocks.
-                double height=(i%2==0?0.0D:0.45D)
-                    +0.18D*Math.sin(angle*2.0D+animationTick*0.035D);
+                double height=(i%2==0?0.0D:RESTORE_RING_OUTER_HEIGHT_OFFSET)
+                    +RESTORE_RING_VERTICAL_WAVE*Math.sin(angle*2.0D+animationTick*0.035D);
                 DustParticleOptions ringDust=(i&1)==0
                     ? RESTORE_VIOLET_DUST : RESTORE_VIOLET_ACCENT_DUST;
                 level.sendParticles(ringDust,
