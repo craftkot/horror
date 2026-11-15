@@ -84,7 +84,10 @@ def verify_restoration_particle_source():
     if ("BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();" not in target_body
             or "findFissureGroundY(level,blockX,blockZ,cursor)" not in target_body
             or "fissureParticleY(level,blockX,surfaceY,blockZ,cursor)" not in target_body
-            or "fissureRayChunksLoaded(level,viewerPosition,cursor)" not in target_body
+            or "fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ))" not in target_body
+            or "LoadedChunkLookup" not in source
+            or "Math.floor(startX)" not in source
+            or "BEACON_RAY_CHUNK_TRAVERSAL_VERIFIED" not in source
             or "new BlockPos(" in target_body
             or "findFissureGroundY(level,s.x,s.z)" in source):
         raise RuntimeError("BLACK FREQUENCY visible fissure target must reuse its loaded-only sample cursor")
@@ -1169,7 +1172,7 @@ def capture_test_world():
                     r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
                     logs)
                 pad_profile=re.search(
-                    r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset=1 playerOffset=2 axis=([XZ]) firstSolidRow=2 gapRow=1 lastSolidRow=4 standoff=1\.75 distanceSquared=([-+0-9.eE]+) padBlocks=(\d+) withinReach=true beamColumnUntouched=true withinRiftRadius=true perpendicular=true",
+                    r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset=1 playerOffset=2 axis=([XZ]) firstSolidRow=3 gapRow=2 lastSolidRow=4 standoff=3\.25 distanceSquared=([-+0-9.eE]+) padBlocks=(\d+) withinReach=true beamColumnUntouched=true withinRiftRadius=true perpendicular=true",
                     logs)
                 aim=re.search(
                     r"BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)",
@@ -1223,7 +1226,7 @@ def capture_test_world():
                         or not math.isfinite(pad_distance_squared)
                         or pad_distance_squared<0.0
                         or pad_distance_squared>4.5*4.5
-                        or pad_block_count!=9):
+                        or pad_block_count!=6):
                     terrain_capture_failed=True
                     print("WORLD_CAPTURE_FAIL: perpendicular beacon pad is outside interaction reach or incomplete",
                           pad_axis,pad_distance_squared,pad_block_count,flush=True)
