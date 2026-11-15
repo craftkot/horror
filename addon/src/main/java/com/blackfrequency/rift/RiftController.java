@@ -302,6 +302,11 @@ public final class RiftController {
         return estimate;
     }
 
+    /** Return zero for a snapshot that is not safe to retain or serialize. */
+    private static long boundedSnapshotPayloadEstimate(CompoundTag entry) {
+        return isBoundedSnapshotPayload(entry) ? estimatedSnapshotPayloadBytes(entry) : 0L;
+    }
+
     private static boolean withinSnapshotRetentionBudget(long retainedBytes,long candidateBytes) {
         return retainedBytes>=0L && candidateBytes>0L
             && retainedBytes<=MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES
@@ -698,6 +703,10 @@ public final class RiftController {
         boolean ciSparseRecoveryEligibilityLogged;
         boolean ciSurfaceFissureLogged;
         final List<CompoundTag> snapshots = new ArrayList<>();
+        // Derived from validated snapshots on load and maintained on every runtime edit.
+        // It is deliberately not persisted: the value is recomputed from the saved list.
+        long retainedSnapshotEstimateBytes;
+        boolean snapshotBudgetSkipLogged;
         // Reuse the transient audience/menu accumulator across restoration scans.
         // It is intentionally not serialized; each SavedData instance owns its own scratch state.
         final RestorePlayerScanState restorePlayerScan = new RestorePlayerScanState();
@@ -748,14 +757,13 @@ public final class RiftController {
             long retainedSnapshotEstimateBytes=0L;
             for(int i=0;i<snapshotCount;i++) {
                 CompoundTag entry=saved.getCompound(i);
-                long candidateEstimate=isBoundedSnapshotPayload(entry)
-                    ? estimatedSnapshotPayloadBytes(entry) : 0L;
+                long candidateEstimate=boundedSnapshotPayloadEstimate(entry);
                 if(candidateEstimate>0L
-                    && withinSnapshotRetentionBudget(retainedSnapshotEstimateBytes,candidateEstimate)) {
+                    && withinSnapshotRetentionBudget(s.retainedSnapshotEstimateBytes,candidateEstimate)) {
                     // Preserve the oldest, anchor-nearest snapshots first when a damaged
                     // save exceeds the aggregate budget; these are the recovery core.
                     s.snapshots.add(entry);
-                    retainedSnapshotEstimateBytes+=candidateEstimate;
+                    s.retainedSnapshotEstimateBytes+=candidateEstimate;
                 } else {
                     // Preserve list indices for recovery cursors, but never retain or re-save
                     // invalid or aggregate-over-budget NBT payloads.
@@ -1518,12 +1526,27 @@ public final class RiftController {
         CompoundTag snapshot=new CompoundTag();
         snapshot.putLong("pos",pos.asLong());
         snapshot.put("state",NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
+        long stoneSnapshotEstimate=boundedSnapshotPayloadEstimate(snapshot);
+        CompoundTag invalidRuntimeSnapshot=snapshot.copy();
+        invalidRuntimeSnapshot.putString("unexpected","payload");
+        boolean runtimeBudgetBoundaries=stoneSnapshotEstimate>0L
+            && withinSnapshotRetentionBudget(0L,stoneSnapshotEstimate)
+            && withinSnapshotRetentionBudget(MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES-stoneSnapshotEstimate,
+                stoneSnapshotEstimate)
+            && !withinSnapshotRetentionBudget(MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES-stoneSnapshotEstimate+1L,
+                stoneSnapshotEstimate)
+            && boundedSnapshotPayloadEstimate(invalidRuntimeSnapshot)==0L;
+        if(!runtimeBudgetBoundaries)
+            throw new IllegalStateException("CI runtime recovery snapshot budget guard regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_RUNTIME_BUDGET_GUARD_VERIFIED candidateEstimate={} capBytes={} invalidRejected=true exactBoundary=true",
+            stoneSnapshotEstimate,MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES);
         original.snapshots.add(snapshot);
         State loaded=State.load(original.save(new CompoundTag()));
         if(!loaded.started || !loaded.restoring || loaded.edits!=1
             || loaded.restoreIndex!=0 || loaded.restoreScan!=0 || loaded.restoreTicks!=20
             || Math.abs(restorationGravityScale(loaded.restoreTicks)-.5D)>1.0E-9D
             || loaded.snapshots.size()!=1
+            || loaded.retainedSnapshotEstimateBytes!=stoneSnapshotEstimate
             || loaded.snapshots.get(0).getLong("pos")!=pos.asLong()
             || !loaded.snapshots.get(0).getCompound("state").equals(snapshot.getCompound("state")))
             throw new IllegalStateException("CI pending terrain snapshot persistence regression");
@@ -3048,6 +3071,7 @@ public final class RiftController {
             if(CI_TEST && Boolean.getBoolean("blackfrequency.ciRestoreWriteFailureTest") && s.skippedInvalid!=3)
                 throw new IllegalStateException("CI malformed/out-of-bounds/duplicate snapshot quarantine failed: "+s.skippedInvalid);
             s.restoring=false;s.restored=true;s.finished=true;s.snapshots.clear();
+            s.retainedSnapshotEstimateBytes=0L;
             for(var player:level.players()) RiftNetwork.send(player,0f,false,0,s.x,s.z);
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored={} destroyed={} skippedOccupied={} skippedInvalid={} flowingReplaced={}",s.restoredBlocks,s.edits,s.skippedOccupied,s.skippedInvalid,s.ciFlowingReplaced);
             // Disposable client test: dispatch a synthetic BreakEvent after
@@ -3702,7 +3726,20 @@ public final class RiftController {
             CompoundTag snapshot=new CompoundTag();
             snapshot.putLong("pos",pos.asLong());
             snapshot.put("state",NbtUtils.writeBlockState(original));
+            long candidateSnapshotEstimate=boundedSnapshotPayloadEstimate(snapshot);
+            if(!withinSnapshotRetentionBudget(s.retainedSnapshotEstimateBytes,candidateSnapshotEstimate)) {
+                // Never remove a block unless its original state can be retained inside
+                // the same aggregate budget enforced when loading a damaged save.
+                // Unsupported modded states are skipped; no un-restorable edit is made.
+                if(!s.snapshotBudgetSkipLogged) {
+                    s.snapshotBudgetSkipLogged=true;
+                    LOGGER.warn("BLACK FREQUENCY: skipped terrain edit because its recovery snapshot is invalid or exceeds the {} byte retention budget (retained estimate {})",
+                        MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES,s.retainedSnapshotEstimateBytes);
+                }
+                continue;
+            }
             s.snapshots.add(snapshot);
+            s.retainedSnapshotEstimateBytes+=candidateSnapshotEstimate;
             if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),2|16)){
                 edits++;s.edits++;
                 if(CI_TEST && s.edits==1) {
@@ -3729,6 +3766,7 @@ public final class RiftController {
                 }
             } else {
                 s.snapshots.remove(s.snapshots.size()-1);
+                s.retainedSnapshotEstimateBytes-=candidateSnapshotEstimate;
             }
         }
         // Persist the cursor every tick; restart must not rewind destructive edits.
