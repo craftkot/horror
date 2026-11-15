@@ -76,6 +76,12 @@ def verify_restoration_particle_source():
             or ("Blocks.CRYING_"+"OBSIDIAN.defaultBlockState()") in source
             or "new DustParticleOptions(" in fissure_emitter):
         raise RuntimeError("BLACK FREQUENCY fissure outer tips must use one cached compact violet Dust option")
+    if ("private record FissureSample(" not in source
+            or "private static final FissureSample[] FISSURE_SAMPLES=createFissureSamples();" not in source
+            or "FISSURE_SAMPLES[arm*FISSURE_SEGMENTS_PER_ARM+segment-1]" not in fissure_emitter
+            or "Math.sin(" in fissure_emitter
+            or "Math.cos(" in fissure_emitter):
+        raise RuntimeError("BLACK FREQUENCY server fissure geometry must use its bit-verified static sample cache")
     if ("private static boolean isOutermostValidFissureSample(int segment,int previousSegment)" not in source
             or "if(isOutermostValidFissureSample(segment,edgeCandidateSegment))" not in fissure_emitter
             or "if(hasEdgeCandidate)" not in fissure_emitter
@@ -2033,6 +2039,9 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: client/server fissure geometry diverged",
                       "server",density_spacing,density_extent,
                       "client",client_spacing,client_extent,"radius",client_radius,flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_SAMPLE_CACHE_VERIFIED samples=48 geometryBitExact=true pulseBitExact=true geometryTrigPerEmission=0 dynamicPulseSin=48 radius=48" not in log_after:
+                print("WORLD_CAPTURE_FAIL: server fissure sample cache was not bit-verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total=52 accentDust=8 violetDust=40 edgeDust=4" not in log_after:
                 print("WORLD_CAPTURE_FAIL: violet-dust fissure particle budget self-check was not executed",flush=True)
