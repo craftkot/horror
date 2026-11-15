@@ -1472,6 +1472,8 @@ def capture_test_world():
             if "BLACK_FREQUENCY_GROUND_MESH_PLANT_OUTLINE_HEIGHT_VERIFIED" not in final_log:
                 print("WORLD_CAPTURE_FAIL: real tall-grass outline height was not verified",flush=True)
                 return False
+            camera_source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
+            camera_source=camera_source_path.read_text(encoding="utf-8",errors="replace")
             color_profile_marker="BLACK_FREQUENCY_GROUND_MESH_COLOR_CHANNEL_PROFILE_VERIFIED zero=0 half=128 one=255 lowClamp=0 highClamp=255 nonFinite=true"
             if color_profile_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: per-ribbon color conversion profile was not executed",flush=True)
@@ -1530,8 +1532,6 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST GROUND_MESH_CAMERA_POSITION_GUARD_VERIFIED nonFiniteRejected=true worldLimitRejected=true" not in final_log:
                 print("WORLD_CAPTURE_FAIL: invalid camera coordinates were not rejected before terrain sampling",flush=True)
                 return False
-            camera_source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
-            camera_source=camera_source_path.read_text(encoding="utf-8",errors="replace")
             ground_render_start=camera_source.find("public static void render(RenderLevelStageEvent event) {")
             ground_render_end=camera_source.find("\n    }\n",ground_render_start+1)
             ground_render=(camera_source[ground_render_start:ground_render_end]
