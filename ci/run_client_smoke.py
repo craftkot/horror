@@ -1522,6 +1522,33 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: ground mesh rebuild still calculates fixed sample trigonometry",flush=True)
                 return False
             print("WORLD_CAPTURE: all 48 ground sample offsets/phases are cached outside the rebuild loop",flush=True)
+            animation_phase_marker=("BLACK_FREQUENCY_GROUND_MESH_ANIMATION_PHASE_CACHE_VERIFIED "
+                                    "samples=48 perFrameTrig=6 legacyPerSegmentTrig=3 equivalent=true")
+            if animation_phase_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: cached animation phase profile was not verified",flush=True)
+                return False
+            render_loop_start=camera_source.find("for(GroundSegment segment:cachedSegments)")
+            render_loop_end=camera_source.find("BufferUploader.drawWithShader(builder.end());",render_loop_start)
+            render_loop_source=(camera_source[render_loop_start:render_loop_end]
+                                if render_loop_start>=0 and render_loop_end>render_loop_start else "")
+            render_preamble_start=camera_source.find("double time=(double)tick+boundedRenderPartialTick")
+            render_preamble=(camera_source[render_preamble_start:render_loop_start]
+                             if render_preamble_start>=0 and render_loop_start>render_preamble_start else "")
+            if ("double phaseSin,double phaseCos,double flickerPhaseSin,double flickerPhaseCos" not in camera_source
+                    or "GroundSample sample,double taperA,double taperB" not in camera_source
+                    or "Math.sin(phase),Math.cos(phase)" not in camera_source
+                    or "Math.sin(phase*1.9D),Math.cos(phase*1.9D)" not in camera_source
+                    or render_preamble.count("Math.sin(")!=3
+                    or render_preamble.count("Math.cos(")!=3
+                    or "segment.sample()" not in render_loop_source
+                    or "sample.phaseSin()" not in render_loop_source
+                    or "sample.phaseCos()" not in render_loop_source
+                    or "sample.flickerPhaseSin()" not in render_loop_source
+                    or "sample.flickerPhaseCos()" not in render_loop_source
+                    or "Math.sin(" in render_loop_source or "Math.cos(" in render_loop_source):
+                print("WORLD_CAPTURE_FAIL: ground animation still performs trigonometry per segment",flush=True)
+                return False
+            print("WORLD_CAPTURE: ground animation uses six shared time-base trig calls per frame",flush=True)
             ribbon_cache_marker=("BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED "
                                  "staticRgbChannels=12 dynamicAlphaChannels=4 edgeAlphaShared=true")
             if ribbon_cache_marker in final_log:
