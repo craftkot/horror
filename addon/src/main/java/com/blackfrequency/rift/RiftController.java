@@ -219,6 +219,9 @@ public final class RiftController {
     private static final int MAX_SNAPSHOT_PROPERTY_COUNT = 64;
     private static final int MAX_SNAPSHOT_PROPERTY_KEY_LENGTH = 128;
     private static final int MAX_SNAPSHOT_PROPERTY_VALUE_LENGTH = 128;
+    // Bound the total snapshot payload retained from one damaged SavedData record.
+    // This is a conservative estimate; the NBT parser has already materialized its input.
+    private static final long MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES=64L*1024L*1024L;
     // Only disposable CI worlds can stop after a small fracture to test
     // recovery when fewer than 160 blocks were damaged.
     private static final int EFFECTIVE_MAX_EDITS = CI_TEST
@@ -281,6 +284,28 @@ public final class RiftController {
             if(value.isEmpty() || value.length()>MAX_SNAPSHOT_PROPERTY_VALUE_LENGTH) return false;
         }
         return true;
+    }
+
+    /**
+     * Conservative encoded-size estimate for the compact block-state schema.
+     * Three bytes per UTF-16 code unit upper-bound UTF-8 string storage; fixed
+     * overhead accounts for the nested compounds, names and tag headers.
+     */
+    private static long estimatedSnapshotPayloadBytes(CompoundTag entry) {
+        CompoundTag state=entry.getCompound("state");
+        long estimate=256L+3L*state.getString("Name").length();
+        if(state.contains("Properties",Tag.TAG_COMPOUND)) {
+            CompoundTag properties=state.getCompound("Properties");
+            for(String key:properties.getAllKeys())
+                estimate+=16L+3L*(key.length()+properties.getString(key).length());
+        }
+        return estimate;
+    }
+
+    private static boolean withinSnapshotRetentionBudget(long retainedBytes,long candidateBytes) {
+        return retainedBytes>=0L && candidateBytes>0L
+            && retainedBytes<=MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES
+            && candidateBytes<=MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES-retainedBytes;
     }
 
     private static long boundedElapsed(long value) {
@@ -720,20 +745,28 @@ public final class RiftController {
             int snapshotCount=boundedSnapshotCount(saved.size());
             boolean snapshotStateRepaired=false;
             int quarantinedSnapshotPayloads=0;
+            long retainedSnapshotEstimateBytes=0L;
             for(int i=0;i<snapshotCount;i++) {
                 CompoundTag entry=saved.getCompound(i);
-                if(isBoundedSnapshotPayload(entry)) s.snapshots.add(entry);
-                else {
-                    // Preserve the list index for recovery cursors, but never retain or re-save
-                    // arbitrary nested NBT from a damaged or edited world file.
+                long candidateEstimate=isBoundedSnapshotPayload(entry)
+                    ? estimatedSnapshotPayloadBytes(entry) : 0L;
+                if(candidateEstimate>0L
+                    && withinSnapshotRetentionBudget(retainedSnapshotEstimateBytes,candidateEstimate)) {
+                    // Preserve the oldest, anchor-nearest snapshots first when a damaged
+                    // save exceeds the aggregate budget; these are the recovery core.
+                    s.snapshots.add(entry);
+                    retainedSnapshotEstimateBytes+=candidateEstimate;
+                } else {
+                    // Preserve list indices for recovery cursors, but never retain or re-save
+                    // invalid or aggregate-over-budget NBT payloads.
                     s.snapshots.add(new CompoundTag());
                     snapshotStateRepaired=true;
                     quarantinedSnapshotPayloads++;
                 }
             }
             if(quarantinedSnapshotPayloads>0)
-                LOGGER.warn("BLACK FREQUENCY: quarantined {} recovery snapshot payloads outside the bounded block-state schema",
-                    quarantinedSnapshotPayloads);
+                LOGGER.warn("BLACK FREQUENCY: quarantined {} recovery snapshot payloads; retained estimate {} bytes of {} byte budget",
+                    quarantinedSnapshotPayloads,retainedSnapshotEstimateBytes,MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES);
             if(snapshotCount>s.edits) {
                 // The pending snapshots are authoritative when a damaged save
                 // has a smaller edit counter; keep restoration accounting consistent.
@@ -1570,6 +1603,67 @@ public final class RiftController {
             || !rewrittenSnapshots.getCompound(1).getAllKeys().isEmpty())
             throw new IllegalStateException("CI oversized recovery snapshot payload was retained");
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_PAYLOAD_QUARANTINE_VERIFIED entries=2 retainedPayload=false");
+
+        long stoneSnapshotEstimate=estimatedSnapshotPayloadBytes(snapshot);
+        long maximumStoneSnapshotEstimate=stoneSnapshotEstimate*MAX_EDITS;
+        boolean retentionBoundaries=withinSnapshotRetentionBudget(0L,MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES)
+            && withinSnapshotRetentionBudget(MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES-1L,1L)
+            && !withinSnapshotRetentionBudget(MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES,1L)
+            && !withinSnapshotRetentionBudget(MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES-1L,2L)
+            && !withinSnapshotRetentionBudget(-1L,1L)
+            && !withinSnapshotRetentionBudget(0L,0L);
+        if(!retentionBoundaries || maximumStoneSnapshotEstimate>MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES)
+            throw new IllegalStateException("CI recovery snapshot aggregate retention budget regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_RETENTION_BUDGET_VERIFIED capBytes={} maxStoneSnapshots={} estimatedBytes={} boundary=true overflowSafe=true",
+            MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES,MAX_EDITS,maximumStoneSnapshotEstimate);
+
+        // Individually valid payloads can still exceed a safe aggregate budget.
+        // Keep the anchor-nearest entries and quarantine only the tail.
+        CompoundTag largeProperties=new CompoundTag();
+        String largePropertyValue="v".repeat(MAX_SNAPSHOT_PROPERTY_VALUE_LENGTH);
+        for(int property=0;property<MAX_SNAPSHOT_PROPERTY_COUNT;property++) {
+            String suffix=Integer.toString(property);
+            String key="p"+suffix+"x".repeat(MAX_SNAPSHOT_PROPERTY_KEY_LENGTH-1-suffix.length());
+            largeProperties.putString(key,largePropertyValue);
+        }
+        CompoundTag largeState=NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState());
+        largeState.put("Properties",largeProperties);
+        CompoundTag largeEntry=new CompoundTag();
+        largeEntry.putLong("pos",new BlockPos(0,64,0).asLong());
+        largeEntry.put("state",largeState.copy());
+        long largeEntryEstimate=estimatedSnapshotPayloadBytes(largeEntry);
+        int aggregateSnapshotCount=(int)(MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES/largeEntryEstimate)+1;
+        if(largeEntryEstimate<=0L || aggregateSnapshotCount<=1 || aggregateSnapshotCount>MAX_EDITS)
+            throw new IllegalStateException("CI aggregate snapshot fixture is outside the intended budget range");
+        ListTag aggregateSnapshots=new ListTag();
+        for(int i=0;i<aggregateSnapshotCount;i++) {
+            CompoundTag entry=new CompoundTag();
+            entry.putLong("pos",new BlockPos(i,64,0).asLong());
+            entry.put("state",largeState.copy());
+            aggregateSnapshots.add(entry);
+        }
+        CompoundTag aggregateSave=new CompoundTag();
+        aggregateSave.putBoolean("restoring",true);
+        aggregateSave.putInt("restoreIndex",aggregateSnapshotCount-1);
+        aggregateSave.putInt("restoreScan",aggregateSnapshotCount-1);
+        aggregateSave.put("snapshots",aggregateSnapshots);
+        State aggregateQuarantined=State.load(aggregateSave);
+        ListTag aggregateRewritten=aggregateQuarantined.save(new CompoundTag()).getList("snapshots",Tag.TAG_COMPOUND);
+        int aggregateEmptyPayloads=0;
+        for(int i=0;i<aggregateRewritten.size();i++)
+            if(aggregateRewritten.getCompound(i).getAllKeys().isEmpty()) aggregateEmptyPayloads++;
+        long aggregateRetainedEstimate=largeEntryEstimate*(aggregateSnapshotCount-1L);
+        if(aggregateQuarantined.snapshots.size()!=aggregateSnapshotCount
+            || aggregateQuarantined.restoreIndex!=aggregateSnapshotCount-1
+            || aggregateQuarantined.restoreScan!=aggregateSnapshotCount-1
+            || aggregateEmptyPayloads!=1
+            || aggregateRewritten.getCompound(0).getAllKeys().isEmpty()
+            || !aggregateRewritten.getCompound(aggregateSnapshotCount-1).getAllKeys().isEmpty()
+            || aggregateRetainedEstimate>MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES
+            || aggregateRetainedEstimate+largeEntryEstimate<=MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES)
+            throw new IllegalStateException("CI aggregate recovery snapshot payload budget was not enforced");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_AGGREGATE_BUDGET_QUARANTINED retained={} quarantined=1 estimateBytes={} capBytes={}",
+            aggregateSnapshotCount-1,aggregateRetainedEstimate,MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES);
 
         // A corrupt NBT list must not grow the recovery queue beyond the same
         // 95,000-entry ceiling enforced by terrain destruction.

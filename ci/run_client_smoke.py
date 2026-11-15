@@ -101,6 +101,15 @@ def verify_restoration_particle_source():
             or "restoreCursor" in save_body
             or "RESTORE_POSITION_CURSOR_REUSE_VERIFIED sameInstance=true packedCoordinates=true transient=true" not in source):
         raise RuntimeError("BLACK FREQUENCY restoration must reuse a transient mutable snapshot-position cursor without serializing it")
+    snapshot_load_start=source.find("static State load(CompoundTag n)")
+    snapshot_load_end=source.find("if(snapshotCount>s.edits)",snapshot_load_start)
+    snapshot_load=source[snapshot_load_start:snapshot_load_end] if snapshot_load_start>=0 and snapshot_load_end>snapshot_load_start else ""
+    if ("MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES=64L*1024L*1024L" not in source
+            or "estimatedSnapshotPayloadBytes(entry)" not in snapshot_load
+            or "withinSnapshotRetentionBudget(retainedSnapshotEstimateBytes,candidateEstimate)" not in snapshot_load
+            or "RECOVERY_SNAPSHOT_RETENTION_BUDGET_VERIFIED" not in source
+            or "RECOVERY_SNAPSHOT_AGGREGATE_BUDGET_QUARANTINED" not in source):
+        raise RuntimeError("BLACK FREQUENCY recovery snapshots must obey a bounded aggregate retention budget")
     scan_interval=re.search(r"RESTORE_PLAYER_SCAN_INTERVAL_TICKS\s*=\s*(\d+)",source)
     ring_policy_start=source.find("private static boolean shouldEmitRestoreAudiencePulse")
     ring_policy_end=source.find("private static boolean shouldScanRestorePlayers",ring_policy_start)
@@ -1418,11 +1427,6 @@ def capture_test_world():
                         break
                     try_beacon_click(current)
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-                    if ("BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current
-                            and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" not in current):
-                        snap("beacon-restoration-active.png")
-                        restoration_shot=True
-                        print("WORLD_CAPTURE: active restoration frame captured before completion",flush=True)
                 capture_terrain_fracture(latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else "")
                 capture_sky_before_beacon()
                 time.sleep(0.1)
@@ -1726,17 +1730,32 @@ def capture_test_world():
                 # the gameplay restore budget or force-load chunks to satisfy CI.
                 deadline_restore=time.time()+480
                 restored=False
+                restoration_capture_attempted_markers=set()
                 while time.time()<deadline_restore and p.poll() is None:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     try_beacon_click(current)
                     initial_pulse_marker="BLACK_FREQUENCY_TEST RESTORE_INITIAL_BEACON_PULSE_EMITTED ring=24 sparks=4 viewer=true"
-                    if (not restoration_shot
-                            and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current
-                            and initial_pulse_marker in current
-                            and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" not in current):
-                        snap("beacon-restoration-active.png")
-                        restoration_shot=True
-                        print("WORLD_CAPTURE: active restoration captured after the initial beacon pulse",flush=True)
+                    stabilization_pulse_marker="BLACK_FREQUENCY_TEST BEACON_STABILIZATION_PULSE viewerScan=shared"
+                    for pulse_marker in (initial_pulse_marker,stabilization_pulse_marker):
+                        if (not restoration_shot and pulse_marker in current
+                                and pulse_marker not in restoration_capture_attempted_markers
+                                and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" not in current):
+                            restoration_capture_attempted_markers.add(pulse_marker)
+                            from PIL import Image
+                            capture_deadline=time.time()+1.1
+                            while time.time()<capture_deadline and p.poll() is None:
+                                snap("beacon-restoration-active.png")
+                                with Image.open(shots/"beacon-restoration-active.png") as frame:
+                                    active_metrics=measure_restoration_palette(frame.convert("RGB"))
+                                if restoration_palette_passes(active_metrics):
+                                    restoration_shot=True
+                                    print("WORLD_CAPTURE: active restoration Dust captured after a real beacon pulse",
+                                          active_metrics,flush=True)
+                                    break
+                                time.sleep(.08)
+                            if not restoration_shot:
+                                print("WORLD_CAPTURE: pulse reached the client but no bounded Dust frame was visible yet",
+                                      pulse_marker,flush=True)
                     if "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" in current:
                         restored=True
                         break
@@ -1800,6 +1819,14 @@ def capture_test_world():
             snapshot_payload_marker="BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_PAYLOAD_QUARANTINE_VERIFIED entries=2 retainedPayload=false"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and snapshot_payload_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: oversized recovery snapshot payload was not quarantined",flush=True)
+                return False
+            snapshot_retention_marker="BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_RETENTION_BUDGET_VERIFIED "
+            if os.environ.get("BF_TEST_RESTORATION")=="1" and snapshot_retention_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: aggregate recovery snapshot retention budget was not verified",flush=True)
+                return False
+            snapshot_aggregate_marker="BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_AGGREGATE_BUDGET_QUARANTINED "
+            if os.environ.get("BF_TEST_RESTORATION")=="1" and snapshot_aggregate_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: aggregate recovery snapshot payloads were not quarantined",flush=True)
                 return False
             scan_marker="BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_PROFILE_VERIFIED intervalTicks=4 menuClose=shared viewerScan=shared loadedOnly=true"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and scan_marker not in log_after:
