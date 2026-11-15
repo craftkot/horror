@@ -104,12 +104,18 @@ def verify_restoration_particle_source():
     snapshot_load_start=source.find("static State load(CompoundTag n)")
     snapshot_load_end=source.find("if(snapshotCount>s.edits)",snapshot_load_start)
     snapshot_load=source[snapshot_load_start:snapshot_load_end] if snapshot_load_start>=0 and snapshot_load_end>snapshot_load_start else ""
+    runtime_snapshot_start=source.find("long candidateSnapshotEstimate=boundedSnapshotPayloadEstimate(snapshot);")
+    runtime_snapshot_end=source.find("if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),2|16))",runtime_snapshot_start)
+    runtime_snapshot=source[runtime_snapshot_start:runtime_snapshot_end] if runtime_snapshot_start>=0 and runtime_snapshot_end>runtime_snapshot_start else ""
     if ("MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES=64L*1024L*1024L" not in source
-            or "estimatedSnapshotPayloadBytes(entry)" not in snapshot_load
-            or "withinSnapshotRetentionBudget(retainedSnapshotEstimateBytes,candidateEstimate)" not in snapshot_load
+            or "boundedSnapshotPayloadEstimate(entry)" not in snapshot_load
+            or "withinSnapshotRetentionBudget(s.retainedSnapshotEstimateBytes,candidateEstimate)" not in snapshot_load
             or "RECOVERY_SNAPSHOT_RETENTION_BUDGET_VERIFIED" not in source
-            or "RECOVERY_SNAPSHOT_AGGREGATE_BUDGET_QUARANTINED" not in source):
-        raise RuntimeError("BLACK FREQUENCY recovery snapshots must obey a bounded aggregate retention budget")
+            or "RECOVERY_SNAPSHOT_AGGREGATE_BUDGET_QUARANTINED" not in source
+            or "withinSnapshotRetentionBudget(s.retainedSnapshotEstimateBytes,candidateSnapshotEstimate)" not in runtime_snapshot
+            or "s.retainedSnapshotEstimateBytes+=candidateSnapshotEstimate" not in runtime_snapshot
+            or "RECOVERY_SNAPSHOT_RUNTIME_BUDGET_GUARD_VERIFIED" not in source):
+        raise RuntimeError("BLACK FREQUENCY runtime and loaded recovery snapshots must share one bounded retention budget")
     scan_interval=re.search(r"RESTORE_PLAYER_SCAN_INTERVAL_TICKS\s*=\s*(\d+)",source)
     ring_policy_start=source.find("private static boolean shouldEmitRestoreAudiencePulse")
     ring_policy_end=source.find("private static boolean shouldScanRestorePlayers",ring_policy_start)
