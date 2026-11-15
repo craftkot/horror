@@ -36,6 +36,17 @@ def verify_restoration_particle_source():
     pad_start=source.find('if(playerInteractionTest && Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest"))')
     pad_end=source.find("} else if(playerInteractionTest)",pad_start+1)
     pad_body=source[pad_start:pad_end] if pad_start>=0 and pad_end>pad_start else ""
+    completion_start=source.find("if(s.restoreIndex<0 && s.restoreTicks>=100)")
+    completion_end=source.find("\\n        s.setDirty();",completion_start)
+    completion_body=source[completion_start:completion_end] if completion_start>=0 and completion_end>completion_start else ""
+    completion_animation=completion_body.find("ClientboundSetTitlesAnimationPacket(")
+    completion_title=completion_body.find("ClientboundSetTitleTextPacket(")
+    if ("RESTORE_TITLE_FADE_IN_TICKS=10;" not in source
+            or "RESTORE_TITLE_STAY_TICKS=80;" not in source
+            or "RESTORE_TITLE_FADE_OUT_TICKS=20;" not in source
+            or completion_animation<0 or completion_title<0 or completion_animation>completion_title
+            or "RESTORATION_COMPLETION_TITLE_TIMING_VERIFIED" not in source):
+        raise RuntimeError("BLACK FREQUENCY completion title must set and verify explicit fade timing before the title packet")
     if ("public static final double FISSURE_BEND_AMPLITUDE=.24D;" not in geometry_contract
             or source.count("RiftGeometry.FISSURE_BEND_AMPLITUDE")<5
             or client_source.count("RiftGeometry.FISSURE_BEND_AMPLITUDE")<4
@@ -1791,7 +1802,11 @@ def capture_test_world():
                     capture_sky_before_beacon()
                     time.sleep(.1)
                 if restored:
+                    # The server logs completion before the title packet is consumed by the client.
+                    # Wait for the explicit fade-in window so this frame proves the final UI, not 99%.
+                    time.sleep(0.75)
                     snap("beacon-restoration-finished.png")
+                    print("WORLD_CAPTURE: final restoration title allowed 0.75s to reach the client",flush=True)
                 else:
                     snap("beacon-restoration-timeout.png")
                     print("WORLD_CAPTURE_FAIL: restoration did not finish in client",flush=True)
@@ -1879,6 +1894,9 @@ def capture_test_world():
                     log_after)
                 if not initial_pulse or tuple(map(int,initial_pulse.groups()))!=(24,4):
                     print("WORLD_CAPTURE_FAIL: the real beacon click did not emit its initial ring and rising sparks",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_TITLE_TIMING_VERIFIED fadeIn=10 stay=80 fadeOut=20 total=110 packetBeforeTitle=true" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: explicit completion title timing was not verified",flush=True)
                     return False
                 counts=re.search(r"BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored=([0-9]+) destroyed=([0-9]+) skippedOccupied=([0-9]+)",log_after)
                 if not counts:
