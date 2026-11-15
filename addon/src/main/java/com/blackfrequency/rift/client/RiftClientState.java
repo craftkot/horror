@@ -142,6 +142,11 @@ public final class RiftClientState {
         private static final double GROUND_MAX_HALF_WIDTH=
             GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE+GROUND_WIDTH_FLICKER;
         private static final double GROUND_EDGE_HALF_WIDTH=.022D;
+        // Keep every ribbon above the sampled block outline while separating the dark core and violet lips vertically.
+        private static final double GROUND_SURFACE_CLEARANCE=.035D;
+        private static final double GROUND_CORE_RECESS=.020D;
+        private static final double GROUND_FILAMENT_LIFT=.006D;
+        private static final double GROUND_EDGE_LIFT=.020D;
         // Shift the ground rails away from hot magenta toward the sky-rift's deep violet palette.
         private static final float GROUND_EDGE_RED=.46F;
         private static final float GROUND_EDGE_GREEN=.18F;
@@ -175,6 +180,7 @@ public final class RiftClientState {
         private static boolean emptyMeshLogged;
         private static boolean taperProfileLogged;
         private static boolean visualProfileLogged;
+        private static boolean reliefProfileLogged;
         private static boolean surfaceWindowLogged;
         private static boolean surfaceHeightProfileLogged;
         private static boolean plantOutlineProfileLogged;
@@ -445,6 +451,28 @@ public final class RiftClientState {
                     "BLACK_FREQUENCY_GROUND_MESH_SURFACE_OUTLINE_HEIGHT_VERIFIED fullBlock={} tallGrassOutline={} snowLayer={} bottomSlab={} invalidFallback={}",
                     fullBlock,tallGrassOutline,snowLayer,bottomSlab,invalidCover);
             }
+        }
+
+        private static void verifyGroundSurfaceReliefProfile() {
+            if(reliefProfileLogged) return;
+            double coreClearance=GROUND_SURFACE_CLEARANCE-GROUND_CORE_RECESS;
+            double glowClearance=GROUND_SURFACE_CLEARANCE;
+            double filamentClearance=GROUND_SURFACE_CLEARANCE+GROUND_FILAMENT_LIFT;
+            double edgeClearance=GROUND_SURFACE_CLEARANCE+GROUND_EDGE_LIFT;
+            if(!Double.isFinite(coreClearance) || !Double.isFinite(glowClearance)
+                || !Double.isFinite(filamentClearance) || !Double.isFinite(edgeClearance)
+                || coreClearance<.01D || !(coreClearance<glowClearance)
+                || !(glowClearance<filamentClearance) || !(filamentClearance<edgeClearance)
+                || Math.abs(GROUND_SURFACE_CLEARANCE-.035D)>1.0E-9D
+                || Math.abs(GROUND_CORE_RECESS-.020D)>1.0E-9D
+                || Math.abs(GROUND_FILAMENT_LIFT-.006D)>1.0E-9D
+                || Math.abs(GROUND_EDGE_LIFT-.020D)>1.0E-9D)
+                throw new IllegalStateException("BLACK FREQUENCY ground mesh surface relief regression");
+            reliefProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_SURFACE_RELIEF_VERIFIED coreRecess={} filamentLift={} edgeLift={} coreClearance={} glowClearance={} filamentClearance={} edgeClearance={} ordered=true",
+                GROUND_CORE_RECESS,GROUND_FILAMENT_LIFT,GROUND_EDGE_LIFT,
+                coreClearance,glowClearance,filamentClearance,edgeClearance);
         }
 
         private static double boundedShapeHeight(double height,double fallback) {
@@ -908,7 +936,7 @@ public final class RiftClientState {
                 if(!head.getFluidState().isEmpty()) continue;
 
                 double surfaceOffset=groundSurfaceOffset(supportHeight,coverHeight);
-                return candidateY-1+surfaceOffset+.035D;
+                return candidateY-1+surfaceOffset+GROUND_SURFACE_CLEARANCE;
             }
             return Double.NaN;
         }
@@ -948,6 +976,7 @@ public final class RiftClientState {
             verifyGroundPlantOutlineProfile(level,SURFACE_CURSOR,worldAnchorX,worldAnchorZ,referenceY);
             verifySurfaceSearchOrder();
             verifyTaperProfile();
+            verifyGroundSurfaceReliefProfile();
             verifyGroundContinuityProfile();
             verifyGroundRebuildProfile();
             verifyGroundRenderRangeProfile();
@@ -1126,7 +1155,7 @@ public final class RiftClientState {
         }
 
         private static void ribbon(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
-                GroundSegment segment,double offset,double halfWidth,
+                GroundSegment segment,double offset,double halfWidth,double verticalOffset,
                 int redChannel,int greenChannel,int blueChannel,int alphaChannel) {
             GroundPoint a=segment.a();
             GroundPoint b=segment.b();
@@ -1136,13 +1165,13 @@ public final class RiftClientState {
             double rightA=(offset-halfWidth)*segment.taperA();
             double leftB=(offset+halfWidth)*segment.taperB();
             double rightB=(offset-halfWidth)*segment.taperB();
-            vertex(builder,matrix,camera,a.x()+segment.normalX()*leftA,a.y(),a.z()+segment.normalZ()*leftA,
+            vertex(builder,matrix,camera,a.x()+segment.normalX()*leftA,a.y()+verticalOffset,a.z()+segment.normalZ()*leftA,
                 redChannel,greenChannel,blueChannel,alphaChannel);
-            vertex(builder,matrix,camera,b.x()+segment.normalX()*leftB,b.y(),b.z()+segment.normalZ()*leftB,
+            vertex(builder,matrix,camera,b.x()+segment.normalX()*leftB,b.y()+verticalOffset,b.z()+segment.normalZ()*leftB,
                 redChannel,greenChannel,blueChannel,alphaChannel);
-            vertex(builder,matrix,camera,b.x()+segment.normalX()*rightB,b.y(),b.z()+segment.normalZ()*rightB,
+            vertex(builder,matrix,camera,b.x()+segment.normalX()*rightB,b.y()+verticalOffset,b.z()+segment.normalZ()*rightB,
                 redChannel,greenChannel,blueChannel,alphaChannel);
-            vertex(builder,matrix,camera,a.x()+segment.normalX()*rightA,a.y(),a.z()+segment.normalZ()*rightA,
+            vertex(builder,matrix,camera,a.x()+segment.normalX()*rightA,a.y()+verticalOffset,a.z()+segment.normalZ()*rightA,
                 redChannel,greenChannel,blueChannel,alphaChannel);
         }
 
@@ -1182,6 +1211,7 @@ public final class RiftClientState {
             emptyMeshLogged=false;
             taperProfileLogged=false;
             visualProfileLogged=false;
+            reliefProfileLogged=false;
             surfaceWindowLogged=false;
             surfaceHeightProfileLogged=false;
             rebuildProfileLogged=false;
@@ -1387,15 +1417,15 @@ public final class RiftClientState {
                     int filamentAlphaChannel=colorChannel(alpha*corePulse);
                     float edgeAlpha=Math.min(1.0F,boundedStrength*(.94F*pulse+.06F));
                     int edgeAlphaChannel=colorChannel(edgeAlpha);
-                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_GLOW_WIDTH_SCALE,
+                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_GLOW_WIDTH_SCALE,0.0D,
                         GROUND_GLOW_RED_CHANNEL,GROUND_GLOW_GREEN_CHANNEL,GROUND_GLOW_BLUE_CHANNEL,glowAlphaChannel);
-                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_CORE_WIDTH_SCALE,
+                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS,
                         GROUND_CORE_RED_CHANNEL,GROUND_CORE_GREEN_CHANNEL,GROUND_CORE_BLUE_CHANNEL,coreAlphaChannel);
-                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*.16D,
+                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*.16D,GROUND_FILAMENT_LIFT,
                         GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,filamentAlphaChannel);
-                    ribbon(builder,matrix,camera,segment,halfWidth*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,
+                    ribbon(builder,matrix,camera,segment,halfWidth*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,
                         GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel);
-                    ribbon(builder,matrix,camera,segment,-halfWidth*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,
+                    ribbon(builder,matrix,camera,segment,-halfWidth*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,
                         GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel);
                 }
                 BufferUploader.drawWithShader(builder.end());

@@ -1729,6 +1729,29 @@ def capture_test_world():
                     or "GROUND_EDGE_OFFSET_SCALE=2.25D;" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: wider ground fissure halo/core constants are not active",flush=True)
                 return False
+            relief_profile_marker=(
+                "BLACK_FREQUENCY_GROUND_MESH_SURFACE_RELIEF_VERIFIED "
+                "coreRecess=0.02 filamentLift=0.006 edgeLift=0.02 "
+                "coreClearance=0.015 glowClearance=0.035 filamentClearance=0.041 "
+                "edgeClearance=0.055 ordered=true"
+            )
+            if relief_profile_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: layered ground fissure relief profile was not executed",flush=True)
+                return False
+            if ("GROUND_SURFACE_CLEARANCE=.035D;" not in camera_source
+                    or "GROUND_CORE_RECESS=.020D;" not in camera_source
+                    or "GROUND_FILAMENT_LIFT=.006D;" not in camera_source
+                    or "GROUND_EDGE_LIFT=.020D;" not in camera_source
+                    or "return candidateY-1+surfaceOffset+GROUND_SURFACE_CLEARANCE;" not in camera_source
+                    or "double offset,double halfWidth,double verticalOffset," not in camera_source
+                    or camera_source.count("a.y()+verticalOffset")!=2
+                    or camera_source.count("b.y()+verticalOffset")!=2
+                    or "halfWidth*GROUND_GLOW_WIDTH_SCALE,0.0D," not in camera_source
+                    or "halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS," not in camera_source
+                    or "halfWidth*.16D,GROUND_FILAMENT_LIFT," not in camera_source
+                    or camera_source.count("GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,")!=2):
+                print("WORLD_CAPTURE_FAIL: ground fissure layers are not vertically separated above the sampled surface",flush=True)
+                return False
             edge_palette_marker="BLACK_FREQUENCY_GROUND_MESH_EDGE_PALETTE_VERIFIED red=0.46 green=0.18 blue=0.82"
             if edge_palette_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: violet ground-edge palette self-check was not executed",flush=True)
