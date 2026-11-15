@@ -526,15 +526,20 @@ public final class RiftClientState {
             boolean capped= Math.abs(cliffBreakTaper(1.0D)-CLIFF_BREAK_TAPER)<1.0E-9D
                 && Math.abs(cliffBreakTaper(.10D)-.10D)<1.0E-9D
                 && cliffBreakTaper(Double.NaN)==0.0D;
+            boolean preservedRiseBudget=Math.abs(SAMPLE_SPACING*MAX_GROUND_SEGMENT_GRADE
+                -RiftGeometry.FISSURE_SAMPLE_SPACING*1.25D)<1.0E-9D;
             if(!(flat && snowStep && halfBlockRamp && oneBlockSampleRejected
-                && oneBlockRampAccepted && cliffRejected && invalid && capped))
+                && oneBlockRampAccepted && cliffRejected && invalid && capped && preservedRiseBudget))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh continuity regression");
             continuityProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_VERIFIED maxStep={} maxGrade={} cliffTaper={}",
                 MAX_GROUND_SEGMENT_Y_DELTA,MAX_GROUND_SEGMENT_GRADE,CLIFF_BREAK_TAPER);
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_GRADE_GUARD_VERIFIED maxGrade=1.25 oneBlockRiseRejected=true snowAccepted=true cliffCapProfile=true");
+                "BLACK_FREQUENCY_GROUND_MESH_GRADE_GUARD_VERIFIED maxGrade=2.5 oneBlockRiseRejected=true snowAccepted=true cliffCapProfile=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_GRADE_BUDGET_VERIFIED previousMaxRise={} currentMaxRise={} same=true",
+                RiftGeometry.FISSURE_SAMPLE_SPACING*1.25D,SAMPLE_SPACING*MAX_GROUND_SEGMENT_GRADE);
         }
 
         private static boolean shouldRebuild(long tick,long previousTick,boolean anchorChanged,

@@ -2029,6 +2029,9 @@ def capture_test_world():
             if grade_guard_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: slope-aware ground fissure guard was not verified",flush=True)
                 return False
+            if "BLACK_FREQUENCY_GROUND_MESH_GRADE_BUDGET_VERIFIED previousMaxRise=0.5625 currentMaxRise=0.5625 same=true" not in log_after:
+                print("WORLD_CAPTURE_FAIL: denser mesh changed the maximum allowed terrain rise",flush=True)
+                return False
             grade_stats=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_GRADE_STATS maxGrade=([-+0-9.eE]+) "
                 r"cliffCaps=(\d+) unsupportedGapCaps=(\d+) steepStepsSkipped=(\d+)",
