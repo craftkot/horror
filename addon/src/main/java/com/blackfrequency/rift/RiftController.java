@@ -702,6 +702,8 @@ public final class RiftController {
         boolean started, finished, initialized, restoring, restored;
         int restoreIndex, restoreScan, restoreTicks, restoredBlocks, skippedOccupied, skippedInvalid;
         long beaconPos;
+        // Distinguish an absent/corrupt NBT field from a legitimate beacon at BlockPos.ZERO.
+        boolean beaconPosPresent;
         // A one-time recovery beacon is placed in a loaded, safe air block.
         // Keep it separate from the beacon that a player actually activates.
         long naturalBeaconPos=Long.MIN_VALUE;
@@ -761,7 +763,8 @@ public final class RiftController {
             s.restoredBlocks=boundedCounter(n.getInt("restoredBlocks"),MAX_EDITS);
             s.skippedOccupied=boundedCounter(n.getInt("skippedOccupied"),MAX_EDITS);
             s.skippedInvalid=boundedCounter(n.getInt("skippedInvalid"),MAX_EDITS);
-            s.beaconPos=n.getLong("beaconPos");
+            s.beaconPosPresent=n.contains("beaconPos",Tag.TAG_LONG);
+            s.beaconPos=s.beaconPosPresent?n.getLong("beaconPos"):0L;
             s.naturalBeaconPos=n.contains("naturalBeaconPos",Tag.TAG_LONG)?n.getLong("naturalBeaconPos"):Long.MIN_VALUE;
             s.naturalBeaconId=n.hasUUID("naturalBeaconId")?n.getUUID("naturalBeaconId"):null;
             ListTag saved=n.getList("snapshots",Tag.TAG_COMPOUND);
@@ -830,7 +833,9 @@ public final class RiftController {
             n.putBoolean("centerOutScan",centerOutScan);n.putInt("centerOutIndex",centerOutIndex);
             n.putBoolean("finished",finished);n.putBoolean("initialized",initialized);
             n.putBoolean("restoring",restoring);n.putBoolean("restored",restored);
-            n.putInt("restoreIndex",restoreIndex);n.putInt("restoreScan",restoreScan);n.putInt("restoreTicks",restoreTicks);n.putInt("restoredBlocks",restoredBlocks);n.putInt("skippedOccupied",skippedOccupied);n.putInt("skippedInvalid",skippedInvalid);n.putLong("beaconPos",beaconPos);
+            n.putInt("restoreIndex",restoreIndex);n.putInt("restoreScan",restoreScan);n.putInt("restoreTicks",restoreTicks);n.putInt("restoredBlocks",restoredBlocks);n.putInt("skippedOccupied",skippedOccupied);n.putInt("skippedInvalid",skippedInvalid);
+            if(beaconPosPresent) n.putLong("beaconPos",beaconPos);
+            else n.remove("beaconPos");
             n.putLong("naturalBeaconPos",naturalBeaconPos);
             if(naturalBeaconId!=null) n.putUUID("naturalBeaconId",naturalBeaconId);
             ListTag saved=new ListTag();for(CompoundTag tag:snapshots)saved.add(tag.copy());
@@ -2022,7 +2027,45 @@ public final class RiftController {
             || isRecoveryBeaconVisualAnchorValid(new BlockPos(200,64,0),200,0,-64,320,false)
             || isRecoveryBeaconVisualAnchorValid(null,0,0,-64,320,true))
             throw new IllegalStateException("CI recovery beacon visual anchor bounds regression");
+        verifyRecoveryBeaconPositionPresence();
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_BEACON_VISUAL_ANCHOR_BOUNDS_VERIFIED radius=128 minYInclusive=true maxYExclusive=true worldBorder=true invalidRejected=true");
+    }
+
+    private static BlockPos recoveryVisualAnchor(State s,int fallbackY) {
+        return s.beaconPosPresent ? BlockPos.of(s.beaconPos) : new BlockPos(s.x,fallbackY,s.z);
+    }
+
+    /** Missing or mistyped NBT must not alias the valid packed coordinate BlockPos.ZERO. */
+    private static void verifyRecoveryBeaconPositionPresence() {
+        CompoundTag missingTag=new CompoundTag();
+        missingTag.putBoolean("restoring",true);
+        missingTag.putInt("x",12);
+        missingTag.putInt("z",-7);
+        State missing=State.load(missingTag);
+        CompoundTag rewritten=new CompoundTag();
+        rewritten.putLong("beaconPos",BlockPos.ZERO.asLong());
+        missing.save(rewritten);
+        BlockPos fallback=recoveryVisualAnchor(missing,64);
+
+        CompoundTag wrongTypeTag=missingTag.copy();
+        wrongTypeTag.putString("beaconPos","not-a-long");
+        State wrongType=State.load(wrongTypeTag);
+
+        State origin=new State();
+        origin.x=12;
+        origin.z=-7;
+        origin.beaconPos=BlockPos.ZERO.asLong();
+        origin.beaconPosPresent=true;
+        State loadedOrigin=State.load(origin.save(new CompoundTag()));
+        BlockPos originAnchor=recoveryVisualAnchor(loadedOrigin,64);
+
+        if(missing.beaconPosPresent || rewritten.contains("beaconPos",Tag.TAG_LONG)
+            || !fallback.equals(new BlockPos(12,64,-7))
+            || wrongType.beaconPosPresent
+            || !loadedOrigin.beaconPosPresent || loadedOrigin.beaconPos!=BlockPos.ZERO.asLong()
+            || !originAnchor.equals(BlockPos.ZERO))
+            throw new IllegalStateException("CI saved recovery beacon position presence regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_BEACON_POSITION_PRESENCE_VERIFIED missingOrWrongTypeRejected=true originCoordinatePreserved=true fallback=rift-anchor");
     }
 
     /** Horizontal anchor check with overflow-safe coordinates, independent of beacon height. */
@@ -2692,7 +2735,7 @@ public final class RiftController {
         // Log only accepted player interactions; rejected distant beacons must
         // never count as successful activation in the real-client CI test.
         if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION x={} y={} z={} natural={}",pos.getX(),pos.getY(),pos.getZ(),pos.asLong()==s.naturalBeaconPos);
-        s.restoring=true;s.restoreIndex=s.snapshots.size()-1;s.restoreScan=s.restoreIndex;s.restoreTicks=0;s.restoredBlocks=0;s.skippedOccupied=0;s.skippedInvalid=0;s.beaconPos=pos.asLong();s.setDirty();
+        s.restoring=true;s.restoreIndex=s.snapshots.size()-1;s.restoreScan=s.restoreIndex;s.restoreTicks=0;s.restoredBlocks=0;s.skippedOccupied=0;s.skippedInvalid=0;s.beaconPos=pos.asLong();s.beaconPosPresent=true;s.setDirty();
         // Keep the physical beacon visible during activation. A full-screen title
         // covered the object in the player's view; use the action bar instead.
         // Only nearby, active players should receive this world-local notice.
@@ -3046,9 +3089,10 @@ public final class RiftController {
     }
 
     private static void restore(ServerLevel level,State s) {
-        BlockPos activatedBeacon=BlockPos.of(s.beaconPos);
+        BlockPos activatedBeacon=recoveryVisualAnchor(s,level.getSeaLevel());
         // Resolve the physical beacon once per restoration tick using loaded-only access.
-        boolean beaconPositionValid=isRecoveryBeaconVisualAnchorValid(activatedBeacon,s.x,s.z,
+        boolean beaconPositionValid=s.beaconPosPresent
+            && isRecoveryBeaconVisualAnchorValid(activatedBeacon,s.x,s.z,
             level.getMinBuildHeight(),level.getMaxBuildHeight(),
             level.getWorldBorder().isWithinBounds(activatedBeacon));
         boolean beaconPresent=beaconPositionValid && level.hasChunkAt(activatedBeacon)
@@ -3751,7 +3795,7 @@ public final class RiftController {
         boolean ciSparseReady=CI_TEST && Boolean.getBoolean("blackfrequency.ciSparseRecoveryTest")
             && s.finished && s.edits>0 && s.edits<160;
         if(CI_TEST && Boolean.getBoolean("blackfrequency.ciExerciseRestoration")
-            && !s.restoring && s.beaconPos==0L && (s.edits>=160 || ciSparseReady) && !s.snapshots.isEmpty()
+            && !s.restoring && !s.beaconPosPresent && (s.edits>=160 || ciSparseReady) && !s.snapshots.isEmpty()
             && (!Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest")
                 || (s.naturalBeaconPos!=Long.MIN_VALUE && s.ciNaturalBeaconReplaced))) {
             boolean playerInteractionTest=Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest");
@@ -3957,7 +4001,7 @@ public final class RiftController {
                 demoPlayer.displayClientMessage(recoveryViolet(
                     "✦ Маяк готов — нажмите ПКМ для стабилизации"),true);
             }
-            s.beaconPos=demoPos.asLong();
+            s.beaconPos=demoPos.asLong();s.beaconPosPresent=true;
             if(playerInteractionTest)
                 LOGGER.info("BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER x={} y={} z={}",demoPos.getX(),demoPos.getY(),demoPos.getZ());
             else
