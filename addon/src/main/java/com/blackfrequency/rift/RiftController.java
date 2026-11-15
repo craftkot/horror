@@ -144,6 +144,12 @@ public final class RiftController {
         return Double.isFinite(wave) ? wave : 0.0D;
     }
 
+    private static double fissurePulseWave(double phase,FissureSample sample) {
+        if(!Double.isFinite(phase)) return 0.0D;
+        double wave=Math.sin(phase+sample.segmentPhase()+sample.armPhase());
+        return Double.isFinite(wave) ? wave : 0.0D;
+    }
+
     private static DustParticleOptions fissureDustForWave(double wave) {
         if(!Double.isFinite(wave)) return FISSURE_VIOLET_DUST;
         double bounded=Math.max(-1.0D,Math.min(1.0D,wave));
@@ -880,6 +886,30 @@ public final class RiftController {
         }
     }
 
+    // Geometry and pulse offsets are invariant across worlds and ticks. Cache them once
+    // so each server-side fissure pulse performs only the time-varying wave sine calls.
+    private record FissureSample(double forwardX,double bendX,double forwardZ,double bendZ,
+            double segmentPhase,double armPhase) {}
+    private static final FissureSample[] FISSURE_SAMPLES=createFissureSamples();
+
+    private static FissureSample[] createFissureSamples() {
+        FissureSample[] samples=new FissureSample[FISSURE_ARM_COUNT*FISSURE_SEGMENTS_PER_ARM];
+        for(int arm=0;arm<FISSURE_ARM_COUNT;arm++) {
+            double angle=arm*Math.PI/2.0D;
+            double sinAngle=Math.sin(angle);
+            double cosAngle=Math.cos(angle);
+            for(int segment=1;segment<=FISSURE_SEGMENTS_PER_ARM;segment++) {
+                double distance=segment*FISSURE_SAMPLE_SPACING;
+                double bend=Math.sin(segment*.85D+arm*1.1D)*.18D;
+                samples[arm*FISSURE_SEGMENTS_PER_ARM+segment-1]=new FissureSample(
+                    cosAngle*distance,sinAngle*bend,
+                    sinAngle*distance,cosAngle*bend,
+                    segment*.8D,arm*.6D);
+            }
+        }
+        return samples;
+    }
+
     // Sparse accent samples use a brighter cached Dust tint from the same
     // particle family, keeping the whole surface fissure inside the violet palette.
     private static boolean isAccentFissureDustSegment(int segment) {
@@ -977,15 +1007,13 @@ public final class RiftController {
         int edgeFallbackArms=0;
         double surfaceYTotal=0.0D;
         for(int arm=0;arm<FISSURE_ARM_COUNT;arm++) {
-            double angle=arm*Math.PI/2.0;
             int edgeCandidateSegment=0;
             boolean hasEdgeCandidate=false;
             double edgeX=0.0D,edgeY=0.0D,edgeZ=0.0D,edgePulse=0.0D;
             for(int segment=1;segment<=FISSURE_SEGMENTS_PER_ARM;segment++) {
-                double distance=segment*FISSURE_SAMPLE_SPACING;
-                double bend=Math.sin(segment*.85D+arm*1.1D)*.18D;
-                double px=s.x+.5+Math.cos(angle)*distance-Math.sin(angle)*bend;
-                double pz=s.z+.5+Math.sin(angle)*distance+Math.cos(angle)*bend;
+                FissureSample sample=FISSURE_SAMPLES[arm*FISSURE_SEGMENTS_PER_ARM+segment-1];
+                double px=s.x+.5+sample.forwardX()-sample.bendX();
+                double pz=s.z+.5+sample.forwardZ()+sample.bendZ();
                 int blockX=(int)Math.floor(px);
                 int blockZ=(int)Math.floor(pz);
                 long dx=blockX-(long)s.x;
@@ -999,7 +1027,7 @@ public final class RiftController {
                 cursor.set(blockX,surfaceY-1,blockZ);
                 if(!isFissureGroundSupport(level.getBlockState(cursor))) continue;
                 double particleY=fissureParticleY(level,blockX,surfaceY,blockZ,cursor);
-                double wave=fissurePulseWave(phase,segment,arm);
+                double wave=fissurePulseWave(phase,sample);
                 double pulse=wave*.05D;
                 DustParticleOptions dust=fissureDustForWave(wave);
                 // Keep the accent on the furthest usable sample. If the exact outer cell
@@ -1295,6 +1323,42 @@ public final class RiftController {
         return false;
     }
 
+    private static void verifyFissureSampleCache() {
+        if(FISSURE_SAMPLES.length!=FISSURE_ARM_COUNT*FISSURE_SEGMENTS_PER_ARM)
+            throw new IllegalStateException("CI fissure sample cache size regression");
+        double[] phases={0.0D,.125D,Math.PI,-4.0D*Math.PI,1000.0D,
+            Double.NaN,Double.POSITIVE_INFINITY,Double.NEGATIVE_INFINITY};
+        for(int arm=0;arm<FISSURE_ARM_COUNT;arm++) {
+            double angle=arm*Math.PI/2.0D;
+            double sinAngle=Math.sin(angle);
+            double cosAngle=Math.cos(angle);
+            for(int segment=1;segment<=FISSURE_SEGMENTS_PER_ARM;segment++) {
+                FissureSample sample=FISSURE_SAMPLES[arm*FISSURE_SEGMENTS_PER_ARM+segment-1];
+                double distance=segment*FISSURE_SAMPLE_SPACING;
+                double bend=Math.sin(segment*.85D+arm*1.1D)*.18D;
+                if(Double.doubleToLongBits(sample.forwardX())!=Double.doubleToLongBits(cosAngle*distance)
+                    || Double.doubleToLongBits(sample.bendX())!=Double.doubleToLongBits(sinAngle*bend)
+                    || Double.doubleToLongBits(sample.forwardZ())!=Double.doubleToLongBits(sinAngle*distance)
+                    || Double.doubleToLongBits(sample.bendZ())!=Double.doubleToLongBits(cosAngle*bend)
+                    || Double.doubleToLongBits(sample.segmentPhase())!=Double.doubleToLongBits(segment*.8D)
+                    || Double.doubleToLongBits(sample.armPhase())!=Double.doubleToLongBits(arm*.6D))
+                    throw new IllegalStateException("CI fissure sample geometry cache changed the legacy profile");
+                double offsetX=sample.forwardX()-sample.bendX();
+                double offsetZ=sample.forwardZ()+sample.bendZ();
+                if(!Double.isFinite(offsetX) || !Double.isFinite(offsetZ)
+                    || offsetX*offsetX+offsetZ*offsetZ>=(double)RADIUS*RADIUS)
+                    throw new IllegalStateException("CI fissure sample escaped the bounded rift radius");
+                for(double phase:phases) {
+                    if(Double.doubleToLongBits(fissurePulseWave(phase,sample))
+                        !=Double.doubleToLongBits(fissurePulseWave(phase,segment,arm)))
+                        throw new IllegalStateException("CI fissure sample pulse cache changed the legacy profile");
+                }
+            }
+        }
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SAMPLE_CACHE_VERIFIED samples={} geometryBitExact=true pulseBitExact=true geometryTrigPerEmission=0 dynamicPulseSin={} radius={}",
+            FISSURE_SAMPLES.length,FISSURE_ARM_COUNT*FISSURE_SEGMENTS_PER_ARM,RADIUS);
+    }
+
     private static void verifyFissureSamplingDensity() {
         int samples=FISSURE_ARM_COUNT*FISSURE_SEGMENTS_PER_ARM;
         double extent=FISSURE_SEGMENTS_PER_ARM*FISSURE_SAMPLE_SPACING;
@@ -1310,6 +1374,7 @@ public final class RiftController {
             || isOutermostValidFissureSample(FISSURE_SEGMENTS_PER_ARM+1,0))
             throw new IllegalStateException("CI fissure sampling density/outer-tip fallback regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_OUTER_TIP_FALLBACK_VERIFIED policy=furthest-valid-sample");
+        verifyFissureSampleCache();
         int edgeDustCount=0;
         int accentDustMotes=0;
         int violetDustMotes=0;
