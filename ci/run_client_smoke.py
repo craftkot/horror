@@ -1759,7 +1759,7 @@ def capture_test_world():
                 return False
             if ribbon_cache_marker in final_log:
                 edge_rail_pattern = re.compile(
-                    r"ribbon\(builder,matrix,camera,segment,(-?)halfWidth\*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,\s*"
+                    r"ribbon\(builder,matrix,camera,segment,(-?)halfWidth\*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,\s*"
                     r"GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel\);"
                 )
             else:
