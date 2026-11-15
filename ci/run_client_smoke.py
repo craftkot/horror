@@ -171,6 +171,8 @@ def verify_restoration_particle_source():
     tick_advance=body.find("s.restoreTicks=nextNonNegativeTick(s.restoreTicks)")
     cadence_derive=body.find("int cadenceTick=restorationCadenceTick(s.restoreTicks,level.getGameTime())")
     scan_gate=body.find("if(shouldScanRestorePlayers(cadenceTick,beaconPresent))")
+    beacon_anchor_guard=body.find("boolean beaconPositionValid=isRecoveryBeaconVisualAnchorValid(")
+    beacon_chunk_lookup=body.find("&& level.hasChunkAt(activatedBeacon)",beacon_anchor_guard)
     cadence_policy_start=source.find("private static int restorationCadenceTick")
     cadence_policy_end=source.find("private static long restorationAnimationTick",cadence_policy_start)
     cadence_policy=source[cadence_policy_start:cadence_policy_end] if cadence_policy_start>=0 and cadence_policy_end>cadence_policy_start else ""
@@ -180,6 +182,9 @@ def verify_restoration_particle_source():
     scan_body=body[player_loop:scan_end] if scan_end>player_loop else ""
     if (not scan_interval or int(scan_interval.group(1))!=4
             or not (0<=tick_advance<cadence_derive<scan_gate<player_loop<=menu_guard)
+            or "private static boolean isRecoveryBeaconVisualAnchorValid(" not in source
+            or not (0<=beacon_anchor_guard<beacon_chunk_lookup)
+            or "level.getWorldBorder().isWithinBounds(activatedBeacon)" not in body
             or "int cadenceTick=restorationCadenceTick(s.restoreTicks,level.getGameTime())" not in body
             or "Math.floorMod(gameTime,(long)RESTORE_CADENCE_PERIOD_TICKS)" not in cadence_policy
             or "restoreTicks<Integer.MAX_VALUE" not in cadence_policy
