@@ -1729,14 +1729,15 @@ def capture_test_world():
                     or "GROUND_EDGE_OFFSET_SCALE=2.25D;" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: wider ground fissure halo/core constants are not active",flush=True)
                 return False
-            relief_profile_marker=(
-                "BLACK_FREQUENCY_GROUND_MESH_SURFACE_RELIEF_VERIFIED "
-                "coreRecess=0.02 filamentLift=0.006 edgeLift=0.02 "
-                "coreClearance=0.015 glowClearance=0.035 filamentClearance=0.041 "
-                "edgeClearance=0.055 ordered=true"
-            )
-            if relief_profile_marker not in final_log:
-                print("WORLD_CAPTURE_FAIL: layered ground fissure relief profile was not executed",flush=True)
+            relief_profile_match=re.search(
+                r"BLACK_FREQUENCY_GROUND_MESH_SURFACE_RELIEF_VERIFIED coreRecess=([-+0-9.eE]+) filamentLift=([-+0-9.eE]+) edgeLift=([-+0-9.eE]+) coreClearance=([-+0-9.eE]+) glowClearance=([-+0-9.eE]+) filamentClearance=([-+0-9.eE]+) edgeClearance=([-+0-9.eE]+) ordered=true",
+                final_log)
+            expected_relief=(.020,.006,.020,.015,.035,.041,.055)
+            if (not relief_profile_match
+                    or any(not math.isclose(float(relief_profile_match.group(i)),expected_relief[i-1],
+                                             rel_tol=0.0,abs_tol=1.0e-9)
+                           for i in range(1,8))):
+                print("WORLD_CAPTURE_FAIL: layered ground fissure relief profile was not executed or is out of bounds",flush=True)
                 return False
             if ("GROUND_SURFACE_CLEARANCE=.035D;" not in camera_source
                     or "GROUND_CORE_RECESS=.020D;" not in camera_source
