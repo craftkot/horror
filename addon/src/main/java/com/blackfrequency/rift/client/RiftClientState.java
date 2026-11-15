@@ -141,6 +141,19 @@ public final class RiftClientState {
         private static final float GROUND_EDGE_RED=.46F;
         private static final float GROUND_EDGE_GREEN=.18F;
         private static final float GROUND_EDGE_BLUE=.82F;
+        // RGB values are invariant across every frame and segment; pack them once at class initialization.
+        private static final int GROUND_GLOW_RED_CHANNEL=colorChannel(.20F);
+        private static final int GROUND_GLOW_GREEN_CHANNEL=colorChannel(.025F);
+        private static final int GROUND_GLOW_BLUE_CHANNEL=colorChannel(.43F);
+        private static final int GROUND_CORE_RED_CHANNEL=colorChannel(.008F);
+        private static final int GROUND_CORE_GREEN_CHANNEL=colorChannel(.001F);
+        private static final int GROUND_CORE_BLUE_CHANNEL=colorChannel(.022F);
+        private static final int GROUND_FILAMENT_RED_CHANNEL=colorChannel(.28F);
+        private static final int GROUND_FILAMENT_GREEN_CHANNEL=colorChannel(.015F);
+        private static final int GROUND_FILAMENT_BLUE_CHANNEL=colorChannel(.62F);
+        private static final int GROUND_EDGE_RED_CHANNEL=colorChannel(GROUND_EDGE_RED);
+        private static final int GROUND_EDGE_GREEN_CHANNEL=colorChannel(GROUND_EDGE_GREEN);
+        private static final int GROUND_EDGE_BLUE_CHANNEL=colorChannel(GROUND_EDGE_BLUE);
         // Keep the halo readable against grass and stone without another draw call or mesh layer.
         private static final float GROUND_GLOW_ALPHA=.42F;
         // GROUND_GLOW_ALPHA is binary32; allow its widened representation's rounding error.
@@ -163,6 +176,7 @@ public final class RiftClientState {
         private static boolean rebuildProfileLogged;
         private static boolean animationProfileLogged;
         private static boolean packedColorProfileLogged;
+        private static boolean ribbonColorCacheProfileLogged;
         private static boolean samplingProfileLogged;
         private static boolean rangeRejectLogged;
         private static boolean rangeProfileLogged;
@@ -796,6 +810,7 @@ public final class RiftClientState {
             verifyGroundRenderRangeProfile();
             verifyGroundAnimationProfile();
             verifyPackedColorProfile();
+            verifyRibbonColorCacheProfile();
             verifyGroundSupportProfile();
             verifySurfaceCacheReuse();
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
@@ -943,8 +958,24 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_GROUND_MESH_COLOR_CHANNEL_PROFILE_VERIFIED zero=0 half=128 one=255 lowClamp=0 highClamp=255 nonFinite=true");
         }
 
-        // Color channels are constant for all four vertices of one ribbon.
-        // Convert once per quad instead of repeating four conversions per vertex.
+        private static void verifyRibbonColorCacheProfile() {
+            if(ribbonColorCacheProfileLogged) return;
+            boolean glow=GROUND_GLOW_RED_CHANNEL==51
+                && GROUND_GLOW_GREEN_CHANNEL==6 && GROUND_GLOW_BLUE_CHANNEL==110;
+            boolean core=GROUND_CORE_RED_CHANNEL==2
+                && GROUND_CORE_GREEN_CHANNEL==0 && GROUND_CORE_BLUE_CHANNEL==6;
+            boolean filament=GROUND_FILAMENT_RED_CHANNEL==71
+                && GROUND_FILAMENT_GREEN_CHANNEL==4 && GROUND_FILAMENT_BLUE_CHANNEL==158;
+            boolean edge=GROUND_EDGE_RED_CHANNEL==117
+                && GROUND_EDGE_GREEN_CHANNEL==46 && GROUND_EDGE_BLUE_CHANNEL==209;
+            if(!(glow && core && filament && edge))
+                throw new IllegalStateException("BLACK FREQUENCY ground mesh static RGB cache regression");
+            ribbonColorCacheProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED staticRgbChannels=12 dynamicAlphaChannels=4 edgeAlphaShared=true");
+        }
+
+        // Static RGB channels are packed once; only each ribbon's animated alpha is dynamic.
         private static void vertex(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
                 double x,double y,double z,int red,int green,int blue,int alpha) {
             builder.vertex(matrix,(float)(x-camera.x),(float)(y-camera.y),(float)(z-camera.z))
@@ -954,13 +985,9 @@ public final class RiftClientState {
 
         private static void ribbon(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
                 GroundSegment segment,double offset,double halfWidth,
-                float red,float green,float blue,float alpha) {
+                int redChannel,int greenChannel,int blueChannel,int alphaChannel) {
             GroundPoint a=segment.a();
             GroundPoint b=segment.b();
-            int redChannel=colorChannel(red);
-            int greenChannel=colorChannel(green);
-            int blueChannel=colorChannel(blue);
-            int alphaChannel=colorChannel(alpha);
             // Scale the offset and half-width together so glow, dark core and
             // bright edge rails converge at the same tapered endpoint.
             double leftA=(offset+halfWidth)*segment.taperA();
@@ -1202,18 +1229,22 @@ public final class RiftClientState {
                         GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE*wave+widthFlicker);
                     float pulse=(float)(.78D+.22D*Math.sin(time*.19D+segment.phase()));
                     float alpha=boundedStrength*pulse;
-                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_GLOW_WIDTH_SCALE,
-                        .20F,.025F,.43F,alpha*GROUND_GLOW_ALPHA);
-                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_CORE_WIDTH_SCALE,
-                        .008F,.001F,.022F,alpha*.94F);
+                    int glowAlphaChannel=colorChannel(alpha*GROUND_GLOW_ALPHA);
+                    int coreAlphaChannel=colorChannel(alpha*.94F);
                     float corePulse=(float)boundedCorePulse(wave);
-                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*.16D,
-                        .28F,.015F,.62F,alpha*corePulse);
+                    int filamentAlphaChannel=colorChannel(alpha*corePulse);
                     float edgeAlpha=Math.min(1.0F,boundedStrength*(.94F*pulse+.06F));
+                    int edgeAlphaChannel=colorChannel(edgeAlpha);
+                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_GLOW_WIDTH_SCALE,
+                        GROUND_GLOW_RED_CHANNEL,GROUND_GLOW_GREEN_CHANNEL,GROUND_GLOW_BLUE_CHANNEL,glowAlphaChannel);
+                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_CORE_WIDTH_SCALE,
+                        GROUND_CORE_RED_CHANNEL,GROUND_CORE_GREEN_CHANNEL,GROUND_CORE_BLUE_CHANNEL,coreAlphaChannel);
+                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*.16D,
+                        GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,filamentAlphaChannel);
                     ribbon(builder,matrix,camera,segment,halfWidth*1.9D,GROUND_EDGE_HALF_WIDTH,
-                        GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE,edgeAlpha);
+                        GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel);
                     ribbon(builder,matrix,camera,segment,-halfWidth*1.9D,GROUND_EDGE_HALF_WIDTH,
-                        GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE,edgeAlpha);
+                        GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel);
                 }
                 BufferUploader.drawWithShader(builder.end());
             } finally {
