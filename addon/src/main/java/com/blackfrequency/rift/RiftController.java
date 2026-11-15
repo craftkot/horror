@@ -838,6 +838,7 @@ public final class RiftController {
             else n.remove("beaconPos");
             n.putLong("naturalBeaconPos",naturalBeaconPos);
             if(naturalBeaconId!=null) n.putUUID("naturalBeaconId",naturalBeaconId);
+            else n.remove("naturalBeaconId");
             ListTag saved=new ListTag();for(CompoundTag tag:snapshots)saved.add(tag.copy());
             n.put("snapshots",saved);
             return n;
@@ -2121,7 +2122,20 @@ public final class RiftController {
         if(!saved.naturalBeaconId.equals(loaded.naturalBeaconId)
             || loaded.naturalBeaconPos!=saved.naturalBeaconPos)
             throw new IllegalStateException("CI natural beacon ownership UUID persistence regression");
+
+        // SavedData normally supplies a fresh tag, but keep save() correct when
+        // a caller reuses one: a cleared objective must not retain an old owner UUID.
+        CompoundTag reused=new CompoundTag();
+        saved.save(reused);
+        saved.naturalBeaconPos=Long.MIN_VALUE;
+        saved.naturalBeaconId=null;
+        saved.save(reused);
+        State cleared=State.load(reused);
+        if(reused.hasUUID("naturalBeaconId") || cleared.naturalBeaconId!=null
+            || cleared.naturalBeaconPos!=Long.MIN_VALUE)
+            throw new IllegalStateException("CI stale natural beacon UUID survived save");
         LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_ID_STATE_PERSISTENCE_VERIFIED");
+        LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_ID_CLEAR_VERIFIED reusedTag=true staleUuidRemoved=true");
     }
 
     /** Overflow-safe 3D audience filter shared by recovery effects and titles. */
