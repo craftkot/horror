@@ -133,14 +133,15 @@ def verify_restoration_particle_source():
         raise RuntimeError("BLACK FREQUENCY cadence-aware shared player scan must close all beacon menus before finishing")
     packet_range=re.search(r"RESTORE_PARTICLE_PACKET_RANGE\s*=\s*([0-9.]+)D",source)
     effect_envelope=re.search(r"RESTORE_PARTICLE_EFFECT_ENVELOPE\s*=\s*([0-9.]+)D",source)
-    particle_distance=re.search(r"RESTORE_PARTICLE_VIEW_DISTANCE\s*=\s*([0-9.]+)D",source)
+    particle_distance_expression=re.search(
+        r"RESTORE_PARTICLE_VIEW_DISTANCE\s*=\s*RESTORE_PARTICLE_PACKET_RANGE\s*\+\s*RESTORE_PARTICLE_EFFECT_ENVELOPE",
+        source)
     audience_start=source.find("private static boolean withinRestoreParticleAudience(")
     audience_end=source.find("\n    private static boolean shouldScanRestorePlayers",audience_start)
     audience_body=source[audience_start:audience_end] if audience_start>=0 and audience_end>audience_start else ""
     if (not packet_range or float(packet_range.group(1))!=32.0
             or not effect_envelope or float(effect_envelope.group(1))!=5.0
-            or not particle_distance or float(particle_distance.group(1))!=37.0
-            or float(particle_distance.group(1))!=float(packet_range.group(1))+float(effect_envelope.group(1))
+            or not particle_distance_expression
             or "Double.isFinite(distanceSquared)" not in audience_body
             or "distanceSquared<RESTORE_PARTICLE_VIEW_DISTANCE_SQR" not in audience_body
             or "Math.nextDown(RESTORE_PARTICLE_VIEW_DISTANCE_SQR)" not in source
