@@ -68,11 +68,11 @@ def verify_restoration_particle_source():
             or "CI_BEACON_PAD_FIRST_SOLID_ROW!=CI_BEACON_PAD_GAP_ROW+1" not in source
             or "ciBeaconPadAlongX(int anchorX,int anchorZ,int beaconX,int beaconZ)" not in source
             or "ciBeaconPadAlongX(s.x,s.z,demoPos.getX(),demoPos.getZ())" not in pad_body
-            or "chooseCiBeaconPadSign(level,s,demoPos,padAlongX)" not in pad_body
+            or "chooseCiBeaconPadSign(level,demoPlayer,s,demoPos,padAlongX)" not in pad_body
             or "BEACON_APPROACH_SIDE_SELECTED" not in pad_body
             or "padSign*offset" not in pad_body
-            or "ciBeaconPadApproachClear(ServerLevel level,State s,BlockPos beacon" not in source
-            or "CollisionContext.empty()" not in source
+            or "ciBeaconPadApproachClear(ServerLevel level,net.minecraft.server.level.ServerPlayer player,State s,BlockPos beacon" not in source
+            or "ClipContext.Fluid.NONE,player" not in source
             or "verifyCiBeaconPadSignSelection();" not in source
             or "for(int offset=CI_BEACON_PAD_FIRST_SOLID_ROW;offset<=CI_BEACON_PAD_LAST_SOLID_ROW;offset++)" not in pad_body
             or "ciBeaconSightlineHitsBeacon(level,demoPlayer,demoPos)" not in pad_body

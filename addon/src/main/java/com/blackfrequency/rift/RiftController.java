@@ -1130,7 +1130,7 @@ public final class RiftController {
      * tree or other natural block may occupy the nominally empty sightline row.
      * This probe reads only already-loaded chunks and never clears natural terrain.
      */
-    private static boolean ciBeaconPadApproachClear(ServerLevel level,State s,BlockPos beacon,
+    private static boolean ciBeaconPadApproachClear(ServerLevel level,net.minecraft.server.level.ServerPlayer player,State s,BlockPos beacon,
             boolean alongX,int sign) {
         if(sign!=1 && sign!=-1) return false;
         for(int offset=CI_BEACON_PAD_FIRST_SOLID_ROW;offset<=CI_BEACON_PAD_LAST_SOLID_ROW;offset++) {
@@ -1172,15 +1172,15 @@ public final class RiftController {
         var hit=level.clip(new net.minecraft.world.level.ClipContext(eye,target,
             net.minecraft.world.level.ClipContext.Block.OUTLINE,
             net.minecraft.world.level.ClipContext.Fluid.NONE,
-            net.minecraft.world.phys.shapes.CollisionContext.empty()));
+            player));
         return hit.getType()==net.minecraft.world.phys.HitResult.Type.BLOCK
             && hit.getBlockPos().equals(beacon);
     }
 
-    private static int chooseCiBeaconPadSign(ServerLevel level,State s,BlockPos beacon,
+    private static int chooseCiBeaconPadSign(ServerLevel level,net.minecraft.server.level.ServerPlayer player,State s,BlockPos beacon,
             boolean alongX) {
-        boolean positiveClear=ciBeaconPadApproachClear(level,s,beacon,alongX,1);
-        boolean negativeClear=ciBeaconPadApproachClear(level,s,beacon,alongX,-1);
+        boolean positiveClear=ciBeaconPadApproachClear(level,player,s,beacon,alongX,1);
+        boolean negativeClear=ciBeaconPadApproachClear(level,player,s,beacon,alongX,-1);
         return selectCiBeaconPadSign(positiveClear,negativeClear);
     }
 
@@ -3799,7 +3799,7 @@ public final class RiftController {
                     // Every pad column stays inside the bounded rift radius, world border
                     // and already-loaded chunks; this disposable fixture never force-loads.
                     boolean padAlongX=ciBeaconPadAlongX(s.x,s.z,demoPos.getX(),demoPos.getZ());
-                    int padSign=chooseCiBeaconPadSign(level,s,demoPos,padAlongX);
+                    int padSign=chooseCiBeaconPadSign(level,demoPlayer,s,demoPos,padAlongX);
                     if(padSign==0) {
                         LOGGER.warn("BLACK_FREQUENCY_TEST BEACON_APPROACH_NO_CLEAR_SIDE axis={} loadedOnly=true",
                             padAlongX?"X":"Z");
