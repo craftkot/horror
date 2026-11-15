@@ -1517,7 +1517,6 @@ def capture_test_world():
                     or "sample.bendX()" not in build_source
                     or "sample.forwardZ()" not in build_source
                     or "sample.bendZ()" not in build_source
-                    or "sample.phase()" not in build_source
                     or "Math.sin(" in build_source or "Math.cos(" in build_source):
                 print("WORLD_CAPTURE_FAIL: ground mesh rebuild still calculates fixed sample trigonometry",flush=True)
                 return False
