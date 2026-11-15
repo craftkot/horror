@@ -68,6 +68,12 @@ def verify_restoration_particle_source():
             or "CI_BEACON_PAD_FIRST_SOLID_ROW!=CI_BEACON_PAD_GAP_ROW+1" not in source
             or "ciBeaconPadAlongX(int anchorX,int anchorZ,int beaconX,int beaconZ)" not in source
             or "ciBeaconPadAlongX(s.x,s.z,demoPos.getX(),demoPos.getZ())" not in pad_body
+            or "chooseCiBeaconPadSign(level,s,demoPos,padAlongX)" not in pad_body
+            or "BEACON_APPROACH_SIDE_SELECTED" not in pad_body
+            or "padSign*offset" not in pad_body
+            or "ciBeaconPadApproachClear(ServerLevel level,State s,BlockPos beacon" not in source
+            or "CollisionContext.empty()" not in source
+            or "verifyCiBeaconPadSignSelection();" not in source
             or "for(int offset=CI_BEACON_PAD_FIRST_SOLID_ROW;offset<=CI_BEACON_PAD_LAST_SOLID_ROW;offset++)" not in pad_body
             or "ciBeaconSightlineHitsBeacon(level,demoPlayer,demoPos)" not in pad_body
             or "BEACON_SIGHTLINE_VERIFIED" not in pad_body
@@ -1192,6 +1198,7 @@ def capture_test_world():
                         return
                 if (not marker or not particles or not target or not safe_pad or not pad_profile or not aim or not mesh
                         or "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs
+                        or "BLACK_FREQUENCY_TEST BEACON_APPROACH_SIDE_SELECTED" not in logs
                         or "BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" not in logs):
                     return
                 samples,accent_dust,violet_dust,edge_dust_count,total_particles=particles
@@ -2211,6 +2218,9 @@ def capture_test_world():
                         r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=-?\d+ y=-?\d+ z=-?\d+ support=solid fallDistance=0\.0",
                         log_after):
                     print("WORLD_CAPTURE_FAIL: player was not reset onto a verified safe beacon pad",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST BEACON_APPROACH_SIDE_SELECTED" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: server did not select a clear loaded-only beacon approach side",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: server did not verify a loaded-only line of sight to the physical beacon",flush=True)

@@ -1121,6 +1121,77 @@ public final class RiftController {
         return Math.abs(anchorDeltaZ)>=Math.abs(anchorDeltaX);
     }
 
+    private static int selectCiBeaconPadSign(boolean positiveClear,boolean negativeClear) {
+        return positiveClear?1:negativeClear?-1:0;
+    }
+
+    /**
+     * Test both perpendicular sides before building the disposable pad. A village wall,
+     * tree or other natural block may occupy the nominally empty sightline row.
+     * This probe reads only already-loaded chunks and never clears natural terrain.
+     */
+    private static boolean ciBeaconPadApproachClear(ServerLevel level,State s,BlockPos beacon,
+            boolean alongX,int sign) {
+        if(sign!=1 && sign!=-1) return false;
+        for(int offset=CI_BEACON_PAD_FIRST_SOLID_ROW;offset<=CI_BEACON_PAD_LAST_SOLID_ROW;offset++) {
+            for(int lateral=-1;lateral<=1;lateral++) {
+                int dx=alongX?sign*offset:lateral;
+                int dz=alongX?lateral:sign*offset;
+                BlockPos floor=beacon.offset(dx,CI_BEACON_PAD_FLOOR_Y_OFFSET,dz);
+                long radiusX=(long)floor.getX()-s.x;
+                long radiusZ=(long)floor.getZ()-s.z;
+                if(Math.abs(radiusX)>RADIUS || Math.abs(radiusZ)>RADIUS
+                    || radiusX*radiusX+radiusZ*radiusZ>(long)RADIUS*RADIUS
+                    || !level.getWorldBorder().isWithinBounds(floor)
+                    || !level.hasChunk(floor.getX()>>4,floor.getZ()>>4)
+                    || floor.getY()<level.getMinBuildHeight()
+                    || (long)floor.getY()+3L>=level.getMaxBuildHeight()) return false;
+            }
+        }
+        double playerX=beacon.getX()+.5D+(alongX?sign*CI_BEACON_PAD_STANDOFF:0.0D);
+        double playerZ=beacon.getZ()+.5D+(alongX?0.0D:sign*CI_BEACON_PAD_STANDOFF);
+        double playerY=beacon.getY()+CI_BEACON_PAD_PLAYER_Y_OFFSET;
+        if(!Double.isFinite(playerX) || !Double.isFinite(playerZ)
+            || Math.abs(playerX)>30_000_000.0D || Math.abs(playerZ)>30_000_000.0D) return false;
+        BlockPos feet=BlockPos.containing(playerX,playerY,playerZ);
+        BlockPos support=feet.below();
+        long supportX=(long)support.getX()-s.x;
+        long supportZ=(long)support.getZ()-s.z;
+        if(Math.abs(supportX)>RADIUS || Math.abs(supportZ)>RADIUS
+            || supportX*supportX+supportZ*supportZ>(long)RADIUS*RADIUS
+            || !level.getWorldBorder().isWithinBounds(feet)
+            || !level.getWorldBorder().isWithinBounds(support)
+            || !level.hasChunk(feet.getX()>>4,feet.getZ()>>4)
+            || !level.hasChunk(support.getX()>>4,support.getZ()>>4)) return false;
+
+        net.minecraft.world.phys.Vec3 eye=new net.minecraft.world.phys.Vec3(
+            playerX,playerY+CI_BEACON_PLAYER_EYE_HEIGHT,playerZ);
+        net.minecraft.world.phys.Vec3 target=net.minecraft.world.phys.Vec3.atCenterOf(beacon);
+        if(!fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ)))
+            return false;
+        var hit=level.clip(new net.minecraft.world.level.ClipContext(eye,target,
+            net.minecraft.world.level.ClipContext.Block.OUTLINE,
+            net.minecraft.world.level.ClipContext.Fluid.NONE,
+            net.minecraft.world.phys.shapes.CollisionContext.empty()));
+        return hit.getType()==net.minecraft.world.phys.HitResult.Type.BLOCK
+            && hit.getBlockPos().equals(beacon);
+    }
+
+    private static int chooseCiBeaconPadSign(ServerLevel level,State s,BlockPos beacon,
+            boolean alongX) {
+        boolean positiveClear=ciBeaconPadApproachClear(level,s,beacon,alongX,1);
+        boolean negativeClear=ciBeaconPadApproachClear(level,s,beacon,alongX,-1);
+        return selectCiBeaconPadSign(positiveClear,negativeClear);
+    }
+
+    private static void verifyCiBeaconPadSignSelection() {
+        if(selectCiBeaconPadSign(true,true)!=1
+            || selectCiBeaconPadSign(false,true)!=-1
+            || selectCiBeaconPadSign(false,false)!=0)
+            throw new IllegalStateException("CI beacon pad clear-side selection regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_APPROACH_SIDE_SELECTION_VERIFIED positivePreferred=true reverseFallback=true blockedRejected=true");
+    }
+
     private static double ciBeaconPadDistanceSquared() {
         double vertical=CI_BEACON_PAD_PLAYER_Y_OFFSET-.5D;
         double horizontal=CI_BEACON_PAD_STANDOFF;
@@ -1174,6 +1245,7 @@ public final class RiftController {
             CI_BEACON_PAD_FIRST_SOLID_ROW,CI_BEACON_PAD_GAP_ROW,CI_BEACON_PAD_LAST_SOLID_ROW,
             CI_BEACON_PAD_STANDOFF,distanceSquared,padInnerFaceY,beaconEntryY);
         verifyFissureRayChunkTraversalProfile();
+        verifyCiBeaconPadSignSelection();
     }
 
     @FunctionalInterface
@@ -3727,14 +3799,22 @@ public final class RiftController {
                     // Every pad column stays inside the bounded rift radius, world border
                     // and already-loaded chunks; this disposable fixture never force-loads.
                     boolean padAlongX=ciBeaconPadAlongX(s.x,s.z,demoPos.getX(),demoPos.getZ());
-                    int padDirectionX=padAlongX?1:0;
-                    int padDirectionZ=padAlongX?0:1;
+                    int padSign=chooseCiBeaconPadSign(level,s,demoPos,padAlongX);
+                    if(padSign==0) {
+                        LOGGER.warn("BLACK_FREQUENCY_TEST BEACON_APPROACH_NO_CLEAR_SIDE axis={} loadedOnly=true",
+                            padAlongX?"X":"Z");
+                        return;
+                    }
+                    LOGGER.info("BLACK_FREQUENCY_TEST BEACON_APPROACH_SIDE_SELECTED axis={} sign={} sightlineClear=true loadedOnly=true",
+                        padAlongX?"X":"Z",padSign);
+                    int padDirectionX=padAlongX?padSign:0;
+                    int padDirectionZ=padAlongX?0:padSign;
                     int padBlocks=0;
-                    // Keep the first row empty for beacon sightline; offset 2 supports the player.
+                    // Keep the first two rows free; choose the side with a real, loaded-only sightline.
                     for(int offset=CI_BEACON_PAD_FIRST_SOLID_ROW;offset<=CI_BEACON_PAD_LAST_SOLID_ROW;offset++)
                         for(int lateral=-1;lateral<=1;lateral++) {
-                            int dx=padAlongX?offset:lateral;
-                            int dz=padAlongX?lateral:offset;
+                            int dx=padAlongX?padSign*offset:lateral;
+                            int dz=padAlongX?lateral:padSign*offset;
                             BlockPos floor=demoPos.offset(dx,CI_BEACON_PAD_FLOOR_Y_OFFSET,dz);
                             long padDx=(long)floor.getX()-s.x;
                             long padDz=(long)floor.getZ()-s.z;
