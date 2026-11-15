@@ -198,9 +198,10 @@ public final class RiftClientState {
         private static boolean inactiveCacheCleanupLogged;
 
         private record GroundPoint(double x,double y,double z) {}
-        private record GroundSample(double forwardX,double bendX,double forwardZ,double bendZ,double phase) {}
+        private record GroundSample(double forwardX,double bendX,double forwardZ,double bendZ,double phase,
+                double phaseSin,double phaseCos,double flickerPhaseSin,double flickerPhaseCos) {}
         private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,
-                double phase,double taperA,double taperB) {}
+                GroundSample sample,double taperA,double taperB) {}
         private record GroundMesh(List<GroundSegment> segments,int activeArms,int sampledColumns,int cacheHits,
                 int steepStepBreaks) {}
 
@@ -217,10 +218,12 @@ public final class RiftClientState {
                 for(int segment=1;segment<=SEGMENTS_PER_ARM;segment++) {
                     double distance=segment*SAMPLE_SPACING;
                     double bend=Math.sin(segment*.85D+arm*1.1D)*.18D;
+                    double phase=arm*1.7D+segment*.63D;
                     samples[arm*SEGMENTS_PER_ARM+segment-1]=new GroundSample(
                         cosAngle*distance,sinAngle*bend,
-                        sinAngle*distance,cosAngle*bend,
-                        arm*1.7D+segment*.63D);
+                        sinAngle*distance,cosAngle*bend,phase,
+                        Math.sin(phase),Math.cos(phase),
+                        Math.sin(phase*1.9D),Math.cos(phase*1.9D));
                 }
             }
             return samples;
@@ -273,20 +276,46 @@ public final class RiftClientState {
                     double forwardZ=sinAngle*distance;
                     double bendZ=cosAngle*bend;
                     double phase=arm*1.7D+segment*.63D;
+                    double phaseSin=Math.sin(phase);
+                    double phaseCos=Math.cos(phase);
+                    double flickerPhaseSin=Math.sin(phase*1.9D);
+                    double flickerPhaseCos=Math.cos(phase*1.9D);
                     if(sample==null
                         || Double.doubleToLongBits(sample.forwardX())!=Double.doubleToLongBits(forwardX)
                         || Double.doubleToLongBits(sample.bendX())!=Double.doubleToLongBits(bendX)
                         || Double.doubleToLongBits(sample.forwardZ())!=Double.doubleToLongBits(forwardZ)
                         || Double.doubleToLongBits(sample.bendZ())!=Double.doubleToLongBits(bendZ)
                         || Double.doubleToLongBits(sample.phase())!=Double.doubleToLongBits(phase)
+                        || Double.doubleToLongBits(sample.phaseSin())!=Double.doubleToLongBits(phaseSin)
+                        || Double.doubleToLongBits(sample.phaseCos())!=Double.doubleToLongBits(phaseCos)
+                        || Double.doubleToLongBits(sample.flickerPhaseSin())!=Double.doubleToLongBits(flickerPhaseSin)
+                        || Double.doubleToLongBits(sample.flickerPhaseCos())!=Double.doubleToLongBits(flickerPhaseCos)
                         || !Double.isFinite(sample.forwardX()) || !Double.isFinite(sample.bendX())
                         || !Double.isFinite(sample.forwardZ()) || !Double.isFinite(sample.bendZ())
-                        || !Double.isFinite(sample.phase()))
+                        || !Double.isFinite(sample.phase()) || !Double.isFinite(sample.phaseSin())
+                        || !Double.isFinite(sample.phaseCos()) || !Double.isFinite(sample.flickerPhaseSin())
+                        || !Double.isFinite(sample.flickerPhaseCos()))
                         throw new IllegalStateException("BLACK FREQUENCY ground sample cache value regression");
                     double dx=sample.forwardX()-sample.bendX();
                     double dz=sample.forwardZ()+sample.bendZ();
                     if(dx*dx+dz*dz>=(double)RADIUS*RADIUS)
                         throw new IllegalStateException("BLACK FREQUENCY ground sample escaped fracture radius");
+                    // Validate the angle-addition cache against the original per-segment sine formulas.
+                    for(double time:new double[]{0.0D,1.0D,20.0D,1234.5D,-120.0D}) {
+                        double wave=Math.sin(time*.14D+phase);
+                        double waveCached=Math.sin(time*.14D)*sample.phaseCos()
+                            +Math.cos(time*.14D)*sample.phaseSin();
+                        double pulse=Math.sin(time*.19D+phase);
+                        double pulseCached=Math.sin(time*.19D)*sample.phaseCos()
+                            +Math.cos(time*.19D)*sample.phaseSin();
+                        double flicker=Math.sin(time*.055D+phase*1.9D);
+                        double flickerCached=Math.sin(time*.055D)*sample.flickerPhaseCos()
+                            +Math.cos(time*.055D)*sample.flickerPhaseSin();
+                        if(Math.abs(wave-waveCached)>1.0E-12D
+                            || Math.abs(pulse-pulseCached)>1.0E-12D
+                            || Math.abs(flicker-flickerCached)>1.0E-12D)
+                            throw new IllegalStateException("BLACK FREQUENCY ground animation phase cache regression");
+                    }
                     checked++;
                 }
             }
@@ -295,6 +324,9 @@ public final class RiftClientState {
             sampleOffsetsProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_OFFSETS_VERIFIED samples={} trigPerRebuild=0 bounded=true phaseCached=true",
+                checked);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_ANIMATION_PHASE_CACHE_VERIFIED samples={} perFrameTrig=6 legacyPerSegmentTrig=3 equivalent=true",
                 checked);
         }
 
@@ -439,7 +471,7 @@ public final class RiftClientState {
             double cappedTaper=cliffBreakTaper(last.taperB());
             if(cappedTaper>=last.taperB()) return false;
             segments.set(lastIndex,new GroundSegment(last.a(),last.b(),
-                last.normalX(),last.normalZ(),last.phase(),last.taperA(),cappedTaper));
+                last.normalX(),last.normalZ(),last.sample(),last.taperA(),cappedTaper));
             return true;
         }
 
@@ -942,7 +974,7 @@ public final class RiftClientState {
                             if(isContinuousGroundStep(previous.y(),current.y(),length)) {
                                 double startTaper=afterGap ? CLIFF_BREAK_TAPER : endpointTaper(segment-1);
                                 result.add(new GroundSegment(previous,current,
-                                    -tangentZ/length,tangentX/length,sample.phase(),
+                                    -tangentZ/length,tangentX/length,sample,
                                     startTaper,endpointTaper(segment)));
                                 afterGap=false;
                             } else {
@@ -1127,7 +1159,7 @@ public final class RiftClientState {
             cachedAnchorSurfaceY=64;
             cachedReferenceY=64;
             cachedSegments=List.of(new GroundSegment(new GroundPoint(1,64,2),
-                new GroundPoint(2,64,2),1,0,0,1,1));
+                new GroundPoint(2,64,2),1,0,GROUND_SAMPLES[0],1,1));
             cachedArmCount=1;
             cachedSampledColumns=1;
             cachedColumnCacheHits=1;
@@ -1148,7 +1180,7 @@ public final class RiftClientState {
             cachedLevel=level;
             cachedTick=2L;
             cachedSegments=List.of(new GroundSegment(new GroundPoint(1,64,2),
-                new GroundPoint(2,64,2),1,0,0,1,1));
+                new GroundPoint(2,64,2),1,0,GROUND_SAMPLES[0],1,1));
             SURFACE_Y_BY_COLUMN.put(columnKey(1,2),64.0D);
             boolean verticalRangeCleared=clearGeometryCacheIfOutsideGroundRenderRange(0L,64.01D,1,2,64);
             if(!verticalRangeCleared || cachedLevel!=null || cachedTick!=Long.MIN_VALUE
@@ -1287,14 +1319,24 @@ public final class RiftClientState {
                 builder.begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.POSITION_COLOR);
                 double time=(double)tick+boundedRenderPartialTick(event.getPartialTick());
                 float boundedStrength=(float)(Math.min(1.0F,strength)*rangeFade);
+                // Three time bases are shared by every segment. Cached phase sine/cosine
+                // values turn per-segment Math.sin calls into multiply-add pairs.
+                double waveTime=time*.14D;
+                double waveSin=Math.sin(waveTime),waveCos=Math.cos(waveTime);
+                double flickerTime=time*.055D;
+                double flickerSin=Math.sin(flickerTime),flickerCos=Math.cos(flickerTime);
+                double pulseTime=time*.19D;
+                double pulseSin=Math.sin(pulseTime),pulseCos=Math.cos(pulseTime);
                 for(GroundSegment segment:cachedSegments) {
-                    double wave=.5D+.5D*Math.sin(time*.14D+segment.phase());
+                    GroundSample sample=segment.sample();
+                    double wave=.5D+.5D*(waveSin*sample.phaseCos()+waveCos*sample.phaseSin());
                     // A slow travelling pulse changes width independently along
                     // the seam; endpoint taper keeps each arm from ending bluntly.
-                    double widthFlicker=GROUND_WIDTH_FLICKER*Math.sin(time*.055D+segment.phase()*1.9D);
+                    double widthFlicker=GROUND_WIDTH_FLICKER
+                        *(flickerSin*sample.flickerPhaseCos()+flickerCos*sample.flickerPhaseSin());
                     double halfWidth=Math.max(GROUND_MIN_HALF_WIDTH,
                         GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE*wave+widthFlicker);
-                    float pulse=(float)(.78D+.22D*Math.sin(time*.19D+segment.phase()));
+                    float pulse=(float)(.78D+.22D*(pulseSin*sample.phaseCos()+pulseCos*sample.phaseSin()));
                     float alpha=boundedStrength*pulse;
                     int glowAlphaChannel=colorChannel(alpha*GROUND_GLOW_ALPHA);
                     int coreAlphaChannel=colorChannel(alpha*.94F);
