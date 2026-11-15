@@ -131,11 +131,16 @@ def verify_restoration_particle_source():
             or "RESTORE_PLAYER_SCAN_INTERVAL_TICKS" not in scan_policy
             or "RESTORE_INITIAL_BEACON_PULSE_EMITTED" not in body):
         raise RuntimeError("BLACK FREQUENCY cadence-aware shared player scan must close all beacon menus before finishing")
+    packet_range=re.search(r"RESTORE_PARTICLE_PACKET_RANGE\s*=\s*([0-9.]+)D",source)
+    effect_envelope=re.search(r"RESTORE_PARTICLE_EFFECT_ENVELOPE\s*=\s*([0-9.]+)D",source)
     particle_distance=re.search(r"RESTORE_PARTICLE_VIEW_DISTANCE\s*=\s*([0-9.]+)D",source)
     audience_start=source.find("private static boolean withinRestoreParticleAudience(")
     audience_end=source.find("\n    private static boolean shouldScanRestorePlayers",audience_start)
     audience_body=source[audience_start:audience_end] if audience_start>=0 and audience_end>audience_start else ""
-    if (not particle_distance or float(particle_distance.group(1))!=32.0
+    if (not packet_range or float(packet_range.group(1))!=32.0
+            or not effect_envelope or float(effect_envelope.group(1))!=5.0
+            or not particle_distance or float(particle_distance.group(1))!=37.0
+            or float(particle_distance.group(1))!=float(packet_range.group(1))+float(effect_envelope.group(1))
             or "Double.isFinite(distanceSquared)" not in audience_body
             or "distanceSquared<RESTORE_PARTICLE_VIEW_DISTANCE_SQR" not in audience_body
             or "Math.nextDown(RESTORE_PARTICLE_VIEW_DISTANCE_SQR)" not in source
@@ -1657,7 +1662,7 @@ def capture_test_world():
             if os.environ.get("BF_TEST_RESTORATION")=="1" and scan_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: beacon-menu closure did not use the shared bounded player scan",flush=True)
                 return False
-            particle_audience_marker="BLACK_FREQUENCY_TEST RESTORE_PARTICLE_AUDIENCE_BOUNDS_VERIFIED maxDistance=32.0 maxDistanceSquared=1024.0 strictBoundary=true invalidRejected=true"
+            particle_audience_marker="BLACK_FREQUENCY_TEST RESTORE_PARTICLE_AUDIENCE_BOUNDS_VERIFIED maxDistance=37.0 maxDistanceSquared=1369.0 packetRange=32.0 effectEnvelope=5.0 strictBoundary=true invalidRejected=true"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and particle_audience_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: beacon particle audience did not match the bounded packet radius",flush=True)
                 return False

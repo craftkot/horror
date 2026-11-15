@@ -62,10 +62,13 @@ public final class RiftController {
     private static final int RESTORE_HELIX_INTERVAL_TICKS = 8;
     // Share one nearby-player pass between beacon-menu closure and visual audience checks.
     private static final int RESTORE_PLAYER_SCAN_INTERVAL_TICKS = 4;
-    // The default ServerLevel.sendParticles overload delivers within 32 blocks.
-    // Keep beacon-particle scans aligned with that packet radius; UI/overlay messages
-    // deliberately retain their wider recovery audience.
-    private static final double RESTORE_PARTICLE_VIEW_DISTANCE=32.0D;
+    // The default ServerLevel.sendParticles overload delivers within 32 blocks of each mote.
+    // The outer recovery helix stays within a conservative 5-block envelope around the beacon.
+    // Scan only the packet radius plus that envelope; UI/overlay messages keep their 128-block audience.
+    private static final double RESTORE_PARTICLE_PACKET_RANGE=32.0D;
+    private static final double RESTORE_PARTICLE_EFFECT_ENVELOPE=5.0D;
+    private static final double RESTORE_PARTICLE_VIEW_DISTANCE=
+        RESTORE_PARTICLE_PACKET_RANGE+RESTORE_PARTICLE_EFFECT_ENVELOPE;
     private static final double RESTORE_PARTICLE_VIEW_DISTANCE_SQR=
         RESTORE_PARTICLE_VIEW_DISTANCE*RESTORE_PARTICLE_VIEW_DISTANCE;
     // Common phase window for every periodic restoration effect (4, 8, 10, 20 and 40 ticks).
@@ -1779,8 +1782,9 @@ public final class RiftController {
             && !withinRestoreParticleAudience(Double.NEGATIVE_INFINITY);
         if(!(origin && justInside && boundaryRejected && outsideRejected && invalidRejected))
             throw new IllegalStateException("CI restore particle audience range regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PARTICLE_AUDIENCE_BOUNDS_VERIFIED maxDistance={} maxDistanceSquared={} strictBoundary=true invalidRejected=true",
-            RESTORE_PARTICLE_VIEW_DISTANCE,RESTORE_PARTICLE_VIEW_DISTANCE_SQR);
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_PARTICLE_AUDIENCE_BOUNDS_VERIFIED maxDistance={} maxDistanceSquared={} packetRange={} effectEnvelope={} strictBoundary=true invalidRejected=true",
+            RESTORE_PARTICLE_VIEW_DISTANCE,RESTORE_PARTICLE_VIEW_DISTANCE_SQR,
+            RESTORE_PARTICLE_PACKET_RANGE,RESTORE_PARTICLE_EFFECT_ENVELOPE);
     }
 
     private static boolean shouldScanRestorePlayers(int restoreTicks,boolean beaconPresent) {
