@@ -1624,6 +1624,22 @@ def capture_test_world():
             if os.environ.get("BF_TEST_RESTORATION")=="1" and size_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: bounded restoration particle size/spread was not verified",flush=True)
                 return False
+            if os.environ.get("BF_TEST_RESTORATION")=="1":
+                ring_clearance=re.search(
+                    r"BLACK_FREQUENCY_TEST RESTORATION_RING_CLEARANCE_VERIFIED offset=([0-9.]+) minOffset=([0-9.]+) maxOffset=([0-9.]+) clearsBeaconTop=true",
+                    log_after)
+                if not ring_clearance:
+                    print("WORLD_CAPTURE_FAIL: recovery ring vertical envelope was not verified",flush=True)
+                    return False
+                ring_offset,ring_min,ring_max=map(float,ring_clearance.groups())
+                if (not all(map(math.isfinite,(ring_offset,ring_min,ring_max)))
+                        or ring_offset<=1.0 or ring_offset>1.5
+                        or ring_min<=1.0 or ring_max>2.0 or ring_min>ring_max):
+                    print("WORLD_CAPTURE_FAIL: recovery ring extends outside its safe beacon-relative envelope",
+                          {"offset":ring_offset,"minOffset":ring_min,"maxOffset":ring_max},flush=True)
+                    return False
+                print("WORLD_CAPTURE: recovery ring clears beacon and remains vertically bounded",
+                      {"offset":ring_offset,"minOffset":ring_min,"maxOffset":ring_max},flush=True)
             scan_marker="BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_PROFILE_VERIFIED intervalTicks=4 menuClose=shared viewerScan=shared loadedOnly=true"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and scan_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: beacon-menu closure did not use the shared bounded player scan",flush=True)
