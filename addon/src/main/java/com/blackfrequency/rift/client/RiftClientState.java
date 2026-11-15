@@ -160,6 +160,7 @@ public final class RiftClientState {
         private static boolean plantOutlineProfileLogged;
         private static boolean rebuildProfileLogged;
         private static boolean animationProfileLogged;
+        private static boolean packedColorProfileLogged;
         private static boolean samplingProfileLogged;
         private static boolean rangeRejectLogged;
         private static boolean rangeProfileLogged;
@@ -792,6 +793,7 @@ public final class RiftClientState {
             verifyGroundRebuildProfile();
             verifyGroundRenderRangeProfile();
             verifyGroundAnimationProfile();
+            verifyPackedColorProfile();
             verifyGroundSupportProfile();
             verifySurfaceCacheReuse();
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
@@ -922,10 +924,29 @@ public final class RiftClientState {
             return Math.max(0,Math.min(255,Math.round(value*255.0F)));
         }
 
+        private static void verifyPackedColorProfile() {
+            if(packedColorProfileLogged) return;
+            boolean normalized=colorChannel(0.0F)==0
+                && colorChannel(.5F)==128
+                && colorChannel(1.0F)==255;
+            boolean clamped=colorChannel(-1.0F)==0
+                && colorChannel(2.0F)==255;
+            boolean nonFinite=colorChannel(Float.NaN)==0
+                && colorChannel(Float.POSITIVE_INFINITY)==255
+                && colorChannel(Float.NEGATIVE_INFINITY)==0;
+            if(!(normalized && clamped && nonFinite))
+                throw new IllegalStateException("BLACK FREQUENCY ground mesh packed color regression");
+            packedColorProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_COLOR_CHANNEL_PROFILE_VERIFIED zero=0 half=128 one=255 lowClamp=0 highClamp=255 nonFinite=true");
+        }
+
+        // Color channels are constant for all four vertices of one ribbon.
+        // Convert once per quad instead of repeating four conversions per vertex.
         private static void vertex(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
-                double x,double y,double z,float red,float green,float blue,float alpha) {
+                double x,double y,double z,int red,int green,int blue,int alpha) {
             builder.vertex(matrix,(float)(x-camera.x),(float)(y-camera.y),(float)(z-camera.z))
-                .color(colorChannel(red),colorChannel(green),colorChannel(blue),colorChannel(alpha))
+                .color(red,green,blue,alpha)
                 .endVertex();
         }
 
@@ -934,6 +955,10 @@ public final class RiftClientState {
                 float red,float green,float blue,float alpha) {
             GroundPoint a=segment.a();
             GroundPoint b=segment.b();
+            int redChannel=colorChannel(red);
+            int greenChannel=colorChannel(green);
+            int blueChannel=colorChannel(blue);
+            int alphaChannel=colorChannel(alpha);
             // Scale the offset and half-width together so glow, dark core and
             // bright edge rails converge at the same tapered endpoint.
             double leftA=(offset+halfWidth)*segment.taperA();
@@ -941,13 +966,13 @@ public final class RiftClientState {
             double leftB=(offset+halfWidth)*segment.taperB();
             double rightB=(offset-halfWidth)*segment.taperB();
             vertex(builder,matrix,camera,a.x()+segment.normalX()*leftA,a.y(),a.z()+segment.normalZ()*leftA,
-                red,green,blue,alpha);
+                redChannel,greenChannel,blueChannel,alphaChannel);
             vertex(builder,matrix,camera,b.x()+segment.normalX()*leftB,b.y(),b.z()+segment.normalZ()*leftB,
-                red,green,blue,alpha);
+                redChannel,greenChannel,blueChannel,alphaChannel);
             vertex(builder,matrix,camera,b.x()+segment.normalX()*rightB,b.y(),b.z()+segment.normalZ()*rightB,
-                red,green,blue,alpha);
+                redChannel,greenChannel,blueChannel,alphaChannel);
             vertex(builder,matrix,camera,a.x()+segment.normalX()*rightA,a.y(),a.z()+segment.normalZ()*rightA,
-                red,green,blue,alpha);
+                redChannel,greenChannel,blueChannel,alphaChannel);
         }
 
         private static void clearGeometryCache() {
