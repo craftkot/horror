@@ -141,6 +141,8 @@ public final class RiftClientState {
         private static final float GROUND_EDGE_RED=.46F;
         private static final float GROUND_EDGE_GREEN=.18F;
         private static final float GROUND_EDGE_BLUE=.82F;
+        // Keep the halo readable against grass and stone without another draw call or mesh layer.
+        private static final float GROUND_GLOW_ALPHA=.42F;
         // A restrained violet filament pulses inside the dark core without another trig call.
         private static final double GROUND_CORE_PULSE_BASE=.10D;
         private static final double GROUND_CORE_PULSE_RANGE=.22D;
@@ -573,6 +575,14 @@ public final class RiftClientState {
 
         private static void verifyGroundAnimationProfile() {
             if(animationProfileLogged) return;
+            double glowPulseMinimum=.78D-.22D;
+            double glowPulseMaximum=.78D+.22D;
+            double glowAlphaMinimum=glowPulseMinimum*GROUND_GLOW_ALPHA;
+            double glowAlphaMaximum=glowPulseMaximum*GROUND_GLOW_ALPHA;
+            if(!Float.isFinite(GROUND_GLOW_ALPHA) || GROUND_GLOW_ALPHA<.38F || GROUND_GLOW_ALPHA>.45F
+                || Math.abs(glowAlphaMinimum-.2352D)>1.0E-9D
+                || Math.abs(glowAlphaMaximum-.42D)>1.0E-9D)
+                throw new IllegalStateException("BLACK FREQUENCY ground glow alpha profile regression");
             double minimum=boundedCorePulse(0.0D);
             double midpoint=boundedCorePulse(.5D);
             double maximum=boundedCorePulse(1.0D);
@@ -595,6 +605,9 @@ public final class RiftClientState {
                 || tickNegativeInfinity!=0.0D)
                 throw new IllegalStateException("BLACK FREQUENCY ground core pulse regression");
             animationProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_GLOW_ALPHA_VERIFIED multiplier={} fullStrengthPulseMin={} fullStrengthPulseMax={} minAlpha={} maxAlpha={}",
+                GROUND_GLOW_ALPHA,glowPulseMinimum,glowPulseMaximum,glowAlphaMinimum,glowAlphaMaximum);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_CORE_PULSE_VERIFIED min={} midpoint={} max={} widthScale={}",
                 minimum,midpoint,maximum,.16D);
@@ -1163,7 +1176,7 @@ public final class RiftClientState {
                     float pulse=(float)(.78D+.22D*Math.sin(time*.19D+segment.phase()));
                     float alpha=boundedStrength*pulse;
                     ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_GLOW_WIDTH_SCALE,
-                        .20F,.025F,.43F,alpha*.34F);
+                        .20F,.025F,.43F,alpha*GROUND_GLOW_ALPHA);
                     ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_CORE_WIDTH_SCALE,
                         .008F,.001F,.022F,alpha*.94F);
                     float corePulse=(float)boundedCorePulse(wave);
