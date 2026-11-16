@@ -1132,15 +1132,15 @@ public final class RiftController {
     }
 
     private record FissureTarget(double x,double y,double z,double distanceSquared,
-            double horizontalDistanceSquared) {}
+            double horizontalDistanceSquared,double viewScore) {}
 
-    private static boolean isBetterFissureTarget(double candidateDistanceSquared,
-            double bestDistanceSquared,boolean hasBest) {
-        if(!Double.isFinite(candidateDistanceSquared) || candidateDistanceSquared<0.0D)
+    private static boolean isBetterFissureTarget(double candidateScore,
+            double bestScore,boolean hasBest) {
+        if(!Double.isFinite(candidateScore) || candidateScore<0.0D)
             return false;
         if(!hasBest) return true;
-        return Double.isFinite(bestDistanceSquared) && bestDistanceSquared>=0.0D
-            && candidateDistanceSquared<bestDistanceSquared;
+        return Double.isFinite(bestScore) && bestScore>=0.0D
+            && candidateScore<bestScore;
     }
 
     private static boolean isFissureTargetHorizontalDistance(double horizontalSquared) {
@@ -1150,9 +1150,23 @@ public final class RiftController {
             && horizontalSquared>=minimumSquared && horizontalSquared<=maximumSquared;
     }
 
+    // A 45-degree ground view keeps the fissure readable without aiming almost
+    // vertically down at the nearest sample or flattening the crack against the horizon.
+    private static double fissureTargetViewScore(double horizontalSquared,double verticalDelta) {
+        if(!isFissureTargetHorizontalDistance(horizontalSquared) || !Double.isFinite(verticalDelta))
+            return Double.POSITIVE_INFINITY;
+        double horizontalDistance=Math.sqrt(horizontalSquared);
+        double pitchDegrees=Math.toDegrees(Math.atan2(Math.abs(verticalDelta),horizontalDistance));
+        double score=Math.abs(pitchDegrees-45.0D);
+        return Double.isFinite(score)?score:Double.POSITIVE_INFINITY;
+    }
+
     private static void verifyFissureTargetSelectionPolicy() {
         double minimumSquared=FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE*FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE;
         double maximumSquared=FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE*FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE;
+        double balanced=fissureTargetViewScore(25.0D,5.0D);
+        double steep=fissureTargetViewScore(25.0D,10.0D);
+        double shallow=fissureTargetViewScore(25.0D,2.0D);
         if(!isBetterFissureTarget(4.0D,Double.NaN,false)
             || !isBetterFissureTarget(4.0D,16.0D,true)
             || isBetterFissureTarget(16.0D,4.0D,true)
@@ -1166,9 +1180,13 @@ public final class RiftController {
             || isFissureTargetHorizontalDistance(maximumSquared+1.0E-6D)
             || isFissureTargetHorizontalDistance(Double.NaN)
             || isFissureTargetHorizontalDistance(Double.POSITIVE_INFINITY)
-            || isFissureTargetHorizontalDistance(-1.0D))
+            || isFissureTargetHorizontalDistance(-1.0D)
+            || !Double.isFinite(balanced) || Math.abs(balanced)>1.0E-9D
+            || !(steep>balanced) || !(shallow>balanced)
+            || fissureTargetViewScore(25.0D,Double.NaN)!=Double.POSITIVE_INFINITY
+            || fissureTargetViewScore(25.0D,Double.POSITIVE_INFINITY)!=Double.POSITIVE_INFINITY)
             throw new IllegalStateException("CI fissure target selection regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=nearest ties=stable invalidRejected=true minHorizontal={} maxHorizontal={}",
+        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=balanced-view targetPitch=45 ties=stable invalidRejected=true minHorizontal={} maxHorizontal={}",
             FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE,FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE);
         verifyCiBeaconPadProfile();
     }
@@ -1471,10 +1489,12 @@ public final class RiftController {
                     net.minecraft.world.level.ClipContext.Block.COLLIDER,
                     net.minecraft.world.level.ClipContext.Fluid.NONE,viewer));
                 if(hit.getType()!=net.minecraft.world.phys.HitResult.Type.MISS) continue;
+                double viewScore=fissureTargetViewScore(horizontalSquared,vy);
+                if(!Double.isFinite(viewScore)) continue;
                 double distanceSquared=vx*vx+vy*vy+vz*vz;
-                if(isBetterFissureTarget(distanceSquared,
-                        best==null?Double.NaN:best.distanceSquared(),best!=null))
-                    best=new FissureTarget(px,target.y,pz,distanceSquared,horizontalSquared);
+                if(isBetterFissureTarget(viewScore,
+                        best==null?Double.NaN:best.viewScore(),best!=null))
+                    best=new FissureTarget(px,target.y,pz,distanceSquared,horizontalSquared,viewScore);
             }
         }
         return best;
@@ -4100,9 +4120,10 @@ public final class RiftController {
                             ciFissureTargetUnavailableLogged=true;
                         }
                     } else {
-                        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x={} y={} z={} distanceSquared={} horizontalDistanceSquared={} selection=nearest",
+                        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x={} y={} z={} distanceSquared={} horizontalDistanceSquared={} viewScore={} selection=balanced-view",
                             visibleFissure.x(),visibleFissure.y(),visibleFissure.z(),
-                            visibleFissure.distanceSquared(),visibleFissure.horizontalDistanceSquared());
+                            visibleFissure.distanceSquared(),visibleFissure.horizontalDistanceSquared(),
+                            visibleFissure.viewScore());
                     }
                     // Restore ordinary vanilla gravity only after the player is
                     // standing above a loaded, motion-blocking support block.
