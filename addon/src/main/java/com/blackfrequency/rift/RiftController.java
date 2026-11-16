@@ -413,7 +413,8 @@ public final class RiftController {
         if(!Double.isFinite(x) || !Double.isFinite(z)
             || Math.abs(x)>30_000_000.0D || Math.abs(z)>30_000_000.0D) return 0.0D;
         double time=Math.max(0,ticks);
-        double base=Math.sin(x*.115D+time*.022D)*Math.cos(z*.125D-time*.018D);
+        double base=Math.sin(x*.115D+Math.sin(time*.011D)*1.8D)
+            *Math.cos(z*.125D-time*.008D);
         double cross=Math.sin((x+z)*.047D+Math.sin(time*.013D)*.9D-time*.009D);
         double field=.82D*base+.18D*cross;
         return Math.max(-1.0D,Math.min(1.0D,field));
