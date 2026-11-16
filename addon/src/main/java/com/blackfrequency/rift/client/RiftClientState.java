@@ -125,6 +125,8 @@ public final class RiftClientState {
         // Reject near-vertical interpolated ribbons: grade is measured against the
         // actual horizontal distance between sampled surface points.
         private static final double MAX_GROUND_SEGMENT_Y_DELTA=1.25D;
+        // A single one-block sample may be skipped only when the two-sample span remains slope-safe.
+        private static final double MAX_BRIDGED_GROUND_STEP_Y_DELTA=1.0D;
         // Keep the same maximum height change per segment after halving sample spacing.
         private static final double MAX_GROUND_SEGMENT_GRADE=2.5D;
         // Narrow both sides of a mesh gap instead of ending with blunt translucent quads.
@@ -522,6 +524,25 @@ public final class RiftClientState {
                 && rise<=horizontalDistance*MAX_GROUND_SEGMENT_GRADE;
         }
 
+        private static boolean canStartSingleGroundStepBridge(double fromY,double stepY,double horizontalDistance) {
+            if(!Double.isFinite(fromY) || !Double.isFinite(stepY)
+                || !Double.isFinite(horizontalDistance) || horizontalDistance<=1.0E-5D) return false;
+            double rise=Math.abs(stepY-fromY);
+            return Double.isFinite(rise) && rise>0.0D
+                && rise<=MAX_BRIDGED_GROUND_STEP_Y_DELTA
+                && isContinuousGroundStep(fromY,stepY,horizontalDistance*2.0D);
+        }
+
+        private static boolean canBridgeSingleGroundStep(double fromY,double stepY,double toY,
+                double firstStepDistance,double spanDistance) {
+            if(!canStartSingleGroundStepBridge(fromY,stepY,firstStepDistance)
+                || !Double.isFinite(toY)) return false;
+            double secondRise=Math.abs(toY-stepY);
+            return Double.isFinite(secondRise)
+                && secondRise<=MAX_BRIDGED_GROUND_STEP_Y_DELTA
+                && isContinuousGroundStep(fromY,toY,spanDistance);
+        }
+
         private static double cliffBreakTaper(double taper) {
             if(!Double.isFinite(taper)) return 0.0D;
             return Math.max(0.0D,Math.min(CLIFF_BREAK_TAPER,taper));
@@ -548,6 +569,16 @@ public final class RiftClientState {
             boolean halfBlockRamp=isContinuousGroundStep(64.0D,64.5D,SAMPLE_SPACING);
             boolean oneBlockSampleRejected=!isContinuousGroundStep(64.0D,65.0D,SAMPLE_SPACING);
             boolean oneBlockRampAccepted=isContinuousGroundStep(64.0D,65.0D,1.0D);
+            boolean bridgeCandidate=canStartSingleGroundStepBridge(64.0D,65.0D,SAMPLE_SPACING);
+            boolean plateauBridge=canBridgeSingleGroundStep(64.0D,65.0D,65.0D,
+                SAMPLE_SPACING,SAMPLE_SPACING*2.0D);
+            boolean bumpBridge=canBridgeSingleGroundStep(64.0D,65.0D,64.0D,
+                SAMPLE_SPACING,SAMPLE_SPACING*2.0D);
+            boolean repeatedStepRejected=!canBridgeSingleGroundStep(64.0D,65.0D,66.0D,
+                SAMPLE_SPACING,SAMPLE_SPACING*2.0D);
+            boolean cliffBridgeRejected=!canStartSingleGroundStepBridge(64.0D,65.5D,SAMPLE_SPACING);
+            boolean invalidBridgeRejected=!canStartSingleGroundStepBridge(Double.NaN,65.0D,SAMPLE_SPACING)
+                && !canBridgeSingleGroundStep(64.0D,65.0D,Double.NaN,SAMPLE_SPACING,SAMPLE_SPACING*2.0D);
             boolean cliffRejected=!isContinuousGroundStep(64.0D,65.5D,SAMPLE_SPACING);
             boolean invalid=!isContinuousGroundStep(64.0D,64.0D,0.0D)
                 || isContinuousGroundStep(64.0D,Double.NaN,SAMPLE_SPACING)
@@ -558,7 +589,9 @@ public final class RiftClientState {
             boolean preservedRiseBudget=Math.abs(SAMPLE_SPACING*MAX_GROUND_SEGMENT_GRADE
                 -RiftGeometry.FISSURE_SAMPLE_SPACING*1.25D)<1.0E-9D;
             if(!(flat && snowStep && halfBlockRamp && oneBlockSampleRejected
-                && oneBlockRampAccepted && cliffRejected && invalid && capped && preservedRiseBudget))
+                && oneBlockRampAccepted && bridgeCandidate && plateauBridge && bumpBridge
+                && repeatedStepRejected && cliffBridgeRejected && invalidBridgeRejected
+                && cliffRejected && invalid && capped && preservedRiseBudget))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh continuity regression");
             continuityProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
@@ -569,6 +602,8 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_GRADE_BUDGET_VERIFIED previousMaxRise={} currentMaxRise={} same=true",
                 RiftGeometry.FISSURE_SAMPLE_SPACING*1.25D,SAMPLE_SPACING*MAX_GROUND_SEGMENT_GRADE);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_SINGLE_STEP_BRIDGE_VERIFIED maxStep=1.0 spanSamples=2 plateau=true bump=true repeatedStepRejected=true cliffGuard=true invalidRejected=true");
         }
 
         private static boolean shouldRebuild(long tick,long previousTick,boolean anchorChanged,
@@ -994,12 +1029,16 @@ public final class RiftClientState {
             int cacheHits=0;
             int activeArms=0;
             int steepStepBreaks=0;
+            int bridgedSingleSteps=0;
             int cliffBreakCaps=0;
             int unsupportedGapCaps=0;
             for(int arm=0;arm<ARM_COUNT;arm++) {
                 int armStart=result.size();
                 double angle=arm*Math.PI/2.0D;
                 GroundPoint previous=null;
+                GroundPoint pendingStep=null;
+                GroundSample pendingStepSample=null;
+                double pendingStepDistance=0.0D;
                 boolean afterGap=false;
                 for(int segment=1;segment<=SEGMENTS_PER_ARM;segment++) {
                     GroundSample sample=GROUND_SAMPLES[arm*SEGMENTS_PER_ARM+segment-1];
@@ -1012,6 +1051,9 @@ public final class RiftClientState {
                     if(dx*dx+dz*dz>(long)RADIUS*RADIUS) {
                         if(capLastGroundSegmentAtGap(result,armStart,previous)) unsupportedGapCaps++;
                         previous=null;
+                        pendingStep=null;
+                        pendingStepSample=null;
+                        pendingStepDistance=0.0D;
                         afterGap=true;
                         continue;
                     }
@@ -1035,6 +1077,9 @@ public final class RiftClientState {
                         // unsupported column, liquid, or obstructed headroom.
                         if(capLastGroundSegmentAtGap(result,armStart,previous)) unsupportedGapCaps++;
                         previous=null;
+                        pendingStep=null;
+                        pendingStepSample=null;
+                        pendingStepDistance=0.0D;
                         afterGap=true;
                         continue;
                     }
@@ -1043,15 +1088,39 @@ public final class RiftClientState {
                         double tangentZ=current.z()-previous.z();
                         double length=Math.sqrt(tangentX*tangentX+tangentZ*tangentZ);
                         if(length>1.0E-5D) {
-                            if(isContinuousGroundStep(previous.y(),current.y(),length)) {
+                            if(pendingStep!=null) {
+                                if(canBridgeSingleGroundStep(previous.y(),pendingStep.y(),current.y(),
+                                        pendingStepDistance,length)) {
+                                    double startTaper=afterGap ? CLIFF_BREAK_TAPER : endpointTaper(segment-2);
+                                    result.add(new GroundSegment(previous,current,
+                                        -tangentZ/length,tangentX/length,pendingStepSample,
+                                        startTaper,endpointTaper(segment)));
+                                    bridgedSingleSteps++;
+                                    afterGap=false;
+                                } else {
+                                    // A second steep sample or a cliff keeps the ribbon split.
+                                    if(capLastGroundSegmentAtGap(result,armStart,previous)) cliffBreakCaps++;
+                                    afterGap=true;
+                                    steepStepBreaks++;
+                                }
+                                pendingStep=null;
+                                pendingStepSample=null;
+                                pendingStepDistance=0.0D;
+                            } else if(isContinuousGroundStep(previous.y(),current.y(),length)) {
                                 double startTaper=afterGap ? CLIFF_BREAK_TAPER : endpointTaper(segment-1);
                                 result.add(new GroundSegment(previous,current,
                                     -tangentZ/length,tangentX/length,sample,
                                     startTaper,endpointTaper(segment)));
                                 afterGap=false;
+                            } else if(canStartSingleGroundStepBridge(previous.y(),current.y(),length)) {
+                                // Hold one isolated sample. The next point must prove that
+                                // a two-sample span is still within the same grade budget.
+                                pendingStep=current;
+                                pendingStepSample=sample;
+                                pendingStepDistance=length;
+                                continue;
                             } else {
-                                // Keep the cliff open: cap both nearby ribbon ends instead
-                                // of interpolating a near-vertical translucent wall.
+                                // Keep real cliffs open rather than drawing a near-vertical wall.
                                 if(capLastGroundSegmentAtGap(result,armStart,previous)) cliffBreakCaps++;
                                 afterGap=true;
                                 steepStepBreaks++;
@@ -1060,12 +1129,16 @@ public final class RiftClientState {
                     }
                     previous=current;
                 }
+                if(pendingStep!=null) {
+                    if(capLastGroundSegmentAtGap(result,armStart,previous)) cliffBreakCaps++;
+                    steepStepBreaks++;
+                }
                 if(result.size()>armStart) activeArms++;
             }
             if(!continuityBuildLogged) {
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_GROUND_MESH_GRADE_STATS maxGrade={} cliffCaps={} unsupportedGapCaps={} steepStepsSkipped={}",
-                    MAX_GROUND_SEGMENT_GRADE,cliffBreakCaps,unsupportedGapCaps,steepStepBreaks);
+                    "BLACK_FREQUENCY_GROUND_MESH_GRADE_STATS maxGrade={} cliffCaps={} unsupportedGapCaps={} singleStepBridges={} steepStepsSkipped={}",
+                    MAX_GROUND_SEGMENT_GRADE,cliffBreakCaps,unsupportedGapCaps,bridgedSingleSteps,steepStepBreaks);
             }
             if(!sampleCursorReuseLogged) {
                 if(surfaceSamples<=0 || surfaceSamples!=SURFACE_Y_BY_COLUMN.size()
