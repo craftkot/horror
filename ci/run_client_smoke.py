@@ -1968,7 +1968,7 @@ def capture_test_world():
             if os.environ.get("BF_TEST_RESTORATION")=="1" and anomaly_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: cached violet gravity anomaly particle palette was not verified",flush=True)
                 return False
-            anomaly_field_marker="BLACK_FREQUENCY_TEST ANOMALY_FIELD_TURBULENCE_VERIFIED baseWeight=0.82 crossWeight=0.18 bounded=true deterministic=true liftPocket=true sinkPocket=true timeDrift=true invalidRejected=true"
+            anomaly_field_marker="BLACK_FREQUENCY_TEST ANOMALY_FIELD_TURBULENCE_VERIFIED baseWeight=1.0 crossAmplitude=0.12 bounded=true deterministic=true liftPocket=true sinkPocket=true timeDrift=true invalidRejected=true"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and anomaly_field_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: shared bounded gravity anomaly field was not verified",flush=True)
                 return False

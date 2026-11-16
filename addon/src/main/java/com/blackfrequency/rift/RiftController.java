@@ -416,7 +416,7 @@ public final class RiftController {
         double base=Math.sin(x*.115D+Math.sin(time*.011D)*1.8D)
             *Math.cos(z*.125D-time*.008D);
         double cross=Math.sin((x+z)*.047D+Math.sin(time*.013D)*.9D-time*.009D);
-        double field=.82D*base+.18D*cross;
+        double field=base+.12D*cross;
         return Math.max(-1.0D,Math.min(1.0D,field));
     }
 
@@ -434,7 +434,7 @@ public final class RiftController {
             && gravityAnomalyField(30_000_001.0D,0.0D,0)==0.0D;
         if(!(bounded && deterministic && pockets && drifting && invalidRejected))
             throw new IllegalStateException("CI gravity anomaly field regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_TURBULENCE_VERIFIED baseWeight=0.82 crossWeight=0.18 bounded=true deterministic=true liftPocket=true sinkPocket=true timeDrift=true invalidRejected=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_TURBULENCE_VERIFIED baseWeight=1.0 crossAmplitude=0.12 bounded=true deterministic=true liftPocket=true sinkPocket=true timeDrift=true invalidRejected=true");
     }
 
     private static void verifyRiftGravityEligibility() {
