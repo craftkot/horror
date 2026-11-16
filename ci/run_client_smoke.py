@@ -223,7 +223,11 @@ def verify_restoration_particle_source():
             or "private static boolean isRecoveryBeaconVisualAnchorValid(" not in source
             or not (0<=beacon_anchor_guard<beacon_chunk_lookup)
             or "boolean beaconPosPresent;" not in state_fields
-            or 's.beaconPosPresent=n.contains("beaconPos",Tag.TAG_LONG);' not in snapshot_load
+            or 'boolean beaconPositionPresent=n.contains("beaconPos");' not in snapshot_load
+            or 'boolean beaconPositionValid=n.contains("beaconPos",Tag.TAG_LONG);' not in snapshot_load
+            or 'if(beaconPositionPresent && !beaconPositionValid)' not in snapshot_load
+            or 'quarantined malformed recovery beacon position' not in snapshot_load
+            or 's.setDirty();' not in snapshot_load[snapshot_load.find("if(beaconPositionPresent && !beaconPositionValid)"):]
             or "if(beaconPosPresent) n.putLong(" not in save_body
             or 'else n.remove("beaconPos");' not in save_body
             or "BlockPos activatedBeacon=recoveryVisualAnchor(s,level.getSeaLevel());" not in body
