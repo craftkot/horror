@@ -2513,6 +2513,12 @@ def capture_test_world():
                 if "BLACK_FREQUENCY_TEST IDLE_BEACON_PARTICLE_CADENCE_VERIFIED intervalTicks=20 particles=6 cachedDust=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: idle beacon Dust cadence was not verified",flush=True)
                     return False
+                if "BLACK_FREQUENCY_TEST IDLE_BEACON_VIOLET_PALETTE_VERIFIED red=0.48 green=0.14 blue=0.98 scale=0.9 count=6 intervalTicks=20 cached=true" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: bright violet beacon palette was not verified",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST IDLE_BEACON_VIOLET_DUST_EMITTED count=6 red=0.48 green=0.14 blue=0.98 scale=0.9" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: bright violet idle beacon Dust was not emitted",flush=True)
+                    return False
                 after_click=shots/"beacon-after-right-click.png"
                 if (not after_click.is_file()
                         or any(shots.glob("beacon-after-right-click_*.png"))):

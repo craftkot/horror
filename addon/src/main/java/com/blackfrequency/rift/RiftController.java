@@ -117,6 +117,10 @@ public final class RiftController {
         new DustParticleOptions(new Vector3f(.34F,.08F,.78F),.75F);
     private static final DustParticleOptions FISSURE_VIOLET_DUST =
         new DustParticleOptions(new Vector3f(.34F,.08F,.78F),.85F);
+    // Give the physical recovery beacon a brighter violet idle cue without changing
+    // the vanilla beacon block or increasing its six-particle-per-second budget.
+    private static final DustParticleOptions BEACON_VIOLET_DUST =
+        new DustParticleOptions(new Vector3f(.48F,.14F,.98F),.90F);
     private static final DustParticleOptions FISSURE_VIOLET_DUST_MEDIUM_LARGE =
         new DustParticleOptions(new Vector3f(.34F,.08F,.78F),.95F);
     private static final DustParticleOptions FISSURE_VIOLET_DUST_LARGE =
@@ -753,6 +757,7 @@ public final class RiftController {
         boolean ciNaturalBeaconRemoved, ciNaturalBeaconReplaced;
         boolean ciSparseRecoveryEligibilityLogged;
         boolean ciSurfaceFissureLogged;
+        boolean ciIdleBeaconVioletDustLogged;
         final List<CompoundTag> snapshots = new ArrayList<>();
         // Derived from validated snapshots on load and maintained on every runtime edit.
         // It is deliberately not persisted: the value is recomputed from the saved list.
@@ -2699,6 +2704,15 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST GRAVITY_ANOMALY_PARTICLE_PALETTE_VERIFIED base=deep-violet accent=bright-violet cached=true");
     }
 
+    private static void verifyIdleBeaconParticlePalette() {
+        if(!hasDustColor(BEACON_VIOLET_DUST,.48F,.14F,.98F)
+            || Math.abs(BEACON_VIOLET_DUST.getScale()-.90F)>1.0E-6F
+            || IDLE_BEACON_PULSE_INTERVAL_TICKS!=20
+            || IDLE_BEACON_PULSE_PARTICLE_COUNT!=6)
+            throw new IllegalStateException("CI idle beacon violet Dust palette regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST IDLE_BEACON_VIOLET_PALETTE_VERIFIED red=0.48 green=0.14 blue=0.98 scale=0.9 count=6 intervalTicks=20 cached=true");
+    }
+
     private static void verifyRecoveryUiPalette() {
         Component title=recoveryViolet(RESTORE_SUCCESS_TITLE);
         Component partialTitle=recoveryViolet(RESTORE_PARTIAL_TITLE);
@@ -2796,6 +2810,7 @@ public final class RiftController {
         verifyRestoreParticleAudienceBounds();
         verifyRestoreCadenceSaturationFallback();
         verifyRecoveryUiPalette();
+        verifyIdleBeaconParticlePalette();
     }
 
     private static void verifyBeaconInteractionGuard() {
@@ -4015,10 +4030,15 @@ public final class RiftController {
                         && level.players().stream().anyMatch(player ->
                             player.isAlive() && !player.isRemoved() && !player.isSpectator()
                             && player.distanceToSqr(beacon.getX()+.5D,beacon.getY()+1.2D,
-                                beacon.getZ()+.5D)<=64.0D*64.0D))
-                        level.sendParticles(FISSURE_VIOLET_DUST,
+                                beacon.getZ()+.5D)<=64.0D*64.0D)) {
+                        level.sendParticles(BEACON_VIOLET_DUST,
                             beacon.getX()+.5,beacon.getY()+1.2,beacon.getZ()+.5,
                             IDLE_BEACON_PULSE_PARTICLE_COUNT,.28,.45,.28,.015);
+                        if(CI_TEST && !s.ciIdleBeaconVioletDustLogged) {
+                            LOGGER.info("BLACK_FREQUENCY_TEST IDLE_BEACON_VIOLET_DUST_EMITTED count=6 red=0.48 green=0.14 blue=0.98 scale=0.9");
+                            s.ciIdleBeaconVioletDustLogged=true;
+                        }
+                    }
                     if(shouldSendIdleBeaconHint(s.restoring,s.restored,s.finaleTicks)) for(var player:level.players())
                         if(player.isAlive() && !player.isRemoved() && !player.isSpectator()
                             && withinRecoveryAudience(player.blockPosition(),
