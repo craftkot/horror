@@ -2548,10 +2548,6 @@ public final class RiftController {
             IDLE_BEACON_PARTICLE_PACKET_RANGE,IDLE_BEACON_PARTICLE_PACKET_RANGE_SQR);
     }
 
-    private static void verifyIdleBeaconParticleAudienceBoundsAtStartup() {
-        verifyIdleBeaconParticleAudienceBounds();
-    }
-
     private static boolean shouldEmitRestoreHelix(int restoreTicks) {
         return restoreTicks>0 && restoreTicks%RESTORE_HELIX_INTERVAL_TICKS==0;
     }
@@ -4064,7 +4060,7 @@ public final class RiftController {
                         && level.players().stream().anyMatch(player ->
                             player.isAlive() && !player.isRemoved() && !player.isSpectator()
                             && withinIdleBeaconParticleAudience(player.distanceToSqr(
-                                beacon.getX()+.5D,beacon.getY()+1.2D,beacon.getZ()+.5D))) {
+                                beacon.getX()+.5D,beacon.getY()+1.2D,beacon.getZ()+.5D)))) {
                         level.sendParticles(BEACON_VIOLET_DUST,
                             beacon.getX()+.5,beacon.getY()+1.2,beacon.getZ()+.5,
                             IDLE_BEACON_PULSE_PARTICLE_COUNT,.28,.45,.28,.015);
