@@ -2283,7 +2283,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: cached fissure dust pulse profile was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=balanced-view targetPitch=45 ties=stable invalidRejected=true" not in log_after:
-                print("WORLD_CAPTURE_FAIL: nearest visible fissure target policy was not verified",flush=True)
+                print("WORLD_CAPTURE_FAIL: balanced fissure camera target policy was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_STRUCTURAL_SUPPORT_FILTER_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: server did not reject structural blocks as fissure terrain",flush=True)
