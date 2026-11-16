@@ -18,6 +18,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.8'
+          # This trusted feature branch needs its own writable cache; otherwise
+          # every push starts with an empty Gradle user home and re-hits Forge Maven.
+          cache-read-only: false
       - name: Build addon
         working-directory: addon
         run: gradle --no-daemon build
