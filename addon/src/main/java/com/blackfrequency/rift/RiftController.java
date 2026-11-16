@@ -56,6 +56,11 @@ public final class RiftController {
     private static final int FISSURE_MOTES_PER_SAMPLE = 1;
     private static final int IDLE_BEACON_PULSE_INTERVAL_TICKS = 20;
     private static final int IDLE_BEACON_PULSE_PARTICLE_COUNT = 6;
+    // The default ServerLevel.sendParticles overload only delivers within 32 blocks.
+    // Do not scan for idle-beacon viewers outside the packet's actual delivery radius.
+    private static final double IDLE_BEACON_PARTICLE_PACKET_RANGE=32.0D;
+    private static final double IDLE_BEACON_PARTICLE_PACKET_RANGE_SQR=
+        IDLE_BEACON_PARTICLE_PACKET_RANGE*IDLE_BEACON_PARTICLE_PACKET_RANGE;
     // Recovery effects use cached blue-violet Dust and bounded, deterministic pulses.
     private static final int RESTORE_RING_INTERVAL_TICKS = 20;
     // Completion titles use explicit timings instead of inheriting the finale's title clock.
@@ -2519,6 +2524,34 @@ public final class RiftController {
         return finaleTicks>0 && finaleTicks%IDLE_BEACON_PULSE_INTERVAL_TICKS==0;
     }
 
+    private static boolean withinIdleBeaconParticleAudience(double distanceSquared) {
+        return Double.isFinite(distanceSquared)
+            && distanceSquared>=0.0D
+            && distanceSquared<IDLE_BEACON_PARTICLE_PACKET_RANGE_SQR;
+    }
+
+    private static void verifyIdleBeaconParticleAudienceBounds() {
+        boolean origin=withinIdleBeaconParticleAudience(0.0D);
+        boolean justInside=withinIdleBeaconParticleAudience(
+            Math.nextDown(IDLE_BEACON_PARTICLE_PACKET_RANGE_SQR));
+        boolean boundaryRejected=!withinIdleBeaconParticleAudience(
+            IDLE_BEACON_PARTICLE_PACKET_RANGE_SQR);
+        boolean outsideRejected=!withinIdleBeaconParticleAudience(
+            Math.nextUp(IDLE_BEACON_PARTICLE_PACKET_RANGE_SQR));
+        boolean invalidRejected=!withinIdleBeaconParticleAudience(-1.0D)
+            && !withinIdleBeaconParticleAudience(Double.NaN)
+            && !withinIdleBeaconParticleAudience(Double.POSITIVE_INFINITY)
+            && !withinIdleBeaconParticleAudience(Double.NEGATIVE_INFINITY);
+        if(!(origin && justInside && boundaryRejected && outsideRejected && invalidRejected))
+            throw new IllegalStateException("CI idle beacon particle audience range regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST IDLE_BEACON_PARTICLE_AUDIENCE_BOUNDS_VERIFIED maxDistance={} maxDistanceSquared={} strictBoundary=true invalidRejected=true",
+            IDLE_BEACON_PARTICLE_PACKET_RANGE,IDLE_BEACON_PARTICLE_PACKET_RANGE_SQR);
+    }
+
+    private static void verifyIdleBeaconParticleAudienceBoundsAtStartup() {
+        verifyIdleBeaconParticleAudienceBounds();
+    }
+
     private static boolean shouldEmitRestoreHelix(int restoreTicks) {
         return restoreTicks>0 && restoreTicks%RESTORE_HELIX_INTERVAL_TICKS==0;
     }
@@ -2711,6 +2744,7 @@ public final class RiftController {
             || IDLE_BEACON_PULSE_PARTICLE_COUNT!=6)
             throw new IllegalStateException("CI idle beacon violet Dust palette regression");
         LOGGER.info("BLACK_FREQUENCY_TEST IDLE_BEACON_VIOLET_PALETTE_VERIFIED red=0.48 green=0.14 blue=0.98 scale=0.9 count=6 intervalTicks=20 cached=true");
+        verifyIdleBeaconParticleAudienceBounds();
     }
 
     private static void verifyRecoveryUiPalette() {
@@ -4029,8 +4063,8 @@ public final class RiftController {
                     if(shouldEmitIdleBeaconParticles(s.finaleTicks)
                         && level.players().stream().anyMatch(player ->
                             player.isAlive() && !player.isRemoved() && !player.isSpectator()
-                            && player.distanceToSqr(beacon.getX()+.5D,beacon.getY()+1.2D,
-                                beacon.getZ()+.5D)<=64.0D*64.0D)) {
+                            && withinIdleBeaconParticleAudience(player.distanceToSqr(
+                                beacon.getX()+.5D,beacon.getY()+1.2D,beacon.getZ()+.5D))) {
                         level.sendParticles(BEACON_VIOLET_DUST,
                             beacon.getX()+.5,beacon.getY()+1.2,beacon.getZ()+.5,
                             IDLE_BEACON_PULSE_PARTICLE_COUNT,.28,.45,.28,.015);

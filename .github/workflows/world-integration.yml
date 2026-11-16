@@ -149,6 +149,7 @@ jobs:
             grep -q 'BLACK_FREQUENCY_TEST RESTORE_WRITE_DEFERRED' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RESTORE_WRITE_RETRIED' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST IDLE_BEACON_PARTICLE_CADENCE_VERIFIED intervalTicks=20 particles=6 cachedDust=true' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST IDLE_BEACON_PARTICLE_AUDIENCE_BOUNDS_VERIFIED maxDistance=32.0 maxDistanceSquared=1024.0 strictBoundary=true invalidRejected=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_PROFILE_VERIFIED ring=24 ringIntervalTicks=20 sparks=4 helix=16 helixIntervalTicks=8 blockCue=6 blockIntervalBlocks=48 audience=8 audienceIntervalTicks=20 cachedDust=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_TITLE_TIMING_VERIFIED fadeIn=10 stay=80 fadeOut=20 total=110 packetBeforeTitle=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RESTORE_COMPLETION_TITLE_WIDTH_VERIFIED successChars=10 partialChars=13 maxChars=13' world-test.log
