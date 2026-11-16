@@ -705,6 +705,32 @@ def capture_test_world():
 
     shader_path=ROOT/"addon"/"src"/"main"/"resources"/"assets"/"blackfrequency"/"shaders"/"core"/"sky_rift.fsh"
     shader_source=shader_path.read_text(encoding="utf-8")
+    def lightning_power_twelve(value):
+        base=max(0.0,min(1.0,value))
+        squared=base*base
+        fourth=squared*squared
+        eighth=fourth*fourth
+        return eighth*fourth
+
+    lightning_samples=(-0.5,0.0,0.125,0.5,0.9,1.0,1.5)
+    lightning_equivalent=all(
+        math.isclose(lightning_power_twelve(value),
+                     max(0.0,min(1.0,value))**12,
+                     rel_tol=1.0e-12,abs_tol=1.0e-15)
+        for value in lightning_samples)
+    lightning_chain=(
+        "float lightningBase=clamp(lightningWave,0.,1.);",
+        "float lightningSquared=lightningBase*lightningBase;",
+        "float lightningFourth=lightningSquared*lightningSquared;",
+        "float lightningEighth=lightningFourth*lightningFourth;",
+        "float lightningFlash=lightningEighth*lightningFourth;",
+    )
+    if (not lightning_equivalent
+            or any(token not in shader_source for token in lightning_chain)
+            or "pow(" in shader_source):
+        raise RuntimeError("BLACK FREQUENCY sky lightning multiply-chain regression")
+    print("WORLD_CAPTURE: bounded sky lightning x^12 multiply chain verified",
+          {"samples": len(lightning_samples), "genericPowCalls": 0},flush=True)
     if "vec3 edge=vec3(.46,.18,.82);" not in shader_source:
         raise RuntimeError("BLACK FREQUENCY sky edge palette regression")
     filament_mask_samples=[
