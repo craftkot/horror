@@ -53,6 +53,10 @@ def verify_restoration_particle_source():
             or "RESTORE_TITLE_STAY_TICKS=80;" not in source
             or "RESTORE_TITLE_FADE_OUT_TICKS=20;" not in source
             or completion_animation<0 or completion_title<0 or completion_animation>completion_title
+            or 'private static final String RESTORE_SUCCESS_TITLE="МИР СПАСЁН";' not in source
+            or 'private static final String RESTORE_PARTIAL_TITLE="ЕСТЬ ПРОПУСКИ";' not in source
+            or "s.skippedOccupied==0 && s.skippedInvalid==0 ? RESTORE_SUCCESS_TITLE : RESTORE_PARTIAL_TITLE" not in completion_body
+            or "RESTORE_COMPLETION_TITLE_WIDTH_VERIFIED successChars={} partialChars={} maxChars=13" not in source
             or "RESTORATION_COMPLETION_TITLE_TIMING_VERIFIED" not in source):
         raise RuntimeError("BLACK FREQUENCY completion title must set and verify explicit fade timing before the title packet")
     if ("public static final double FISSURE_BEND_AMPLITUDE=.24D;" not in geometry_contract
@@ -919,6 +923,45 @@ def capture_test_world():
         # Require real violet Dust in at least one frame; never accept magenta-only.
         return (restoration_palette_passes(active_metrics)
                 or restoration_palette_passes(finished_metrics))
+
+    def measure_completion_title_width(frame):
+        width,height=frame.size
+        top,bottom=int(height*.28),int(height*.55)
+        pixels=frame.load()
+        column_counts=[0]*width
+        for y in range(top,bottom):
+            for x in range(width):
+                red,green,blue=pixels[x,y]
+                if red>=65 and green<=45 and blue>=145 and blue-red>=70:
+                    column_counts[x]+=1
+        active=[x for x,count in enumerate(column_counts) if count>=6]
+        if not active:
+            return {"left":0,"right":0,"width":0,"fraction":0.0,"centerOffset":float("inf")}
+        left,right=active[0],active[-1]
+        title_width=right-left+1
+        return {"left":left,"right":right,"width":title_width,
+                "fraction":title_width/width,
+                "centerOffset":abs((left+right)/2-width/2)}
+
+    def completion_title_width_passes(metrics,frame_width):
+        return (200<=metrics["width"]<=frame_width*.78
+                and metrics["centerOffset"]<=frame_width*.08)
+
+    from PIL import Image,ImageDraw
+    _compact_title_fixture=Image.new("RGB",(1280,720),(0,0,0))
+    ImageDraw.Draw(_compact_title_fixture).rectangle((300,240,980,320),fill=(86,20,197))
+    _wide_title_fixture=Image.new("RGB",(1280,720),(0,0,0))
+    ImageDraw.Draw(_wide_title_fixture).rectangle((50,240,1230,320),fill=(86,20,197))
+    _blank_title_fixture=Image.new("RGB",(1280,720),(0,0,0))
+    if (not completion_title_width_passes(
+            measure_completion_title_width(_compact_title_fixture),1280)
+            or completion_title_width_passes(
+                measure_completion_title_width(_wide_title_fixture),1280)
+            or completion_title_width_passes(
+                measure_completion_title_width(_blank_title_fixture),1280)):
+        raise RuntimeError("BLACK FREQUENCY compact completion-title width classifier regression")
+    print("WORLD_CAPTURE: completion title width classifier verified",flush=True)
+
 
     _palette_valid={"legacyMagentaPixels":0,"violetDustPixels":1000}
     _palette_missing={"legacyMagentaPixels":0,"violetDustPixels":0}
@@ -1900,7 +1943,9 @@ def capture_test_world():
                 with Image.open(restoration_path) as source:
                     active_restoration_metrics=measure_restoration_palette(source.convert("RGB"))
                 with Image.open(finished_restoration_path) as source:
-                    finished_restoration_metrics=measure_restoration_palette(source.convert("RGB"))
+                    finished_frame=source.convert("RGB")
+                    finished_restoration_metrics=measure_restoration_palette(finished_frame)
+                    finished_title_metrics=measure_completion_title_width(finished_frame)
                 if not restoration_palette_evidence_passes(
                         active_restoration_metrics,finished_restoration_metrics):
                     print("WORLD_CAPTURE_FAIL: neither active nor completion frame shows bounded violet restoration Dust",
@@ -1911,6 +1956,12 @@ def capture_test_world():
                 print("WORLD_CAPTURE: restoration violet Dust palette verified",
                       {"capture":palette_frame,"active":active_restoration_metrics,
                        "finished":finished_restoration_metrics},flush=True)
+                if not completion_title_width_passes(finished_title_metrics,finished_frame.size[0]):
+                    print("WORLD_CAPTURE_FAIL: completion title exceeds compact width budget",
+                          finished_title_metrics,flush=True)
+                    return False
+                print("WORLD_CAPTURE: compact completion title width verified",
+                      finished_title_metrics,flush=True)
                 if not terrain_shot:
                     print("WORLD_CAPTURE_FAIL: no player-visible ground fissure was captured",flush=True)
                     return False

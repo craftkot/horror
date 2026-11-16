@@ -62,6 +62,8 @@ public final class RiftController {
     private static final int RESTORE_TITLE_FADE_IN_TICKS=10;
     private static final int RESTORE_TITLE_STAY_TICKS=80;
     private static final int RESTORE_TITLE_FADE_OUT_TICKS=20;
+    private static final String RESTORE_SUCCESS_TITLE="МИР СПАСЁН";
+    private static final String RESTORE_PARTIAL_TITLE="ЕСТЬ ПРОПУСКИ";
     private static final int RESTORE_RING_PARTICLE_COUNT = 24;
     private static final int RESTORE_RISING_SPARK_PARTICLE_COUNT = 4;
     private static final int RESTORE_HELIX_INTERVAL_TICKS = 8;
@@ -2584,12 +2586,17 @@ public final class RiftController {
     }
 
     private static void verifyRecoveryUiPalette() {
-        Component title=recoveryViolet("МИР ВОССТАНОВЛЕН");
+        Component title=recoveryViolet(RESTORE_SUCCESS_TITLE);
+        Component partialTitle=recoveryViolet(RESTORE_PARTIAL_TITLE);
         Component actionBar=recoveryViolet("✦ СТАБИЛИЗАЦИЯ 100%");
-        if(!hasRecoveryViolet(title) || !hasRecoveryViolet(actionBar)
-            || !"МИР ВОССТАНОВЛЕН".equals(title.getString()))
-            throw new IllegalStateException("CI recovery UI must use explicit deep-violet RGB, not legacy magenta");
+        if(!hasRecoveryViolet(title) || !hasRecoveryViolet(partialTitle) || !hasRecoveryViolet(actionBar)
+            || !RESTORE_SUCCESS_TITLE.equals(title.getString())
+            || !RESTORE_PARTIAL_TITLE.equals(partialTitle.getString())
+            || RESTORE_SUCCESS_TITLE.length()>10 || RESTORE_PARTIAL_TITLE.length()>13)
+            throw new IllegalStateException("CI recovery UI must use compact deep-violet completion titles");
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_UI_PALETTE_VERIFIED rgb=5714c7 legacyFormatting=false");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_COMPLETION_TITLE_WIDTH_VERIFIED successChars={} partialChars={} maxChars=13",
+            RESTORE_SUCCESS_TITLE.length(),RESTORE_PARTIAL_TITLE.length());
     }
 
     private static void verifyRestorationParticleProfile() {
@@ -3610,7 +3617,7 @@ public final class RiftController {
                 player.connection.send(new ClientboundSetTitlesAnimationPacket(
                     RESTORE_TITLE_FADE_IN_TICKS,RESTORE_TITLE_STAY_TICKS,RESTORE_TITLE_FADE_OUT_TICKS));
                 player.connection.send(new ClientboundSetTitleTextPacket(recoveryViolet(
-                    s.skippedOccupied==0 && s.skippedInvalid==0 ? "МИР ВОССТАНОВЛЕН" : "СТАБИЛИЗАЦИЯ ЗАВЕРШЕНА")));
+                    s.skippedOccupied==0 && s.skippedInvalid==0 ? RESTORE_SUCCESS_TITLE : RESTORE_PARTIAL_TITLE)));
                 player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal(
                     s.skippedOccupied==0 && s.skippedInvalid==0 ? "§7Разлом закрывается" : "§7Пропущено занятых: "+s.skippedOccupied+"; повреждённых записей: "+s.skippedInvalid)));
             }
