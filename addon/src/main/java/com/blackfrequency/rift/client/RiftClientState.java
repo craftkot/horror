@@ -256,7 +256,10 @@ public final class RiftClientState {
             double ramp=Math.min(1.0,boundedSample/(double)GROUND_ENDPOINT_TAPER_SAMPLES);
             // Preserve the old 1.35-block taper length after doubling mesh sample density.
             double tail=Math.min(1.0,(SEGMENTS_PER_ARM-boundedSample)/(double)GROUND_ENDPOINT_TAPER_SAMPLES);
-            return .5D+.5D*Math.min(ramp,tail);
+            double progress=Math.min(ramp,tail);
+            // Smoothstep gives each arm a zero-slope start/end without changing its taper span.
+            double eased=progress*progress*(3.0D-2.0D*progress);
+            return .5D+.5D*eased;
         }
 
         private static void verifyGroundMeshSamplingProfile() {
@@ -392,13 +395,18 @@ public final class RiftClientState {
                 boolean falling=middle>secondLast && secondLast>last && last>end;
                 boolean invalidClamped=endpointTaper(-1)==start
                     && endpointTaper(SEGMENTS_PER_ARM+1)==end;
-                if(!(symmetric && rising && falling && invalidClamped
+                boolean smoothstep=Math.abs(first-(.5D+1.0D/27.0D))<1.0E-9D
+                    && Math.abs(second-(17.0D/27.0D))<1.0E-9D
+                    && first<7.0D/12.0D && second<2.0D/3.0D;
+                if(!(symmetric && rising && falling && invalidClamped && smoothstep
                     && Math.abs(middle-1.0D)<1.0E-9D))
                     throw new IllegalStateException("BLACK FREQUENCY ground mesh taper regression");
                 taperProfileLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
                     "BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED start={} first={} second={} middle={} secondLast={} last={} end={} symmetric={} invalidClamped={}",
                     start,first,second,middle,secondLast,last,end,symmetric,invalidClamped);
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_GROUND_MESH_TAPER_EASING_VERIFIED curve=smoothstep zeroSlopeAtEnds=true sameSpan=true");
             }
             if(!visualProfileLogged) {
                 double minimumHalfWidth=GROUND_MIN_HALF_WIDTH;
