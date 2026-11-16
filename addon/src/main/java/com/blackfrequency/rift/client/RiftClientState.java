@@ -129,8 +129,8 @@ public final class RiftClientState {
         private static final double MAX_BRIDGED_GROUND_STEP_Y_DELTA=1.0D;
         // Keep the same maximum height change per segment after halving sample spacing.
         private static final double MAX_GROUND_SEGMENT_GRADE=2.5D;
-        // Narrow both sides of a mesh gap instead of ending with blunt translucent quads.
-        private static final double CLIFF_BREAK_TAPER=.25D;
+        // Taper cliff-side ribbon ends more tightly so each disconnected seam resolves to a pointed tip.
+        private static final double CLIFF_BREAK_TAPER=.14D;
         // Keep the violet halo subordinate to a more legible dark fissure core without adding draw calls or vertices.
         private static final double GROUND_GLOW_WIDTH_SCALE=5.8D;
         private static final double GROUND_CORE_WIDTH_SCALE=1.65D;
@@ -591,13 +591,18 @@ public final class RiftClientState {
                 || isContinuousGroundStep(Double.POSITIVE_INFINITY,64.0D,SAMPLE_SPACING);
             boolean capped= Math.abs(cliffBreakTaper(1.0D)-CLIFF_BREAK_TAPER)<1.0E-9D
                 && Math.abs(cliffBreakTaper(.10D)-.10D)<1.0E-9D
-                && cliffBreakTaper(Double.NaN)==0.0D;
+                && cliffBreakTaper(Double.NaN)==0.0D
+                && cliffBreakTaper(Double.POSITIVE_INFINITY)==0.0D
+                && cliffBreakTaper(Double.NEGATIVE_INFINITY)==0.0D
+                && cliffBreakTaper(-1.0D)==0.0D;
+            boolean pointedCliffCap=CLIFF_BREAK_TAPER>=.10D
+                && CLIFF_BREAK_TAPER<=.15D && CLIFF_BREAK_TAPER<.25D;
             boolean preservedRiseBudget=Math.abs(SAMPLE_SPACING*MAX_GROUND_SEGMENT_GRADE
                 -RiftGeometry.FISSURE_SAMPLE_SPACING*1.25D)<1.0E-9D;
             if(!(flat && snowStep && halfBlockRamp && oneBlockSampleRejected
                 && oneBlockRampAccepted && bridgeCandidate && plateauBridge && bumpBridge
                 && repeatedStepRejected && cliffBridgeRejected && invalidBridgeRejected
-                && cliffRejected && invalid && capped && preservedRiseBudget))
+                && cliffRejected && invalid && capped && pointedCliffCap && preservedRiseBudget))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh continuity regression");
             continuityProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
@@ -610,6 +615,9 @@ public final class RiftClientState {
                 RiftGeometry.FISSURE_SAMPLE_SPACING*1.25D,SAMPLE_SPACING*MAX_GROUND_SEGMENT_GRADE);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SINGLE_STEP_BRIDGE_VERIFIED maxStep=1.0 spanSamples=2 plateau=true bump=true repeatedStepRejected=true cliffGuard=true invalidRejected=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_CLIFF_TAPER_PROFILE_VERIFIED taper={} previousTaper=0.25 narrower=true invalidInputsZero=true",
+                CLIFF_BREAK_TAPER);
         }
 
         private static boolean shouldRebuild(long tick,long previousTick,boolean anchorChanged,
