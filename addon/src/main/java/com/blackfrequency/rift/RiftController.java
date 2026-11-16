@@ -78,6 +78,8 @@ public final class RiftController {
         RESTORE_PARTICLE_VIEW_DISTANCE*RESTORE_PARTICLE_VIEW_DISTANCE;
     // Common phase window for every periodic restoration effect (4, 8, 10, 20 and 40 ticks).
     private static final int RESTORE_CADENCE_PERIOD_TICKS = 40;
+    private static final int RESTORE_PROGRESS_INTERVAL_TICKS = RESTORE_CADENCE_PERIOD_TICKS;
+    private static final int RESTORE_OVERLAY_INTERVAL_TICKS = 10;
     private static final int RESTORE_HELIX_ANCHOR_COUNT = 8;
     private static final int RESTORE_HELIX_MOTES_PER_ANCHOR = 2;
     private static final int RESTORE_HELIX_PARTICLE_COUNT =
@@ -744,6 +746,7 @@ public final class RiftController {
         // Cosmetic-only cooldown; deliberately not persisted across world restarts.
         int surfaceCueCooldownTicks;
         boolean ciRestoredGravityGuardLogged;
+        boolean ciRestoreUiAudiencePassLogged;
         // CI-only one-shot beacon removal: exercise recovery after a lost beacon.
         boolean ciNaturalBeaconRemoved, ciNaturalBeaconReplaced;
         boolean ciSparseRecoveryEligibilityLogged;
@@ -2743,6 +2746,14 @@ public final class RiftController {
         return Math.max(0,Math.min(99,(int)(100L*completed/snapshotCount)));
     }
 
+    private static boolean shouldSendRestoreProgress(int cadenceTick,boolean hasPendingSnapshots) {
+        return cadenceTick%RESTORE_PROGRESS_INTERVAL_TICKS==0 && hasPendingSnapshots;
+    }
+
+    private static boolean shouldSendRestoreOverlay(int cadenceTick) {
+        return cadenceTick%RESTORE_OVERLAY_INTERVAL_TICKS==0;
+    }
+
     private static void verifyRestorationProgress() {
         int[][] cases={
             {9,10,0}, {4,10,50}, {0,10,90}, {-1,10,99},
@@ -2753,7 +2764,18 @@ public final class RiftController {
             if(actual!=sample[2] || actual>=100)
                 throw new IllegalStateException("CI restoration progress regression: "+actual);
         }
+        boolean progressAtBoundary=shouldSendRestoreProgress(RESTORE_PROGRESS_INTERVAL_TICKS,true);
+        boolean progressSuppressedWithoutSnapshots=!shouldSendRestoreProgress(RESTORE_PROGRESS_INTERVAL_TICKS,false);
+        boolean progressBetweenBoundaries=!shouldSendRestoreProgress(RESTORE_PROGRESS_INTERVAL_TICKS-1,true);
+        boolean overlayAtBoundary=shouldSendRestoreOverlay(RESTORE_OVERLAY_INTERVAL_TICKS);
+        boolean overlayAtProgressBoundary=shouldSendRestoreOverlay(RESTORE_PROGRESS_INTERVAL_TICKS);
+        boolean overlayBetweenBoundaries=!shouldSendRestoreOverlay(RESTORE_OVERLAY_INTERVAL_TICKS-1);
+        if(!(progressAtBoundary && progressSuppressedWithoutSnapshots && progressBetweenBoundaries
+            && overlayAtBoundary && overlayAtProgressBoundary && overlayBetweenBoundaries))
+            throw new IllegalStateException("CI restoration UI cadence regression");
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_PROGRESS_HELD_BELOW_COMPLETION");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_UI_AUDIENCE_CADENCE_VERIFIED progressIntervalTicks={} overlayIntervalTicks={} combinedBoundary=true",
+            RESTORE_PROGRESS_INTERVAL_TICKS,RESTORE_OVERLAY_INTERVAL_TICKS);
     }
 
     /** Right-click a vanilla beacon within 128 blocks of the fracture anchor. */
@@ -3263,24 +3285,28 @@ public final class RiftController {
                 throw new IllegalStateException("CI restoration bounds guard failed");
             LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_BOUNDS_GUARD_VERIFIED");
         }
-        if(cadenceTick%40==0 && !s.snapshots.isEmpty()) {
-            int percent=restorationPercent(s.restoreIndex,s.snapshots.size());
-            // Restoration is local to the fracture. Do not spam action-bar
-            // updates to players exploring distant parts of the Overworld.
+        boolean sendProgress=shouldSendRestoreProgress(cadenceTick,!s.snapshots.isEmpty());
+        boolean sendOverlay=shouldSendRestoreOverlay(cadenceTick);
+        if(sendProgress || sendOverlay) {
+            int percent=sendProgress?restorationPercent(s.restoreIndex,s.snapshots.size()):0;
+            float remaining=sendOverlay && !s.snapshots.isEmpty()
+                ? Math.max(0f,(s.restoreIndex+1f)/s.snapshots.size()) : 0f;
+            int audiencePlayersVisited=0;
+            // Progress and overlay share one bounded player traversal. At the
+            // 40-tick boundary both payloads are sent from this same pass.
             for(var player:level.players()) {
-                if(player.isAlive() && !player.isRemoved() && !player.isSpectator()
-                    && withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z))
-                    player.displayClientMessage(recoveryViolet("✦ СТАБИЛИЗАЦИЯ §f"+percent+"% §7— восстановлено "+s.restoredBlocks+" блоков"),true);
-            }
-        }
-        if(cadenceTick%10==0) {
-            float remaining=s.snapshots.isEmpty()?0f:Math.max(0f,(s.restoreIndex+1f)/s.snapshots.size());
-            // The recovery overlay is local to the fracture. Do not send
-            // recovery packets to distant, dead, removed or spectator players.
-            for(var player:level.players()) {
+                if(CI_TEST) audiencePlayersVisited++;
                 if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
-                if(withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z))
+                if(!withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z)) continue;
+                if(sendProgress)
+                    player.displayClientMessage(recoveryViolet("✦ СТАБИЛИЗАЦИЯ §f"+percent+"% §7— восстановлено "+s.restoredBlocks+" блоков"),true);
+                if(sendOverlay)
                     RiftNetwork.send(player,remaining,false,0,s.x,s.z);
+            }
+            if(CI_TEST && sendProgress && sendOverlay && !s.ciRestoreUiAudiencePassLogged) {
+                s.ciRestoreUiAudiencePassLogged=true;
+                LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_UI_AUDIENCE_SHARED_PASS progress=true overlay=true playersVisited={} singleTraversal=true",
+                    audiencePlayersVisited);
             }
         }
         int restoredThisTick=0,checks=0;
