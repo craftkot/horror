@@ -68,6 +68,8 @@ jobs:
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_BEACON_POSITION_PRESENCE_VERIFIED missingOrWrongTypeRejected=true originCoordinatePreserved=true fallback=rift-anchor' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST NATURAL_BEACON_UUID_POSITION_PAIR_VERIFIED orphanRejected=true zeroPositionPreserved=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_INVALID_SNAPSHOT_WARNING_RATE_LIMIT_VERIFIED attempts=1000 warnings=1 persisted=true legacyDefault=false' world-test.log
+            grep -Eq 'BLACK_FREQUENCY_TEST RECOVERY_INVALID_SNAPSHOT_SUMMARY_EMITTED count=[1-9][0-9]* singleSummary=true' world-test.log
+            test "$(grep -c 'BLACK_FREQUENCY_TEST RECOVERY_INVALID_SNAPSHOT_SUMMARY_EMITTED' world-test.log)" -eq 1
           fi
           # Compact violet Dust flecks replace oversized block-textured chips at the four outer tips.
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_LAYOUT_VERIFIED count=4 color=violet perArm=1 outerTip=true' world-test.log
