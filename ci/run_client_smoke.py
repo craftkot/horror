@@ -22,6 +22,12 @@ def verify_restoration_particle_source():
     source_path=ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftController.java"
     source=source_path.read_text(encoding="utf-8")
     geometry_contract=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftGeometry.java").read_text(encoding="utf-8")
+    if ("double zone=gravityAnomalyField(testX,testZ,tick);" not in source
+            or "double zone=gravityAnomalyField(px,pz,s.finaleTicks);" not in source
+            or "double zone=gravityAnomalyField(player.getX(),player.getZ(),s.finaleTicks);" not in source
+            or "Math.sin(player.getX()*.115" in source
+            or "Math.sin(px*.115+Math.sin(s.finaleTicks*.011)*1.8)" in source):
+        raise RuntimeError("BLACK FREQUENCY player impulses, passenger probe and particles must share one gravity anomaly field")
     client_source=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"client"/"RiftClientState.java").read_text(encoding="utf-8")
     fissure_start=source.find("private static FissureEmission emitSurfaceFissure(")
     fissure_end=source.find("\n    private static",fissure_start+1)
@@ -1961,6 +1967,10 @@ def capture_test_world():
             anomaly_marker="BLACK_FREQUENCY_TEST GRAVITY_ANOMALY_PARTICLE_PALETTE_VERIFIED base=deep-violet accent=bright-violet cached=true"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and anomaly_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: cached violet gravity anomaly particle palette was not verified",flush=True)
+                return False
+            anomaly_field_marker="BLACK_FREQUENCY_TEST ANOMALY_FIELD_TURBULENCE_VERIFIED baseWeight=0.82 crossWeight=0.18 bounded=true deterministic=true liftPocket=true sinkPocket=true timeDrift=true invalidRejected=true"
+            if os.environ.get("BF_TEST_RESTORATION")=="1" and anomaly_field_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: shared bounded gravity anomaly field was not verified",flush=True)
                 return False
             ui_palette_marker="BLACK_FREQUENCY_TEST RECOVERY_UI_PALETTE_VERIFIED rgb=5714c7 legacyFormatting=false"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and ui_palette_marker not in log_after:

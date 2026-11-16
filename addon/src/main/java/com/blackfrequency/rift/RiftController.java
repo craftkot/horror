@@ -405,6 +405,37 @@ public final class RiftController {
             player.isFallFlying(),player.isPassenger());
     }
 
+    /**
+     * One bounded field drives both player impulses and their visible cues.
+     * A low-amplitude cross-wave breaks the old regular bands without changing impulse caps.
+     */
+    private static double gravityAnomalyField(double x,double z,int ticks) {
+        if(!Double.isFinite(x) || !Double.isFinite(z)
+            || Math.abs(x)>30_000_000.0D || Math.abs(z)>30_000_000.0D) return 0.0D;
+        double time=Math.max(0,ticks);
+        double base=Math.sin(x*.115D+time*.022D)*Math.cos(z*.125D-time*.018D);
+        double cross=Math.sin((x+z)*.047D+Math.sin(time*.013D)*.9D-time*.009D);
+        double field=.82D*base+.18D*cross;
+        return Math.max(-1.0D,Math.min(1.0D,field));
+    }
+
+    private static void verifyGravityAnomalyField() {
+        double lift=gravityAnomalyField(-17.5D,20.5D,0);
+        double sink=gravityAnomalyField(-19.5D,-3.5D,0);
+        double repeated=gravityAnomalyField(-17.5D,20.5D,0);
+        double later=gravityAnomalyField(-17.5D,20.5D,85);
+        boolean bounded=Double.isFinite(lift) && Double.isFinite(sink)
+            && lift>=-1.0D && lift<=1.0D && sink>=-1.0D && sink<=1.0D;
+        boolean deterministic=Math.abs(lift-repeated)<=1.0E-12D;
+        boolean pockets=lift>.42D && sink<-.68D;
+        boolean drifting=Math.abs(later-lift)>.05D;
+        boolean invalidRejected=gravityAnomalyField(Double.NaN,0.0D,0)==0.0D
+            && gravityAnomalyField(30_000_001.0D,0.0D,0)==0.0D;
+        if(!(bounded && deterministic && pockets && drifting && invalidRejected))
+            throw new IllegalStateException("CI gravity anomaly field regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_TURBULENCE_VERIFIED baseWeight=0.82 crossWeight=0.18 bounded=true deterministic=true liftPocket=true sinkPocket=true timeDrift=true invalidRejected=true");
+    }
+
     private static void verifyRiftGravityEligibility() {
         boolean[][] cases={
             {true,false,false,false,false,false,false,true},
@@ -468,8 +499,7 @@ public final class RiftController {
         int probeTicks=-1;
         double probeZone=Double.NaN;
         for(int tick=0;tick<10000;tick++) {
-            double zone=Math.sin(testX*.115+Math.sin(tick*.011)*1.8)
-                *Math.cos(testZ*.125-tick*.008);
+            double zone=gravityAnomalyField(testX,testZ,tick);
             if(zone>.42D) {
                 probeTicks=tick;
                 probeZone=zone;
@@ -557,8 +587,7 @@ public final class RiftController {
         if(distanceSquared>=outerRadius*outerRadius) return false;
         double fade=Math.min(1.0,Math.max(0.0,
             (outerRadius-Math.sqrt(distanceSquared))/16.0));
-        double zone=Math.sin(px*.115+Math.sin(s.finaleTicks*.011)*1.8)
-            *Math.cos(pz*.125-s.finaleTicks*.008);
+        double zone=gravityAnomalyField(px,pz,s.finaleTicks);
         if(zone>.42) {
             var v=player.getDeltaMovement();
             double lift=Math.max(.045,Math.min(.19,.11+zone*.07))*fade*impulseStrength;
@@ -2654,6 +2683,7 @@ public final class RiftController {
         verifyBoundedSinkVelocity();
         verifyBoundedSinkDrag();
         verifyRiftGravityEligibility();
+        verifyGravityAnomalyField();
         verifyRestorationGravityFade();
         verifyGravityAnomalyParticlePalette();
         verifyPendingSnapshotPersistence();
@@ -3717,8 +3747,7 @@ public final class RiftController {
                 if(fade<.125) continue;
                 // Match the server-side gravity field so particles mark actual
                 // lift/sink zones instead of an unrelated moving pattern.
-                double zone=Math.sin(player.getX()*.115+Math.sin(s.finaleTicks*.011)*1.8)
-                           *Math.cos(player.getZ()*.125-s.finaleTicks*.008);
+                double zone=gravityAnomalyField(player.getX(),player.getZ(),s.finaleTicks);
                 if(zone>.42) {
                     // Deep-violet motes mark lift; smaller bright-violet sparks define the edge.
                     level.sendParticles(ANOMALY_VIOLET_DUST,
