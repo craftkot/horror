@@ -3561,6 +3561,12 @@ public final class RiftController {
                 throw new IllegalStateException("CI malformed/out-of-bounds/duplicate snapshot quarantine failed: "+s.skippedInvalid);
             s.restoring=false;s.restored=true;s.finished=true;s.snapshots.clear();
             s.retainedSnapshotEstimateBytes=0L;
+            if(s.skippedInvalid>0) {
+                LOGGER.warn("BLACK FREQUENCY: recovery completed with {} invalid snapshot entries quarantined; these entries were not applied to world state",
+                    s.skippedInvalid);
+                if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_INVALID_SNAPSHOT_SUMMARY_EMITTED count={} singleSummary=true",
+                    s.skippedInvalid);
+            }
             for(var player:level.players()) RiftNetwork.send(player,0f,false,0,s.x,s.z);
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored={} destroyed={} skippedOccupied={} skippedInvalid={} flowingReplaced={}",s.restoredBlocks,s.edits,s.skippedOccupied,s.skippedInvalid,s.ciFlowingReplaced);
             // Disposable client test: dispatch a synthetic BreakEvent after
