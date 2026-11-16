@@ -1855,7 +1855,7 @@ def capture_test_world():
             if ("private static final float GROUND_EDGE_RED=.46F;" not in camera_source
                     or "private static final float GROUND_EDGE_GREEN=.18F;" not in camera_source
                     or "private static final float GROUND_EDGE_BLUE=.82F;" not in camera_source
-                    or "GROUND_EDGE_HALF_WIDTH=.022D;" not in camera_source
+                    or "GROUND_EDGE_HALF_WIDTH=.026D;" not in camera_source
                     or sorted(edge_rail_offsets) != ["", "-"]):
                 print("WORLD_CAPTURE_FAIL: current violet edge palette is not used by both symmetric ground rails",flush=True)
                 return False
