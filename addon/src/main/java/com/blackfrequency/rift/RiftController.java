@@ -802,8 +802,14 @@ public final class RiftController {
             s.skippedInvalid=boundedCounter(n.getInt("skippedInvalid"),MAX_EDITS);
             s.invalidSnapshotWarningLogged=n.contains("invalidSnapshotWarningLogged",Tag.TAG_BYTE)
                 && n.getBoolean("invalidSnapshotWarningLogged");
-            s.beaconPosPresent=n.contains("beaconPos",Tag.TAG_LONG);
+            boolean beaconPositionPresent=n.contains("beaconPos");
+            boolean beaconPositionValid=n.contains("beaconPos",Tag.TAG_LONG);
+            s.beaconPosPresent=beaconPositionValid;
             s.beaconPos=s.beaconPosPresent?n.getLong("beaconPos"):0L;
+            if(beaconPositionPresent && !beaconPositionValid) {
+                LOGGER.warn("BLACK FREQUENCY: quarantined malformed recovery beacon position");
+                s.setDirty();
+            }
             boolean naturalBeaconPositionPresent=n.contains("naturalBeaconPos");
             boolean naturalBeaconPositionValid=n.contains("naturalBeaconPos",Tag.TAG_LONG);
             boolean naturalBeaconIdentityPresent=n.contains("naturalBeaconId");
@@ -2143,8 +2149,12 @@ public final class RiftController {
         BlockPos fallback=recoveryVisualAnchor(missing,64);
 
         CompoundTag wrongTypeTag=missingTag.copy();
+        wrongTypeTag.putBoolean("restoring",false);
         wrongTypeTag.putString("beaconPos","not-a-long");
         State wrongType=State.load(wrongTypeTag);
+        CompoundTag normalizedWrongType=new CompoundTag();
+        wrongType.save(normalizedWrongType);
+        State roundTrippedWrongType=State.load(normalizedWrongType);
 
         State origin=new State();
         origin.x=12;
@@ -2156,11 +2166,15 @@ public final class RiftController {
 
         if(missing.beaconPosPresent || rewritten.contains("beaconPos",Tag.TAG_LONG)
             || !fallback.equals(new BlockPos(12,64,-7))
-            || wrongType.beaconPosPresent
+            || wrongType.beaconPosPresent || !wrongType.isDirty()
+            || normalizedWrongType.contains("beaconPos")
+            || roundTrippedWrongType.beaconPosPresent
+            || !recoveryVisualAnchor(roundTrippedWrongType,64).equals(new BlockPos(12,64,-7))
             || !loadedOrigin.beaconPosPresent || loadedOrigin.beaconPos!=BlockPos.ZERO.asLong()
             || !originAnchor.equals(BlockPos.ZERO))
             throw new IllegalStateException("CI saved recovery beacon position presence regression");
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_BEACON_POSITION_PRESENCE_VERIFIED missingOrWrongTypeRejected=true originCoordinatePreserved=true fallback=rift-anchor");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_BEACON_POSITION_TYPE_QUARANTINE_VERIFIED malformedType=true dirty=true removedOnSave=true roundTrip=true fallbackPreserved=true");
     }
 
     /** Horizontal anchor check with overflow-safe coordinates, independent of beacon height. */

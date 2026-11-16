@@ -10,6 +10,18 @@ minecraft {
   server { workingDirectory project.file('run'); args '--nogui'; mods { blackfrequency { source sourceSets.main } } }
  }
 }
-repositories { maven { url='https://maven.minecraftforge.net' }; mavenCentral() }
+repositories {
+ maven {
+     name = 'Forge'
+     url = 'https://maven.minecraftforge.net'
+     content { includeGroupByRegex 'net\\.minecraftforge(\\..*)?' }
+ }
+ maven {
+     name = 'NeoForged'
+     url = 'https://maven.neoforged.net/releases'
+     content { includeGroupByRegex 'net\\.minecraftforge(\\..*)?' }
+ }
+ mavenCentral()
+}
 dependencies { minecraft 'net.minecraftforge:forge:1.20.1-47.4.15' }
 tasks.withType(JavaCompile).configureEach { options.encoding='UTF-8' }

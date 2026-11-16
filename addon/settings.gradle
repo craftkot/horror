@@ -1,2 +1,17 @@
-pluginManagement { repositories { gradlePluginPortal(); maven { url = 'https://maven.minecraftforge.net' }; mavenCentral() } }
+pluginManagement {
+    repositories {
+        maven {
+            name = 'Forge'
+            url = 'https://maven.minecraftforge.net'
+            content { includeGroupByRegex 'net\\.minecraftforge(\\..*)?' }
+        }
+        maven {
+            name = 'NeoForged'
+            url = 'https://maven.neoforged.net/releases'
+            content { includeGroupByRegex 'net\\.minecraftforge(\\..*)?' }
+        }
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
 rootProject.name = 'blackfrequency'
