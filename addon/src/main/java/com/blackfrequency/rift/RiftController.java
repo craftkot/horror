@@ -756,6 +756,8 @@ public final class RiftController {
         // It is deliberately not persisted: the value is recomputed from the saved list.
         long retainedSnapshotEstimateBytes;
         boolean snapshotBudgetSkipLogged;
+        // Persist one warning per recovery state; skippedInvalid retains the full count.
+        boolean invalidSnapshotWarningLogged;
         // Reuse the transient audience/menu accumulator across restoration scans.
         // It is intentionally not serialized; each SavedData instance owns its own scratch state.
         final RestorePlayerScanState restorePlayerScan = new RestorePlayerScanState();
@@ -796,6 +798,8 @@ public final class RiftController {
             s.restoredBlocks=boundedCounter(n.getInt("restoredBlocks"),MAX_EDITS);
             s.skippedOccupied=boundedCounter(n.getInt("skippedOccupied"),MAX_EDITS);
             s.skippedInvalid=boundedCounter(n.getInt("skippedInvalid"),MAX_EDITS);
+            s.invalidSnapshotWarningLogged=n.contains("invalidSnapshotWarningLogged",Tag.TAG_BYTE)
+                && n.getBoolean("invalidSnapshotWarningLogged");
             s.beaconPosPresent=n.contains("beaconPos",Tag.TAG_LONG);
             s.beaconPos=s.beaconPosPresent?n.getLong("beaconPos"):0L;
             s.naturalBeaconPos=n.contains("naturalBeaconPos",Tag.TAG_LONG)?n.getLong("naturalBeaconPos"):Long.MIN_VALUE;
@@ -867,6 +871,7 @@ public final class RiftController {
             n.putBoolean("finished",finished);n.putBoolean("initialized",initialized);
             n.putBoolean("restoring",restoring);n.putBoolean("restored",restored);
             n.putInt("restoreIndex",restoreIndex);n.putInt("restoreScan",restoreScan);n.putInt("restoreTicks",restoreTicks);n.putInt("restoredBlocks",restoredBlocks);n.putInt("skippedOccupied",skippedOccupied);n.putInt("skippedInvalid",skippedInvalid);
+            n.putBoolean("invalidSnapshotWarningLogged",invalidSnapshotWarningLogged);
             if(beaconPosPresent) n.putLong("beaconPos",beaconPos);
             else n.remove("beaconPos");
             n.putLong("naturalBeaconPos",naturalBeaconPos);
@@ -877,6 +882,19 @@ public final class RiftController {
             return n;
         }
     }
+    private static boolean markInvalidSnapshotWarningLogged(State s) {
+        if(s.invalidSnapshotWarningLogged) return false;
+        s.invalidSnapshotWarningLogged=true;
+        s.setDirty();
+        return true;
+    }
+
+    private static void warnInvalidSnapshotOnce(State s,String reason,Object detail) {
+        if(markInvalidSnapshotWarningLogged(s))
+            LOGGER.warn("BLACK FREQUENCY: invalid recovery snapshot ({} at {}); subsequent invalid entries are counted without per-entry warnings",
+                reason,detail);
+    }
+
     /**
      * Recovery beacons are emergency world fixtures, not free survival loot.
      * Let a player dismantle one, but consume it without vanilla drops; the
@@ -2191,6 +2209,23 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_ID_CLEAR_VERIFIED reusedTag=true staleUuidRemoved=true");
     }
 
+    private static void verifyInvalidSnapshotWarningRateLimit() {
+        State state=new State();
+        int warnings=0;
+        for(int attempt=0;attempt<1000;attempt++)
+            if(markInvalidSnapshotWarningLogged(state)) warnings++;
+        if(warnings!=1)
+            throw new IllegalStateException("CI invalid recovery snapshot warning rate limit regression: "+warnings);
+
+        State reloaded=State.load(state.save(new CompoundTag()));
+        if(markInvalidSnapshotWarningLogged(reloaded))
+            throw new IllegalStateException("CI invalid recovery snapshot warning flag was not persisted");
+        State legacy=State.load(new CompoundTag());
+        if(!markInvalidSnapshotWarningLogged(legacy))
+            throw new IllegalStateException("CI legacy recovery state must default to an unlogged warning");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_INVALID_SNAPSHOT_WARNING_RATE_LIMIT_VERIFIED attempts=1000 warnings=1 persisted=true legacyDefault=false");
+    }
+
     /** Overflow-safe 3D audience filter shared by recovery effects and titles. */
     private static boolean withinRecoveryAudience(BlockPos player, int anchorX, int anchorY, int anchorZ) {
         long dx=(long)player.getX()-anchorX;
@@ -2699,6 +2734,7 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_ANCHOR_BOUNDS_VERIFIED");
         verifyRecoveryBeaconVisualAnchorBounds();
         verifyNaturalBeaconIdPersistence();
+        verifyInvalidSnapshotWarningRateLimit();
         verifyRecoveryAudienceBounds();
         verifyRecoveryVortexContraction();
         verifyFractureColumnBounds();
@@ -3331,7 +3367,7 @@ public final class RiftController {
                 || !entry.contains("state",Tag.TAG_COMPOUND)
                 || !entry.getCompound("state").contains("Name",Tag.TAG_STRING)) {
                 s.skippedInvalid++;
-                LOGGER.warn("BLACK FREQUENCY: malformed recovery snapshot at index {}; no terrain edit",candidate);
+                warnInvalidSnapshotOnce(s,"malformed payload",candidate);
                 if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST MALFORMED_SNAPSHOT_SKIPPED index={}",candidate);
                 if(candidate!=s.restoreIndex) {
                     s.snapshots.set(candidate,s.snapshots.get(s.restoreIndex));
@@ -3351,7 +3387,7 @@ public final class RiftController {
             // even when their referenced chunk is unloaded; never load it.
             if(!isRestorableSnapshotPosition(pos,s,level)) {
                 s.skippedInvalid++;
-                LOGGER.warn("BLACK FREQUENCY: out-of-bounds recovery snapshot at {}; no terrain edit",pos);
+                warnInvalidSnapshotOnce(s,"outside fracture bounds",pos);
                 if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST OUT_OF_BOUNDS_SNAPSHOT_SKIPPED x={} y={} z={}",
                     pos.getX(),pos.getY(),pos.getZ());
                 if(candidate!=s.restoreIndex) {
@@ -3367,7 +3403,7 @@ public final class RiftController {
             // snapshot without loading its chunk or touching terrain.
             if(!level.getWorldBorder().isWithinBounds(pos)) {
                 s.skippedInvalid++;
-                LOGGER.warn("BLACK FREQUENCY: recovery snapshot outside world border at {}; no terrain edit",pos);
+                warnInvalidSnapshotOnce(s,"outside world border",pos);
                 if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BORDER_SNAPSHOT_SKIPPED x={} y={} z={}",
                     pos.getX(),pos.getY(),pos.getZ());
                 if(candidate!=s.restoreIndex) {
@@ -3388,7 +3424,7 @@ public final class RiftController {
                     level.holderLookup(Registries.BLOCK),entry.getCompound("state"));
                 if(duplicateOriginal.isAir()) {
                     s.skippedInvalid++;
-                    LOGGER.warn("BLACK FREQUENCY: duplicate recovery snapshot at {} resolves to air; no terrain edit",pos);
+                    warnInvalidSnapshotOnce(s,"duplicate resolves to air",pos);
                     if(CI_TEST && entry.getBoolean("ciDuplicateInvalid")) {
                         if(s.restoreTicks!=1)
                             throw new IllegalStateException("CI duplicate invalid snapshot was not quarantined in the failed-write tick");
@@ -3458,7 +3494,7 @@ public final class RiftController {
                     // Fractures never record air. An unknown block id decoded as
                     // air is corrupt data, not a successfully restored block.
                     s.skippedInvalid++;
-                    LOGGER.warn("BLACK FREQUENCY: recovery snapshot at {} resolves to air; no terrain edit",pos);
+                    warnInvalidSnapshotOnce(s,"block state resolves to air",pos);
                 }
             }
             // O(1) swap keeps all still-pending entries in [0,restoreIndex].
