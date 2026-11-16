@@ -135,7 +135,7 @@ public final class RiftClientState {
         private static final double GROUND_GLOW_WIDTH_SCALE=5.8D;
         private static final double GROUND_CORE_WIDTH_SCALE=1.65D;
         // Move both violet edge rails outward so the wider dark core remains visibly separated.
-        private static final double GROUND_EDGE_OFFSET_SCALE=2.25D;
+        private static final double GROUND_EDGE_OFFSET_SCALE=2.4D;
         // The render pulse is clamped to this interval for every wave/flicker phase.
         private static final double GROUND_MIN_HALF_WIDTH=.045D;
         private static final double GROUND_BASE_HALF_WIDTH=.048D;
@@ -143,7 +143,8 @@ public final class RiftClientState {
         private static final double GROUND_WIDTH_FLICKER=.004D;
         private static final double GROUND_MAX_HALF_WIDTH=
             GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE+GROUND_WIDTH_FLICKER;
-        private static final double GROUND_EDGE_HALF_WIDTH=.022D;
+        private static final double GROUND_EDGE_HALF_WIDTH=.026D;
+        private static final double GROUND_MIN_CORE_EDGE_GAP=.0075D;
         // Keep every ribbon above the sampled block outline while separating the dark core and violet lips vertically.
         private static final double GROUND_SURFACE_CLEARANCE=.035D;
         private static final double GROUND_CORE_RECESS=.020D;
@@ -405,13 +406,14 @@ public final class RiftClientState {
                 double minimumGlowHalfWidth=minimumHalfWidth*GROUND_GLOW_WIDTH_SCALE;
                 double minimumCoreHalfWidth=minimumHalfWidth*GROUND_CORE_WIDTH_SCALE;
                 double minimumEdgeInnerHalfWidth=minimumHalfWidth*GROUND_EDGE_OFFSET_SCALE-GROUND_EDGE_HALF_WIDTH;
+                double minimumCoreEdgeGap=minimumEdgeInnerHalfWidth-minimumCoreHalfWidth;
                 double maximumGlowHalfWidth=maximumHalfWidth*GROUND_GLOW_WIDTH_SCALE;
                 double maximumCoreHalfWidth=maximumHalfWidth*GROUND_CORE_WIDTH_SCALE;
                 double maximumEdgeInnerHalfWidth=maximumHalfWidth*GROUND_EDGE_OFFSET_SCALE-GROUND_EDGE_HALF_WIDTH;
                 if(Math.abs(GROUND_GLOW_WIDTH_SCALE-5.8D)>1.0E-9D
                     || Math.abs(GROUND_CORE_WIDTH_SCALE-1.65D)>1.0E-9D
-                    || Math.abs(GROUND_EDGE_OFFSET_SCALE-2.25D)>1.0E-9D
-                    || Math.abs(GROUND_EDGE_HALF_WIDTH-.022D)>1.0E-9D
+                    || Math.abs(GROUND_EDGE_OFFSET_SCALE-2.4D)>1.0E-9D
+                    || Math.abs(GROUND_EDGE_HALF_WIDTH-.026D)>1.0E-9D
                     || Math.abs(maximumHalfWidth-.068D)>1.0E-9D
                     || !Float.isFinite(GROUND_EDGE_RED) || !Float.isFinite(GROUND_EDGE_GREEN)
                     || !Float.isFinite(GROUND_EDGE_BLUE)
@@ -422,6 +424,7 @@ public final class RiftClientState {
                     || Math.abs(GROUND_EDGE_GREEN-.18F)>1.0E-6F
                     || Math.abs(GROUND_EDGE_BLUE-.82F)>1.0E-6F
                     || !(GROUND_EDGE_BLUE>GROUND_EDGE_RED && GROUND_EDGE_RED>GROUND_EDGE_GREEN)
+                    || !Double.isFinite(minimumCoreEdgeGap) || minimumCoreEdgeGap<GROUND_MIN_CORE_EDGE_GAP
                     || !(minimumCoreHalfWidth<minimumEdgeInnerHalfWidth
                         && minimumEdgeInnerHalfWidth<minimumGlowHalfWidth)
                     || !(maximumCoreHalfWidth<maximumEdgeInnerHalfWidth
@@ -432,6 +435,9 @@ public final class RiftClientState {
                     "BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale={} coreScale={} edgeOffsetScale={} edgeHalfWidth={} pulseMin={} pulseMax={} coreInsideEdgeBand=true",
                     GROUND_GLOW_WIDTH_SCALE,GROUND_CORE_WIDTH_SCALE,GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,
                     minimumHalfWidth,maximumHalfWidth);
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_GROUND_MESH_CORE_EDGE_GAP_VERIFIED min={} required={} valid=true",
+                    minimumCoreEdgeGap,GROUND_MIN_CORE_EDGE_GAP);
                 com.mojang.logging.LogUtils.getLogger().info(
                     "BLACK_FREQUENCY_GROUND_MESH_EDGE_PALETTE_VERIFIED red={} green={} blue={}",
                     GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE);

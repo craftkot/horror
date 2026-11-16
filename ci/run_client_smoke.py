@@ -1800,13 +1800,17 @@ def capture_test_world():
                     or "double tail=Math.min(1.0,(SEGMENTS_PER_ARM-boundedSample)/(double)GROUND_ENDPOINT_TAPER_SAMPLES);" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: ground fissure endpoint taper is not symmetric or bounded",flush=True)
                 return False
-            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=5.8 coreScale=1.65 edgeOffsetScale=2.25 edgeHalfWidth=0.022 pulseMin=0.045 pulseMax=0.068 coreInsideEdgeBand=true"
+            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=5.8 coreScale=1.65 edgeOffsetScale=2.4 edgeHalfWidth=0.026 pulseMin=0.045 pulseMax=0.068 coreInsideEdgeBand=true"
             if visual_profile_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: widened ground fissure visual profile self-check was not executed",flush=True)
                 return False
             if ("GROUND_GLOW_WIDTH_SCALE=5.8D;" not in camera_source
                     or "GROUND_CORE_WIDTH_SCALE=1.65D;" not in camera_source
-                    or "GROUND_EDGE_OFFSET_SCALE=2.25D;" not in camera_source):
+                    or "GROUND_EDGE_OFFSET_SCALE=2.4D;" not in camera_source
+                    or "GROUND_EDGE_HALF_WIDTH=.026D;" not in camera_source
+                    or "GROUND_MIN_CORE_EDGE_GAP=.0075D;" not in camera_source
+                    or "minimumCoreEdgeGap<GROUND_MIN_CORE_EDGE_GAP" not in camera_source
+                    or "BLACK_FREQUENCY_GROUND_MESH_CORE_EDGE_GAP_VERIFIED min={} required={} valid=true" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: wider ground fissure halo/core constants are not active",flush=True)
                 return False
             relief_profile_match=re.search(
