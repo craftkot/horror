@@ -14,6 +14,34 @@ FISSURE_PARTICLE_EMISSION_RE=re.compile(
     r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) accentDust=(\d+) violetDust=(\d+) edgeDust=(\d+) total=(\d+) heightmap=motion-blocking-no-leaves"
 )
 
+def fissure_target_view_score(target_y, player_y, horizontal_distance_squared):
+    values=(float(target_y),float(player_y),float(horizontal_distance_squared))
+    if not all(math.isfinite(value) for value in values) or values[2]<=0.0:
+        raise ValueError("fissure target view score requires finite coordinates and positive horizontal distance")
+    vertical_delta=values[0]-(values[1]+1.62)
+    return abs(math.degrees(math.atan2(abs(vertical_delta),math.sqrt(values[2])))-45.0)
+
+def verify_fissure_target_view_score_profile():
+    fixtures=(
+        (68.9125,70,7.272919386951269,0.11306757125331757),
+        (66.1,70,32.98037496303177,1.1335440888873975),
+    )
+    for target_y,player_y,horizontal_squared,expected in fixtures:
+        actual=fissure_target_view_score(target_y,player_y,horizontal_squared)
+        if not math.isclose(actual,expected,rel_tol=0.0,abs_tol=1.0E-6):
+            raise RuntimeError("BLACK FREQUENCY balanced fissure view-score fixture regression")
+    for invalid in (
+            (float("nan"),70,4.0),
+            (66.0,70,float("inf")),
+            (66.0,70,0.0),
+            (66.0,70,-1.0)):
+        try:
+            fissure_target_view_score(*invalid)
+        except ValueError:
+            continue
+        raise RuntimeError("BLACK FREQUENCY fissure view-score accepted invalid coordinates")
+    print("WORLD_CAPTURE: balanced fissure target score fixtures and invalid-input guards verified",flush=True)
+
 def parse_fissure_particle_emission(log_text):
     match=FISSURE_PARTICLE_EMISSION_RE.search(log_text)
     return tuple(int(value) for value in match.groups()) if match else None
@@ -277,6 +305,7 @@ def verify_restoration_particle_source():
     print("WORLD_CAPTURE: surface fissure uses a smaller cached accent than recovery cues",flush=True)
     print("WORLD_CAPTURE: restoration uses smaller cached violet Dust, bounded halo and dark-purple UI",flush=True)
 
+verify_fissure_target_view_score_profile()
 verify_restoration_particle_source()
 
 def valid_fissure_particle_emission(counts):
@@ -1301,6 +1330,7 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: perpendicular beacon pad is outside interaction reach or incomplete",
                           pad_axis,pad_distance_squared,pad_block_count,flush=True)
                     return
+                player_x,player_y,player_z=map(int,safe_pad.groups())
                 target_horizontal_squared=float(target.group(5))
                 target_view_score=float(target.group(6))
                 minimum_target_horizontal_squared=2.25*2.25
@@ -1311,9 +1341,8 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: fissure camera target is too close or outside the bounded standoff",
                           target_horizontal_squared,flush=True)
                     return
-                target_vertical_delta=float(target.group(2))-(player_y+1.62)
-                expected_view_score=abs(math.degrees(math.atan2(
-                    abs(target_vertical_delta),math.sqrt(target_horizontal_squared)))-45.0)
+                expected_view_score=fissure_target_view_score(
+                    float(target.group(2)),player_y,target_horizontal_squared)
                 if (not math.isfinite(target_view_score)
                         or target_view_score<0.0 or target_view_score>20.0
                         or not math.isclose(target_view_score,expected_view_score,
@@ -1333,7 +1362,6 @@ def capture_test_world():
                 # Aim at a server-verified emitted sample with an unobstructed
                 # ray from the safe pad, not at the anchor's possibly hidden cliff face.
                 target_x,target_y,target_z=map(float,target.groups()[:3])
-                player_x,player_y,player_z=map(int,safe_pad.groups())
                 current_orientation=read_client_camera_rotation()
                 if current_orientation is None:
                     terrain_capture_failed=True
