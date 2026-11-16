@@ -342,12 +342,107 @@ MC.mkdir(parents=True,exist_ok=True)
 
 def status(x): print("[install]",x,flush=True)
 cb={"setStatus":status,"setProgress":lambda x:None,"setMax":lambda x:None}
+def _is_transient_forge_download_error(error):
+    # urllib3 may wrap a broken socket write in ProtocolError/ChunkedEncodingError.
+    # Walk the exception chain so the retry policy does not hide unrelated failures.
+    pending=[error]
+    visited=set()
+    retryable_names={"ProtocolError","ChunkedEncodingError","ReadTimeoutError",
+                     "ConnectTimeoutError","NewConnectionError","MaxRetryError"}
+    while pending:
+        current=pending.pop()
+        if id(current) in visited:
+            continue
+        visited.add(id(current))
+        if isinstance(current,(BrokenPipeError,ConnectionResetError,TimeoutError)):
+            return True
+        if type(current).__name__ in retryable_names:
+            return True
+        for attribute in ("__cause__","__context__"):
+            nested=getattr(current,attribute,None)
+            if isinstance(nested,BaseException):
+                pending.append(nested)
+    return False
+
+
+def install_forge_with_retries(installer,version,directory,callback,sleep=time.sleep,max_attempts=3):
+    if max_attempts<1:
+        raise ValueError("max_attempts must be positive")
+    for attempt in range(1,max_attempts+1):
+        try:
+            installer(version,directory,callback=callback)
+            return
+        except Exception as error:
+            if not _is_transient_forge_download_error(error) or attempt==max_attempts:
+                raise
+            delay=min(8,2**attempt)
+            print(f"[install] transient Forge library download interruption; retry {attempt+1}/{max_attempts} in {delay}s: {type(error).__name__}",flush=True)
+            sleep(delay)
+
+
+def verify_forge_download_retry_policy():
+    class ProtocolError(Exception):
+        pass
+
+    def broken_pipe_error():
+        error=ProtocolError("connection broken during library stream")
+        error.__cause__=BrokenPipeError("simulated truncated artifact stream")
+        return error
+
+    calls=[]
+    delays=[]
+    def flaky_installer(version,directory,callback=None):
+        calls.append(version)
+        if len(calls)==1:
+            raise broken_pipe_error()
+
+    install_forge_with_retries(flaky_installer,"test-forge","test-minecraft",{},
+                               sleep=delays.append)
+    if calls!=["test-forge","test-forge"] or delays!=[2]:
+        raise RuntimeError("BLACK FREQUENCY Forge download retry regression")
+
+    calls.clear()
+    delays.clear()
+    def permanent_failure(version,directory,callback=None):
+        calls.append(version)
+        raise ValueError("invalid Forge metadata")
+
+    try:
+        install_forge_with_retries(permanent_failure,"test-forge","test-minecraft",{},
+                                   sleep=delays.append)
+    except ValueError:
+        pass
+    else:
+        raise RuntimeError("BLACK FREQUENCY Forge retry must preserve permanent errors")
+    if calls!=["test-forge"] or delays:
+        raise RuntimeError("BLACK FREQUENCY permanent Forge error was retried")
+
+    calls.clear()
+    delays.clear()
+    def persistent_network_failure(version,directory,callback=None):
+        calls.append(version)
+        raise ConnectionResetError("simulated network reset")
+
+    try:
+        install_forge_with_retries(persistent_network_failure,"test-forge","test-minecraft",{},
+                                   sleep=delays.append,max_attempts=3)
+    except ConnectionResetError:
+        pass
+    else:
+        raise RuntimeError("BLACK FREQUENCY Forge retry must stop after its attempt budget")
+    if calls!=["test-forge"]*3 or delays!=[2,4]:
+        raise RuntimeError("BLACK FREQUENCY Forge retry attempt budget regression")
+    print("WORLD_CAPTURE: Forge installer retries transient library-download interruptions only",flush=True)
+
+
+verify_forge_download_retry_policy()
+
 
 print("Installing Minecraft 1.20.1...",flush=True)
 minecraft_launcher_lib.install.install_minecraft_version("1.20.1",str(MC),callback=cb)
 forge="1.20.1-47.4.15"
 print("Installing Forge",forge,flush=True)
-minecraft_launcher_lib.forge.install_forge_version(forge,str(MC),callback=cb)
+install_forge_with_retries(minecraft_launcher_lib.forge.install_forge_version,forge,str(MC),cb)
 
 versions=minecraft_launcher_lib.utils.get_installed_versions(str(MC))
 ids=[v["id"] for v in versions]
