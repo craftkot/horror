@@ -184,7 +184,13 @@ void main(){
  // Fast, localized violet lightning travels along the three major tears.
  // Modulate existing glow masks rather than adding more Voronoi searches.
  float lightningWave=sin(longitude*43.-t*5.3+sin(longitude*9.+t*.7)*2.);
- float lightningFlash=pow(max(lightningWave,0.),12.);
+ // The lightning envelope is x^12 on [0,1]. Spell it as a multiply chain:
+ // this avoids a generic pow() in every fragment while preserving the curve.
+ float lightningBase=clamp(lightningWave,0.,1.);
+ float lightningSquared=lightningBase*lightningBase;
+ float lightningFourth=lightningSquared*lightningSquared;
+ float lightningEighth=lightningFourth*lightningFourth;
+ float lightningFlash=lightningEighth*lightningFourth;
  float lightning=lightningFlash*majorGlow*(1.-green);
  color+=edge*(spineGlow*.96+branchGlow*.78+upperGlow*.80+lowerGlow*.72+crownGlow*.74+zenithGlow*.62+filaments*.07)*pulse;
  color+=vec3(.19,.035,.34)*lightning*.55;
