@@ -804,13 +804,22 @@ public final class RiftController {
                 && n.getBoolean("invalidSnapshotWarningLogged");
             s.beaconPosPresent=n.contains("beaconPos",Tag.TAG_LONG);
             s.beaconPos=s.beaconPosPresent?n.getLong("beaconPos"):0L;
-            s.naturalBeaconPos=n.contains("naturalBeaconPos",Tag.TAG_LONG)?n.getLong("naturalBeaconPos"):Long.MIN_VALUE;
+            boolean naturalBeaconPositionPresent=n.contains("naturalBeaconPos");
+            boolean naturalBeaconPositionValid=n.contains("naturalBeaconPos",Tag.TAG_LONG);
+            boolean naturalBeaconIdentityPresent=n.contains("naturalBeaconId");
+            s.naturalBeaconPos=naturalBeaconPositionValid?n.getLong("naturalBeaconPos"):Long.MIN_VALUE;
             s.naturalBeaconId=s.naturalBeaconPos!=Long.MIN_VALUE && n.hasUUID("naturalBeaconId")?n.getUUID("naturalBeaconId"):null;
-            // A persisted coordinate without its ownership UUID is not a mod-owned objective.
-            // Retire the orphan during load instead of carrying an unusable anchor until a later tick.
+            // A coordinate without a valid ownership UUID is not a mod-owned objective.
+            // Retire it during load instead of carrying an unusable anchor until a later tick.
             if(s.naturalBeaconPos!=Long.MIN_VALUE && s.naturalBeaconId==null) {
                 LOGGER.warn("BLACK FREQUENCY: retired recovery beacon coordinate without ownership UUID");
                 s.naturalBeaconPos=Long.MIN_VALUE;
+                s.setDirty();
+            } else if((naturalBeaconPositionPresent && !naturalBeaconPositionValid)
+                    || (s.naturalBeaconPos==Long.MIN_VALUE && naturalBeaconIdentityPresent)) {
+                // Also persist removal of an orphan UUID or malformed coordinate. Without
+                // setDirty(), SavedData may never write this normalized pair back to disk.
+                LOGGER.warn("BLACK FREQUENCY: quarantined orphaned recovery beacon metadata");
                 s.setDirty();
             }
             ListTag saved=n.getList("snapshots",Tag.TAG_COMPOUND);
@@ -2209,7 +2218,14 @@ public final class RiftController {
         orphaned.putString("naturalBeaconPos","not-a-long");
         orphaned.putUUID("naturalBeaconId",UUID.fromString("8e6e7b2a-5b42-4c8f-9b17-6b5d6e7a8c91"));
         State orphanedLoaded=State.load(orphaned);
+        boolean orphanedMarkedDirty=orphanedLoaded.isDirty();
         CompoundTag normalizedOrphan=orphanedLoaded.save(new CompoundTag());
+
+        CompoundTag missingPositionWithUuid=new CompoundTag();
+        missingPositionWithUuid.putUUID("naturalBeaconId",UUID.fromString("4d0f1a6b-9c32-4e85-b7a1-6f2c8d0e3a59"));
+        State missingPositionWithUuidLoaded=State.load(missingPositionWithUuid);
+        boolean missingPositionMarkedDirty=missingPositionWithUuidLoaded.isDirty();
+        CompoundTag normalizedMissingPositionWithUuid=missingPositionWithUuidLoaded.save(new CompoundTag());
 
         CompoundTag missingOwner=new CompoundTag();
         missingOwner.putLong("naturalBeaconPos",new BlockPos(5,64,9).asLong());
@@ -2228,6 +2244,10 @@ public final class RiftController {
         if(orphanedLoaded.naturalBeaconPos!=Long.MIN_VALUE
             || orphanedLoaded.naturalBeaconId!=null
             || normalizedOrphan.hasUUID("naturalBeaconId")
+            || !orphanedMarkedDirty
+            || !missingPositionMarkedDirty
+            || normalizedMissingPositionWithUuid.hasUUID("naturalBeaconId")
+            || missingPositionWithUuidLoaded.naturalBeaconPos!=Long.MIN_VALUE
             || missingOwnerLoaded.naturalBeaconPos!=Long.MIN_VALUE
             || missingOwnerLoaded.naturalBeaconId!=null
             || normalizedMissingOwner.getLong("naturalBeaconPos")!=Long.MIN_VALUE
@@ -2237,7 +2257,7 @@ public final class RiftController {
             || loadedZero.naturalBeaconPos!=BlockPos.ZERO.asLong()
             || !zeroPosition.naturalBeaconId.equals(loadedZero.naturalBeaconId))
             throw new IllegalStateException("CI natural beacon UUID/position pair integrity regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_UUID_POSITION_PAIR_VERIFIED orphanRejected=true zeroPositionPreserved=true missingUuidRejected=true wrongTypeUuidRejected=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_UUID_POSITION_PAIR_VERIFIED orphanRejected=true zeroPositionPreserved=true missingUuidRejected=true wrongTypeUuidRejected=true orphanUuidQuarantined=true malformedCoordinateDirty=true missingCoordinateDirty=true");
 
         // SavedData normally supplies a fresh tag, but keep save() correct when
         // a caller reuses one: a cleared objective must not retain an old owner UUID.
