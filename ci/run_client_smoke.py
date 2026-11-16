@@ -2091,6 +2091,12 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: ground mesh did not verify its cliff-discontinuity guard",
                       flush=True)
                 return False
+            if ("BLACK_FREQUENCY_GROUND_MESH_SINGLE_STEP_BRIDGE_VERIFIED "
+                    "maxStep=1.0 spanSamples=2 plateau=true bump=true repeatedStepRejected=true "
+                    "cliffGuard=true invalidRejected=true" not in log_after):
+                print("WORLD_CAPTURE_FAIL: isolated one-block ground-step bridge policy was not verified",
+                      flush=True)
+                return False
             grade_guard_marker=(
                 "BLACK_FREQUENCY_GROUND_MESH_GRADE_GUARD_VERIFIED "
                 "maxGrade=2.5 oneBlockRiseRejected=true snowAccepted=true cliffCapProfile=true"
@@ -2103,15 +2109,21 @@ def capture_test_world():
                 return False
             grade_stats=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_GRADE_STATS maxGrade=([-+0-9.eE]+) "
-                r"cliffCaps=(\d+) unsupportedGapCaps=(\d+) steepStepsSkipped=(\d+)",
+                r"cliffCaps=(\d+) unsupportedGapCaps=(\d+) singleStepBridges=(\d+) steepStepsSkipped=(\d+)",
                 log_after)
             if (not grade_stats
                     or abs(float(grade_stats.group(1))-2.5)>1.0E-9
-                    or int(grade_stats.group(2))>int(grade_stats.group(4))):
-                print("WORLD_CAPTURE_FAIL: cliff-end taper accounting is invalid",flush=True)
+                    or int(grade_stats.group(2))>int(grade_stats.group(5))
+                    or int(grade_stats.group(4))+int(grade_stats.group(5))>GROUND_MESH_SAMPLES):
+                print("WORLD_CAPTURE_FAIL: cliff-end taper or single-step bridge accounting is invalid",flush=True)
                 return False
             if ("private static final double MAX_GROUND_SEGMENT_GRADE=2.5D;" not in camera_source
                     or "isContinuousGroundStep(previous.y(),current.y(),length)" not in camera_source
+                    or "private static boolean canStartSingleGroundStepBridge" not in camera_source
+                    or "private static boolean canBridgeSingleGroundStep" not in camera_source
+                    or "canStartSingleGroundStepBridge(previous.y(),current.y(),length)" not in build_source.group(0)
+                    or "canBridgeSingleGroundStep(previous.y(),pendingStep.y(),current.y()," not in build_source.group(0)
+                    or "pendingStep=null;" not in build_source.group(0)
                     or "capLastGroundSegmentAtGap" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: renderer is not using slope-aware continuity and gap caps",flush=True)
                 return False
