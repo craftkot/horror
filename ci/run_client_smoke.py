@@ -1235,7 +1235,7 @@ def capture_test_world():
                     logs)
                 particles=parse_fissure_particle_emission(logs)
                 target=re.search(
-                    r"BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x=([-+0-9.eE]+) y=([-+0-9.eE]+) z=([-+0-9.eE]+) distanceSquared=([-+0-9.eE]+) horizontalDistanceSquared=([-+0-9.eE]+) selection=nearest",
+                    r"BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x=([-+0-9.eE]+) y=([-+0-9.eE]+) z=([-+0-9.eE]+) distanceSquared=([-+0-9.eE]+) horizontalDistanceSquared=([-+0-9.eE]+) viewScore=([-+0-9.eE]+) selection=balanced-view",
                     logs)
                 safe_pad=re.search(
                     r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
@@ -1302,6 +1302,7 @@ def capture_test_world():
                           pad_axis,pad_distance_squared,pad_block_count,flush=True)
                     return
                 target_horizontal_squared=float(target.group(5))
+                target_view_score=float(target.group(6))
                 minimum_target_horizontal_squared=2.25*2.25
                 if (not math.isfinite(target_horizontal_squared)
                         or target_horizontal_squared<minimum_target_horizontal_squared-1.0E-9
@@ -1309,6 +1310,17 @@ def capture_test_world():
                     terrain_capture_failed=True
                     print("WORLD_CAPTURE_FAIL: fissure camera target is too close or outside the bounded standoff",
                           target_horizontal_squared,flush=True)
+                    return
+                target_vertical_delta=float(target.group(2))-(player_y+1.62)
+                expected_view_score=abs(math.degrees(math.atan2(
+                    abs(target_vertical_delta),math.sqrt(target_horizontal_squared)))-45.0)
+                if (not math.isfinite(target_view_score)
+                        or target_view_score<0.0 or target_view_score>20.0
+                        or not math.isclose(target_view_score,expected_view_score,
+                                            rel_tol=0.0,abs_tol=1.0E-6)):
+                    terrain_capture_failed=True
+                    print("WORLD_CAPTURE_FAIL: fissure target is not a bounded 45-degree camera candidate",
+                          target_view_score,expected_view_score,flush=True)
                     return
                 terrain_capture_attempted=True
                 if samples<32:
@@ -2270,7 +2282,7 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_DUST_PULSE_PROFILE_VERIFIED min=0.65 low=0.75 base=0.85 high=0.95 max=1.05 variants=5" not in log_after:
                 print("WORLD_CAPTURE_FAIL: cached fissure dust pulse profile was not verified",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=nearest ties=stable invalidRejected=true" not in log_after:
+            if "BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=balanced-view targetPitch=45 ties=stable invalidRejected=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: nearest visible fissure target policy was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_STRUCTURAL_SUPPORT_FILTER_VERIFIED" not in log_after:
