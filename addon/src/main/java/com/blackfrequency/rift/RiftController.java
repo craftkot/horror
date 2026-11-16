@@ -866,16 +866,21 @@ public final class RiftController {
             // the persisted snapshot list. Never invent missing terrain data.
             if(s.restoring) {
                 int last=s.snapshots.size()-1;
+                boolean restoreCursorRepaired=false;
                 if(s.restoreIndex < -1 || s.restoreIndex > last) {
                     LOGGER.warn("BLACK FREQUENCY: invalid restoreIndex={} for {} snapshots; clamping",
                         s.restoreIndex,s.snapshots.size());
                     s.restoreIndex=last;
+                    restoreCursorRepaired=true;
                 }
                 if(s.restoreScan < -1 || s.restoreScan > s.restoreIndex) {
                     LOGGER.warn("BLACK FREQUENCY: invalid restoreScan={}; resetting to restoreIndex={}",
                         s.restoreScan,s.restoreIndex);
                     s.restoreScan=s.restoreIndex;
+                    restoreCursorRepaired=true;
                 }
+                // Persist cursor repairs even if no later restoration tick runs.
+                if(restoreCursorRepaired) s.setDirty();
             }
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST STATE_LOADED elapsed={} edits={} restored={} restoring={} snapshots={}",s.elapsed,s.edits,s.restored,s.restoring,s.snapshots.size());
             return s;
@@ -2274,6 +2279,38 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_ID_CLEAR_VERIFIED reusedTag=true staleUuidRemoved=true");
     }
 
+    private static void verifyRestoreCursorRepairPersistence() {
+        CompoundTag invalidIndex=new CompoundTag();
+        invalidIndex.putBoolean("restoring",true);
+        invalidIndex.putInt("restoreIndex",0);
+        invalidIndex.putInt("restoreScan",0);
+        State repairedIndex=State.load(invalidIndex);
+        CompoundTag savedIndex=repairedIndex.save(new CompoundTag());
+        State reloadedIndex=State.load(savedIndex);
+
+        CompoundTag invalidScan=new CompoundTag();
+        invalidScan.putBoolean("restoring",true);
+        invalidScan.putInt("restoreIndex",-1);
+        invalidScan.putInt("restoreScan",0);
+        State repairedScan=State.load(invalidScan);
+
+        CompoundTag validCursor=new CompoundTag();
+        validCursor.putBoolean("restoring",true);
+        validCursor.putInt("restoreIndex",-1);
+        validCursor.putInt("restoreScan",-1);
+        State untouched=State.load(validCursor);
+
+        if(repairedIndex.restoreIndex!=-1 || repairedIndex.restoreScan!=-1
+            || !repairedIndex.isDirty()
+            || reloadedIndex.restoreIndex!=-1 || reloadedIndex.restoreScan!=-1
+            || repairedScan.restoreIndex!=-1 || repairedScan.restoreScan!=-1
+            || !repairedScan.isDirty()
+            || untouched.restoreIndex!=-1 || untouched.restoreScan!=-1
+            || untouched.isDirty())
+            throw new IllegalStateException("CI recovery cursor repair persistence regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_CURSOR_REPAIR_PERSISTENCE_VERIFIED indexClamped=true scanClamped=true dirty=true roundTrip=true validUnchanged=true");
+    }
+
     private static void verifyInvalidSnapshotWarningRateLimit() {
         State state=new State();
         int warnings=0;
@@ -2804,6 +2841,7 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_ANCHOR_BOUNDS_VERIFIED");
         verifyRecoveryBeaconVisualAnchorBounds();
         verifyNaturalBeaconIdPersistence();
+        verifyRestoreCursorRepairPersistence();
         verifyInvalidSnapshotWarningRateLimit();
         verifyRecoveryAudienceBounds();
         verifyRecoveryVortexContraction();
