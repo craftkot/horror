@@ -1871,14 +1871,14 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: widened ground fissure visual profile self-check was not executed",flush=True)
                 return False
             cliff_taper_match=re.search(
-                r"BLACK_FREQUENCY_GROUND_MESH_CLIFF_TAPER_PROFILE_VERIFIED taper=([-+0-9.eE]+) previousTaper=0.25 narrower=true invalidInputsZero=true",
+                r"BLACK_FREQUENCY_GROUND_MESH_CLIFF_TAPER_PROFILE_VERIFIED taper=([-+0-9.eE]+) previousTaper=0.25 wider=true invalidInputsZero=true",
                 final_log)
             if (not cliff_taper_match
-                    or not math.isclose(float(cliff_taper_match.group(1)),.14,rel_tol=0.0,abs_tol=1.0e-9)
-                    or "CLIFF_BREAK_TAPER=.14D;" not in camera_source
+                    or not math.isclose(float(cliff_taper_match.group(1)),.22,rel_tol=0.0,abs_tol=1.0e-9)
+                    or "CLIFF_BREAK_TAPER=.22D;" not in camera_source
                     or "cliffBreakTaper(Double.POSITIVE_INFINITY)==0.0D" not in camera_source
                     or "cliffBreakTaper(Double.NEGATIVE_INFINITY)==0.0D" not in camera_source):
-                print("WORLD_CAPTURE_FAIL: pointed cliff-end taper or non-finite input guards were not verified",flush=True)
+                print("WORLD_CAPTURE_FAIL: visible cliff-end taper or non-finite input guards were not verified",flush=True)
                 return False
             if ("GROUND_GLOW_WIDTH_SCALE=5.8D;" not in camera_source
                     or "GROUND_CORE_WIDTH_SCALE=1.65D;" not in camera_source
