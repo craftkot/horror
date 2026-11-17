@@ -131,7 +131,7 @@ def verify_restoration_particle_source():
             or "Math.sin(px*.115+Math.sin(s.finaleTicks*.011)*1.8)" in source):
         raise RuntimeError("BLACK FREQUENCY gravity consumers must share the bounded multi-scale anomaly field")
     field_start=source.find("private static double gravityAnomalyField(")
-    field_end=source.find("\\n    private static void verifyGravityAnomalyField",field_start)
+    field_end=source.find("\n    private static void verifyGravityAnomalyField",field_start)
     field_body=source[field_start:field_end] if field_start>=0 and field_end>field_start else ""
     if not field_body or any(term in field_body for term in ("time*.008D","time*.009D","time*.021D","time*.031D")):
         raise RuntimeError("BLACK FREQUENCY gravity field must reuse all cached time offsets")
