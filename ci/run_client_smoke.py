@@ -412,6 +412,10 @@ def verify_real_beacon_break_source():
             or "getEntitiesOfClass(" not in verify
             or "countItem(net.minecraft.world.item.Items.BEACON)" not in verify
             or "loadedOnly=true" not in verify
+            or "boolean survivalMining=!player.isCreative() && !player.getAbilities().instabuild;" not in verify
+            or "distanceToSqr(" not in verify
+            or "CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE" not in verify
+            or "survival=true withinReach=true distanceSquared={}" not in verify
             or probe.count("new net.minecraftforge.event.level.BlockEvent.BreakEvent(")!=1
             or "testEvent" in probe
             or "POST_RESTORE_BEACON_BREAK_CONSUMED" in probe
@@ -1444,6 +1448,12 @@ def capture_test_world():
                 delta=current[marker_offset:]
                 if ("BLACK_FREQUENCY_TEST NATURAL_BEACON_MINED_NO_DROP" in delta
                         and "BLACK_FREQUENCY_TEST REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED" in delta):
+                    proof=re.search(
+                        r"BLACK_FREQUENCY_TEST REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED "
+                        r"survival=true withinReach=true distanceSquared=([0-9.]+)",delta)
+                    if not proof or float(proof.group(1))>4.5*4.5:
+                        print("WORLD_CAPTURE_FAIL: beacon mining was not confirmed in survival within 4.5 blocks",flush=True)
+                        return False
                     observed=True
                     break
                 time.sleep(.1)
