@@ -63,7 +63,11 @@ def verify_beacon_aura_source():
             or "level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)" not in client
             or "Blocks.BEACON" not in client
             or "VertexFormat.Mode.LINES" not in client
-            or "BEACON_AURA_RENDERED cages=2 edges=24 loadedOnly=true" not in client
+            or "BEACON_AURA_RENDERED cages=2 edges=24 rotation=counterphase loadedOnly=true" not in client
+            or "BEACON_AURA_ROTATION_PROFILE_VERIFIED periodTicks=1200 outerTurns=1 innerTurns=-2 wrapContinuous=true partialBounded=true" not in client
+            or "BEACON_AURA_ROTATION_PERIOD=1200L" not in client
+            or "beaconAuraRotationAngle(level.getGameTime(),partial,1)" not in client
+            or "beaconAuraRotationAngle(level.getGameTime(),partial,-2)" not in client
             or "RiftClientState.renderBeaconAura(event);" not in sky
             or "s.x,s.z,s.naturalBeaconPos" not in controller):
         raise RuntimeError("BLACK FREQUENCY loaded-only violet beacon aura source contract is incomplete")
@@ -2546,8 +2550,11 @@ def capture_test_world():
                 if "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon was not activated by actual player right-click",flush=True)
                     return False
-                if "BLACK_FREQUENCY_TEST BEACON_AURA_RENDERED cages=2 edges=24 loadedOnly=true" not in log_after:
-                    print("WORLD_CAPTURE_FAIL: violet physical beacon containment aura was not drawn from the loaded beacon block",flush=True)
+                if "BLACK_FREQUENCY_TEST BEACON_AURA_ROTATION_PROFILE_VERIFIED periodTicks=1200 outerTurns=1 innerTurns=-2 wrapContinuous=true partialBounded=true" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: beacon aura rotation profile was not verified",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST BEACON_AURA_RENDERED cages=2 edges=24 rotation=counterphase loadedOnly=true" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: rotating violet physical beacon containment aura was not drawn from the loaded beacon block",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST BEACON_START_ACTIONBAR_ONLY" not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon activation did not use the non-obstructive action bar",flush=True)
