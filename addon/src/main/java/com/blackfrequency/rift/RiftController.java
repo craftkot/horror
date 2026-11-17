@@ -427,7 +427,8 @@ public final class RiftController {
 
     /**
      * One bounded field drives both player impulses and their visible cues.
-     * A low-amplitude cross-wave breaks the old regular bands without changing impulse caps.
+     * A diagonal, faster cross-wave shears the broad lift/sink bands into smaller
+     * drifting pockets without changing the existing impulse caps.
      */
     private static double gravityAnomalyField(double x,double z,int ticks) {
         if(!Double.isFinite(x) || !Double.isFinite(z)
@@ -436,7 +437,8 @@ public final class RiftController {
         double base=Math.sin(x*.115D+Math.sin(time*.011D)*1.8D)
             *Math.cos(z*.125D-time*.008D);
         double cross=Math.sin((x+z)*.047D+Math.sin(time*.013D)*.9D-time*.009D);
-        double field=base+.12D*cross;
+        double turbulence=Math.sin((x-z)*.083D+Math.sin(time*.017D)*1.3D+time*.021D);
+        double field=base+.12D*cross+.06D*turbulence;
         return Math.max(-1.0D,Math.min(1.0D,field));
     }
 
@@ -455,6 +457,33 @@ public final class RiftController {
         if(!(bounded && deterministic && pockets && drifting && invalidRejected))
             throw new IllegalStateException("CI gravity anomaly field regression");
         LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_TURBULENCE_VERIFIED baseWeight=1.0 crossAmplitude=0.12 bounded=true deterministic=true liftPocket=true sinkPocket=true timeDrift=true invalidRejected=true");
+
+        double[] coordinates={-48.0D,-24.0D,0.0D,24.0D,48.0D};
+        int[] ticks={86,240,1200,6000};
+        int samples=0;
+        for(double sampleX:coordinates)
+            for(double sampleZ:coordinates)
+                for(int sampleTick:ticks) {
+                    double sample=gravityAnomalyField(sampleX,sampleZ,sampleTick);
+                    if(!Double.isFinite(sample) || sample< -1.0D || sample>1.0D
+                        || Math.abs(sample-gravityAnomalyField(sampleX,sampleZ,sampleTick))>1.0E-12D)
+                        throw new IllegalStateException("CI multi-scale gravity anomaly grid regression");
+                    samples++;
+                }
+        double sampleX=-17.5D,sampleZ=20.5D;
+        double sampleTime=85.0D;
+        double expectedBase=Math.sin(sampleX*.115D+Math.sin(sampleTime*.011D)*1.8D)
+            *Math.cos(sampleZ*.125D-sampleTime*.008D);
+        double expectedCross=Math.sin((sampleX+sampleZ)*.047D
+            +Math.sin(sampleTime*.013D)*.9D-sampleTime*.009D);
+        double expectedTurbulence=Math.sin((sampleX-sampleZ)*.083D
+            +Math.sin(sampleTime*.017D)*1.3D+sampleTime*.021D);
+        double expected=Math.max(-1.0D,Math.min(1.0D,
+            expectedBase+.12D*expectedCross+.06D*expectedTurbulence));
+        if(samples!=100
+            || Math.abs(gravityAnomalyField(sampleX,sampleZ,85)-expected)>1.0E-12D)
+            throw new IllegalStateException("CI multi-scale gravity anomaly composition regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_MULTI_SCALE_VERIFIED turbulenceAmplitude=0.06 samples={} deterministic=true bounded=true",samples);
     }
 
     private static void verifyRiftGravityEligibility() {

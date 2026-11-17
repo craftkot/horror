@@ -53,9 +53,11 @@ def verify_restoration_particle_source():
     if ("double zone=gravityAnomalyField(testX,testZ,tick);" not in source
             or "double zone=gravityAnomalyField(px,pz,s.finaleTicks);" not in source
             or "double zone=gravityAnomalyField(player.getX(),player.getZ(),s.finaleTicks);" not in source
+            or "double turbulence=Math.sin((x-z)*.083D+Math.sin(time*.017D)*1.3D+time*.021D);" not in source
+            or "double field=base+.12D*cross+.06D*turbulence;" not in source
             or "Math.sin(player.getX()*.115" in source
             or "Math.sin(px*.115+Math.sin(s.finaleTicks*.011)*1.8)" in source):
-        raise RuntimeError("BLACK FREQUENCY player impulses, passenger probe and particles must share one gravity anomaly field")
+        raise RuntimeError("BLACK FREQUENCY gravity consumers must share the bounded multi-scale anomaly field")
     client_source=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"client"/"RiftClientState.java").read_text(encoding="utf-8")
     fissure_start=source.find("private static FissureEmission emitSurfaceFissure(")
     fissure_end=source.find("\n    private static",fissure_start+1)
@@ -2207,6 +2209,10 @@ def capture_test_world():
             anomaly_field_marker="BLACK_FREQUENCY_TEST ANOMALY_FIELD_TURBULENCE_VERIFIED baseWeight=1.0 crossAmplitude=0.12 bounded=true deterministic=true liftPocket=true sinkPocket=true timeDrift=true invalidRejected=true"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and anomaly_field_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: shared bounded gravity anomaly field was not verified",flush=True)
+                return False
+            multi_scale_marker="BLACK_FREQUENCY_TEST ANOMALY_FIELD_MULTI_SCALE_VERIFIED turbulenceAmplitude=0.06 samples=100 deterministic=true bounded=true"
+            if os.environ.get("BF_TEST_RESTORATION")=="1" and multi_scale_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: multi-scale gravity anomaly field was not verified",flush=True)
                 return False
             ui_palette_marker="BLACK_FREQUENCY_TEST RECOVERY_UI_PALETTE_VERIFIED rgb=5714c7 legacyFormatting=false"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and ui_palette_marker not in log_after:
