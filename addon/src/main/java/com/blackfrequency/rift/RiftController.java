@@ -1294,8 +1294,11 @@ public final class RiftController {
             net.minecraft.world.level.ClipContext.Block.OUTLINE,
             net.minecraft.world.level.ClipContext.Fluid.NONE,
             player));
-        return hit.getType()==net.minecraft.world.phys.HitResult.Type.BLOCK
-            && hit.getBlockPos().equals(beacon);
+        if(hit.getType()!=net.minecraft.world.phys.HitResult.Type.BLOCK
+            || !hit.getBlockPos().equals(beacon)) return false;
+        // A clear beacon ray is not enough: reject a side whose camera is boxed in
+        // by nearby village terrain and cannot see any actual loaded fissure sample.
+        return findVisibleFissureTarget(level,s,player,eye)!=null;
     }
 
     private static int chooseCiBeaconPadSign(ServerLevel level,net.minecraft.server.level.ServerPlayer player,State s,BlockPos beacon,
@@ -1310,7 +1313,7 @@ public final class RiftController {
             || selectCiBeaconPadSign(false,true)!=-1
             || selectCiBeaconPadSign(false,false)!=0)
             throw new IllegalStateException("CI beacon pad clear-side selection regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_APPROACH_SIDE_SELECTION_VERIFIED positivePreferred=true reverseFallback=true blockedRejected=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_APPROACH_SIDE_SELECTION_VERIFIED positivePreferred=true reverseFallback=true blockedRejected=true fissureVisibilityRequired=true");
     }
 
     private static double ciBeaconPadDistanceSquared() {
@@ -1497,8 +1500,13 @@ public final class RiftController {
      */
     private static FissureTarget findVisibleFissureTarget(ServerLevel level,State s,
             net.minecraft.server.level.ServerPlayer viewer) {
-        if(viewer==null || !viewer.isAlive() || viewer.isRemoved()) return null;
-        net.minecraft.world.phys.Vec3 eye=viewer.getEyePosition();
+        if(viewer==null) return null;
+        return findVisibleFissureTarget(level,s,viewer,viewer.getEyePosition());
+    }
+
+    private static FissureTarget findVisibleFissureTarget(ServerLevel level,State s,
+            net.minecraft.server.level.ServerPlayer viewer,net.minecraft.world.phys.Vec3 eye) {
+        if(viewer==null || !viewer.isAlive() || viewer.isRemoved() || eye==null) return null;
         BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();
         FissureTarget best=null;
         for(int arm=0;arm<FISSURE_ARM_COUNT;arm++) {
@@ -4227,7 +4235,7 @@ public final class RiftController {
                             padAlongX?"X":"Z");
                         return;
                     }
-                    LOGGER.info("BLACK_FREQUENCY_TEST BEACON_APPROACH_SIDE_SELECTED axis={} sign={} sightlineClear=true loadedOnly=true",
+                    LOGGER.info("BLACK_FREQUENCY_TEST BEACON_APPROACH_SIDE_SELECTED axis={} sign={} sightlineClear=true fissureVisible=true loadedOnly=true",
                         padAlongX?"X":"Z",padSign);
                     int padDirectionX=padAlongX?padSign:0;
                     int padDirectionZ=padAlongX?0:padSign;
