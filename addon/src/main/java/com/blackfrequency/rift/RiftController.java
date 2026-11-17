@@ -59,6 +59,8 @@ public final class RiftController {
     // CI-only deferred check after an actual player break; never persisted or force-loaded.
     private static BlockPos ciPendingNaturalBeaconBreakVerificationPos;
     private static UUID ciPendingNaturalBeaconBreakVerificationPlayer;
+    private static boolean ciPendingNaturalBeaconBreakVerificationSurvival;
+    private static double ciPendingNaturalBeaconBreakVerificationDistanceSquared=Double.NaN;
     private static final long DAY = 24000L;
     // Only for disposable CI worlds. Never increases Minecraft's global tick rate.
     private static final long TEST_STEP = Boolean.getBoolean("blackfrequency.ciTestMode")
@@ -1063,8 +1065,13 @@ public final class RiftController {
             s.naturalBeaconId=null;
             s.setDirty();
             if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPostRestoreBeaconBreakTest")) {
+                var miner=event.getPlayer();
                 ciPendingNaturalBeaconBreakVerificationPos=pos.immutable();
-                ciPendingNaturalBeaconBreakVerificationPlayer=event.getPlayer().getUUID();
+                ciPendingNaturalBeaconBreakVerificationPlayer=miner.getUUID();
+                ciPendingNaturalBeaconBreakVerificationSurvival=!miner.isCreative()
+                    && !miner.getAbilities().instabuild;
+                ciPendingNaturalBeaconBreakVerificationDistanceSquared=
+                    ciEyeDistanceSquaredToBlock(miner.getEyePosition(),pos);
             }
             event.getPlayer().displayClientMessage(recoveryViolet(
                 s.restoring || s.restored
@@ -3933,6 +3940,18 @@ public final class RiftController {
         s.setDirty();
     }
 
+    private static double ciEyeDistanceSquaredToBlock(net.minecraft.world.phys.Vec3 eye,BlockPos pos) {
+        if(eye==null || !Double.isFinite(eye.x) || !Double.isFinite(eye.y) || !Double.isFinite(eye.z))
+            return Double.NaN;
+        double minX=pos.getX();
+        double minY=pos.getY();
+        double minZ=pos.getZ();
+        double closestX=Math.max(minX,Math.min(eye.x,minX+1.0D));
+        double closestY=Math.max(minY,Math.min(eye.y,minY+1.0D));
+        double closestZ=Math.max(minZ,Math.min(eye.z,minZ+1.0D));
+        return eye.distanceToSqr(closestX,closestY,closestZ);
+    }
+
     private static void verifyCiNaturalBeaconBreakNoDrop(ServerLevel level,State s) {
         if(!CI_TEST || ciPendingNaturalBeaconBreakVerificationPos==null) return;
         BlockPos pos=ciPendingNaturalBeaconBreakVerificationPos;
@@ -3944,11 +3963,14 @@ public final class RiftController {
             .findFirst().orElse(null);
         if(player==null || !player.isAlive() || player.isRemoved() || player.isSpectator())
             throw new IllegalStateException("CI beacon miner is unavailable during no-drop verification");
-        boolean survivalMining=!player.isCreative() && !player.getAbilities().instabuild;
-        double distanceSquared=player.distanceToSqr(
-            pos.getX()+.5D,pos.getY()+.5D,pos.getZ()+.5D);
+        boolean survivalMining=ciPendingNaturalBeaconBreakVerificationSurvival;
+        double distanceSquared=ciPendingNaturalBeaconBreakVerificationDistanceSquared;
         boolean withinReach=Double.isFinite(distanceSquared)
             && distanceSquared<=CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE;
+        double distanceAfterBreakSquared=player.distanceToSqr(
+            pos.getX()+.5D,pos.getY()+.5D,pos.getZ()+.5D);
+        if(!Double.isFinite(distanceAfterBreakSquared))
+            throw new IllegalStateException("CI beacon miner position became non-finite after break");
         if(!survivalMining || !withinReach)
             throw new IllegalStateException("CI beacon must be mined in survival within normal interaction reach");
         int inventoryBeacons=player.getInventory().countItem(net.minecraft.world.item.Items.BEACON);
@@ -3962,10 +3984,12 @@ public final class RiftController {
         boolean ownershipCleared=s.naturalBeaconPos==Long.MIN_VALUE && s.naturalBeaconId==null;
         if(inventoryBeacons!=0 || nearbyBeaconDrops!=0 || !blockAir || !ownershipCleared)
             throw new IllegalStateException("CI real beacon break produced a drop or retained its objective");
-        LOGGER.info("BLACK_FREQUENCY_TEST REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED survival=true withinReach=true distanceSquared={} inventoryBeacons={} nearbyDrops={} blockAir=true ownershipCleared=true loadedOnly=true",
+        LOGGER.info("BLACK_FREQUENCY_TEST REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED survival=true withinReach=true distanceSquared={} capturedAtBreak=true inventoryBeacons={} nearbyDrops={} blockAir=true ownershipCleared=true loadedOnly=true",
             distanceSquared,inventoryBeacons,nearbyBeaconDrops);
         ciPendingNaturalBeaconBreakVerificationPos=null;
         ciPendingNaturalBeaconBreakVerificationPlayer=null;
+        ciPendingNaturalBeaconBreakVerificationSurvival=false;
+        ciPendingNaturalBeaconBreakVerificationDistanceSquared=Double.NaN;
     }
 
     @SubscribeEvent
