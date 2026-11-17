@@ -87,10 +87,10 @@ public final class RiftController {
         IDLE_BEACON_PARTICLE_PACKET_RANGE_SQR;
     // Recovery effects use cached blue-violet Dust and bounded, deterministic pulses.
     private static final int RESTORE_RING_INTERVAL_TICKS = 20;
-    // Completion titles use explicit timings instead of inheriting the finale's title clock.
-    private static final int RESTORE_TITLE_FADE_IN_TICKS=10;
-    private static final int RESTORE_TITLE_STAY_TICKS=80;
-    private static final int RESTORE_TITLE_FADE_OUT_TICKS=20;
+    // Keep the success title brief so it marks recovery without hiding the physical beacon.
+    private static final int RESTORE_TITLE_FADE_IN_TICKS=8;
+    private static final int RESTORE_TITLE_STAY_TICKS=32;
+    private static final int RESTORE_TITLE_FADE_OUT_TICKS=12;
     private static final String RESTORE_SUCCESS_TITLE="МИР СПАСЁН";
     private static final String RESTORE_PARTIAL_TITLE="ЕСТЬ ПРОПУСКИ";
     private static final int RESTORE_RING_PARTICLE_COUNT = 24;
@@ -2930,9 +2930,9 @@ public final class RiftController {
             && !shouldEmitRestoreAudiencePulse(-RESTORE_RING_INTERVAL_TICKS)
             && !shouldEmitRestoreBlockCue(0)
             && !shouldEmitRestoreBlockCue(-RESTORE_BLOCK_CUE_INTERVAL);
-        boolean completionTitleTiming=RESTORE_TITLE_FADE_IN_TICKS==10
-            && RESTORE_TITLE_STAY_TICKS==80 && RESTORE_TITLE_FADE_OUT_TICKS==20
-            && RESTORE_TITLE_FADE_IN_TICKS+RESTORE_TITLE_STAY_TICKS+RESTORE_TITLE_FADE_OUT_TICKS<=200;
+        boolean completionTitleTiming=RESTORE_TITLE_FADE_IN_TICKS==8
+            && RESTORE_TITLE_STAY_TICKS==32 && RESTORE_TITLE_FADE_OUT_TICKS==12
+            && RESTORE_TITLE_FADE_IN_TICKS+RESTORE_TITLE_STAY_TICKS+RESTORE_TITLE_FADE_OUT_TICKS<=60;
         boolean boundedCounts=RESTORE_RING_PARTICLE_COUNT==24
             && RESTORE_RISING_SPARK_PARTICLE_COUNT==4
             && RESTORE_HELIX_PARTICLE_COUNT==16
