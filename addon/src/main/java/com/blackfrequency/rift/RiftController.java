@@ -492,7 +492,7 @@ public final class RiftController {
             || Math.abs(expectedMicroLater-expectedMicroAtZero)<=.1D)
             throw new IllegalStateException("CI multi-scale gravity anomaly composition regression");
         LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_MULTI_SCALE_VERIFIED turbulenceAmplitude=0.06 samples={} deterministic=true bounded=true",samples);
-        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_MICRO_TURBULENCE_VERIFIED amplitude=0.035 spatialFrequencyX=0.17 spatialFrequencyZ=0.13 timeWarped=true",samples);
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_MICRO_TURBULENCE_VERIFIED amplitude=0.035 spatialFrequencyX=0.17 spatialFrequencyZ=0.13 timeWarped=true");
     }
 
     private static void verifyRiftGravityEligibility() {
