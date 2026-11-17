@@ -401,6 +401,9 @@ def verify_real_beacon_break_source():
     verify_start=controller.find("private static void verifyCiNaturalBeaconBreakNoDrop(")
     verify_end=controller.find("\n    @SubscribeEvent",verify_start)
     verify=controller[verify_start:verify_end] if verify_start>=0 and verify_end>verify_start else ""
+    pad_profile_start=controller.find("private static void verifyCiBeaconPadProfile(")
+    pad_profile_end=controller.find("\n    @FunctionalInterface",pad_profile_start)
+    pad_profile=controller[pad_profile_start:pad_profile_end] if pad_profile_start>=0 and pad_profile_end>pad_profile_start else ""
     completion_start=controller.find("if(s.restoreIndex<0 && s.restoreTicks>=100)")
     probe_start=controller.find('if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPostRestoreBeaconBreakTest"))',completion_start)
     probe_end=controller.find("\n            for(var player:level.players())",probe_start)
@@ -420,6 +423,8 @@ def verify_real_beacon_break_source():
             or "eye.distanceToSqr(closestX,closestY,closestZ)" not in helper
             or "private static void verifyCiNaturalBeaconBreakNoDrop(" not in controller
             or "verifyCiNaturalBeaconBreakNoDrop(level,s);" not in controller
+            or "verifyCiBeaconBreakReachGeometry();" not in pad_profile
+            or "BEACON_BREAK_REACH_AABB_VERIFIED" not in controller
             or "getEntitiesOfClass(" not in verify
             or "countItem(net.minecraft.world.item.Items.BEACON)" not in verify
             or "loadedOnly=true" not in verify
@@ -2493,6 +2498,10 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: recovery title/action bar did not use the explicit deep-violet RGB palette",flush=True)
                 return False
             if os.environ.get("BF_TEST_PLAYER_BEACON")=="1":
+                reach_marker="BLACK_FREQUENCY_TEST BEACON_BREAK_REACH_AABB_VERIFIED boundary=20.25 axes=3 negativeCoordinates=true outsideRejected=true invalidRejected=true"
+                if reach_marker not in log_after:
+                    print("WORLD_CAPTURE_FAIL: Java AABB reach boundary probe did not execute in the Forge client",flush=True)
+                    return False
                 initial_pulse=re.search(
                     r"BLACK_FREQUENCY_TEST RESTORE_INITIAL_BEACON_PULSE_EMITTED ring=(\d+) sparks=(\d+) viewer=true",
                     log_after)
