@@ -3944,6 +3944,13 @@ public final class RiftController {
             .findFirst().orElse(null);
         if(player==null || !player.isAlive() || player.isRemoved() || player.isSpectator())
             throw new IllegalStateException("CI beacon miner is unavailable during no-drop verification");
+        boolean survivalMining=!player.isCreative() && !player.getAbilities().instabuild;
+        double distanceSquared=player.distanceToSqr(
+            pos.getX()+.5D,pos.getY()+.5D,pos.getZ()+.5D);
+        boolean withinReach=Double.isFinite(distanceSquared)
+            && distanceSquared<=CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE;
+        if(!survivalMining || !withinReach)
+            throw new IllegalStateException("CI beacon must be mined in survival within normal interaction reach");
         int inventoryBeacons=player.getInventory().countItem(net.minecraft.world.item.Items.BEACON);
         int nearbyBeaconDrops=level.getEntitiesOfClass(
             net.minecraft.world.entity.item.ItemEntity.class,
@@ -3955,8 +3962,8 @@ public final class RiftController {
         boolean ownershipCleared=s.naturalBeaconPos==Long.MIN_VALUE && s.naturalBeaconId==null;
         if(inventoryBeacons!=0 || nearbyBeaconDrops!=0 || !blockAir || !ownershipCleared)
             throw new IllegalStateException("CI real beacon break produced a drop or retained its objective");
-        LOGGER.info("BLACK_FREQUENCY_TEST REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED inventoryBeacons={} nearbyDrops={} blockAir=true ownershipCleared=true loadedOnly=true",
-            inventoryBeacons,nearbyBeaconDrops);
+        LOGGER.info("BLACK_FREQUENCY_TEST REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED survival=true withinReach=true distanceSquared={} inventoryBeacons={} nearbyDrops={} blockAir=true ownershipCleared=true loadedOnly=true",
+            distanceSquared,inventoryBeacons,nearbyBeaconDrops);
         ciPendingNaturalBeaconBreakVerificationPos=null;
         ciPendingNaturalBeaconBreakVerificationPlayer=null;
     }
