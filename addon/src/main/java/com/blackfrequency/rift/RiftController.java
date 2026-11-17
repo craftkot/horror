@@ -61,6 +61,9 @@ public final class RiftController {
     private static final double IDLE_BEACON_PARTICLE_PACKET_RANGE=32.0D;
     private static final double IDLE_BEACON_PARTICLE_PACKET_RANGE_SQR=
         IDLE_BEACON_PARTICLE_PACKET_RANGE*IDLE_BEACON_PARTICLE_PACKET_RANGE;
+    // Surface block cues use the same strict 32-block delivery boundary as the default particle packet.
+    private static final double SURFACE_FRACTURE_PARTICLE_PACKET_RANGE_SQR=
+        IDLE_BEACON_PARTICLE_PACKET_RANGE_SQR;
     // Recovery effects use cached blue-violet Dust and bounded, deterministic pulses.
     private static final int RESTORE_RING_INTERVAL_TICKS = 20;
     // Completion titles use explicit timings instead of inheriting the finale's title clock.
@@ -1645,11 +1648,35 @@ public final class RiftController {
             && (edits&3)==0 && y==surfaceY-1;
     }
 
+    private static boolean withinSurfaceFractureParticleAudience(double distanceSquared) {
+        return Double.isFinite(distanceSquared)
+            && distanceSquared>=0.0D
+            && distanceSquared<SURFACE_FRACTURE_PARTICLE_PACKET_RANGE_SQR;
+    }
+
+    private static void verifySurfaceFractureParticleAudienceBounds() {
+        boolean origin=withinSurfaceFractureParticleAudience(0.0D);
+        boolean justInside=withinSurfaceFractureParticleAudience(
+            Math.nextDown(SURFACE_FRACTURE_PARTICLE_PACKET_RANGE_SQR));
+        boolean boundaryRejected=!withinSurfaceFractureParticleAudience(
+            SURFACE_FRACTURE_PARTICLE_PACKET_RANGE_SQR);
+        boolean outsideRejected=!withinSurfaceFractureParticleAudience(
+            Math.nextUp(SURFACE_FRACTURE_PARTICLE_PACKET_RANGE_SQR));
+        boolean invalidRejected=!withinSurfaceFractureParticleAudience(-1.0D)
+            && !withinSurfaceFractureParticleAudience(Double.NaN)
+            && !withinSurfaceFractureParticleAudience(Double.POSITIVE_INFINITY)
+            && !withinSurfaceFractureParticleAudience(Double.NEGATIVE_INFINITY);
+        if(!(origin && justInside && boundaryRejected && outsideRejected && invalidRejected))
+            throw new IllegalStateException("CI surface fracture particle audience range regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FRACTURE_PARTICLE_AUDIENCE_BOUNDS_VERIFIED maxDistance={} maxDistanceSquared={} strictBoundary=true invalidRejected=true",
+            IDLE_BEACON_PARTICLE_PACKET_RANGE, SURFACE_FRACTURE_PARTICLE_PACKET_RANGE_SQR);
+    }
+
     private static boolean hasNearbySurfaceFractureViewer(ServerLevel level,BlockPos pos) {
         for(var player:level.players()) {
             if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
-            if(player.distanceToSqr(pos.getX()+.5D,pos.getY()+.5D,pos.getZ()+.5D)<=32.0D*32.0D)
-                return true;
+            if(withinSurfaceFractureParticleAudience(player.distanceToSqr(
+                pos.getX()+.5D,pos.getY()+.5D,pos.getZ()+.5D))) return true;
         }
         return false;
     }
@@ -2903,6 +2930,7 @@ public final class RiftController {
         verifyRestoreCursorRepairPersistence();
         verifyInvalidSnapshotWarningRateLimit();
         verifyRecoveryAudienceBounds();
+        verifySurfaceFractureParticleAudienceBounds();
         verifyRecoveryVortexContraction();
         verifyFractureColumnBounds();
         verifyBoundedAnomalyVelocity();

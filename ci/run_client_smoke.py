@@ -2516,6 +2516,9 @@ def capture_test_world():
                 if "BLACK_FREQUENCY_TEST IDLE_BEACON_PARTICLE_AUDIENCE_BOUNDS_VERIFIED maxDistance=32.0 maxDistanceSquared=1024.0 strictBoundary=true invalidRejected=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: idle beacon particle audience exceeded the packet delivery radius",flush=True)
                     return False
+                if "BLACK_FREQUENCY_TEST SURFACE_FRACTURE_PARTICLE_AUDIENCE_BOUNDS_VERIFIED maxDistance=32.0 maxDistanceSquared=1024.0 strictBoundary=true invalidRejected=true" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: surface fracture particle audience exceeded the packet delivery radius",flush=True)
+                    return False
                 if "BLACK_FREQUENCY_TEST IDLE_BEACON_VIOLET_PALETTE_VERIFIED red=0.48 green=0.14 blue=0.98 scale=0.9 count=6 intervalTicks=20 cached=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: bright violet beacon palette was not verified",flush=True)
                     return False
