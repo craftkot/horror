@@ -3335,7 +3335,7 @@ public final class RiftController {
                     boolean beaconCollapse=!s.restored && (s.started || s.finished);
                     // Publish the exact physical objective immediately; clients must not
                     // guess its Y coordinate from the fracture anchor or scan chunks.
-                    for(var player:level.players()) RiftNetwork.send(player,beaconProgress,
+                    for(var beaconViewer:level.players()) RiftNetwork.send(beaconViewer,beaconProgress,
                         beaconCollapse,s.finaleTicks,s.x,s.z,s.naturalBeaconPos);
                     if(CI_TEST) {
                         // Exercise the actual Forge block-entity persistence path,
