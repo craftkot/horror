@@ -39,6 +39,10 @@ public final class RiftClientState {
     private static final double BEACON_AURA_RENDER_DISTANCE=48.0D;
     private static final double BEACON_AURA_RENDER_DISTANCE_SQR=
         BEACON_AURA_RENDER_DISTANCE*BEACON_AURA_RENDER_DISTANCE;
+    // Fade the cage over the outer eight blocks instead of popping at the render boundary.
+    private static final double BEACON_AURA_FADE_START_DISTANCE=40.0D;
+    private static final double BEACON_AURA_FADE_START_DISTANCE_SQR=
+        BEACON_AURA_FADE_START_DISTANCE*BEACON_AURA_FADE_START_DISTANCE;
     private static final double BEACON_AURA_OUTER_MARGIN=.14D;
     private static final double BEACON_AURA_INNER_MARGIN=.025D;
     // Camera-facing ribbons keep the cage readable without relying on platform-specific GL line widths.
@@ -89,6 +93,17 @@ public final class RiftClientState {
         return active && hasPosition && chunkLoaded && beaconBlock
             && Double.isFinite(distanceSquared) && distanceSquared>=0.0D
             && distanceSquared<BEACON_AURA_RENDER_DISTANCE_SQR;
+    }
+
+    private static double beaconAuraDistanceFade(double distanceSquared) {
+        if(!Double.isFinite(distanceSquared) || distanceSquared<0.0D
+            || distanceSquared>=BEACON_AURA_RENDER_DISTANCE_SQR) return 0.0D;
+        double distance=Math.sqrt(distanceSquared);
+        if(distance<=BEACON_AURA_FADE_START_DISTANCE) return 1.0D;
+        double t=(BEACON_AURA_RENDER_DISTANCE-distance)
+            /(BEACON_AURA_RENDER_DISTANCE-BEACON_AURA_FADE_START_DISTANCE);
+        t=Math.max(0.0D,Math.min(1.0D,t));
+        return t*t*(3.0D-2.0D*t);
     }
 
     private static boolean isSafeBeaconPosition(long packed,net.minecraft.client.multiplayer.ClientLevel level) {
@@ -143,8 +158,26 @@ public final class RiftClientState {
         boolean invalidRejected=!shouldRenderBeaconAura(true,true,true,true,Double.NaN)
             && !shouldRenderBeaconAura(true,true,true,true,Double.POSITIVE_INFINITY)
             && !shouldRenderBeaconAura(true,true,true,true,-1.0D);
+        double fadeNear=beaconAuraDistanceFade(39.0D*39.0D);
+        double fadeStart=beaconAuraDistanceFade(40.0D*40.0D);
+        double fadeMiddle=beaconAuraDistanceFade(44.0D*44.0D);
+        double fadeBoundary=beaconAuraDistanceFade(48.0D*48.0D);
+        boolean fadeMonotonic=fadeNear==1.0D && fadeStart==1.0D
+            && Math.abs(fadeMiddle-.5D)<1.0E-12D && fadeBoundary==0.0D;
+        double previousFade=fadeStart;
+        for(int step=1;step<=8;step++) {
+            double distance=BEACON_AURA_FADE_START_DISTANCE+step;
+            double currentFade=beaconAuraDistanceFade(distance*distance);
+            fadeMonotonic &= Double.isFinite(currentFade)
+                && currentFade>=0.0D && currentFade<=previousFade;
+            previousFade=currentFade;
+        }
+        boolean invalidFadeRejected=beaconAuraDistanceFade(Double.NaN)==0.0D
+            && beaconAuraDistanceFade(Double.POSITIVE_INFINITY)==0.0D
+            && beaconAuraDistanceFade(-1.0D)==0.0D;
         if(!(inside && inactiveRejected && missingPositionRejected && unloadedRejected
-            && replacedBeaconRejected && boundaryRejected && invalidRejected)
+            && replacedBeaconRejected && boundaryRejected && invalidRejected
+            && fadeMonotonic && invalidFadeRejected)
             || !Double.isFinite(BEACON_AURA_OUTER_MARGIN)
             || !Double.isFinite(BEACON_AURA_INNER_MARGIN)
             || !Double.isFinite(BEACON_AURA_OUTER_HALF_WIDTH)
@@ -157,6 +190,8 @@ public final class RiftClientState {
             || BEACON_AURA_INNER_HALF_WIDTH>=BEACON_AURA_INNER_MARGIN)
             throw new IllegalStateException("BLACK FREQUENCY beacon aura range/geometry regression");
         beaconAuraProfileLogged=true;
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true");
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST BEACON_AURA_RIBBON_PROFILE_VERIFIED outerHalfWidth=0.022 innerHalfWidth=0.012 cameraFacing=true allocationFree=true");
         com.mojang.logging.LogUtils.getLogger().info(
@@ -266,6 +301,8 @@ public final class RiftClientState {
         double distanceSquared=dx*dx+dy*dy+dz*dz;
         if(!shouldRenderBeaconAura(collapse || progress>0.0F,beaconPositionValid,
                 true,beaconBlock,distanceSquared)) return;
+        double distanceFade=beaconAuraDistanceFade(distanceSquared);
+        if(distanceFade<=1.0D/255.0D) return;
 
         double partial=Double.isFinite(event.getPartialTick())
             ? Math.max(0.0D,Math.min(1.0D,event.getPartialTick())) : 0.0D;
@@ -273,8 +310,8 @@ public final class RiftClientState {
         double pulse=.5D+.5D*Math.sin(time*.12D);
         double outerAngle=beaconAuraRotationAngle(level.getGameTime(),partial,1);
         double innerAngle=.35D+beaconAuraRotationAngle(level.getGameTime(),partial,-2);
-        int outerAlpha=beaconAuraChannel((float)(.42D+.22D*pulse));
-        int innerAlpha=beaconAuraChannel((float)(.58D+.30D*pulse));
+        int outerAlpha=beaconAuraChannel((float)((.42D+.22D*pulse)*distanceFade));
+        int innerAlpha=beaconAuraChannel((float)((.58D+.30D*pulse)*distanceFade));
         Matrix4f matrix=event.getPoseStack().last().pose();
         BufferBuilder builder=Tesselator.getInstance().getBuilder();
         boolean submitted=false;

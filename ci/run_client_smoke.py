@@ -64,6 +64,8 @@ def verify_beacon_aura_source():
             or "Blocks.BEACON" not in client
             or "VertexFormat.Mode.QUADS" not in client
             or "BEACON_AURA_RENDERED cages=2 edgeRibbons=24 rotation=counterphase loadedOnly=true" not in client
+            or "BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true" not in client
+            or "beaconAuraDistanceFade(distanceSquared)" not in client
             or "BEACON_AURA_RIBBON_PROFILE_VERIFIED outerHalfWidth=0.022 innerHalfWidth=0.012 cameraFacing=true allocationFree=true" not in client
             or "private static void beaconAuraRibbon(" not in client
             or "BEACON_AURA_ROTATION_PROFILE_VERIFIED periodTicks=1200 outerTurns=1 innerTurns=-2 wrapContinuous=true partialBounded=true" not in client
@@ -2554,6 +2556,9 @@ def capture_test_world():
                     return False
                 if "BLACK_FREQUENCY_TEST BEACON_AURA_ROTATION_PROFILE_VERIFIED periodTicks=1200 outerTurns=1 innerTurns=-2 wrapContinuous=true partialBounded=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon aura rotation profile was not verified",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: beacon aura distance fade profile was not verified",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST BEACON_AURA_RENDERED cages=2 edgeRibbons=24 rotation=counterphase loadedOnly=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: rotating violet physical beacon containment aura was not drawn from the loaded beacon block",flush=True)
