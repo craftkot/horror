@@ -56,6 +56,10 @@ public final class RiftClientState {
     // World identity also changes when reconnecting to a different server in the same dimension.
     private static net.minecraft.client.multiplayer.ClientLevel lastLevel;
     private static final int CLIENT_STATE_PACKET_TIMEOUT_TICKS=100;
+    private static final int BEACON_AURA_COMPLETION_FADE_TICKS=12;
+    private static int beaconAuraCompletionFadeTicks;
+    private static boolean beaconAuraCompletionFadeProfileLogged;
+    private static boolean beaconAuraCompletionFadeRenderedLogged;
     private RiftClientState() {}
     public static void update(float value, boolean collapsing, int ticks, int worldAnchorX, int worldAnchorZ, long worldBeaconPosition, boolean worldRestorationActive) {
         // Packets may arrive before the first client tick after joining a world.
@@ -66,7 +70,13 @@ public final class RiftClientState {
         lastLevel=level;
         ticksSincePacket=0;
         // Network data must never feed NaN or infinity into sky and overlay shaders.
-        progress=Float.isFinite(value) ? Math.max(0f,Math.min(1f,value)) : 0f;
+        float safeProgress=Float.isFinite(value) ? Math.max(0f,Math.min(1f,value)) : 0f;
+        boolean wasRestoring=restorationActive;
+        beaconAuraCompletionFadeTicks=nextBeaconAuraCompletionFadeTicks(
+            beaconAuraCompletionFadeTicks,wasRestoring,worldRestorationActive,collapsing,safeProgress);
+        if(worldRestorationActive || collapsing || safeProgress>0f)
+            beaconAuraCompletionFadeRenderedLogged=false;
+        progress=safeProgress;
         collapse=collapsing;
         finaleTicks=Math.max(0,ticks);
         anchorX=worldAnchorX;
@@ -88,6 +98,8 @@ public final class RiftClientState {
         progress=0;collapse=false;finaleTicks=0;ticksSincePacket=0;
         anchorX=0;anchorZ=0;anchorValid=false;
         beaconPosition=Long.MIN_VALUE;beaconPositionValid=false;restorationActive=false;
+        beaconAuraCompletionFadeTicks=0;beaconAuraCompletionFadeProfileLogged=false;
+        beaconAuraCompletionFadeRenderedLogged=false;
         beaconAuraProfileLogged=false;beaconAuraRenderedLogged=false;
         beaconAuraRestorationRenderedLogged=false;
         GroundRenderer.clearCache();
@@ -112,6 +124,23 @@ public final class RiftClientState {
 
     private static boolean isClientPacketStateStale(int ticksSincePacket) {
         return ticksSincePacket>CLIENT_STATE_PACKET_TIMEOUT_TICKS;
+    }
+
+    private static int nextBeaconAuraCompletionFadeTicks(int previousTicks,boolean wasRestoring,
+            boolean restoring,boolean collapsing,float value) {
+        if(restoring || collapsing || (Float.isFinite(value) && value>0.0F)) return 0;
+        if(wasRestoring) return BEACON_AURA_COMPLETION_FADE_TICKS;
+        return Math.max(0,Math.min(BEACON_AURA_COMPLETION_FADE_TICKS,previousTicks));
+    }
+
+    private static double beaconAuraCompletionFade(int ticksRemaining,double partialTick) {
+        int boundedTicks=Math.max(0,Math.min(BEACON_AURA_COMPLETION_FADE_TICKS,ticksRemaining));
+        if(boundedTicks==0) return 0.0D;
+        double partial=Double.isFinite(partialTick)
+            ? Math.max(0.0D,Math.min(1.0D,partialTick)) : 0.0D;
+        double remaining=Math.max(0.0D,Math.min(1.0D,
+            (boundedTicks-partial)/BEACON_AURA_COMPLETION_FADE_TICKS));
+        return remaining*remaining*(3.0D-2.0D*remaining);
     }
 
     private static double beaconAuraDistanceFade(double distanceSquared) {
@@ -177,6 +206,29 @@ public final class RiftClientState {
         boolean idleStateUntimed=!hasActiveTimedClientState(0.0F,false,0,false);
         boolean packetTimeoutBoundary=!isClientPacketStateStale(CLIENT_STATE_PACKET_TIMEOUT_TICKS)
             && isClientPacketStateStale(CLIENT_STATE_PACKET_TIMEOUT_TICKS+1);
+        int completionFadeStarted=nextBeaconAuraCompletionFadeTicks(0,true,false,false,0.0F);
+        int completionFadeContinued=nextBeaconAuraCompletionFadeTicks(6,false,false,false,0.0F);
+        int completionFadeCanceledByRestore=nextBeaconAuraCompletionFadeTicks(6,false,true,false,0.0F);
+        int completionFadeCanceledByCollapse=nextBeaconAuraCompletionFadeTicks(6,false,false,true,0.0F);
+        int completionFadeCanceledByProgress=nextBeaconAuraCompletionFadeTicks(6,false,false,false,.1F);
+        double completionFadeFull=beaconAuraCompletionFade(12,0.0D);
+        double completionFadeMiddle=beaconAuraCompletionFade(6,0.0D);
+        double completionFadeEnd=beaconAuraCompletionFade(0,0.0D);
+        boolean completionFadeMonotonic=completionFadeFull==1.0D
+            && Math.abs(completionFadeMiddle-.5D)<1.0E-12D && completionFadeEnd==0.0D
+            && Math.abs(beaconAuraCompletionFade(12,1.0D)-beaconAuraCompletionFade(11,0.0D))<1.0E-12D;
+        double previousCompletionFade=completionFadeFull;
+        for(int remaining=11;remaining>=0;remaining--) {
+            double current=beaconAuraCompletionFade(remaining,0.0D);
+            completionFadeMonotonic &= Double.isFinite(current)
+                && current>=0.0D && current<=previousCompletionFade;
+            previousCompletionFade=current;
+        }
+        boolean completionFadeProfile=completionFadeStarted==12 && completionFadeContinued==6
+            && completionFadeCanceledByRestore==0 && completionFadeCanceledByCollapse==0
+            && completionFadeCanceledByProgress==0 && completionFadeMonotonic
+            && beaconAuraCompletionFade(99,Double.NaN)==1.0D
+            && beaconAuraCompletionFade(-1,0.0D)==0.0D;
         boolean inactiveRejected=!shouldRenderBeaconAura(false,true,true,true,1.0D);
         boolean missingPositionRejected=!shouldRenderBeaconAura(true,false,true,true,1.0D);
         boolean unloadedRejected=!shouldRenderBeaconAura(true,true,false,true,1.0D);
@@ -206,7 +258,7 @@ public final class RiftClientState {
             && replacedBeaconRejected && boundaryRejected && invalidRejected
             && collapseVisible && progressVisible && zeroProgressRestorationVisible && completedHidden
             && restorationOnlyTimedState && idleStateUntimed && packetTimeoutBoundary
-            && fadeMonotonic && invalidFadeRejected)
+            && completionFadeProfile && fadeMonotonic && invalidFadeRejected)
             || !Double.isFinite(BEACON_AURA_OUTER_MARGIN)
             || !Double.isFinite(BEACON_AURA_INNER_MARGIN)
             || !Double.isFinite(BEACON_AURA_OUTER_HALF_WIDTH)
@@ -223,6 +275,11 @@ public final class RiftClientState {
             "BLACK_FREQUENCY_TEST BEACON_AURA_RESTORATION_VISIBILITY_VERIFIED zeroProgressRestoring=true completed=false");
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST BEACON_AURA_STALE_PACKET_EXPIRY_VERIFIED restorationOnly=true idle=false timeoutTicks=100");
+        if(!beaconAuraCompletionFadeProfileLogged) {
+            beaconAuraCompletionFadeProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_PROFILE_VERIFIED ticks=12 curve=smoothstep partialTick=true");
+        }
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true");
         com.mojang.logging.LogUtils.getLogger().info(
@@ -318,7 +375,9 @@ public final class RiftClientState {
         if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_PARTICLES) return;
         verifyBeaconAuraProfile();
         var level=Minecraft.getInstance().level;
-        boolean auraActive=shouldShowBeaconAura(collapse,progress,restorationActive);
+        boolean completionFadeActive=beaconAuraCompletionFadeTicks>0;
+        boolean auraActive=shouldShowBeaconAura(collapse,progress,restorationActive)
+            || completionFadeActive;
         if(level==null || !level.dimension().equals(Level.OVERWORLD)
             || !beaconPositionValid || !auraActive) return;
         if(!isSafeBeaconPosition(beaconPosition,level)) return;
@@ -327,6 +386,9 @@ public final class RiftClientState {
             || !level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)) return;
         boolean beaconBlock=level.getBlockState(beacon).is(
             net.minecraft.world.level.block.Blocks.BEACON);
+        // The server may consume the physical beacon immediately after successful
+        // recovery. Keep its last authoritative position for this short visual tail.
+        if(!beaconBlock && !completionFadeActive) return;
         Vec3 camera=event.getCamera().getPosition();
         if(!Double.isFinite(camera.x) || !Double.isFinite(camera.y) || !Double.isFinite(camera.z)) return;
         double dx=beacon.getX()+.5D-camera.x;
@@ -334,12 +396,14 @@ public final class RiftClientState {
         double dz=beacon.getZ()+.5D-camera.z;
         double distanceSquared=dx*dx+dy*dy+dz*dz;
         if(!shouldRenderBeaconAura(auraActive,beaconPositionValid,
-                true,beaconBlock,distanceSquared)) return;
+                true,beaconBlock || completionFadeActive,distanceSquared)) return;
         double distanceFade=beaconAuraDistanceFade(distanceSquared);
-        if(distanceFade<=1.0D/255.0D) return;
-
         double partial=Double.isFinite(event.getPartialTick())
             ? Math.max(0.0D,Math.min(1.0D,event.getPartialTick())) : 0.0D;
+        double completionFade=completionFadeActive
+            ? beaconAuraCompletionFade(beaconAuraCompletionFadeTicks,partial) : 1.0D;
+        distanceFade*=completionFade;
+        if(distanceFade<=1.0D/255.0D) return;
         double time=(double)level.getGameTime()+partial;
         double pulse=.5D+.5D*Math.sin(time*.12D);
         double outerAngle=beaconAuraRotationAngle(level.getGameTime(),partial,1);
@@ -381,6 +445,13 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST BEACON_AURA_RESTORATION_ACTIVE_RENDERED progressZero=true loadedOnly=true");
         }
+        if(submitted && completionFadeActive && !restorationActive
+            && !beaconAuraCompletionFadeRenderedLogged) {
+            beaconAuraCompletionFadeRenderedLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_RENDERED ticksRemaining={}",
+                beaconAuraCompletionFadeTicks);
+        }
     }
     // Recovery updates are intentionally local. Expire stale visuals when a player
     // leaves the fracture radius or the server stops sending state packets.
@@ -398,6 +469,7 @@ public final class RiftClientState {
         // Integrated singleplayer pauses server packets too. Do not expire the
         // fracture overlay while the simulation is paused in a menu.
         if(net.minecraft.client.Minecraft.getInstance().isPaused()) return;
+        if(beaconAuraCompletionFadeTicks>0) beaconAuraCompletionFadeTicks--;
         if(hasActiveTimedClientState(progress,collapse,finaleTicks,restorationActive)
             && isClientPacketStateStale(++ticksSincePacket)) reset();
     }
