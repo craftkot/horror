@@ -440,7 +440,7 @@ def verify_real_beacon_break_source():
 def point_to_block_aabb_distance_squared(point,origin):
     if not all(math.isfinite(value) for value in (*point,*origin)):
         return float("nan")
-    closest=tuple(max(base,min(value,base+1.0D)) for value,base in zip(point,origin))
+    closest=tuple(max(base,min(value,base+1.0)) for value,base in zip(point,origin))
     return sum((value-near)**2 for value,near in zip(point,closest))
 
 def verify_beacon_interaction_reach_geometry():
