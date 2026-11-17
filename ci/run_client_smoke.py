@@ -2191,13 +2191,13 @@ def capture_test_world():
                             break
                         time.sleep(.02)
                     start_match=re.search(
-                        r"BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_RENDERED ticksRemaining=(\\d+)",
+                        r"BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_RENDERED ticksRemaining=(\d+)",
                         fade_logs)
                     midpoint_match=re.search(
-                        r"BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_MIDPOINT_RENDERED ticksRemaining=(\\d+) alphaFactor=([0-9.eE+-]+)",
+                        r"BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_MIDPOINT_RENDERED ticksRemaining=(\d+) alphaFactor=([0-9.eE+-]+)",
                         fade_logs)
                     tail_match=re.search(
-                        r"BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_TAIL_RENDERED ticksRemaining=(\\d+) alphaFactor=([0-9.eE+-]+)",
+                        r"BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_TAIL_RENDERED ticksRemaining=(\d+) alphaFactor=([0-9.eE+-]+)",
                         fade_logs)
                     if not (fade_start_marker in fade_logs and fade_midpoint_shot and fade_tail_shot
                             and start_match and midpoint_match and tail_match):
