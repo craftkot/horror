@@ -390,6 +390,37 @@ def verify_restoration_particle_source():
     print("WORLD_CAPTURE: surface fissure uses a smaller cached accent than recovery cues",flush=True)
     print("WORLD_CAPTURE: restoration uses smaller cached violet Dust, bounded halo and dark-purple UI",flush=True)
 
+def verify_real_beacon_break_source():
+    controller=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftController.java").read_text(encoding="utf-8")
+    handler_start=controller.find("public void onRecoveryBeaconBreak(")
+    handler_end=controller.find("\n    /**",handler_start)
+    handler=controller[handler_start:handler_end] if handler_start>=0 and handler_end>handler_start else ""
+    verify_start=controller.find("private static void verifyCiNaturalBeaconBreakNoDrop(")
+    verify_end=controller.find("\n    @SubscribeEvent",verify_start)
+    verify=controller[verify_start:verify_end] if verify_start>=0 and verify_end>verify_start else ""
+    completion_start=controller.find("if(s.restoreIndex<0 && s.restoreTicks>=100)")
+    probe_start=controller.find('if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPostRestoreBeaconBreakTest"))',completion_start)
+    probe_end=controller.find("\n            for(var player:level.players())",probe_start)
+    probe=controller[probe_start:probe_end] if probe_start>=0 and probe_end>probe_start else ""
+    script=pathlib.Path(__file__).read_text(encoding="utf-8")
+    if (not handler or "event.setCanceled(true);" not in handler
+            or "level.setBlock(pos,Blocks.AIR.defaultBlockState(),3)" not in handler
+            or "ciPendingNaturalBeaconBreakVerificationPos=pos.immutable();" not in handler
+            or "NATURAL_BEACON_MINED_NO_DROP" not in handler
+            or "private static void verifyCiNaturalBeaconBreakNoDrop(" not in controller
+            or "verifyCiNaturalBeaconBreakNoDrop(level,s);" not in controller
+            or "getEntitiesOfClass(" not in verify
+            or "countItem(net.minecraft.world.item.Items.BEACON)" not in verify
+            or "loadedOnly=true" not in verify
+            or probe.count("new net.minecraftforge.event.level.BlockEvent.BreakEvent(")!=1
+            or "testEvent" in probe
+            or "POST_RESTORE_BEACON_BREAK_CONSUMED" in probe
+            or 'subprocess.run(["xdotool","mousedown","1"]' not in script
+            or "REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED" not in script
+            or "beacon-after-left-click.png" not in script):
+        raise RuntimeError("BLACK FREQUENCY post-restoration beacon mining must use real player input and verify zero drops")
+    print("WORLD_CAPTURE: post-restoration beacon mining uses real left-click input and checks inventory/entity drops",flush=True)
+
 verify_fissure_target_view_score_profile()
 verify_restoration_particle_source()
 verify_beacon_aura_source()
@@ -1325,7 +1356,7 @@ def capture_test_world():
             beacon_ready_at=now
             print("WORLD_CAPTURE: beacon ready; waiting for client teleport",flush=True)
         # Both Normal and Sparse must capture the real ground fissure before
-        # the physical beacon is consumed by the player's right-click.
+        # the physical beacon is activated by the player's right-click.
         if not terrain_shot:
             return
         retry_delay=0.75 if "BLACK_FREQUENCY_TEST PLAYER_BEACON_AIM_RECOVERED_AFTER_MISS" in logs else 2.0
@@ -1375,6 +1406,64 @@ def capture_test_world():
             print("WORLD_CAPTURE: after-click screenshot deferred until physical activation is confirmed",flush=True)
         # The final world check still independently requires the server's real
         # interaction marker; the screenshot wait is not a substitute for it.
+    def mine_beacon_after_restoration(log_text):
+        if os.environ.get("BF_TEST_NATURAL_BEACON")!="1":
+            return True
+        protection_deadline=time.monotonic()+2.0
+        while ("BLACK_FREQUENCY_TEST CANCELED_BEACON_BREAK_PRESERVED" not in log_text
+               and time.monotonic()<protection_deadline and p.poll() is None):
+            time.sleep(.1)
+            log_text=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else log_text
+        if "BLACK_FREQUENCY_TEST CANCELED_BEACON_BREAK_PRESERVED" not in log_text:
+            print("WORLD_CAPTURE_FAIL: protection-canceled break did not preserve the recovery beacon",flush=True)
+            return False
+        if ("BLACK_FREQUENCY_TEST NATURAL_BEACON_MINED_NO_DROP" in log_text
+                or "BLACK_FREQUENCY_TEST REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED" in log_text):
+            print("WORLD_CAPTURE_FAIL: beacon was consumed before the real left-click test",flush=True)
+            return False
+        if not aim_camera_at_beacon(log_text):
+            return False
+        snap("beacon-before-left-click.png")
+        if not (shots/"beacon-before-left-click.png").is_file():
+            print("WORLD_CAPTURE_FAIL: pre-mining beacon screenshot was not captured",flush=True)
+            return False
+        log_before=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else log_text
+        marker_offset=len(log_before)
+        focus_game()
+        down=subprocess.run(["xdotool","mousedown","1"],check=False)
+        if down.returncode!=0:
+            print("WORLD_CAPTURE_FAIL: could not hold the left mouse button for beacon mining",flush=True)
+            return False
+        print("WORLD_CAPTURE_INPUT: player left-click hold started",flush=True)
+        deadline=time.monotonic()+10.0
+        observed=False
+        try:
+            while time.monotonic()<deadline and p.poll() is None:
+                current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                delta=current[marker_offset:]
+                if ("BLACK_FREQUENCY_TEST NATURAL_BEACON_MINED_NO_DROP" in delta
+                        and "BLACK_FREQUENCY_TEST REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED" in delta):
+                    observed=True
+                    break
+                time.sleep(.1)
+        finally:
+            subprocess.run(["xdotool","mouseup","1"],check=False)
+        if not observed:
+            current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+            delta=current[marker_offset:]
+            print("WORLD_CAPTURE_FAIL: real left-click did not remove the beacon and verify zero drops",
+                  {"minedMarker":"BLACK_FREQUENCY_TEST NATURAL_BEACON_MINED_NO_DROP" in delta,
+                   "noDropMarker":"BLACK_FREQUENCY_TEST REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED" in delta},
+                  flush=True)
+            return False
+        time.sleep(.25)
+        snap("beacon-after-left-click.png")
+        if not (shots/"beacon-after-left-click.png").is_file():
+            print("WORLD_CAPTURE_FAIL: post-mining beacon screenshot was not captured",flush=True)
+            return False
+        print("WORLD_CAPTURE: real player left-click removed the owned beacon without an item drop",flush=True)
+        return True
+
     time.sleep(2)
     print("WORLD_CAPTURE_INPUT: active window",
         subprocess.run(["xdotool","getactivewindow","getwindowname"],
@@ -2290,6 +2379,10 @@ def capture_test_world():
                     return False
                 print("WORLD_CAPTURE: restoration finished in integrated client",flush=True)
             log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+            if os.environ.get("BF_TEST_NATURAL_BEACON")=="1":
+                if not mine_beacon_after_restoration(log_after):
+                    return False
+                log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else log_after
             if (os.environ.get("BF_TEST_RESTORATION")=="1"
                     and "BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_PROFILE_VERIFIED ring=24 ringIntervalTicks=20 sparks=4 helix=16 helixIntervalTicks=8 blockCue=6 blockIntervalBlocks=48 audience=8 audienceIntervalTicks=20 cachedDust=true" not in log_after):
                 print("WORLD_CAPTURE_FAIL: restoration particle cadence/profile was not verified",flush=True)
@@ -2411,11 +2504,16 @@ def capture_test_world():
                         return False
                     print("WORLD_CAPTURE: SNOW_BEACON_CLICK_VERIFIED",*snow.groups(),flush=True)
                 preserved=log_after.find("BLACK_FREQUENCY_TEST CANCELED_BEACON_BREAK_PRESERVED")
+                mined=log_after.find("BLACK_FREQUENCY_TEST NATURAL_BEACON_MINED_NO_DROP")
                 consumed=log_after.find("BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_CONSUMED")
-                if preserved<0 or consumed<=preserved:
-                    print("WORLD_CAPTURE_FAIL: canceled beacon break must preserve the fixture before permitted break consumes it",flush=True)
+                no_drop=log_after.find("BLACK_FREQUENCY_TEST REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED")
+                if not (0<=preserved<mined<consumed<no_drop):
+                    print("WORLD_CAPTURE_FAIL: real player break must follow protection cancellation and verify no drops",flush=True)
                     return False
-                print("WORLD_CAPTURE: POST_RESTORE_BEACON_BREAK_GUARD_VERIFIED (synthetic event)",flush=True)
+                if "BLACK_FREQUENCY_TEST NATURAL_BEACON_ID_CLEARED_AFTER_BREAK" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: natural beacon ownership UUID was not cleared after real mining",flush=True)
+                    return False
+                print("WORLD_CAPTURE: POST_RESTORE_BEACON_BREAK_GUARD_VERIFIED realPlayerInput=true noDrop=true",flush=True)
             fissure=parse_fissure_particle_emission(log_after)
             ground_mesh=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) arms=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+) sampledColumns=(\d+) cacheHits=(\d+)",

@@ -56,6 +56,9 @@ public final class RiftController {
     private static boolean ciPlayerSafePadReady;
     private static boolean ciFissureTargetUnavailableLogged;
     private static boolean ciBeaconSightlineFailureLogged;
+    // CI-only deferred check after an actual player break; never persisted or force-loaded.
+    private static BlockPos ciPendingNaturalBeaconBreakVerificationPos;
+    private static UUID ciPendingNaturalBeaconBreakVerificationPlayer;
     private static final long DAY = 24000L;
     // Only for disposable CI worlds. Never increases Minecraft's global tick rate.
     private static final long TEST_STEP = Boolean.getBoolean("blackfrequency.ciTestMode")
@@ -1059,12 +1062,21 @@ public final class RiftController {
             s.naturalBeaconPos=Long.MIN_VALUE;
             s.naturalBeaconId=null;
             s.setDirty();
+            if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPostRestoreBeaconBreakTest")) {
+                ciPendingNaturalBeaconBreakVerificationPos=pos.immutable();
+                ciPendingNaturalBeaconBreakVerificationPlayer=event.getPlayer().getUUID();
+            }
             event.getPlayer().displayClientMessage(recoveryViolet(
                 s.restoring || s.restored
                     ? "✦ Маяк стабилизации рассеялся."
                     : "✦ Маяк стабилизации рассеялся. Новый появится поблизости."),true);
-            if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_MINED_NO_DROP x={} y={} z={}",
-                pos.getX(),pos.getY(),pos.getZ());
+            if(CI_TEST) {
+                LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_MINED_NO_DROP x={} y={} z={}",
+                    pos.getX(),pos.getY(),pos.getZ());
+                LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_ID_CLEARED_AFTER_BREAK");
+                if(s.restored) LOGGER.info("BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_CONSUMED x={} y={} z={}",
+                    pos.getX(),pos.getY(),pos.getZ());
+            }
         }
     }
 
@@ -3882,17 +3894,14 @@ public final class RiftController {
             }
             for(var player:level.players()) RiftNetwork.send(player,0f,false,0,s.x,s.z,s.naturalBeaconPos,false);
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored={} destroyed={} skippedOccupied={} skippedInvalid={} flowingReplaced={}",s.restoredBlocks,s.edits,s.skippedOccupied,s.skippedInvalid,s.ciFlowingReplaced);
-            // Disposable client test: dispatch a synthetic BreakEvent after
-            // restoration. This verifies cancellation and block consumption,
-            // but does not replace a real player-mining/drop integration test.
+            // A protection mod's earlier cancellation must preserve the physical beacon.
+            // Actual mining is exercised by the client with a held left mouse button.
             if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPostRestoreBeaconBreakTest")) {
                 if(s.naturalBeaconPos==Long.MIN_VALUE || level.players().isEmpty())
                     throw new IllegalStateException("CI recovery beacon missing after restoration");
                 BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
                 if(!isOwnedNaturalBeaconAtLoadedPosition(level,s,beacon))
                     throw new IllegalStateException("CI recovery beacon ownership marker missing after restoration");
-                // A protection mod may have canceled the break before our handler.
-                // It must leave both the physical beacon and its saved anchor intact.
                 var deniedEvent=new net.minecraftforge.event.level.BlockEvent.BreakEvent(
                     level,beacon,level.getBlockState(beacon),level.players().get(0));
                 deniedEvent.setCanceled(true);
@@ -3903,14 +3912,7 @@ public final class RiftController {
                 LOGGER.info("BLACK_FREQUENCY_TEST CANCELED_BEACON_OWNERSHIP_PRESERVED");
                 LOGGER.info("BLACK_FREQUENCY_TEST CANCELED_BEACON_BREAK_PRESERVED x={} y={} z={}",
                     beacon.getX(),beacon.getY(),beacon.getZ());
-                var testEvent=new net.minecraftforge.event.level.BlockEvent.BreakEvent(
-                    level,beacon,level.getBlockState(beacon),level.players().get(0));
-                new RiftController().onRecoveryBeaconBreak(testEvent);
-                if(!testEvent.isCanceled() || !level.getBlockState(beacon).isAir()
-                    || s.naturalBeaconPos!=Long.MIN_VALUE || s.naturalBeaconId!=null)
-                    throw new IllegalStateException("CI post-restoration beacon break guard failed");
-                LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_ID_CLEARED_AFTER_BREAK");
-                LOGGER.info("BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_CONSUMED x={} y={} z={}",
+                LOGGER.info("BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY_FOR_REAL_PLAYER x={} y={} z={}",
                     beacon.getX(),beacon.getY(),beacon.getZ());
             }
             for(var player:level.players()) {
@@ -3931,11 +3933,40 @@ public final class RiftController {
         s.setDirty();
     }
 
+    private static void verifyCiNaturalBeaconBreakNoDrop(ServerLevel level,State s) {
+        if(!CI_TEST || ciPendingNaturalBeaconBreakVerificationPos==null) return;
+        BlockPos pos=ciPendingNaturalBeaconBreakVerificationPos;
+        if(!level.hasChunkAt(pos))
+            throw new IllegalStateException("CI broken beacon chunk unloaded before no-drop verification");
+        UUID playerId=ciPendingNaturalBeaconBreakVerificationPlayer;
+        net.minecraft.server.level.ServerPlayer player=level.players().stream()
+            .filter(candidate -> candidate.getUUID().equals(playerId))
+            .findFirst().orElse(null);
+        if(player==null || !player.isAlive() || player.isRemoved() || player.isSpectator())
+            throw new IllegalStateException("CI beacon miner is unavailable during no-drop verification");
+        int inventoryBeacons=player.getInventory().countItem(net.minecraft.world.item.Items.BEACON);
+        int nearbyBeaconDrops=level.getEntitiesOfClass(
+            net.minecraft.world.entity.item.ItemEntity.class,
+            new net.minecraft.world.phys.AABB(
+                pos.getX()-2.0D,pos.getY()-2.0D,pos.getZ()-2.0D,
+                pos.getX()+3.0D,pos.getY()+3.0D,pos.getZ()+3.0D),
+            item -> item.getItem().is(net.minecraft.world.item.Items.BEACON)).size();
+        boolean blockAir=level.getBlockState(pos).isAir();
+        boolean ownershipCleared=s.naturalBeaconPos==Long.MIN_VALUE && s.naturalBeaconId==null;
+        if(inventoryBeacons!=0 || nearbyBeaconDrops!=0 || !blockAir || !ownershipCleared)
+            throw new IllegalStateException("CI real beacon break produced a drop or retained its objective");
+        LOGGER.info("BLACK_FREQUENCY_TEST REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED inventoryBeacons={} nearbyDrops={} blockAir=true ownershipCleared=true loadedOnly=true",
+            inventoryBeacons,nearbyBeaconDrops);
+        ciPendingNaturalBeaconBreakVerificationPos=null;
+        ciPendingNaturalBeaconBreakVerificationPlayer=null;
+    }
+
     @SubscribeEvent
     public void onTick(TickEvent.LevelTickEvent event) {
         if(event.phase != TickEvent.Phase.END || !(event.level instanceof ServerLevel level)
            || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
         State s = level.getDataStorage().computeIfAbsent(State::load, State::new, "blackfrequency_finale");
+        verifyCiNaturalBeaconBreakNoDrop(level,s);
         // Validate the real player fall-flying flag once in disposable CI worlds.
         // The probe restores the original chest item and flight state immediately.
         if(CI_TEST && (!ciActualElytraStateVerified || !ciActualPassengerStateVerified)) {
