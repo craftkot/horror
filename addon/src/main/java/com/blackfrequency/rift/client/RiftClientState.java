@@ -60,6 +60,8 @@ public final class RiftClientState {
     private static int beaconAuraCompletionFadeTicks;
     private static boolean beaconAuraCompletionFadeProfileLogged;
     private static boolean beaconAuraCompletionFadeRenderedLogged;
+    private static boolean beaconAuraCompletionFadeMidpointRenderedLogged;
+    private static boolean beaconAuraCompletionFadeTailRenderedLogged;
     private RiftClientState() {}
     public static void update(float value, boolean collapsing, int ticks, int worldAnchorX, int worldAnchorZ, long worldBeaconPosition, boolean worldRestorationActive) {
         // Packets may arrive before the first client tick after joining a world.
@@ -74,8 +76,11 @@ public final class RiftClientState {
         boolean wasRestoring=restorationActive;
         beaconAuraCompletionFadeTicks=nextBeaconAuraCompletionFadeTicks(
             beaconAuraCompletionFadeTicks,wasRestoring,worldRestorationActive,collapsing,safeProgress);
-        if(worldRestorationActive || collapsing || safeProgress>0f)
+        if(worldRestorationActive || collapsing || safeProgress>0f) {
             beaconAuraCompletionFadeRenderedLogged=false;
+            beaconAuraCompletionFadeMidpointRenderedLogged=false;
+            beaconAuraCompletionFadeTailRenderedLogged=false;
+        }
         progress=safeProgress;
         collapse=collapsing;
         finaleTicks=Math.max(0,ticks);
@@ -100,6 +105,8 @@ public final class RiftClientState {
         beaconPosition=Long.MIN_VALUE;beaconPositionValid=false;restorationActive=false;
         beaconAuraCompletionFadeTicks=0;beaconAuraCompletionFadeProfileLogged=false;
         beaconAuraCompletionFadeRenderedLogged=false;
+        beaconAuraCompletionFadeMidpointRenderedLogged=false;
+        beaconAuraCompletionFadeTailRenderedLogged=false;
         beaconAuraProfileLogged=false;beaconAuraRenderedLogged=false;
         beaconAuraRestorationRenderedLogged=false;
         GroundRenderer.clearCache();
@@ -224,9 +231,14 @@ public final class RiftClientState {
                 && current>=0.0D && current<=previousCompletionFade;
             previousCompletionFade=current;
         }
+        double completionFadeMidpointProbe=beaconAuraCompletionFade(6,0.0D);
+        double completionFadeTailProbe=beaconAuraCompletionFade(2,0.0D);
+        boolean completionFadeMilestones=Math.abs(completionFadeMidpointProbe-.5D)<1.0E-12D
+            && completionFadeTailProbe>1.0D/255.0D && completionFadeTailProbe<=.12D;
         boolean completionFadeProfile=completionFadeStarted==12 && completionFadeContinued==6
             && completionFadeCanceledByRestore==0 && completionFadeCanceledByCollapse==0
             && completionFadeCanceledByProgress==0 && completionFadeMonotonic
+            && completionFadeMilestones
             && beaconAuraCompletionFade(99,Double.NaN)==1.0D
             && beaconAuraCompletionFade(-1,0.0D)==0.0D;
         boolean inactiveRejected=!shouldRenderBeaconAura(false,true,true,true,1.0D);
@@ -279,6 +291,8 @@ public final class RiftClientState {
             beaconAuraCompletionFadeProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_PROFILE_VERIFIED ticks=12 curve=smoothstep partialTick=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_MILESTONES_VERIFIED midpointInRange=true tailVisible=true");
         }
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true");
@@ -445,12 +459,27 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST BEACON_AURA_RESTORATION_ACTIVE_RENDERED progressZero=true loadedOnly=true");
         }
-        if(submitted && completionFadeActive && !restorationActive
-            && !beaconAuraCompletionFadeRenderedLogged) {
-            beaconAuraCompletionFadeRenderedLogged=true;
-            com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_RENDERED ticksRemaining={}",
-                beaconAuraCompletionFadeTicks);
+        if(submitted && completionFadeActive && !restorationActive) {
+            if(!beaconAuraCompletionFadeRenderedLogged) {
+                beaconAuraCompletionFadeRenderedLogged=true;
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_RENDERED ticksRemaining={}",
+                    beaconAuraCompletionFadeTicks);
+            }
+            if(!beaconAuraCompletionFadeMidpointRenderedLogged
+                && completionFade<=.60D && completionFade>.25D) {
+                beaconAuraCompletionFadeMidpointRenderedLogged=true;
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_MIDPOINT_RENDERED ticksRemaining={} alphaFactor={}",
+                    beaconAuraCompletionFadeTicks,completionFade);
+            }
+            if(!beaconAuraCompletionFadeTailRenderedLogged
+                && completionFade<=.12D && completionFade>1.0D/255.0D) {
+                beaconAuraCompletionFadeTailRenderedLogged=true;
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_TAIL_RENDERED ticksRemaining={} alphaFactor={}",
+                    beaconAuraCompletionFadeTicks,completionFade);
+            }
         }
     }
     // Recovery updates are intentionally local. Expire stale visuals when a player

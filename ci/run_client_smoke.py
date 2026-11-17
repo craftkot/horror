@@ -75,6 +75,9 @@ def verify_beacon_aura_source():
             or "beaconAuraCompletionFadeTicks,wasRestoring,worldRestorationActive,collapsing,safeProgress)" not in client
             or "BEACON_AURA_COMPLETION_FADE_PROFILE_VERIFIED ticks=12 curve=smoothstep partialTick=true" not in client
             or "BEACON_AURA_COMPLETION_FADE_RENDERED" not in client
+            or "BEACON_AURA_COMPLETION_FADE_MIDPOINT_RENDERED" not in client
+            or "BEACON_AURA_COMPLETION_FADE_TAIL_RENDERED" not in client
+            or "BEACON_AURA_COMPLETION_FADE_MILESTONES_VERIFIED midpointInRange=true tailVisible=true" not in client
             or "BEACON_AURA_RESTORATION_ACTIVE_RENDERED progressZero=true loadedOnly=true" not in client
             or "BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true" not in client
             or "beaconAuraDistanceFade(distanceSquared)" not in client
@@ -2169,19 +2172,54 @@ def capture_test_world():
                     # The server sends the inactive state before the completion title.
                     # Require one real client render from the short aura fade, even if
                     # the server consumes the physical beacon immediately afterward.
-                    fade_marker="BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_RENDERED"
-                    fade_deadline=time.time()+1.0
-                    fade_shot=False
+                    fade_start_marker="BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_RENDERED"
+                    fade_midpoint_marker="BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_MIDPOINT_RENDERED"
+                    fade_tail_marker="BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_TAIL_RENDERED"
+                    fade_deadline=time.time()+2.0
+                    fade_midpoint_shot=False
+                    fade_tail_shot=False
+                    fade_logs=""
                     while time.time()<fade_deadline and p.poll() is None:
                         fade_logs=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-                        if fade_marker in fade_logs:
+                        if fade_midpoint_marker in fade_logs and not fade_midpoint_shot:
+                            snap("beacon-restoration-fade-midpoint.png")
+                            fade_midpoint_shot=True
+                        if fade_tail_marker in fade_logs and not fade_tail_shot:
                             snap("beacon-restoration-fade-out.png")
-                            fade_shot=True
+                            fade_tail_shot=True
+                        if fade_midpoint_shot and fade_tail_shot:
                             break
                         time.sleep(.02)
-                    if not fade_shot:
-                        print("WORLD_CAPTURE_FAIL: completed restoration did not render the beacon aura fade-out",flush=True)
+                    start_match=re.search(
+                        r"BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_RENDERED ticksRemaining=(\\d+)",
+                        fade_logs)
+                    midpoint_match=re.search(
+                        r"BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_MIDPOINT_RENDERED ticksRemaining=(\\d+) alphaFactor=([0-9.eE+-]+)",
+                        fade_logs)
+                    tail_match=re.search(
+                        r"BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_TAIL_RENDERED ticksRemaining=(\\d+) alphaFactor=([0-9.eE+-]+)",
+                        fade_logs)
+                    if not (fade_start_marker in fade_logs and fade_midpoint_shot and fade_tail_shot
+                            and start_match and midpoint_match and tail_match):
+                        print("WORLD_CAPTURE_FAIL: completed restoration did not render start, midpoint and tail of the beacon fade",flush=True)
                         return False
+                    start_ticks=int(start_match.group(1))
+                    midpoint_ticks=int(midpoint_match.group(1))
+                    midpoint_alpha=float(midpoint_match.group(2))
+                    tail_ticks=int(tail_match.group(1))
+                    tail_alpha=float(tail_match.group(2))
+                    if not (start_ticks>midpoint_ticks>tail_ticks
+                            and .25<midpoint_alpha<=.60
+                            and 1.0/255.0<tail_alpha<=.12):
+                        print("WORLD_CAPTURE_FAIL: beacon fade render milestones were out of order or outside their alpha windows",
+                              {"startTicks":start_ticks,"midpointTicks":midpoint_ticks,
+                               "midpointAlpha":midpoint_alpha,"tailTicks":tail_ticks,
+                               "tailAlpha":tail_alpha},flush=True)
+                        return False
+                    print("WORLD_CAPTURE: real beacon fade midpoint and visible tail captured",
+                          {"startTicks":start_ticks,"midpointTicks":midpoint_ticks,
+                           "midpointAlpha":midpoint_alpha,"tailTicks":tail_ticks,
+                           "tailAlpha":tail_alpha},flush=True)
                     # Wait for the explicit title fade-in window so this frame proves
                     # the final UI, not 99% or the preceding containment effect.
                     time.sleep(0.75)
@@ -2195,10 +2233,11 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: restoration finished without an active gameplay screenshot",flush=True)
                     return False
                 restoration_path=shots/"beacon-restoration-active.png"
+                fade_midpoint_path=shots/"beacon-restoration-fade-midpoint.png"
                 fade_restoration_path=shots/"beacon-restoration-fade-out.png"
                 finished_restoration_path=shots/"beacon-restoration-finished.png"
-                if not fade_restoration_path.is_file():
-                    print("WORLD_CAPTURE_FAIL: beacon restoration fade-out screenshot is missing",flush=True)
+                if not fade_midpoint_path.is_file() or not fade_restoration_path.is_file():
+                    print("WORLD_CAPTURE_FAIL: beacon restoration fade midpoint/tail screenshot is missing",flush=True)
                     return False
                 from PIL import Image
                 with Image.open(restoration_path) as source:
