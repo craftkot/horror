@@ -62,8 +62,10 @@ def verify_beacon_aura_source():
     if ("public static void renderBeaconAura(RenderLevelStageEvent event)" not in client
             or "level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)" not in client
             or "Blocks.BEACON" not in client
-            or "VertexFormat.Mode.LINES" not in client
-            or "BEACON_AURA_RENDERED cages=2 edges=24 rotation=counterphase loadedOnly=true" not in client
+            or "VertexFormat.Mode.QUADS" not in client
+            or "BEACON_AURA_RENDERED cages=2 edgeRibbons=24 rotation=counterphase loadedOnly=true" not in client
+            or "BEACON_AURA_RIBBON_PROFILE_VERIFIED outerHalfWidth=0.022 innerHalfWidth=0.012 cameraFacing=true allocationFree=true" not in client
+            or "private static void beaconAuraRibbon(" not in client
             or "BEACON_AURA_ROTATION_PROFILE_VERIFIED periodTicks=1200 outerTurns=1 innerTurns=-2 wrapContinuous=true partialBounded=true" not in client
             or "BEACON_AURA_ROTATION_PERIOD=1200L" not in client
             or "beaconAuraRotationAngle(level.getGameTime(),partial,1)" not in client
@@ -2553,7 +2555,7 @@ def capture_test_world():
                 if "BLACK_FREQUENCY_TEST BEACON_AURA_ROTATION_PROFILE_VERIFIED periodTicks=1200 outerTurns=1 innerTurns=-2 wrapContinuous=true partialBounded=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon aura rotation profile was not verified",flush=True)
                     return False
-                if "BLACK_FREQUENCY_TEST BEACON_AURA_RENDERED cages=2 edges=24 rotation=counterphase loadedOnly=true" not in log_after:
+                if "BLACK_FREQUENCY_TEST BEACON_AURA_RENDERED cages=2 edgeRibbons=24 rotation=counterphase loadedOnly=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: rotating violet physical beacon containment aura was not drawn from the loaded beacon block",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST BEACON_START_ACTIONBAR_ONLY" not in log_after:

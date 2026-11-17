@@ -41,6 +41,9 @@ public final class RiftClientState {
         BEACON_AURA_RENDER_DISTANCE*BEACON_AURA_RENDER_DISTANCE;
     private static final double BEACON_AURA_OUTER_MARGIN=.14D;
     private static final double BEACON_AURA_INNER_MARGIN=.025D;
+    // Camera-facing ribbons keep the cage readable without relying on platform-specific GL line widths.
+    private static final double BEACON_AURA_OUTER_HALF_WIDTH=.022D;
+    private static final double BEACON_AURA_INNER_HALF_WIDTH=.012D;
     // Both cages complete whole turns at the same 60-second boundary, so wrapping
     // game time cannot snap the client-only containment animation.
     private static final long BEACON_AURA_ROTATION_PERIOD=1200L;
@@ -144,10 +147,18 @@ public final class RiftClientState {
             && replacedBeaconRejected && boundaryRejected && invalidRejected)
             || !Double.isFinite(BEACON_AURA_OUTER_MARGIN)
             || !Double.isFinite(BEACON_AURA_INNER_MARGIN)
+            || !Double.isFinite(BEACON_AURA_OUTER_HALF_WIDTH)
+            || !Double.isFinite(BEACON_AURA_INNER_HALF_WIDTH)
             || BEACON_AURA_OUTER_MARGIN<=BEACON_AURA_INNER_MARGIN
-            || BEACON_AURA_INNER_MARGIN<0.0D)
+            || BEACON_AURA_INNER_MARGIN<0.0D
+            || BEACON_AURA_OUTER_HALF_WIDTH<=0.0D
+            || BEACON_AURA_OUTER_HALF_WIDTH>=BEACON_AURA_OUTER_MARGIN
+            || BEACON_AURA_INNER_HALF_WIDTH<=0.0D
+            || BEACON_AURA_INNER_HALF_WIDTH>=BEACON_AURA_INNER_MARGIN)
             throw new IllegalStateException("BLACK FREQUENCY beacon aura range/geometry regression");
         beaconAuraProfileLogged=true;
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST BEACON_AURA_RIBBON_PROFILE_VERIFIED outerHalfWidth=0.022 innerHalfWidth=0.012 cameraFacing=true allocationFree=true");
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST BEACON_AURA_PROFILE_VERIFIED radius={} cages=2 edges=24 loadedOnly=true boundaryStrict=true invalidRejected=true",
             BEACON_AURA_RENDER_DISTANCE);
@@ -158,48 +169,80 @@ public final class RiftClientState {
         return Math.max(0,Math.min(255,Math.round(value*255.0F)));
     }
 
-    private static void beaconAuraVertex(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
-            double centerX,double centerZ,double cosine,double sine,
+    private static void beaconAuraWorldVertex(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
             double x,double y,double z,int red,int green,int blue,int alpha) {
-        double dx=x-centerX,dz=z-centerZ;
-        double rotatedX=centerX+dx*cosine-dz*sine;
-        double rotatedZ=centerZ+dx*sine+dz*cosine;
-        builder.vertex(matrix,(float)(rotatedX-camera.x),(float)(y-camera.y),(float)(rotatedZ-camera.z))
+        builder.vertex(matrix,(float)(x-camera.x),(float)(y-camera.y),(float)(z-camera.z))
             .color(red,green,blue,alpha).endVertex();
     }
 
-    private static void beaconAuraLine(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
-            double centerX,double centerZ,double cosine,double sine,
+    // Build a camera-facing quad around each edge. This avoids relying on GL line-width
+    // support, which is commonly limited to one pixel on modern drivers.
+    private static void beaconAuraRibbon(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
+            double centerX,double centerZ,double cosine,double sine,double halfWidth,
             double x1,double y1,double z1,double x2,double y2,double z2,
             int red,int green,int blue,int alpha) {
-        beaconAuraVertex(builder,matrix,camera,centerX,centerZ,cosine,sine,
-            x1,y1,z1,red,green,blue,alpha);
-        beaconAuraVertex(builder,matrix,camera,centerX,centerZ,cosine,sine,
-            x2,y2,z2,red,green,blue,alpha);
+        double dx1=x1-centerX,dz1=z1-centerZ;
+        double ax=centerX+dx1*cosine-dz1*sine;
+        double az=centerZ+dx1*sine+dz1*cosine;
+        double dx2=x2-centerX,dz2=z2-centerZ;
+        double bx=centerX+dx2*cosine-dz2*sine;
+        double bz=centerZ+dx2*sine+dz2*cosine;
+        double directionX=bx-ax,directionY=y2-y1,directionZ=bz-az;
+        double viewX=camera.x-(ax+bx)*.5D;
+        double viewY=camera.y-(y1+y2)*.5D;
+        double viewZ=camera.z-(az+bz)*.5D;
+        double sideX=directionY*viewZ-directionZ*viewY;
+        double sideY=directionZ*viewX-directionX*viewZ;
+        double sideZ=directionX*viewY-directionY*viewX;
+        double sideLength=Math.sqrt(sideX*sideX+sideY*sideY+sideZ*sideZ);
+        if(!Double.isFinite(sideLength) || sideLength<1.0E-8D) {
+            // A vertical edge can be parallel to world-up; use world-X as the final fallback.
+            sideX=-directionZ;
+            sideY=0.0D;
+            sideZ=directionX;
+            sideLength=Math.sqrt(sideX*sideX+sideZ*sideZ);
+            if(!Double.isFinite(sideLength) || sideLength<1.0E-8D) {
+                sideX=0.0D;
+                sideY=directionZ;
+                sideZ=-directionY;
+                sideLength=Math.sqrt(sideY*sideY+sideZ*sideZ);
+            }
+        }
+        if(!Double.isFinite(sideLength) || sideLength<1.0E-8D
+            || !Double.isFinite(halfWidth) || halfWidth<=0.0D) return;
+        double scale=halfWidth/sideLength;
+        sideX*=scale;
+        sideY*=scale;
+        sideZ*=scale;
+        beaconAuraWorldVertex(builder,matrix,camera,ax+sideX,y1+sideY,az+sideZ,red,green,blue,alpha);
+        beaconAuraWorldVertex(builder,matrix,camera,bx+sideX,y2+sideY,bz+sideZ,red,green,blue,alpha);
+        beaconAuraWorldVertex(builder,matrix,camera,bx-sideX,y2-sideY,bz-sideZ,red,green,blue,alpha);
+        beaconAuraWorldVertex(builder,matrix,camera,ax-sideX,y1-sideY,az-sideZ,red,green,blue,alpha);
     }
 
     private static void emitBeaconCage(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
-            BlockPos beacon,double margin,double angle,int red,int green,int blue,int alpha) {
+            BlockPos beacon,double margin,double angle,double halfWidth,
+            int red,int green,int blue,int alpha) {
         double centerX=beacon.getX()+.5D,centerZ=beacon.getZ()+.5D;
         double cosine=Math.cos(angle),sine=Math.sin(angle);
         double minX=beacon.getX()-margin,maxX=beacon.getX()+1.0D+margin;
         double minY=beacon.getY()-margin,maxY=beacon.getY()+1.0D+margin;
         double minZ=beacon.getZ()-margin,maxZ=beacon.getZ()+1.0D+margin;
         // Bottom ring.
-        beaconAuraLine(builder,matrix,camera,centerX,centerZ,cosine,sine,minX,minY,minZ,maxX,minY,minZ,red,green,blue,alpha);
-        beaconAuraLine(builder,matrix,camera,centerX,centerZ,cosine,sine,maxX,minY,minZ,maxX,minY,maxZ,red,green,blue,alpha);
-        beaconAuraLine(builder,matrix,camera,centerX,centerZ,cosine,sine,maxX,minY,maxZ,minX,minY,maxZ,red,green,blue,alpha);
-        beaconAuraLine(builder,matrix,camera,centerX,centerZ,cosine,sine,minX,minY,maxZ,minX,minY,minZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,minX,minY,minZ,maxX,minY,minZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,maxX,minY,minZ,maxX,minY,maxZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,maxX,minY,maxZ,minX,minY,maxZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,minX,minY,maxZ,minX,minY,minZ,red,green,blue,alpha);
         // Top ring.
-        beaconAuraLine(builder,matrix,camera,centerX,centerZ,cosine,sine,minX,maxY,minZ,maxX,maxY,minZ,red,green,blue,alpha);
-        beaconAuraLine(builder,matrix,camera,centerX,centerZ,cosine,sine,maxX,maxY,minZ,maxX,maxY,maxZ,red,green,blue,alpha);
-        beaconAuraLine(builder,matrix,camera,centerX,centerZ,cosine,sine,maxX,maxY,maxZ,minX,maxY,maxZ,red,green,blue,alpha);
-        beaconAuraLine(builder,matrix,camera,centerX,centerZ,cosine,sine,minX,maxY,maxZ,minX,maxY,minZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,minX,maxY,minZ,maxX,maxY,minZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,maxX,maxY,minZ,maxX,maxY,maxZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,maxX,maxY,maxZ,minX,maxY,maxZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,minX,maxY,maxZ,minX,maxY,minZ,red,green,blue,alpha);
         // Four vertical containment rails.
-        beaconAuraLine(builder,matrix,camera,centerX,centerZ,cosine,sine,minX,minY,minZ,minX,maxY,minZ,red,green,blue,alpha);
-        beaconAuraLine(builder,matrix,camera,centerX,centerZ,cosine,sine,maxX,minY,minZ,maxX,maxY,minZ,red,green,blue,alpha);
-        beaconAuraLine(builder,matrix,camera,centerX,centerZ,cosine,sine,maxX,minY,maxZ,maxX,maxY,maxZ,red,green,blue,alpha);
-        beaconAuraLine(builder,matrix,camera,centerX,centerZ,cosine,sine,minX,minY,maxZ,minX,maxY,maxZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,minX,minY,minZ,minX,maxY,minZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,maxX,minY,minZ,maxX,maxY,minZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,maxX,minY,maxZ,maxX,maxY,maxZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,minX,minY,maxZ,minX,maxY,maxZ,red,green,blue,alpha);
     }
 
     /** Draw a client-only violet containment cage around the server-owned physical beacon. */
@@ -243,11 +286,11 @@ public final class RiftClientState {
         RenderSystem.setShader(GameRenderer::getPositionColorShader);
         RenderSystem.setShaderColor(1.0F,1.0F,1.0F,1.0F);
         try {
-            builder.begin(VertexFormat.Mode.LINES,DefaultVertexFormat.POSITION_COLOR);
+            builder.begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.POSITION_COLOR);
             emitBeaconCage(builder,matrix,camera,beacon,BEACON_AURA_OUTER_MARGIN,outerAngle,
-                77,13,173,outerAlpha);
+                BEACON_AURA_OUTER_HALF_WIDTH,77,13,173,outerAlpha);
             emitBeaconCage(builder,matrix,camera,beacon,BEACON_AURA_INNER_MARGIN,innerAngle,
-                158,56,255,innerAlpha);
+                BEACON_AURA_INNER_HALF_WIDTH,158,56,255,innerAlpha);
             BufferUploader.drawWithShader(builder.end());
             submitted=true;
         } finally {
@@ -260,7 +303,7 @@ public final class RiftClientState {
         if(submitted && !beaconAuraRenderedLogged) {
             beaconAuraRenderedLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST BEACON_AURA_RENDERED cages=2 edges=24 rotation=counterphase loadedOnly=true");
+                "BLACK_FREQUENCY_TEST BEACON_AURA_RENDERED cages=2 edgeRibbons=24 rotation=counterphase loadedOnly=true");
         }
     }
     // Recovery updates are intentionally local. Expire stale visuals when a player
