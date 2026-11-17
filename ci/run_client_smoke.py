@@ -53,17 +53,22 @@ def verify_beacon_aura_source():
     client=(root/"client"/"RiftClientState.java").read_text(encoding="utf-8")
     sky=(root/"client"/"RiftSkyRenderer.java").read_text(encoding="utf-8")
     controller=(root/"RiftController.java").read_text(encoding="utf-8")
-    if ("private static final String VERSION = \"3\";" not in network
-            or "buf.writeLong(p.beaconPos)" not in network
-            or "buf.readLong()" not in network
+    if ("private static final String VERSION = \"4\";" not in network
+            or "buf.writeLong(p.beaconPos); buf.writeBoolean(p.restorationActive)" not in network
+            or "buf.readLong(), buf.readBoolean()" not in network
             or "packet.beaconPos" not in network
-            or "public final long beaconPos;" not in network):
+            or "packet.restorationActive" not in network
+            or "public final long beaconPos;" not in network
+            or "public final boolean restorationActive;" not in network):
         raise RuntimeError("BLACK FREQUENCY physical beacon position packet contract is incomplete")
     if ("public static void renderBeaconAura(RenderLevelStageEvent event)" not in client
             or "level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)" not in client
             or "Blocks.BEACON" not in client
             or "VertexFormat.Mode.QUADS" not in client
             or "BEACON_AURA_RENDERED cages=2 edgeRibbons=24 rotation=counterphase loadedOnly=true" not in client
+            or "shouldShowBeaconAura(collapse,progress,restorationActive)" not in client
+            or "BEACON_AURA_RESTORATION_VISIBILITY_VERIFIED zeroProgressRestoring=true completed=false" not in client
+            or "BEACON_AURA_RESTORATION_ACTIVE_RENDERED progressZero=true loadedOnly=true" not in client
             or "BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true" not in client
             or "beaconAuraDistanceFade(distanceSquared)" not in client
             or "distanceSquared<=BEACON_AURA_FADE_START_DISTANCE_SQR" not in client
@@ -74,7 +79,8 @@ def verify_beacon_aura_source():
             or "beaconAuraRotationAngle(level.getGameTime(),partial,1)" not in client
             or "beaconAuraRotationAngle(level.getGameTime(),partial,-2)" not in client
             or "RiftClientState.renderBeaconAura(event);" not in sky
-            or "s.x,s.z,s.naturalBeaconPos" not in controller):
+            or "RiftNetwork.send(player,remaining,false,0,s.x,s.z,s.naturalBeaconPos,true);" not in controller
+            or "s.x,s.z,s.naturalBeaconPos,s.restoring)" not in controller):
         raise RuntimeError("BLACK FREQUENCY loaded-only violet beacon aura source contract is incomplete")
     aura_start=client.find("public static void renderBeaconAura(")
     aura_end=client.find("\n    }",aura_start)
@@ -2125,8 +2131,10 @@ def capture_test_world():
                     try_beacon_click(current)
                     initial_pulse_marker="BLACK_FREQUENCY_TEST RESTORE_INITIAL_BEACON_PULSE_EMITTED ring=24 sparks=4 viewer=true"
                     stabilization_pulse_marker="BLACK_FREQUENCY_TEST BEACON_STABILIZATION_PULSE viewerScan=shared"
+                    aura_restoration_marker="BLACK_FREQUENCY_TEST BEACON_AURA_RESTORATION_ACTIVE_RENDERED progressZero=true loadedOnly=true"
                     for pulse_marker in (initial_pulse_marker,stabilization_pulse_marker):
-                        if (not restoration_shot and pulse_marker in current
+                        if (not restoration_shot and aura_restoration_marker in current
+                                and pulse_marker in current
                                 and pulse_marker not in restoration_capture_attempted_markers
                                 and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" not in current):
                             restoration_capture_attempted_markers.add(pulse_marker)
@@ -2563,6 +2571,9 @@ def capture_test_world():
                     return False
                 if "BLACK_FREQUENCY_TEST BEACON_AURA_RENDERED cages=2 edgeRibbons=24 rotation=counterphase loadedOnly=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: rotating violet physical beacon containment aura was not drawn from the loaded beacon block",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST BEACON_AURA_RESTORATION_ACTIVE_RENDERED progressZero=true loadedOnly=true" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: physical beacon aura disappeared during the zero-progress stabilization hold",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST BEACON_START_ACTIONBAR_ONLY" not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon activation did not use the non-obstructive action bar",flush=True)

@@ -3336,7 +3336,7 @@ public final class RiftController {
                     // Publish the exact physical objective immediately; clients must not
                     // guess its Y coordinate from the fracture anchor or scan chunks.
                     for(var beaconViewer:level.players()) RiftNetwork.send(beaconViewer,beaconProgress,
-                        beaconCollapse,s.finaleTicks,s.x,s.z,s.naturalBeaconPos);
+                        beaconCollapse,s.finaleTicks,s.x,s.z,s.naturalBeaconPos,s.restoring);
                     if(CI_TEST) {
                         // Exercise the actual Forge block-entity persistence path,
                         // not only the SavedData UUID field.
@@ -3592,7 +3592,7 @@ public final class RiftController {
                 if(sendProgress)
                     player.displayClientMessage(recoveryViolet("✦ СТАБИЛИЗАЦИЯ §f"+percent+"% §7— восстановлено "+s.restoredBlocks+" блоков"),true);
                 if(sendOverlay)
-                    RiftNetwork.send(player,remaining,false,0,s.x,s.z,s.naturalBeaconPos);
+                    RiftNetwork.send(player,remaining,false,0,s.x,s.z,s.naturalBeaconPos,true);
             }
             if(CI_TEST && sendProgress && sendOverlay && !s.ciRestoreUiAudiencePassLogged) {
                 s.ciRestoreUiAudiencePassLogged=true;
@@ -3822,7 +3822,7 @@ public final class RiftController {
                 if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_INVALID_SNAPSHOT_SUMMARY_EMITTED count={} singleSummary=true",
                     s.skippedInvalid);
             }
-            for(var player:level.players()) RiftNetwork.send(player,0f,false,0,s.x,s.z,s.naturalBeaconPos);
+            for(var player:level.players()) RiftNetwork.send(player,0f,false,0,s.x,s.z,s.naturalBeaconPos,false);
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored={} destroyed={} skippedOccupied={} skippedInvalid={} flowingReplaced={}",s.restoredBlocks,s.edits,s.skippedOccupied,s.skippedInvalid,s.ciFlowingReplaced);
             // Disposable client test: dispatch a synthetic BreakEvent after
             // restoration. This verifies cancellation and block consumption,
@@ -3905,7 +3905,7 @@ public final class RiftController {
         // Keep clients synchronized even on old worlds or after the finale.
         if(level.getGameTime()%(s.started && !s.finished ? 10L : 100L)==0) {
             float progress=s.restored ? 0f : s.finished ? 1f : Math.max(0f, Math.min(1f,(s.elapsed-3f*DAY)/(7f*DAY)));
-            for(var player : level.players()) RiftNetwork.send(player,progress,!s.restored && (s.started || s.finished), s.finaleTicks,s.x,s.z,s.naturalBeaconPos);
+            for(var player : level.players()) RiftNetwork.send(player,progress,!s.restored && (s.started || s.finished), s.finaleTicks,s.x,s.z,s.naturalBeaconPos,s.restoring);
         }
         // Once the beacon finishes, do not advance the finale clock or apply
         // gravity impulses again. "finished" alone is not sufficient: it also
@@ -3972,7 +3972,7 @@ public final class RiftController {
                     if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST FINALE_ANCHOR_VALID x={} z={}",s.x,s.z);
                     break;
                 }
-                for(var player : level.players()) RiftNetwork.send(player,1f,true,0,s.x,s.z,s.naturalBeaconPos);
+                for(var player : level.players()) RiftNetwork.send(player,1f,true,0,s.x,s.z,s.naturalBeaconPos,false);
                 // The fracture is local: do not interrupt distant players or
                 // spectators with a full-screen finale announcement.
                 for(var player : level.players()) {

@@ -34,8 +34,10 @@ public final class RiftClientState {
     private static boolean anchorValid;
     private static long beaconPosition=Long.MIN_VALUE;
     private static boolean beaconPositionValid;
+    private static boolean restorationActive;
     private static boolean beaconAuraProfileLogged;
     private static boolean beaconAuraRenderedLogged;
+    private static boolean beaconAuraRestorationRenderedLogged;
     private static final double BEACON_AURA_RENDER_DISTANCE=48.0D;
     private static final double BEACON_AURA_RENDER_DISTANCE_SQR=
         BEACON_AURA_RENDER_DISTANCE*BEACON_AURA_RENDER_DISTANCE;
@@ -54,7 +56,7 @@ public final class RiftClientState {
     // World identity also changes when reconnecting to a different server in the same dimension.
     private static net.minecraft.client.multiplayer.ClientLevel lastLevel;
     private RiftClientState() {}
-    public static void update(float value, boolean collapsing, int ticks, int worldAnchorX, int worldAnchorZ, long worldBeaconPosition) {
+    public static void update(float value, boolean collapsing, int ticks, int worldAnchorX, int worldAnchorZ, long worldBeaconPosition, boolean worldRestorationActive) {
         // Packets may arrive before the first client tick after joining a world.
         // Bind the state to that world immediately, rather than carrying it across sessions.
         net.minecraft.client.multiplayer.ClientLevel level=net.minecraft.client.Minecraft.getInstance().level;
@@ -70,6 +72,7 @@ public final class RiftClientState {
         anchorZ=worldAnchorZ;
         beaconPosition=worldBeaconPosition;
         beaconPositionValid=worldBeaconPosition!=Long.MIN_VALUE;
+        restorationActive=worldRestorationActive;
         anchorValid=Math.abs((long)worldAnchorX)<=30_000_000L
             && Math.abs((long)worldAnchorZ)<=30_000_000L;
     }
@@ -83,8 +86,9 @@ public final class RiftClientState {
     public static void reset() {
         progress=0;collapse=false;finaleTicks=0;ticksSincePacket=0;
         anchorX=0;anchorZ=0;anchorValid=false;
-        beaconPosition=Long.MIN_VALUE;beaconPositionValid=false;
+        beaconPosition=Long.MIN_VALUE;beaconPositionValid=false;restorationActive=false;
         beaconAuraProfileLogged=false;beaconAuraRenderedLogged=false;
+        beaconAuraRestorationRenderedLogged=false;
         GroundRenderer.clearCache();
     }
 
@@ -93,6 +97,10 @@ public final class RiftClientState {
         return active && hasPosition && chunkLoaded && beaconBlock
             && Double.isFinite(distanceSquared) && distanceSquared>=0.0D
             && distanceSquared<BEACON_AURA_RENDER_DISTANCE_SQR;
+    }
+
+    private static boolean shouldShowBeaconAura(boolean collapsing,float value,boolean restoring) {
+        return restoring || collapsing || (Float.isFinite(value) && value>0.0F);
     }
 
     private static double beaconAuraDistanceFade(double distanceSquared) {
@@ -150,6 +158,10 @@ public final class RiftClientState {
         verifyBeaconAuraRotationProfile();
         boolean inside=shouldRenderBeaconAura(true,true,true,true,
             Math.nextDown(BEACON_AURA_RENDER_DISTANCE_SQR));
+        boolean collapseVisible=shouldShowBeaconAura(true,0.0F,false);
+        boolean progressVisible=shouldShowBeaconAura(false,.25F,false);
+        boolean zeroProgressRestorationVisible=shouldShowBeaconAura(false,0.0F,true);
+        boolean completedHidden=!shouldShowBeaconAura(false,0.0F,false);
         boolean inactiveRejected=!shouldRenderBeaconAura(false,true,true,true,1.0D);
         boolean missingPositionRejected=!shouldRenderBeaconAura(true,false,true,true,1.0D);
         boolean unloadedRejected=!shouldRenderBeaconAura(true,true,false,true,1.0D);
@@ -177,6 +189,7 @@ public final class RiftClientState {
             && beaconAuraDistanceFade(-1.0D)==0.0D;
         if(!(inside && inactiveRejected && missingPositionRejected && unloadedRejected
             && replacedBeaconRejected && boundaryRejected && invalidRejected
+            && collapseVisible && progressVisible && zeroProgressRestorationVisible && completedHidden
             && fadeMonotonic && invalidFadeRejected)
             || !Double.isFinite(BEACON_AURA_OUTER_MARGIN)
             || !Double.isFinite(BEACON_AURA_INNER_MARGIN)
@@ -190,6 +203,8 @@ public final class RiftClientState {
             || BEACON_AURA_INNER_HALF_WIDTH>=BEACON_AURA_INNER_MARGIN)
             throw new IllegalStateException("BLACK FREQUENCY beacon aura range/geometry regression");
         beaconAuraProfileLogged=true;
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST BEACON_AURA_RESTORATION_VISIBILITY_VERIFIED zeroProgressRestoring=true completed=false");
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true");
         com.mojang.logging.LogUtils.getLogger().info(
@@ -285,8 +300,9 @@ public final class RiftClientState {
         if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_PARTICLES) return;
         verifyBeaconAuraProfile();
         var level=Minecraft.getInstance().level;
+        boolean auraActive=shouldShowBeaconAura(collapse,progress,restorationActive);
         if(level==null || !level.dimension().equals(Level.OVERWORLD)
-            || !beaconPositionValid || !(collapse || progress>0.0F)) return;
+            || !beaconPositionValid || !auraActive) return;
         if(!isSafeBeaconPosition(beaconPosition,level)) return;
         BlockPos beacon=BlockPos.of(beaconPosition);
         if(!level.getWorldBorder().isWithinBounds(beacon)
@@ -299,7 +315,7 @@ public final class RiftClientState {
         double dy=beacon.getY()+.5D-camera.y;
         double dz=beacon.getZ()+.5D-camera.z;
         double distanceSquared=dx*dx+dy*dy+dz*dz;
-        if(!shouldRenderBeaconAura(collapse || progress>0.0F,beaconPositionValid,
+        if(!shouldRenderBeaconAura(auraActive,beaconPositionValid,
                 true,beaconBlock,distanceSquared)) return;
         double distanceFade=beaconAuraDistanceFade(distanceSquared);
         if(distanceFade<=1.0D/255.0D) return;
@@ -341,6 +357,11 @@ public final class RiftClientState {
             beaconAuraRenderedLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST BEACON_AURA_RENDERED cages=2 edgeRibbons=24 rotation=counterphase loadedOnly=true");
+        }
+        if(submitted && restorationActive && progress<=0.0F && !beaconAuraRestorationRenderedLogged) {
+            beaconAuraRestorationRenderedLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST BEACON_AURA_RESTORATION_ACTIVE_RENDERED progressZero=true loadedOnly=true");
         }
     }
     // Recovery updates are intentionally local. Expire stale visuals when a player
