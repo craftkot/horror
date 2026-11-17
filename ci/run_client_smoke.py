@@ -107,8 +107,16 @@ def verify_restoration_particle_source():
     if ("double zone=gravityAnomalyField(testX,testZ,tick);" not in source
             or "double zone=gravityAnomalyField(px,pz,s.finaleTicks);" not in source
             or "double zone=gravityAnomalyField(player.getX(),player.getZ(),s.finaleTicks);" not in source
-            or "double turbulence=Math.sin((x-z)*.083D+Math.sin(time*.017D)*1.3D+time*.021D);" not in source
-            or "double field=base+.12D*cross+.06D*turbulence;" not in source
+            or "double turbulence=Math.sin((x-z)*.083D+gravityFieldTurbulenceTimePhase*1.3D+time*.021D);" not in source
+            or "double microTurbulence=Math.sin((x*.17D+z*.13D)" not in source
+            or "double field=base+.12D*cross+.06D*turbulence+.035D*microTurbulence;" not in source
+            or "private static void updateGravityFieldPhaseCache(int ticks)" not in source
+            or "if(gravityFieldCachedTick==time) return;" not in source
+            or "gravityFieldBaseTimePhase=Math.sin(time*.011D);" not in source
+            or "gravityFieldCrossTimePhase=Math.sin(time*.013D);" not in source
+            or "gravityFieldTurbulenceTimePhase=Math.sin(time*.017D);" not in source
+            or "gravityFieldMicroTimePhase=Math.sin(time*.027D);" not in source
+            or "ANOMALY_FIELD_TIME_PHASE_CACHE_VERIFIED cachedPhases=4 sameTickReuse=true tickRewind=true serverThreadOnly=true" not in source
             or "Math.sin(player.getX()*.115" in source
             or "Math.sin(px*.115+Math.sin(s.finaleTicks*.011)*1.8)" in source):
         raise RuntimeError("BLACK FREQUENCY gravity consumers must share the bounded multi-scale anomaly field")

@@ -30,6 +30,13 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 /** No commands. Ten days after installing this addon in a world, its finale begins. */
 public final class RiftController {
     private static final org.slf4j.Logger LOGGER = com.mojang.logging.LogUtils.getLogger();
+    // Time-only anomaly phases are shared by every player query in the same finale tick.
+    // The field is evaluated on the logical server thread; a tick change refreshes this transient cache.
+    private static int gravityFieldCachedTick=Integer.MIN_VALUE;
+    private static double gravityFieldBaseTimePhase;
+    private static double gravityFieldCrossTimePhase;
+    private static double gravityFieldTurbulenceTimePhase;
+    private static double gravityFieldMicroTimePhase;
     // The legacy dark-purple formatting code is magenta; use the actual deep-violet brand color.
     private static final int RECOVERY_UI_VIOLET_RGB=0x5714C7;
     private static final boolean CI_TEST = Boolean.getBoolean("blackfrequency.ciTestMode");
@@ -430,16 +437,28 @@ public final class RiftController {
      * A diagonal cross-wave and a smaller time-warped spatial wave shear the broad
      * lift/sink bands into irregular drifting pockets without changing impulse caps.
      */
+    /** Refresh four time-only wave phases once per distinct finale tick. */
+    private static void updateGravityFieldPhaseCache(int ticks) {
+        int time=Math.max(0,ticks);
+        if(gravityFieldCachedTick==time) return;
+        gravityFieldBaseTimePhase=Math.sin(time*.011D);
+        gravityFieldCrossTimePhase=Math.sin(time*.013D);
+        gravityFieldTurbulenceTimePhase=Math.sin(time*.017D);
+        gravityFieldMicroTimePhase=Math.sin(time*.027D);
+        gravityFieldCachedTick=time;
+    }
+
     private static double gravityAnomalyField(double x,double z,int ticks) {
         if(!Double.isFinite(x) || !Double.isFinite(z)
             || Math.abs(x)>30_000_000.0D || Math.abs(z)>30_000_000.0D) return 0.0D;
-        double time=Math.max(0,ticks);
-        double base=Math.sin(x*.115D+Math.sin(time*.011D)*1.8D)
+        int time=Math.max(0,ticks);
+        updateGravityFieldPhaseCache(time);
+        double base=Math.sin(x*.115D+gravityFieldBaseTimePhase*1.8D)
             *Math.cos(z*.125D-time*.008D);
-        double cross=Math.sin((x+z)*.047D+Math.sin(time*.013D)*.9D-time*.009D);
-        double turbulence=Math.sin((x-z)*.083D+Math.sin(time*.017D)*1.3D+time*.021D);
+        double cross=Math.sin((x+z)*.047D+gravityFieldCrossTimePhase*.9D-time*.009D);
+        double turbulence=Math.sin((x-z)*.083D+gravityFieldTurbulenceTimePhase*1.3D+time*.021D);
         double microTurbulence=Math.sin((x*.17D+z*.13D)
-            +Math.sin(time*.027D)*.8D+time*.031D);
+            +gravityFieldMicroTimePhase*.8D+time*.031D);
         double field=base+.12D*cross+.06D*turbulence+.035D*microTurbulence;
         return Math.max(-1.0D,Math.min(1.0D,field));
     }
@@ -487,12 +506,23 @@ public final class RiftController {
             +Math.sin(85.0D*.027D)*.8D+85.0D*.031D);
         double expected=Math.max(-1.0D,Math.min(1.0D,
             expectedBase+.12D*expectedCross+.06D*expectedTurbulence+.035D*expectedMicroTurbulence));
+        double expectedAtZero=Math.max(-1.0D,Math.min(1.0D,
+            Math.sin(sampleX*.115D)*Math.cos(sampleZ*.125D)
+                +.12D*Math.sin((sampleX+sampleZ)*.047D)
+                +.06D*Math.sin((sampleX-sampleZ)*.083D)
+                +.035D*expectedMicroAtZero));
+        double atZeroAfterRewind=gravityAnomalyField(sampleX,sampleZ,0);
+        double at85AfterRewind=gravityAnomalyField(sampleX,sampleZ,85);
         if(samples!=100
             || Math.abs(gravityAnomalyField(sampleX,sampleZ,85)-expected)>1.0E-12D
+            || Math.abs(atZeroAfterRewind-expectedAtZero)>1.0E-12D
+            || Math.abs(at85AfterRewind-expected)>1.0E-12D
+            || gravityFieldCachedTick!=85
             || Math.abs(expectedMicroLater-expectedMicroAtZero)<=.1D)
             throw new IllegalStateException("CI multi-scale gravity anomaly composition regression");
         LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_MULTI_SCALE_VERIFIED turbulenceAmplitude=0.06 samples={} deterministic=true bounded=true",samples);
         LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_MICRO_TURBULENCE_VERIFIED amplitude=0.035 spatialFrequencyX=0.17 spatialFrequencyZ=0.13 timeWarped=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_TIME_PHASE_CACHE_VERIFIED cachedPhases=4 sameTickReuse=true tickRewind=true serverThreadOnly=true");
     }
 
     private static void verifyRiftGravityEligibility() {
