@@ -3964,7 +3964,7 @@ public final class RiftController {
         double boundaryY=ciEyeDistanceSquaredToBlock(
             new net.minecraft.world.phys.Vec3(-1.5D,69.5D,-2.5D),beacon);
         double boundaryZ=ciEyeDistanceSquaredToBlock(
-            new net.minecraft.world.phys.Vec3(-1.5D,64.5D,1.5D),beacon);
+            new net.minecraft.world.phys.Vec3(-1.5D,64.5D,2.5D),beacon);
         double outside=ciEyeDistanceSquaredToBlock(
             new net.minecraft.world.phys.Vec3(3.5001D,64.5D,-2.5D),beacon);
         double invalid=ciEyeDistanceSquaredToBlock(
