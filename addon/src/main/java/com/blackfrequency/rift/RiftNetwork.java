@@ -14,7 +14,7 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
 
 public final class RiftNetwork {
-    private static final String VERSION = "2";
+    private static final String VERSION = "3";
     private static final ResourceLocation CHANNEL_ID = Objects.requireNonNull(
         ResourceLocation.tryBuild("blackfrequency", "main"), "Invalid BLACK FREQUENCY channel id");
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
@@ -27,20 +27,20 @@ public final class RiftNetwork {
         if (registered) return;
         registered = true;
         CHANNEL.messageBuilder(RiftStatePacket.class, 0, NetworkDirection.PLAY_TO_CLIENT)
-            .encoder((p, buf) -> { buf.writeFloat(p.progress); buf.writeBoolean(p.collapse); buf.writeVarInt(p.finaleTicks); buf.writeInt(p.anchorX); buf.writeInt(p.anchorZ); })
-            .decoder(buf -> new RiftStatePacket(buf.readFloat(), buf.readBoolean(), buf.readVarInt(), buf.readInt(), buf.readInt()))
+            .encoder((p, buf) -> { buf.writeFloat(p.progress); buf.writeBoolean(p.collapse); buf.writeVarInt(p.finaleTicks); buf.writeInt(p.anchorX); buf.writeInt(p.anchorZ); buf.writeLong(p.beaconPos); })
+            .decoder(buf -> new RiftStatePacket(buf.readFloat(), buf.readBoolean(), buf.readVarInt(), buf.readInt(), buf.readInt(), buf.readLong()))
             .consumerMainThread(RiftNetwork::receive)
             .add();
     }
     public static void send(ServerPlayer player, float progress, boolean collapse, int finaleTicks,
-            int anchorX, int anchorZ) {
+            int anchorX, int anchorZ, long beaconPos) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
-            new RiftStatePacket(progress, collapse, finaleTicks, anchorX, anchorZ));
+            new RiftStatePacket(progress, collapse, finaleTicks, anchorX, anchorZ, beaconPos));
     }
     private static void receive(RiftStatePacket packet, Supplier<NetworkEvent.Context> ctx) {
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () ->
             com.blackfrequency.rift.client.RiftClientState.update(packet.progress, packet.collapse,
-                packet.finaleTicks, packet.anchorX, packet.anchorZ));
+                packet.finaleTicks, packet.anchorX, packet.anchorZ, packet.beaconPos));
         ctx.get().setPacketHandled(true);
     }
     public static final class RiftStatePacket {
@@ -49,12 +49,14 @@ public final class RiftNetwork {
         public final int finaleTicks;
         public final int anchorX;
         public final int anchorZ;
-        public RiftStatePacket(float progress, boolean collapse, int finaleTicks, int anchorX, int anchorZ) {
+        public final long beaconPos;
+        public RiftStatePacket(float progress, boolean collapse, int finaleTicks, int anchorX, int anchorZ, long beaconPos) {
             this.progress = progress;
             this.collapse = collapse;
             this.finaleTicks = finaleTicks;
             this.anchorX = anchorX;
             this.anchorZ = anchorZ;
+            this.beaconPos = beaconPos;
         }
     }
 }

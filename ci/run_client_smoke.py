@@ -46,6 +46,35 @@ def parse_fissure_particle_emission(log_text):
     match=FISSURE_PARTICLE_EMISSION_RE.search(log_text)
     return tuple(int(value) for value in match.groups()) if match else None
 
+
+def verify_beacon_aura_source():
+    root=ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"
+    network=(root/"RiftNetwork.java").read_text(encoding="utf-8")
+    client=(root/"client"/"RiftClientState.java").read_text(encoding="utf-8")
+    sky=(root/"client"/"RiftSkyRenderer.java").read_text(encoding="utf-8")
+    controller=(root/"RiftController.java").read_text(encoding="utf-8")
+    if ("private static final String VERSION = \"3\";" not in network
+            or "buf.writeLong(p.beaconPos)" not in network
+            or "buf.readLong()" not in network
+            or "packet.beaconPos" not in network
+            or "public final long beaconPos;" not in network):
+        raise RuntimeError("BLACK FREQUENCY physical beacon position packet contract is incomplete")
+    if ("public static void renderBeaconAura(RenderLevelStageEvent event)" not in client
+            or "level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)" not in client
+            or "Blocks.BEACON" not in client
+            or "VertexFormat.Mode.LINES" not in client
+            or "BEACON_AURA_RENDERED cages=2 edges=24 loadedOnly=true" not in client
+            or "RiftClientState.renderBeaconAura(event);" not in sky
+            or "s.x,s.z,s.naturalBeaconPos" not in controller):
+        raise RuntimeError("BLACK FREQUENCY loaded-only violet beacon aura source contract is incomplete")
+    aura_start=client.find("public static void renderBeaconAura(")
+    aura_end=client.find("\n    }",aura_start)
+    aura_body=client[aura_start:aura_end] if aura_start>=0 and aura_end>aura_start else ""
+    if any(token in aura_body for token in ("getChunkAt(","getChunk(",
+            "getChunkSource().getChunk","forceChunk")):
+        raise RuntimeError("BLACK FREQUENCY beacon aura must never request chunk loading")
+    print("WORLD_CAPTURE: loaded-only physical beacon aura packet and render contract verified",flush=True)
+
 def verify_restoration_particle_source():
     source_path=ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftController.java"
     source=source_path.read_text(encoding="utf-8")
@@ -315,6 +344,7 @@ def verify_restoration_particle_source():
 
 verify_fissure_target_view_score_profile()
 verify_restoration_particle_source()
+verify_beacon_aura_source()
 
 def valid_fissure_particle_emission(counts):
     if counts is None:
@@ -2515,6 +2545,9 @@ def capture_test_world():
                     return False
                 if "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon was not activated by actual player right-click",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST BEACON_AURA_RENDERED cages=2 edges=24 loadedOnly=true" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: violet physical beacon containment aura was not drawn from the loaded beacon block",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST BEACON_START_ACTIONBAR_ONLY" not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon activation did not use the non-obstructive action bar",flush=True)

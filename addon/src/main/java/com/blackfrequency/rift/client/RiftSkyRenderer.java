@@ -172,6 +172,7 @@ public final class RiftSkyRenderer {
         @SubscribeEvent
         public static void sky(RenderLevelStageEvent event) {
             if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_PARTICLES) {
+                RiftClientState.renderBeaconAura(event);
                 RiftClientState.GroundRenderer.render(event);
                 return;
             }

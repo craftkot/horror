@@ -32,10 +32,19 @@ public final class RiftClientState {
     private static int anchorX;
     private static int anchorZ;
     private static boolean anchorValid;
+    private static long beaconPosition=Long.MIN_VALUE;
+    private static boolean beaconPositionValid;
+    private static boolean beaconAuraProfileLogged;
+    private static boolean beaconAuraRenderedLogged;
+    private static final double BEACON_AURA_RENDER_DISTANCE=48.0D;
+    private static final double BEACON_AURA_RENDER_DISTANCE_SQR=
+        BEACON_AURA_RENDER_DISTANCE*BEACON_AURA_RENDER_DISTANCE;
+    private static final double BEACON_AURA_OUTER_MARGIN=.14D;
+    private static final double BEACON_AURA_INNER_MARGIN=.025D;
     // World identity also changes when reconnecting to a different server in the same dimension.
     private static net.minecraft.client.multiplayer.ClientLevel lastLevel;
     private RiftClientState() {}
-    public static void update(float value, boolean collapsing, int ticks, int worldAnchorX, int worldAnchorZ) {
+    public static void update(float value, boolean collapsing, int ticks, int worldAnchorX, int worldAnchorZ, long worldBeaconPosition) {
         // Packets may arrive before the first client tick after joining a world.
         // Bind the state to that world immediately, rather than carrying it across sessions.
         net.minecraft.client.multiplayer.ClientLevel level=net.minecraft.client.Minecraft.getInstance().level;
@@ -49,6 +58,8 @@ public final class RiftClientState {
         finaleTicks=Math.max(0,ticks);
         anchorX=worldAnchorX;
         anchorZ=worldAnchorZ;
+        beaconPosition=worldBeaconPosition;
+        beaconPositionValid=worldBeaconPosition!=Long.MIN_VALUE;
         anchorValid=Math.abs((long)worldAnchorX)<=30_000_000L
             && Math.abs((long)worldAnchorZ)<=30_000_000L;
     }
@@ -62,7 +73,150 @@ public final class RiftClientState {
     public static void reset() {
         progress=0;collapse=false;finaleTicks=0;ticksSincePacket=0;
         anchorX=0;anchorZ=0;anchorValid=false;
+        beaconPosition=Long.MIN_VALUE;beaconPositionValid=false;
+        beaconAuraProfileLogged=false;beaconAuraRenderedLogged=false;
         GroundRenderer.clearCache();
+    }
+
+    private static boolean shouldRenderBeaconAura(boolean active,boolean hasPosition,
+            boolean chunkLoaded,boolean beaconBlock,double distanceSquared) {
+        return active && hasPosition && chunkLoaded && beaconBlock
+            && Double.isFinite(distanceSquared) && distanceSquared>=0.0D
+            && distanceSquared<BEACON_AURA_RENDER_DISTANCE_SQR;
+    }
+
+    private static boolean isSafeBeaconPosition(long packed,net.minecraft.client.multiplayer.ClientLevel level) {
+        if(packed==Long.MIN_VALUE) return false;
+        BlockPos pos=BlockPos.of(packed);
+        return pos.asLong()==packed
+            && pos.getY()>=level.getMinBuildHeight() && pos.getY()<level.getMaxBuildHeight()
+            && Math.abs((long)pos.getX())<=30_000_000L
+            && Math.abs((long)pos.getZ())<=30_000_000L;
+    }
+
+    private static void verifyBeaconAuraProfile() {
+        if(beaconAuraProfileLogged) return;
+        boolean inside=shouldRenderBeaconAura(true,true,true,true,
+            Math.nextDown(BEACON_AURA_RENDER_DISTANCE_SQR));
+        boolean inactiveRejected=!shouldRenderBeaconAura(false,true,true,true,1.0D);
+        boolean missingPositionRejected=!shouldRenderBeaconAura(true,false,true,true,1.0D);
+        boolean unloadedRejected=!shouldRenderBeaconAura(true,true,false,true,1.0D);
+        boolean replacedBeaconRejected=!shouldRenderBeaconAura(true,true,true,false,1.0D);
+        boolean boundaryRejected=!shouldRenderBeaconAura(true,true,true,true,BEACON_AURA_RENDER_DISTANCE_SQR);
+        boolean invalidRejected=!shouldRenderBeaconAura(true,true,true,true,Double.NaN)
+            && !shouldRenderBeaconAura(true,true,true,true,Double.POSITIVE_INFINITY)
+            && !shouldRenderBeaconAura(true,true,true,true,-1.0D);
+        if(!(inside && inactiveRejected && missingPositionRejected && unloadedRejected
+            && replacedBeaconRejected && boundaryRejected && invalidRejected)
+            || !Double.isFinite(BEACON_AURA_OUTER_MARGIN)
+            || !Double.isFinite(BEACON_AURA_INNER_MARGIN)
+            || BEACON_AURA_OUTER_MARGIN<=BEACON_AURA_INNER_MARGIN
+            || BEACON_AURA_INNER_MARGIN<0.0D)
+            throw new IllegalStateException("BLACK FREQUENCY beacon aura range/geometry regression");
+        beaconAuraProfileLogged=true;
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST BEACON_AURA_PROFILE_VERIFIED radius={} cages=2 edges=24 loadedOnly=true boundaryStrict=true invalidRejected=true",
+            BEACON_AURA_RENDER_DISTANCE);
+    }
+
+    private static int beaconAuraChannel(float value) {
+        if(!Float.isFinite(value)) return 0;
+        return Math.max(0,Math.min(255,Math.round(value*255.0F)));
+    }
+
+    private static void beaconAuraVertex(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
+            double x,double y,double z,int red,int green,int blue,int alpha) {
+        builder.vertex(matrix,(float)(x-camera.x),(float)(y-camera.y),(float)(z-camera.z))
+            .color(red,green,blue,alpha).endVertex();
+    }
+
+    private static void beaconAuraLine(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
+            double x1,double y1,double z1,double x2,double y2,double z2,
+            int red,int green,int blue,int alpha) {
+        beaconAuraVertex(builder,matrix,camera,x1,y1,z1,red,green,blue,alpha);
+        beaconAuraVertex(builder,matrix,camera,x2,y2,z2,red,green,blue,alpha);
+    }
+
+    private static void emitBeaconCage(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
+            BlockPos beacon,double margin,int red,int green,int blue,int alpha) {
+        double minX=beacon.getX()-margin,maxX=beacon.getX()+1.0D+margin;
+        double minY=beacon.getY()-margin,maxY=beacon.getY()+1.0D+margin;
+        double minZ=beacon.getZ()-margin,maxZ=beacon.getZ()+1.0D+margin;
+        // Bottom ring.
+        beaconAuraLine(builder,matrix,camera,minX,minY,minZ,maxX,minY,minZ,red,green,blue,alpha);
+        beaconAuraLine(builder,matrix,camera,maxX,minY,minZ,maxX,minY,maxZ,red,green,blue,alpha);
+        beaconAuraLine(builder,matrix,camera,maxX,minY,maxZ,minX,minY,maxZ,red,green,blue,alpha);
+        beaconAuraLine(builder,matrix,camera,minX,minY,maxZ,minX,minY,minZ,red,green,blue,alpha);
+        // Top ring.
+        beaconAuraLine(builder,matrix,camera,minX,maxY,minZ,maxX,maxY,minZ,red,green,blue,alpha);
+        beaconAuraLine(builder,matrix,camera,maxX,maxY,minZ,maxX,maxY,maxZ,red,green,blue,alpha);
+        beaconAuraLine(builder,matrix,camera,maxX,maxY,maxZ,minX,maxY,maxZ,red,green,blue,alpha);
+        beaconAuraLine(builder,matrix,camera,minX,maxY,maxZ,minX,maxY,minZ,red,green,blue,alpha);
+        // Four vertical containment rails.
+        beaconAuraLine(builder,matrix,camera,minX,minY,minZ,minX,maxY,minZ,red,green,blue,alpha);
+        beaconAuraLine(builder,matrix,camera,maxX,minY,minZ,maxX,maxY,minZ,red,green,blue,alpha);
+        beaconAuraLine(builder,matrix,camera,maxX,minY,maxZ,maxX,maxY,maxZ,red,green,blue,alpha);
+        beaconAuraLine(builder,matrix,camera,minX,minY,maxZ,minX,maxY,maxZ,red,green,blue,alpha);
+    }
+
+    /** Draw a client-only violet containment cage around the server-owned physical beacon. */
+    public static void renderBeaconAura(RenderLevelStageEvent event) {
+        if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_PARTICLES) return;
+        verifyBeaconAuraProfile();
+        var level=Minecraft.getInstance().level;
+        if(level==null || !level.dimension().equals(Level.OVERWORLD)
+            || !beaconPositionValid || !(collapse || progress>0.0F)) return;
+        if(!isSafeBeaconPosition(beaconPosition,level)) return;
+        BlockPos beacon=BlockPos.of(beaconPosition);
+        if(!level.getWorldBorder().isWithinBounds(beacon)
+            || !level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)) return;
+        boolean beaconBlock=level.getBlockState(beacon).is(
+            net.minecraft.world.level.block.Blocks.BEACON);
+        Vec3 camera=event.getCamera().getPosition();
+        if(!Double.isFinite(camera.x) || !Double.isFinite(camera.y) || !Double.isFinite(camera.z)) return;
+        double dx=beacon.getX()+.5D-camera.x;
+        double dy=beacon.getY()+.5D-camera.y;
+        double dz=beacon.getZ()+.5D-camera.z;
+        double distanceSquared=dx*dx+dy*dy+dz*dz;
+        if(!shouldRenderBeaconAura(collapse || progress>0.0F,beaconPositionValid,
+                true,beaconBlock,distanceSquared)) return;
+
+        double partial=Double.isFinite(event.getPartialTick())
+            ? Math.max(0.0D,Math.min(1.0D,event.getPartialTick())) : 0.0D;
+        double time=(double)level.getGameTime()+partial;
+        double pulse=.5D+.5D*Math.sin(time*.12D);
+        int outerAlpha=beaconAuraChannel((float)(.42D+.22D*pulse));
+        int innerAlpha=beaconAuraChannel((float)(.58D+.30D*pulse));
+        Matrix4f matrix=event.getPoseStack().last().pose();
+        BufferBuilder builder=Tesselator.getInstance().getBuilder();
+        boolean submitted=false;
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.enableDepthTest();
+        RenderSystem.disableCull();
+        RenderSystem.depthMask(false);
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        RenderSystem.setShaderColor(1.0F,1.0F,1.0F,1.0F);
+        try {
+            builder.begin(VertexFormat.Mode.LINES,DefaultVertexFormat.POSITION_COLOR);
+            emitBeaconCage(builder,matrix,camera,beacon,BEACON_AURA_OUTER_MARGIN,
+                77,13,173,outerAlpha);
+            emitBeaconCage(builder,matrix,camera,beacon,BEACON_AURA_INNER_MARGIN,
+                158,56,255,innerAlpha);
+            BufferUploader.drawWithShader(builder.end());
+            submitted=true;
+        } finally {
+            RenderSystem.depthMask(true);
+            RenderSystem.enableCull();
+            RenderSystem.enableDepthTest();
+            RenderSystem.disableBlend();
+            RenderSystem.setShaderColor(1.0F,1.0F,1.0F,1.0F);
+        }
+        if(submitted && !beaconAuraRenderedLogged) {
+            beaconAuraRenderedLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST BEACON_AURA_RENDERED cages=2 edges=24 loadedOnly=true");
+        }
     }
     // Recovery updates are intentionally local. Expire stale visuals when a player
     // leaves the fracture radius or the server stops sending state packets.
