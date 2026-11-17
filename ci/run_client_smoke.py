@@ -73,7 +73,7 @@ def verify_beacon_aura_source():
             or "BEACON_AURA_STALE_PACKET_EXPIRY_VERIFIED restorationOnly=true idle=false timeoutTicks=100" not in client
             or "nextBeaconAuraCompletionFadeTicks(" not in client
             or "beaconAuraCompletionFadeTicks,wasRestoring,worldRestorationActive,collapsing,safeProgress)" not in client
-            or "BEACON_AURA_COMPLETION_FADE_PROFILE_VERIFIED ticks=12 curve=smoothstep partialTick=true" not in client
+            or "BEACON_AURA_COMPLETION_FADE_PROFILE_VERIFIED ticks=16 curve=smoothstep partialTick=true" not in client
             or "BEACON_AURA_COMPLETION_FADE_RENDERED" not in client
             or "BEACON_AURA_COMPLETION_FADE_MIDPOINT_RENDERED" not in client
             or "BEACON_AURA_COMPLETION_FADE_TAIL_RENDERED" not in client
@@ -2175,7 +2175,7 @@ def capture_test_world():
                     fade_start_marker="BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_RENDERED"
                     fade_midpoint_marker="BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_MIDPOINT_RENDERED"
                     fade_tail_marker="BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_TAIL_RENDERED"
-                    fade_deadline=time.time()+2.0
+                    fade_deadline=time.time()+5.0
                     fade_midpoint_shot=False
                     fade_tail_shot=False
                     fade_logs=""

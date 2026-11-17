@@ -56,7 +56,7 @@ public final class RiftClientState {
     // World identity also changes when reconnecting to a different server in the same dimension.
     private static net.minecraft.client.multiplayer.ClientLevel lastLevel;
     private static final int CLIENT_STATE_PACKET_TIMEOUT_TICKS=100;
-    private static final int BEACON_AURA_COMPLETION_FADE_TICKS=12;
+    private static final int BEACON_AURA_COMPLETION_FADE_TICKS=16;
     private static int beaconAuraCompletionFadeTicks;
     private static boolean beaconAuraCompletionFadeProfileLogged;
     private static boolean beaconAuraCompletionFadeRenderedLogged;
@@ -218,24 +218,24 @@ public final class RiftClientState {
         int completionFadeCanceledByRestore=nextBeaconAuraCompletionFadeTicks(6,false,true,false,0.0F);
         int completionFadeCanceledByCollapse=nextBeaconAuraCompletionFadeTicks(6,false,false,true,0.0F);
         int completionFadeCanceledByProgress=nextBeaconAuraCompletionFadeTicks(6,false,false,false,.1F);
-        double completionFadeFull=beaconAuraCompletionFade(12,0.0D);
-        double completionFadeMiddle=beaconAuraCompletionFade(6,0.0D);
+        double completionFadeFull=beaconAuraCompletionFade(16,0.0D);
+        double completionFadeMiddle=beaconAuraCompletionFade(8,0.0D);
         double completionFadeEnd=beaconAuraCompletionFade(0,0.0D);
         boolean completionFadeMonotonic=completionFadeFull==1.0D
             && Math.abs(completionFadeMiddle-.5D)<1.0E-12D && completionFadeEnd==0.0D
-            && Math.abs(beaconAuraCompletionFade(12,1.0D)-beaconAuraCompletionFade(11,0.0D))<1.0E-12D;
+            && Math.abs(beaconAuraCompletionFade(16,1.0D)-beaconAuraCompletionFade(15,0.0D))<1.0E-12D;
         double previousCompletionFade=completionFadeFull;
-        for(int remaining=11;remaining>=0;remaining--) {
+        for(int remaining=15;remaining>=0;remaining--) {
             double current=beaconAuraCompletionFade(remaining,0.0D);
             completionFadeMonotonic &= Double.isFinite(current)
                 && current>=0.0D && current<=previousCompletionFade;
             previousCompletionFade=current;
         }
-        double completionFadeMidpointProbe=beaconAuraCompletionFade(6,0.0D);
-        double completionFadeTailProbe=beaconAuraCompletionFade(2,0.0D);
+        double completionFadeMidpointProbe=beaconAuraCompletionFade(8,0.0D);
+        double completionFadeTailProbe=beaconAuraCompletionFade(3,0.0D);
         boolean completionFadeMilestones=Math.abs(completionFadeMidpointProbe-.5D)<1.0E-12D
             && completionFadeTailProbe>1.0D/255.0D && completionFadeTailProbe<=.12D;
-        boolean completionFadeProfile=completionFadeStarted==12 && completionFadeContinued==6
+        boolean completionFadeProfile=completionFadeStarted==16 && completionFadeContinued==6
             && completionFadeCanceledByRestore==0 && completionFadeCanceledByCollapse==0
             && completionFadeCanceledByProgress==0 && completionFadeMonotonic
             && completionFadeMilestones
@@ -290,7 +290,7 @@ public final class RiftClientState {
         if(!beaconAuraCompletionFadeProfileLogged) {
             beaconAuraCompletionFadeProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_PROFILE_VERIFIED ticks=12 curve=smoothstep partialTick=true");
+                "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_PROFILE_VERIFIED ticks=16 curve=smoothstep partialTick=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_MILESTONES_VERIFIED midpointInRange=true tailVisible=true");
         }
