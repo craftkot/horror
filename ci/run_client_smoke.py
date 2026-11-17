@@ -107,19 +107,34 @@ def verify_restoration_particle_source():
     if ("double zone=gravityAnomalyField(testX,testZ,tick);" not in source
             or "double zone=gravityAnomalyField(px,pz,s.finaleTicks);" not in source
             or "double zone=gravityAnomalyField(player.getX(),player.getZ(),s.finaleTicks);" not in source
-            or "double turbulence=Math.sin((x-z)*.083D+gravityFieldTurbulenceTimePhase*1.3D+time*.021D);" not in source
+            or "double base=Math.sin(x*.115D+gravityFieldBasePhase)" not in source
+            or "double cross=Math.sin((x+z)*.047D+gravityFieldCrossPhase-gravityFieldCrossTimeOffset);" not in source
+            or "double turbulence=Math.sin((x-z)*.083D+gravityFieldTurbulencePhase+gravityFieldTurbulenceTimeOffset);" not in source
             or "double microTurbulence=Math.sin((x*.17D+z*.13D)" not in source
             or "double field=base+.12D*cross+.06D*turbulence+.035D*microTurbulence;" not in source
             or "private static void updateGravityFieldPhaseCache(int ticks)" not in source
             or "if(gravityFieldCachedTick==time) return;" not in source
-            or "gravityFieldBaseTimePhase=Math.sin(time*.011D);" not in source
-            or "gravityFieldCrossTimePhase=Math.sin(time*.013D);" not in source
-            or "gravityFieldTurbulenceTimePhase=Math.sin(time*.017D);" not in source
-            or "gravityFieldMicroTimePhase=Math.sin(time*.027D);" not in source
-            or "ANOMALY_FIELD_TIME_PHASE_CACHE_VERIFIED cachedPhases=4 sameTickReuse=true tickRewind=true serverThreadOnly=true" not in source
+            or "gravityFieldBasePhase=Math.sin(time*.011D)*1.8D;" not in source
+            or "gravityFieldBaseZOffset=time*.008D;" not in source
+            or "gravityFieldCrossPhase=Math.sin(time*.013D)*.9D;" not in source
+            or "gravityFieldCrossTimeOffset=time*.009D;" not in source
+            or "gravityFieldTurbulencePhase=Math.sin(time*.017D)*1.3D;" not in source
+            or "gravityFieldTurbulenceTimeOffset=time*.021D;" not in source
+            or "gravityFieldMicroPhase=Math.sin(time*.027D)*.8D;" not in source
+            or "gravityFieldMicroTimeOffset=time*.031D;" not in source
+            or "gravityFieldCacheRefreshCount<Long.MAX_VALUE" not in source
+            or "refreshCountAfterSameTick!=refreshCountAt85" not in source
+            or "refreshCountAfterRewind!=refreshCountAt85+1L" not in source
+            or "refreshCountAfterSecondRewind!=refreshCountAt85+2L" not in source
+            or "ANOMALY_FIELD_TIME_PHASE_CACHE_VERIFIED cachedOffsets=8 sameTickReuse=true tickRewind=true" not in source
             or "Math.sin(player.getX()*.115" in source
             or "Math.sin(px*.115+Math.sin(s.finaleTicks*.011)*1.8)" in source):
         raise RuntimeError("BLACK FREQUENCY gravity consumers must share the bounded multi-scale anomaly field")
+    field_start=source.find("private static double gravityAnomalyField(")
+    field_end=source.find("\\n    private static void verifyGravityAnomalyField",field_start)
+    field_body=source[field_start:field_end] if field_start>=0 and field_end>field_start else ""
+    if not field_body or any(term in field_body for term in ("time*.008D","time*.009D","time*.021D","time*.031D")):
+        raise RuntimeError("BLACK FREQUENCY gravity field must reuse all cached time offsets")
     client_source=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"client"/"RiftClientState.java").read_text(encoding="utf-8")
     fissure_start=source.find("private static FissureEmission emitSurfaceFissure(")
     fissure_end=source.find("\n    private static",fissure_start+1)
