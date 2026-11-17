@@ -424,6 +424,7 @@ def verify_real_beacon_break_source():
 verify_fissure_target_view_score_profile()
 verify_restoration_particle_source()
 verify_beacon_aura_source()
+verify_real_beacon_break_source()
 
 def valid_fissure_particle_emission(counts):
     if counts is None:
