@@ -156,9 +156,9 @@ def verify_restoration_particle_source():
     completion_body=source[completion_start:completion_end] if completion_start>=0 and completion_end>completion_start else ""
     completion_animation=completion_body.find("ClientboundSetTitlesAnimationPacket(")
     completion_title=completion_body.find("ClientboundSetTitleTextPacket(")
-    if ("RESTORE_TITLE_FADE_IN_TICKS=10;" not in source
-            or "RESTORE_TITLE_STAY_TICKS=80;" not in source
-            or "RESTORE_TITLE_FADE_OUT_TICKS=20;" not in source
+    if ("RESTORE_TITLE_FADE_IN_TICKS=8;" not in source
+            or "RESTORE_TITLE_STAY_TICKS=32;" not in source
+            or "RESTORE_TITLE_FADE_OUT_TICKS=12;" not in source
             or completion_animation<0 or completion_title<0 or completion_animation>completion_title
             or 'private static final String RESTORE_SUCCESS_TITLE="МИР СПАСЁН";' not in source
             or 'private static final String RESTORE_PARTIAL_TITLE="ЕСТЬ ПРОПУСКИ";' not in source
@@ -1375,6 +1375,7 @@ def capture_test_world():
     beacon_ready_at=None
     last_beacon_attempt=0
     beacon_aim_verified=False
+    completion_title_started_at=None
     def try_beacon_click(logs):
         nonlocal beacon_attempts,beacon_ready_at,last_beacon_attempt,beacon_aim_verified
         if os.environ.get("BF_TEST_PLAYER_BEACON")!="1":
@@ -1467,6 +1468,14 @@ def capture_test_world():
             return False
         if not aim_camera_at_beacon(log_text):
             return False
+        if completion_title_started_at is None:
+            print("WORLD_CAPTURE_FAIL: completion title start time was not observed",flush=True)
+            return False
+        title_clear_at=completion_title_started_at+52/20.0+.25
+        remaining_title_time=title_clear_at-time.monotonic()
+        if remaining_title_time>0:
+            time.sleep(remaining_title_time)
+        print("WORLD_CAPTURE: completion title cleared before pre-mining beacon frame",flush=True)
         snap("beacon-before-left-click.png")
         if not (shots/"beacon-before-left-click.png").is_file():
             print("WORLD_CAPTURE_FAIL: pre-mining beacon screenshot was not captured",flush=True)
@@ -2326,6 +2335,8 @@ def capture_test_world():
                                 print("WORLD_CAPTURE: pulse reached the client but no bounded Dust frame was visible yet",
                                       pulse_marker,flush=True)
                     if "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" in current:
+                        if completion_title_started_at is None:
+                            completion_title_started_at=time.monotonic()
                         restored=True
                         break
                     capture_sky_before_beacon()
@@ -2508,7 +2519,7 @@ def capture_test_world():
                 if not initial_pulse or tuple(map(int,initial_pulse.groups()))!=(24,4):
                     print("WORLD_CAPTURE_FAIL: the real beacon click did not emit its initial ring and rising sparks",flush=True)
                     return False
-                if "BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_TITLE_TIMING_VERIFIED fadeIn=10 stay=80 fadeOut=20 total=110 packetBeforeTitle=true" not in log_after:
+                if "BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_TITLE_TIMING_VERIFIED fadeIn=8 stay=32 fadeOut=12 total=52 packetBeforeTitle=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: explicit completion title timing was not verified",flush=True)
                     return False
                 counts=re.search(r"BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored=([0-9]+) destroyed=([0-9]+) skippedOccupied=([0-9]+)",log_after)
