@@ -66,6 +66,7 @@ def verify_beacon_aura_source():
             or "BEACON_AURA_RENDERED cages=2 edgeRibbons=24 rotation=counterphase loadedOnly=true" not in client
             or "BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true" not in client
             or "beaconAuraDistanceFade(distanceSquared)" not in client
+            or "distanceSquared<=BEACON_AURA_FADE_START_DISTANCE_SQR" not in client
             or "BEACON_AURA_RIBBON_PROFILE_VERIFIED outerHalfWidth=0.022 innerHalfWidth=0.012 cameraFacing=true allocationFree=true" not in client
             or "private static void beaconAuraRibbon(" not in client
             or "BEACON_AURA_ROTATION_PROFILE_VERIFIED periodTicks=1200 outerTurns=1 innerTurns=-2 wrapContinuous=true partialBounded=true" not in client

@@ -98,8 +98,8 @@ public final class RiftClientState {
     private static double beaconAuraDistanceFade(double distanceSquared) {
         if(!Double.isFinite(distanceSquared) || distanceSquared<0.0D
             || distanceSquared>=BEACON_AURA_RENDER_DISTANCE_SQR) return 0.0D;
+        if(distanceSquared<=BEACON_AURA_FADE_START_DISTANCE_SQR) return 1.0D;
         double distance=Math.sqrt(distanceSquared);
-        if(distance<=BEACON_AURA_FADE_START_DISTANCE) return 1.0D;
         double t=(BEACON_AURA_RENDER_DISTANCE-distance)
             /(BEACON_AURA_RENDER_DISTANCE-BEACON_AURA_FADE_START_DISTANCE);
         t=Math.max(0.0D,Math.min(1.0D,t));
