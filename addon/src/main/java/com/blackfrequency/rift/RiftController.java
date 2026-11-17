@@ -56,6 +56,10 @@ public final class RiftController {
     private static final int FISSURE_MOTES_PER_SAMPLE = 1;
     private static final int IDLE_BEACON_PULSE_INTERVAL_TICKS = 20;
     private static final int IDLE_BEACON_PULSE_PARTICLE_COUNT = 6;
+    // Keep the idle beacon cue as a shallow horizontal halo instead of a tall random spray.
+    private static final double IDLE_BEACON_PARTICLE_SPREAD_XZ=.34D;
+    private static final double IDLE_BEACON_PARTICLE_SPREAD_Y=.08D;
+    private static final double IDLE_BEACON_PARTICLE_SPEED=.006D;
     // The default ServerLevel.sendParticles overload only delivers within 32 blocks.
     // Do not scan for idle-beacon viewers outside the packet's actual delivery radius.
     private static final double IDLE_BEACON_PARTICLE_PACKET_RANGE=32.0D;
@@ -2764,9 +2768,21 @@ public final class RiftController {
         if(!hasDustColor(BEACON_VIOLET_DUST,.48F,.14F,.98F)
             || Math.abs(BEACON_VIOLET_DUST.getScale()-.90F)>1.0E-6F
             || IDLE_BEACON_PULSE_INTERVAL_TICKS!=20
-            || IDLE_BEACON_PULSE_PARTICLE_COUNT!=6)
-            throw new IllegalStateException("CI idle beacon violet Dust palette regression");
+            || IDLE_BEACON_PULSE_PARTICLE_COUNT!=6
+            || !Double.isFinite(IDLE_BEACON_PARTICLE_SPREAD_XZ)
+            || !Double.isFinite(IDLE_BEACON_PARTICLE_SPREAD_Y)
+            || !Double.isFinite(IDLE_BEACON_PARTICLE_SPEED)
+            || IDLE_BEACON_PARTICLE_SPREAD_XZ<.25D
+            || IDLE_BEACON_PARTICLE_SPREAD_XZ>.40D
+            || IDLE_BEACON_PARTICLE_SPREAD_Y<.05D
+            || IDLE_BEACON_PARTICLE_SPREAD_Y>=.12D
+            || IDLE_BEACON_PARTICLE_SPREAD_Y>=IDLE_BEACON_PARTICLE_SPREAD_XZ
+            || IDLE_BEACON_PARTICLE_SPEED<0.0D
+            || IDLE_BEACON_PARTICLE_SPEED>.02D)
+            throw new IllegalStateException("CI idle beacon violet Dust palette/halo regression");
         LOGGER.info("BLACK_FREQUENCY_TEST IDLE_BEACON_VIOLET_PALETTE_VERIFIED red=0.48 green=0.14 blue=0.98 scale=0.9 count=6 intervalTicks=20 cached=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST IDLE_BEACON_PARTICLE_HALO_PROFILE_VERIFIED spreadXZ={} spreadY={} speed={} flattened=true",
+            IDLE_BEACON_PARTICLE_SPREAD_XZ,IDLE_BEACON_PARTICLE_SPREAD_Y,IDLE_BEACON_PARTICLE_SPEED);
         verifyIdleBeaconParticleAudienceBounds();
     }
 
@@ -4091,7 +4107,9 @@ public final class RiftController {
                                 beacon.getX()+.5D,beacon.getY()+1.2D,beacon.getZ()+.5D)))) {
                         level.sendParticles(BEACON_VIOLET_DUST,
                             beacon.getX()+.5,beacon.getY()+1.2,beacon.getZ()+.5,
-                            IDLE_BEACON_PULSE_PARTICLE_COUNT,.28,.45,.28,.015);
+                            IDLE_BEACON_PULSE_PARTICLE_COUNT,
+                            IDLE_BEACON_PARTICLE_SPREAD_XZ,IDLE_BEACON_PARTICLE_SPREAD_Y,
+                            IDLE_BEACON_PARTICLE_SPREAD_XZ,IDLE_BEACON_PARTICLE_SPEED);
                         if(CI_TEST && !s.ciIdleBeaconVioletDustLogged) {
                             LOGGER.info("BLACK_FREQUENCY_TEST IDLE_BEACON_VIOLET_DUST_EMITTED count=6 red=0.48 green=0.14 blue=0.98 scale=0.9");
                             s.ciIdleBeaconVioletDustLogged=true;

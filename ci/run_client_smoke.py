@@ -2522,6 +2522,9 @@ def capture_test_world():
                 if "BLACK_FREQUENCY_TEST IDLE_BEACON_VIOLET_PALETTE_VERIFIED red=0.48 green=0.14 blue=0.98 scale=0.9 count=6 intervalTicks=20 cached=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: bright violet beacon palette was not verified",flush=True)
                     return False
+                if "BLACK_FREQUENCY_TEST IDLE_BEACON_PARTICLE_HALO_PROFILE_VERIFIED spreadXZ=0.34 spreadY=0.08 speed=0.006 flattened=true" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: idle beacon particle halo was not flattened and bounded",flush=True)
+                    return False
                 if "BLACK_FREQUENCY_TEST IDLE_BEACON_VIOLET_DUST_EMITTED count=6 red=0.48 green=0.14 blue=0.98 scale=0.9" not in log_after:
                     print("WORLD_CAPTURE_FAIL: bright violet idle beacon Dust was not emitted",flush=True)
                     return False
