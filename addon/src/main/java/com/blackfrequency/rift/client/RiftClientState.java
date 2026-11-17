@@ -55,6 +55,7 @@ public final class RiftClientState {
     private static final long BEACON_AURA_ROTATION_PERIOD=1200L;
     // World identity also changes when reconnecting to a different server in the same dimension.
     private static net.minecraft.client.multiplayer.ClientLevel lastLevel;
+    private static final int CLIENT_STATE_PACKET_TIMEOUT_TICKS=100;
     private RiftClientState() {}
     public static void update(float value, boolean collapsing, int ticks, int worldAnchorX, int worldAnchorZ, long worldBeaconPosition, boolean worldRestorationActive) {
         // Packets may arrive before the first client tick after joining a world.
@@ -101,6 +102,16 @@ public final class RiftClientState {
 
     private static boolean shouldShowBeaconAura(boolean collapsing,float value,boolean restoring) {
         return restoring || collapsing || (Float.isFinite(value) && value>0.0F);
+    }
+
+    private static boolean hasActiveTimedClientState(float value,boolean collapsing,
+            int finaleTicks,boolean restoring) {
+        return restoring || collapsing || finaleTicks>0
+            || (Float.isFinite(value) && value>0.0F);
+    }
+
+    private static boolean isClientPacketStateStale(int ticksSincePacket) {
+        return ticksSincePacket>CLIENT_STATE_PACKET_TIMEOUT_TICKS;
     }
 
     private static double beaconAuraDistanceFade(double distanceSquared) {
@@ -162,6 +173,10 @@ public final class RiftClientState {
         boolean progressVisible=shouldShowBeaconAura(false,.25F,false);
         boolean zeroProgressRestorationVisible=shouldShowBeaconAura(false,0.0F,true);
         boolean completedHidden=!shouldShowBeaconAura(false,0.0F,false);
+        boolean restorationOnlyTimedState=hasActiveTimedClientState(0.0F,false,0,true);
+        boolean idleStateUntimed=!hasActiveTimedClientState(0.0F,false,0,false);
+        boolean packetTimeoutBoundary=!isClientPacketStateStale(CLIENT_STATE_PACKET_TIMEOUT_TICKS)
+            && isClientPacketStateStale(CLIENT_STATE_PACKET_TIMEOUT_TICKS+1);
         boolean inactiveRejected=!shouldRenderBeaconAura(false,true,true,true,1.0D);
         boolean missingPositionRejected=!shouldRenderBeaconAura(true,false,true,true,1.0D);
         boolean unloadedRejected=!shouldRenderBeaconAura(true,true,false,true,1.0D);
@@ -190,6 +205,7 @@ public final class RiftClientState {
         if(!(inside && inactiveRejected && missingPositionRejected && unloadedRejected
             && replacedBeaconRejected && boundaryRejected && invalidRejected
             && collapseVisible && progressVisible && zeroProgressRestorationVisible && completedHidden
+            && restorationOnlyTimedState && idleStateUntimed && packetTimeoutBoundary
             && fadeMonotonic && invalidFadeRejected)
             || !Double.isFinite(BEACON_AURA_OUTER_MARGIN)
             || !Double.isFinite(BEACON_AURA_INNER_MARGIN)
@@ -205,6 +221,8 @@ public final class RiftClientState {
         beaconAuraProfileLogged=true;
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST BEACON_AURA_RESTORATION_VISIBILITY_VERIFIED zeroProgressRestoring=true completed=false");
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST BEACON_AURA_STALE_PACKET_EXPIRY_VERIFIED restorationOnly=true idle=false timeoutTicks=100");
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true");
         com.mojang.logging.LogUtils.getLogger().info(
@@ -380,7 +398,8 @@ public final class RiftClientState {
         // Integrated singleplayer pauses server packets too. Do not expire the
         // fracture overlay while the simulation is paused in a menu.
         if(net.minecraft.client.Minecraft.getInstance().isPaused()) return;
-        if((progress>0f || collapse || finaleTicks>0) && ++ticksSincePacket>100) reset();
+        if(hasActiveTimedClientState(progress,collapse,finaleTicks,restorationActive)
+            && isClientPacketStateStale(++ticksSincePacket)) reset();
     }
     @net.minecraftforge.eventbus.api.SubscribeEvent
     public static void onLogout(net.minecraftforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) { reset(); lastLevel=null; }

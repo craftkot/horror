@@ -68,6 +68,9 @@ def verify_beacon_aura_source():
             or "BEACON_AURA_RENDERED cages=2 edgeRibbons=24 rotation=counterphase loadedOnly=true" not in client
             or "shouldShowBeaconAura(collapse,progress,restorationActive)" not in client
             or "BEACON_AURA_RESTORATION_VISIBILITY_VERIFIED zeroProgressRestoring=true completed=false" not in client
+            or "hasActiveTimedClientState(progress,collapse,finaleTicks,restorationActive)" not in client
+            or "isClientPacketStateStale(++ticksSincePacket)" not in client
+            or "BEACON_AURA_STALE_PACKET_EXPIRY_VERIFIED restorationOnly=true idle=false timeoutTicks=100" not in client
             or "BEACON_AURA_RESTORATION_ACTIVE_RENDERED progressZero=true loadedOnly=true" not in client
             or "BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true" not in client
             or "beaconAuraDistanceFade(distanceSquared)" not in client
