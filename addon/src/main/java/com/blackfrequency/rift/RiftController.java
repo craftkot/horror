@@ -1476,6 +1476,7 @@ public final class RiftController {
             CI_BEACON_PAD_STANDOFF,distanceSquared,padInnerFaceY,beaconEntryY);
         verifyFissureRayChunkTraversalProfile();
         verifyCiBeaconPadSignSelection();
+        verifyCiBeaconBreakReachGeometry();
     }
 
     @FunctionalInterface
@@ -3950,6 +3951,34 @@ public final class RiftController {
         double closestY=Math.max(minY,Math.min(eye.y,minY+1.0D));
         double closestZ=Math.max(minZ,Math.min(eye.z,minZ+1.0D));
         return eye.distanceToSqr(closestX,closestY,closestZ);
+    }
+
+    // Exercise the Java helper itself so the Python fixture cannot silently drift
+    // from the geometry used when a real Forge break event captures player reach.
+    private static void verifyCiBeaconBreakReachGeometry() {
+        BlockPos beacon=new BlockPos(-2,64,-3);
+        double inside=ciEyeDistanceSquaredToBlock(
+            new net.minecraft.world.phys.Vec3(-1.5D,64.5D,-2.5D),beacon);
+        double boundaryX=ciEyeDistanceSquaredToBlock(
+            new net.minecraft.world.phys.Vec3(3.5D,64.5D,-2.5D),beacon);
+        double boundaryY=ciEyeDistanceSquaredToBlock(
+            new net.minecraft.world.phys.Vec3(-1.5D,69.5D,-2.5D),beacon);
+        double boundaryZ=ciEyeDistanceSquaredToBlock(
+            new net.minecraft.world.phys.Vec3(-1.5D,64.5D,1.5D),beacon);
+        double outside=ciEyeDistanceSquaredToBlock(
+            new net.minecraft.world.phys.Vec3(3.5001D,64.5D,-2.5D),beacon);
+        double invalid=ciEyeDistanceSquaredToBlock(
+            new net.minecraft.world.phys.Vec3(Double.NaN,64.5D,-2.5D),beacon);
+        double reachSquared=CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE;
+        if(inside!=0.0D
+            || Math.abs(boundaryX-reachSquared)>1.0E-9D
+            || Math.abs(boundaryY-reachSquared)>1.0E-9D
+            || Math.abs(boundaryZ-reachSquared)>1.0E-9D
+            || !(outside>reachSquared)
+            || Double.isFinite(invalid))
+            throw new IllegalStateException("CI Java beacon break AABB reach geometry regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_BREAK_REACH_AABB_VERIFIED boundary={} axes=3 negativeCoordinates=true outsideRejected=true invalidRejected=true",
+            reachSquared);
     }
 
     private static void verifyCiNaturalBeaconBreakNoDrop(ServerLevel level,State s) {
