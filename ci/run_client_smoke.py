@@ -395,6 +395,9 @@ def verify_real_beacon_break_source():
     handler_start=controller.find("public void onRecoveryBeaconBreak(")
     handler_end=controller.find("\n    /**",handler_start)
     handler=controller[handler_start:handler_end] if handler_start>=0 and handler_end>handler_start else ""
+    helper_start=controller.find("private static double ciEyeDistanceSquaredToBlock(")
+    helper_end=controller.find("\n    private static void verifyCiNaturalBeaconBreakNoDrop",helper_start)
+    helper=controller[helper_start:helper_end] if helper_start>=0 and helper_end>helper_start else ""
     verify_start=controller.find("private static void verifyCiNaturalBeaconBreakNoDrop(")
     verify_end=controller.find("\n    @SubscribeEvent",verify_start)
     verify=controller[verify_start:verify_end] if verify_start>=0 and verify_end>verify_start else ""
@@ -406,29 +409,60 @@ def verify_real_beacon_break_source():
     if (not handler or "event.setCanceled(true);" not in handler
             or "level.setBlock(pos,Blocks.AIR.defaultBlockState(),3)" not in handler
             or "ciPendingNaturalBeaconBreakVerificationPos=pos.immutable();" not in handler
+            or "ciPendingNaturalBeaconBreakVerificationSurvival=!miner.isCreative()" not in handler
+            or "ciPendingNaturalBeaconBreakVerificationDistanceSquared=" not in handler
+            or "ciEyeDistanceSquaredToBlock(miner.getEyePosition(),pos)" not in handler
             or "NATURAL_BEACON_MINED_NO_DROP" not in handler
+            or "private static double ciEyeDistanceSquaredToBlock(" not in controller
+            or "Math.max(minX,Math.min(eye.x,minX+1.0D))" not in helper
+            or "Math.max(minY,Math.min(eye.y,minY+1.0D))" not in helper
+            or "Math.max(minZ,Math.min(eye.z,minZ+1.0D))" not in helper
+            or "eye.distanceToSqr(closestX,closestY,closestZ)" not in helper
             or "private static void verifyCiNaturalBeaconBreakNoDrop(" not in controller
             or "verifyCiNaturalBeaconBreakNoDrop(level,s);" not in controller
             or "getEntitiesOfClass(" not in verify
             or "countItem(net.minecraft.world.item.Items.BEACON)" not in verify
             or "loadedOnly=true" not in verify
-            or "boolean survivalMining=!player.isCreative() && !player.getAbilities().instabuild;" not in verify
+            or "boolean survivalMining=ciPendingNaturalBeaconBreakVerificationSurvival;" not in verify
+            or "double distanceSquared=ciPendingNaturalBeaconBreakVerificationDistanceSquared;" not in verify
             or "distanceToSqr(" not in verify
             or "CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE" not in verify
-            or "survival=true withinReach=true distanceSquared={}" not in verify
+            or "capturedAtBreak=true" not in verify
             or probe.count("new net.minecraftforge.event.level.BlockEvent.BreakEvent(")!=1
             or "testEvent" in probe
             or "POST_RESTORE_BEACON_BREAK_CONSUMED" in probe
             or 'subprocess.run(["xdotool","mousedown","1"]' not in script
             or "REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED" not in script
             or "beacon-after-left-click.png" not in script):
-        raise RuntimeError("BLACK FREQUENCY post-restoration beacon mining must use real player input and verify zero drops")
-    print("WORLD_CAPTURE: post-restoration beacon mining uses real left-click input and checks inventory/entity drops",flush=True)
+        raise RuntimeError("BLACK FREQUENCY post-restoration beacon mining must capture survival and eye-to-block reach at the real break event")
+    print("WORLD_CAPTURE: beacon mining captures survival mode and eye-to-block AABB reach at the real break event",flush=True)
+
+def point_to_block_aabb_distance_squared(point,origin):
+    if not all(math.isfinite(value) for value in (*point,*origin)):
+        return float("nan")
+    closest=tuple(max(base,min(value,base+1.0D)) for value,base in zip(point,origin))
+    return sum((value-near)**2 for value,near in zip(point,closest))
+
+def verify_beacon_interaction_reach_geometry():
+    interaction_limit=4.5*4.5
+    pad_eye=(3.75,3.62,0.5)
+    pad_distance=point_to_block_aabb_distance_squared(pad_eye,(0.0,0.0,0.0))
+    edge_distance=point_to_block_aabb_distance_squared((5.5,0.5,0.5),(0.0,0.0,0.0))
+    outside_distance=point_to_block_aabb_distance_squared((5.5001,0.5,0.5),(0.0,0.0,0.0))
+    invalid_distance=point_to_block_aabb_distance_squared((float("nan"),0.5,0.5),(0.0,0.0,0.0))
+    if (not math.isclose(pad_distance,14.4269,rel_tol=0.0,abs_tol=1.0E-9)
+            or pad_distance>interaction_limit
+            or not math.isclose(edge_distance,interaction_limit,rel_tol=0.0,abs_tol=1.0E-9)
+            or outside_distance<=interaction_limit
+            or math.isfinite(invalid_distance)):
+        raise RuntimeError("BLACK FREQUENCY eye-to-block AABB reach geometry regression")
+    print("WORLD_CAPTURE: eye-to-block AABB reach geometry verified pad=14.4269 boundary=20.25 outsideRejected=true invalidRejected=true",flush=True)
 
 verify_fissure_target_view_score_profile()
 verify_restoration_particle_source()
 verify_beacon_aura_source()
 verify_real_beacon_break_source()
+verify_beacon_interaction_reach_geometry()
 
 def valid_fissure_particle_emission(counts):
     if counts is None:
@@ -1450,7 +1484,7 @@ def capture_test_world():
                         and "BLACK_FREQUENCY_TEST REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED" in delta):
                     proof=re.search(
                         r"BLACK_FREQUENCY_TEST REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED "
-                        r"survival=true withinReach=true distanceSquared=([0-9.]+)",delta)
+                        r"survival=true withinReach=true distanceSquared=([0-9.]+) capturedAtBreak=true",delta)
                     if not proof or float(proof.group(1))>4.5*4.5:
                         print("WORLD_CAPTURE_FAIL: beacon mining was not confirmed in survival within 4.5 blocks",flush=True)
                         return False
