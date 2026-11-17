@@ -71,6 +71,9 @@ def verify_beacon_aura_source():
             or "hasActiveTimedClientState(progress,collapse,finaleTicks,restorationActive)" not in client
             or "isClientPacketStateStale(++ticksSincePacket)" not in client
             or "BEACON_AURA_STALE_PACKET_EXPIRY_VERIFIED restorationOnly=true idle=false timeoutTicks=100" not in client
+            or "nextBeaconAuraCompletionFadeTicks(beaconAuraCompletionFadeTicks,wasRestoring,worldRestorationActive,collapsing,safeProgress)" not in client
+            or "BEACON_AURA_COMPLETION_FADE_PROFILE_VERIFIED ticks=12 curve=smoothstep partialTick=true" not in client
+            or "BEACON_AURA_COMPLETION_FADE_RENDERED" not in client
             or "BEACON_AURA_RESTORATION_ACTIVE_RENDERED progressZero=true loadedOnly=true" not in client
             or "BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true" not in client
             or "beaconAuraDistanceFade(distanceSquared)" not in client
@@ -2162,11 +2165,27 @@ def capture_test_world():
                     capture_sky_before_beacon()
                     time.sleep(.1)
                 if restored:
-                    # The server logs completion before the title packet is consumed by the client.
-                    # Wait for the explicit fade-in window so this frame proves the final UI, not 99%.
+                    # The server sends the inactive state before the completion title.
+                    # Require one real client render from the short aura fade, even if
+                    # the server consumes the physical beacon immediately afterward.
+                    fade_marker="BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_RENDERED"
+                    fade_deadline=time.time()+1.0
+                    fade_shot=False
+                    while time.time()<fade_deadline and p.poll() is None:
+                        fade_logs=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                        if fade_marker in fade_logs:
+                            snap("beacon-restoration-fade-out.png")
+                            fade_shot=True
+                            break
+                        time.sleep(.02)
+                    if not fade_shot:
+                        print("WORLD_CAPTURE_FAIL: completed restoration did not render the beacon aura fade-out",flush=True)
+                        return False
+                    # Wait for the explicit title fade-in window so this frame proves
+                    # the final UI, not 99% or the preceding containment effect.
                     time.sleep(0.75)
                     snap("beacon-restoration-finished.png")
-                    print("WORLD_CAPTURE: final restoration title allowed 0.75s to reach the client",flush=True)
+                    print("WORLD_CAPTURE: restoration fade-out and final title captured",flush=True)
                 else:
                     snap("beacon-restoration-timeout.png")
                     print("WORLD_CAPTURE_FAIL: restoration did not finish in client",flush=True)
@@ -2175,7 +2194,11 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: restoration finished without an active gameplay screenshot",flush=True)
                     return False
                 restoration_path=shots/"beacon-restoration-active.png"
+                fade_restoration_path=shots/"beacon-restoration-fade-out.png"
                 finished_restoration_path=shots/"beacon-restoration-finished.png"
+                if not fade_restoration_path.is_file():
+                    print("WORLD_CAPTURE_FAIL: beacon restoration fade-out screenshot is missing",flush=True)
+                    return False
                 from PIL import Image
                 with Image.open(restoration_path) as source:
                     active_restoration_metrics=measure_restoration_palette(source.convert("RGB"))
