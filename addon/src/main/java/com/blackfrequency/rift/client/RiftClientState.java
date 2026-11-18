@@ -445,8 +445,7 @@ public final class RiftClientState {
         double pulse=.5D+.5D*Math.sin(time*.12D);
         double outerAngle=beaconAuraRotationAngle(level.getGameTime(),partial,1);
         double innerAngle=.35D+beaconAuraRotationAngle(level.getGameTime(),partial,-2);
-        int outerAlpha=beaconAuraChannel((float)((BEACON_AURA_OUTER_ALPHA_BASE+
-            BEACON_AURA_OUTER_ALPHA_PULSE*pulse)*distanceFade));
+        int outerAlpha=beaconAuraChannel((float)((BEACON_AURA_OUTER_ALPHA_BASE+BEACON_AURA_OUTER_ALPHA_PULSE*pulse)*distanceFade));
         int innerAlpha=beaconAuraChannel((float)((.58D+.30D*pulse)*distanceFade));
         Matrix4f matrix=event.getPoseStack().last().pose();
         BufferBuilder builder=Tesselator.getInstance().getBuilder();
