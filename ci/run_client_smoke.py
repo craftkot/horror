@@ -98,6 +98,25 @@ def verify_beacon_aura_source():
     if any(token in aura_body for token in ("getChunkAt(","getChunk(",
             "getChunkSource().getChunk","forceChunk")):
         raise RuntimeError("BLACK FREQUENCY beacon aura must never request chunk loading")
+    cache_start=sky.find("private static boolean cacheShaderUniforms(")
+    cache_end=sky.find("\n    }",cache_start)
+    render_start=sky.find("private static void renderRift(")
+    render_end=sky.find("\n        }\n    }",render_start)
+    registration_start=sky.find("public static void shaders(RegisterShadersEvent event)")
+    registration_end=sky.find("\n        }\n    }",registration_start)
+    cache_body=sky[cache_start:cache_end] if cache_start>=0 and cache_end>cache_start else ""
+    render_body=sky[render_start:render_end] if render_start>=0 and render_end>render_start else ""
+    registration_body=sky[registration_start:registration_end] if registration_start>=0 and registration_end>registration_start else ""
+    if (cache_body.count('.getUniform("')!=3
+            or "clearShaderUniforms();" not in registration_body
+            or "riftStrengthUniform.set(strength);" not in render_body
+            or "greenPhaseUniform.set(RiftClientState.greenPhase());" not in render_body
+            or "gameTimeUniform.set(interpolatedGameTime(" not in render_body
+            or ".getUniform(" in render_body
+            or "return shaderReady && shader!=null" not in sky
+            or "gameTimeUniform!=null" not in sky):
+        raise RuntimeError("BLACK FREQUENCY sky shader uniforms must be cached per shader instance and invalidated on reload")
+    print("WORLD_CAPTURE: shader uniform cache is reload-safe and render-loop lookups are eliminated",flush=True)
     print("WORLD_CAPTURE: loaded-only physical beacon aura packet and render contract verified",flush=True)
 
 def verify_restoration_particle_source():
@@ -2947,6 +2966,9 @@ def capture_test_world():
                 return False
             if "BLACK_FREQUENCY_TEST SKY_SHADER_READY_STATE_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: shader readiness lifecycle was not verified",flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST SKY_SHADER_UNIFORM_CACHE_VERIFIED strength=true green=true time=true reloadSafe=true" not in log_after:
+                print("WORLD_CAPTURE_FAIL: sky shader uniforms were not cached and refreshed on reload",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST FOG_INTERPOLATION_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: render-rate fog interpolation self-check was not executed",flush=True)

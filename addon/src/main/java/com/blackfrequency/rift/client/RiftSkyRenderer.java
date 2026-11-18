@@ -1,6 +1,7 @@
 package com.blackfrequency.rift.client;
 
 import com.blackfrequency.rift.BlackFrequency;
+import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
@@ -33,9 +34,38 @@ public final class RiftSkyRenderer {
     private static final float SKY_TIME_MULTIPLIER_QUANTUM=0.005F;
     private static final double SKY_MAX_WRAP_PHASE_ERROR=0.002D;
     private static ShaderInstance shader;
-    // A reload invalidates the old shader until the replacement is registered.
-    // Cloud suppression must follow the live shader, not a stale non-null reference.
+    // Cache uniforms with the shader instance: getUniform(name) is a map lookup and
+    // should not run three times per rendered frame. All references are replaced on reload.
+    private static Uniform riftStrengthUniform;
+    private static Uniform greenPhaseUniform;
+    private static Uniform gameTimeUniform;
+    // A reload invalidates the old shader and its uniforms until the replacement is registered.
+    // Cloud suppression must follow the live shader, not stale non-null references.
     private static boolean shaderReady;
+
+    private static void clearShaderUniforms() {
+        riftStrengthUniform=null;
+        greenPhaseUniform=null;
+        gameTimeUniform=null;
+    }
+
+    private static boolean cacheShaderUniforms(ShaderInstance candidate) {
+        if(candidate==null) {
+            clearShaderUniforms();
+            return false;
+        }
+        Uniform nextRiftStrength=candidate.getUniform("RiftStrength");
+        Uniform nextGreenPhase=candidate.getUniform("GreenPhase");
+        Uniform nextGameTime=candidate.getUniform("GameTime");
+        if(nextRiftStrength==null || nextGreenPhase==null || nextGameTime==null) {
+            clearShaderUniforms();
+            return false;
+        }
+        riftStrengthUniform=nextRiftStrength;
+        greenPhaseUniform=nextGreenPhase;
+        gameTimeUniform=nextGameTime;
+        return true;
+    }
     private static boolean firstVisibleFrameLogged;
     private static boolean firstDepthAwareFrameLogged;
     private static boolean firstDepthStateCleanupLogged;
@@ -51,7 +81,8 @@ public final class RiftSkyRenderer {
 
     // Cloud suppression must never hide the vanilla sky when shader loading fails.
     public static boolean isShaderReady() {
-        return shaderReady && shader!=null;
+        return shaderReady && shader!=null
+            && riftStrengthUniform!=null && greenPhaseUniform!=null && gameTimeUniform!=null;
     }
 
     private static float wrappedDegrees(float angle) {
@@ -153,16 +184,27 @@ public final class RiftSkyRenderer {
             // suppressing vanilla clouds while the previous shader is invalidated.
             shaderReady=false;
             shader=null;
+            clearShaderUniforms();
             verifyRenderThreshold();
             event.registerShader(
                 new ShaderInstance(event.getResourceProvider(),
                     SKY_RIFT_SHADER_ID, DefaultVertexFormat.POSITION),
                 loaded -> {
                     shader=loaded;
+                    if(!cacheShaderUniforms(loaded)) {
+                        shaderReady=false;
+                        com.mojang.logging.LogUtils.getLogger().error(
+                            "BLACK FREQUENCY: sky shader is missing a required animation uniform");
+                        return;
+                    }
                     shaderReady=true;
                     com.mojang.logging.LogUtils.getLogger().info("BLACK_FREQUENCY_SHADER_READY sky_rift");
-                    if(CI_TEST_MODE) com.mojang.logging.LogUtils.getLogger().info(
-                        "BLACK_FREQUENCY_TEST SKY_SHADER_READY_STATE_VERIFIED");
+                    if(CI_TEST_MODE) {
+                        com.mojang.logging.LogUtils.getLogger().info(
+                            "BLACK_FREQUENCY_TEST SKY_SHADER_UNIFORM_CACHE_VERIFIED strength=true green=true time=true reloadSafe=true");
+                        com.mojang.logging.LogUtils.getLogger().info(
+                            "BLACK_FREQUENCY_TEST SKY_SHADER_READY_STATE_VERIFIED");
+                    }
                 });
         }
     }
@@ -185,7 +227,7 @@ public final class RiftSkyRenderer {
         }
 
         private static void renderRift(RenderLevelStageEvent event) {
-            if(shader==null) return;
+            if(!isShaderReady()) return;
             Minecraft mc=Minecraft.getInstance();
             if(mc.level==null || mc.player==null) return;
             // A stale Overworld packet must not draw the fracture in other dimensions.
@@ -201,10 +243,9 @@ public final class RiftSkyRenderer {
                 com.mojang.logging.LogUtils.getLogger().info("BLACK_FREQUENCY_RENDER_ACTIVE strength={}",strength);
             }
             boolean depthAwareDrawSubmitted=false;
-            if(shader.getUniform("RiftStrength")!=null)shader.getUniform("RiftStrength").set(strength);
-            if(shader.getUniform("GreenPhase")!=null)shader.getUniform("GreenPhase").set(RiftClientState.greenPhase());
-            if(shader.getUniform("GameTime")!=null)
-                shader.getUniform("GameTime").set(interpolatedGameTime(mc.level.getGameTime(),event.getPartialTick()));
+            riftStrengthUniform.set(strength);
+            greenPhaseUniform.set(RiftClientState.greenPhase());
+            gameTimeUniform.set(interpolatedGameTime(mc.level.getGameTime(),event.getPartialTick()));
             // Rendering is allowed to fail (for example, during a resource reload),
             // but it must never leave the next world pass with depth writes disabled.
             // Keep every state change inside the guarded region so cleanup also runs
