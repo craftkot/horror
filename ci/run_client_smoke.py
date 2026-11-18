@@ -2124,14 +2124,25 @@ def capture_test_world():
                 snap("recovery-beacon-ground-context-final-failure.png")
                 return False
             final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-            if "BLACK_FREQUENCY_GROUND_MESH_SURFACE_OUTLINE_HEIGHT_VERIFIED" not in final_log:
-                print("WORLD_CAPTURE_FAIL: outline-based ground surface height self-check was not executed",flush=True)
-                return False
-            if "BLACK_FREQUENCY_GROUND_MESH_PLANT_OUTLINE_HEIGHT_VERIFIED" not in final_log:
-                print("WORLD_CAPTURE_FAIL: real tall-grass outline height was not verified",flush=True)
+            support_top_marker = (
+                "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_TOP_PROFILE_VERIFIED "
+                "fullBlock=1.0 bottomSlab=0.5 invalidFallback=1.0 nonCollidingCoverIgnored=true"
+            )
+            if support_top_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: support-top sampling did not prove that non-colliding foliage cannot lift the fissure mesh",flush=True)
                 return False
             camera_source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
             camera_source=camera_source_path.read_text(encoding="utf-8",errors="replace")
+            sample_start=camera_source.find("private static double sampleGroundY(")
+            sample_end=camera_source.find("private static long columnKey(",sample_start+1)
+            sample_source=(camera_source[sample_start:sample_end]
+                           if sample_start>=0 and sample_end>sample_start else "")
+            if ("private static double groundSurfaceOffset(double supportHeight)" not in camera_source
+                    or "groundSurfaceOffset(supportHeight)" not in sample_source
+                    or "coverShape" in sample_source
+                    or "surface.getShape(level,cursor)" in sample_source):
+                print("WORLD_CAPTURE_FAIL: ground mesh still follows non-colliding cover geometry instead of the supporting block top",flush=True)
+                return False
             color_profile_marker="BLACK_FREQUENCY_GROUND_MESH_COLOR_CHANNEL_PROFILE_VERIFIED zero=0 half=128 one=255 lowClamp=0 highClamp=255 nonFinite=true"
             if color_profile_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: per-ribbon color conversion profile was not executed",flush=True)
