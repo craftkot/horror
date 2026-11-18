@@ -2221,7 +2221,8 @@ def capture_test_world():
             edge_notch_marker=("BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED "
                                "samples=96 left=12 right=8 asymmetricSamples=18 deterministic=true")
             core_width_marker=("BLACK_FREQUENCY_GROUND_MESH_CORE_WIDTH_PROFILE_VERIFIED "
-                               "samples=96 minBound=0.78 maxBound=1.22 maxAdjacentDeltaLimit=0.075 interpolated=true bounded=true")
+                               "samples=96 minBound=0.78 maxBound=1.22 maxAdjacentDeltaLimit=0.075 interpolated=true bounded=true "
+                               "harmonics=2 broadAmplitude=0.16 detailAmplitude=0.05 detailFrequency=0.43 armPhase=1.13 invalidFallback=1.0")
             if edge_notch_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: independently notched ground lips were not verified",flush=True)
                 return False
@@ -2230,6 +2231,11 @@ def capture_test_world():
                 return False
             if ("private static final double GROUND_MIN_CORE_WIDTH_SCALE=.78D;" not in camera_source
                     or "private static final double GROUND_MAX_CORE_WIDTH_SCALE=1.22D;" not in camera_source
+                    or "private static double groundCoreWidthScale(double phase,int arm)" not in camera_source
+                    or "GROUND_CORE_WIDTH_DETAIL_FREQUENCY=.43D;" not in camera_source
+                    or "Math.sin(phase*GROUND_CORE_WIDTH_DETAIL_FREQUENCY" not in camera_source
+                    or "groundCoreWidthScale(phase,arm)" not in camera_source
+                    or "groundCoreWidthScale(Double.NaN,0)!=1.0D" not in camera_source
                     or "previousSample.coreWidthScale()" not in camera_source
                     or "sample.coreWidthScale()" not in camera_source
                     or "segment.coreWidthScaleA()" not in camera_source
