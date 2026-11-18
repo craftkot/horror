@@ -920,9 +920,18 @@ def capture_test_world():
         camera_delta_for_yaw(0.0,-178.0)<0,
         camera_delta_for_yaw(-178.0,0.0)>0,
         camera_delta_for_yaw(179.0,-179.0)>0,
+        camera_delta_for_pitch(90.0,44.65)<0,
+        camera_delta_for_pitch(44.65,90.0)>0,
     )
     if not all(camera_direction_cases):
         raise RuntimeError("BLACK FREQUENCY camera correction direction regression")
+    factor=MOUSE_SENSITIVITY*0.6+0.2
+    degrees_per_pixel=factor*factor*factor*8.0*0.15
+    overshoot_correction=camera_delta_for_pitch(90.0,44.65)
+    corrected_pitch=90.0+overshoot_correction*degrees_per_pixel
+    if overshoot_correction>=0 or abs(corrected_pitch-44.65)>degrees_per_pixel:
+        raise RuntimeError("BLACK FREQUENCY camera pitch overshoot correction regression")
+    print("WORLD_CAPTURE: closed-loop camera pitch overshoot correction verified",flush=True)
     print("WORLD_CAPTURE: client camera telemetry, beacon aim parser and correction directions verified",flush=True)
     def is_rift_violet_pixel(r,g,b):
         # Reject pale lavender UI/death-screen skies; the rift must be saturated violet.
@@ -1814,19 +1823,17 @@ def capture_test_world():
                 horizontal=math.hypot(dx,dz)
                 target_yaw=math.degrees(math.atan2(-dx,dz))
                 target_pitch=-math.degrees(math.atan2(dy,max(.01,horizontal)))
-                yaw_delta=camera_delta_for_yaw(current_yaw,target_yaw)
-                pitch_delta=camera_delta_for_pitch(current_pitch,target_pitch)
                 key("F1")
-                subprocess.run(["xdotool","mousemove","--sync","640","640"],check=False)
+                # The one-shot mouse delta can overshoot Minecraft's +/-90 degree
+                # pitch clamp. Re-read rendered telemetry and close the remaining
+                # error instead of assuming X11 input sums equal camera rotation.
+                subprocess.run(["xdotool","mousemove","--sync","640","360"],check=False)
                 time.sleep(.2)
-                moved_yaw=move_camera_horizontal(yaw_delta)
-                moved_pitch=move_camera(pitch_delta)
                 restored=True
                 try:
-                    # Do not trust requested mouse deltas: verify the camera that
-                    # Minecraft actually rendered before accepting the fissure frame.
+                    restore_camera_orientation(target_yaw,target_pitch)
                     actual_orientation=wait_for_camera_orientation(
-                        target_yaw,target_pitch,tolerance=5.0,timeout=3.0)
+                        target_yaw,target_pitch,tolerance=5.0,timeout=1.0)
                     if (actual_orientation is None
                             or abs(wrapped_angle_delta(actual_orientation[0],target_yaw))>5.0
                             or abs(actual_orientation[1]-target_pitch)>5.0):
@@ -1843,14 +1850,11 @@ def capture_test_world():
                     time.sleep(6.5)
                     snap("terrain-fracture-near-player.png")
                 finally:
-                    if moved_pitch:
-                        restored_pitch=move_camera(-moved_pitch)
-                        if restored_pitch!=-moved_pitch:
-                            restored=False
-                    if moved_yaw:
-                        restored_yaw=move_camera_horizontal(-moved_yaw)
-                        if restored_yaw!=-moved_yaw:
-                            restored=False
+                    restored_orientation=restore_camera_orientation(current_yaw,current_pitch)
+                    if (restored_orientation is None
+                            or abs(wrapped_angle_delta(restored_orientation[0],current_yaw))>3.0
+                            or abs(restored_orientation[1]-current_pitch)>3.0):
+                        restored=False
                     key("F1")
                 if not restored:
                     terrain_capture_failed=True
@@ -2110,11 +2114,15 @@ def capture_test_world():
                 return False
             if not terrain_shot:
                 final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                empty_mesh_matches=list(re.finditer(
+                    r"BLACK_FREQUENCY_GROUND_MESH_EMPTY(?:\\s|$)",final_log))
+                last_empty_mesh=empty_mesh_matches[-1].start() if empty_mesh_matches else -1
+                last_rendered_mesh=final_log.rfind("BLACK_FREQUENCY_GROUND_MESH_RENDERED")
                 if "BLACK_FREQUENCY_GROUND_MESH_EVENT_ACTIVE" not in final_log:
                     print("WORLD_CAPTURE_FAIL: AFTER_PARTICLES ground renderer was never dispatched",flush=True)
-                elif "BLACK_FREQUENCY_GROUND_MESH_EMPTY" in final_log:
-                    print("WORLD_CAPTURE_FAIL: client sampler found no valid loaded surface segments",flush=True)
-                elif "BLACK_FREQUENCY_GROUND_MESH_RENDERED" not in final_log:
+                elif last_empty_mesh>last_rendered_mesh:
+                    print("WORLD_CAPTURE_FAIL: latest ground mesh build had no valid loaded surface segments",flush=True)
+                elif last_rendered_mesh<0:
                     print("WORLD_CAPTURE_FAIL: ground renderer ran but did not reach its mesh readiness threshold",flush=True)
                 else:
                     print("WORLD_CAPTURE_FAIL: mesh marker exists but no player-visible fissure frame was captured",flush=True)
