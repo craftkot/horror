@@ -2115,7 +2115,7 @@ def capture_test_world():
             if not terrain_shot:
                 final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                 empty_mesh_matches=list(re.finditer(
-                    r"BLACK_FREQUENCY_GROUND_MESH_EMPTY(?:\\s|$)",final_log))
+                    r"BLACK_FREQUENCY_GROUND_MESH_EMPTY(?:\s|$)",final_log))
                 last_empty_mesh=empty_mesh_matches[-1].start() if empty_mesh_matches else -1
                 last_rendered_mesh=final_log.rfind("BLACK_FREQUENCY_GROUND_MESH_RENDERED")
                 if "BLACK_FREQUENCY_GROUND_MESH_EVENT_ACTIVE" not in final_log:
