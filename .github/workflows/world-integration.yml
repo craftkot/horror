@@ -171,6 +171,7 @@ jobs:
             grep -q 'BLACK_FREQUENCY_TEST ANOMALY_FIELD_TURBULENCE_VERIFIED baseWeight=1.0 crossAmplitude=0.12 bounded=true deterministic=true liftPocket=true sinkPocket=true timeDrift=true invalidRejected=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST ANOMALY_FIELD_MULTI_SCALE_VERIFIED turbulenceAmplitude=0.06 samples=100 deterministic=true bounded=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST ANOMALY_FIELD_PHASE_WARP_VERIFIED amplitude=0.55 source=crossWave extraTrigPerPlayer=0 nonlinearCoupling=true' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST ANOMALY_FIELD_RADIAL_FALLOFF_VERIFIED innerRadius=48.0 outerRadius=64.0 width=16.0 curve=smoothstep midpoint=0.5 monotonic=true invalidNeutral=true particleThreshold=0.04296875' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST ANOMALY_FIELD_TIME_PHASE_CACHE_VERIFIED cachedOffsets=8 sameTickReuse=true tickRewind=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_UI_PALETTE_VERIFIED rgb=5714c7 legacyFormatting=false' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_PROFILE_VERIFIED ticks=40 start=1.0 midpoint=0.5 end=0.0 monotonic=true' world-test.log
