@@ -2217,8 +2217,21 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: ground animation still performs trigonometry per segment",flush=True)
                 return False
             print("WORLD_CAPTURE: ground animation uses six shared time-base trig calls per frame",flush=True)
+            edge_notch_marker=("BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED "
+                               "samples=96 left=12 right=8 asymmetricSamples=18 deterministic=true")
+            if edge_notch_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: independently notched ground lips were not verified",flush=True)
+                return False
+            if ("boolean leftEdgeNotched,boolean rightEdgeNotched" not in camera_source
+                    or "private static boolean isGroundEdgeNotched(double phase,long salt)" not in camera_source
+                    or "isGroundEdgeNotched(phase,GROUND_LEFT_EDGE_NOTCH_SALT)" not in camera_source
+                    or "isGroundEdgeNotched(phase,GROUND_RIGHT_EDGE_NOTCH_SALT)" not in camera_source
+                    or "if(!sample.leftEdgeNotched())" not in camera_source
+                    or "if(!sample.rightEdgeNotched())" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: crack-lip notches are not cached and independently applied",flush=True)
+                return False
             ribbon_cache_marker=("BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED "
-                                 "staticRgbChannels=12 dynamicAlphaChannels=4 edgeAlphaShared=true")
+                                 "staticRgbChannels=12 dynamicAlphaChannels=4 edgeAlphaBaseShared=true edgeNotchesCached=true")
             if ribbon_cache_marker in final_log:
                 expected_static_channels=(
                     "private static final int GROUND_GLOW_RED_CHANNEL=colorChannel(.20F);",
@@ -2257,6 +2270,9 @@ def capture_test_world():
                         or render_source.count("colorChannel(")!=4
                         or any(call not in render_source for call in ribbon_calls)
                         or render_source.count("GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel")!=2
+                        or "if(!sample.leftEdgeNotched())" not in render_source
+                        or "if(!sample.rightEdgeNotched())" not in render_source
+                        or "isGroundEdgeNotched(" in render_source
                         or "verifyPackedColorProfile();" not in build_source
                         or "verifyRibbonColorCacheProfile();" not in build_source):
                     print("WORLD_CAPTURE_FAIL: ground ribbon must cache 12 static RGB channels and convert only four dynamic alpha channels per segment",flush=True)

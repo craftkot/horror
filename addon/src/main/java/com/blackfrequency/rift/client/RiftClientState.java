@@ -587,6 +587,9 @@ public final class RiftClientState {
         private static final float GROUND_EDGE_RED=.46F;
         private static final float GROUND_EDGE_GREEN=.18F;
         private static final float GROUND_EDGE_BLUE=.82F;
+        // Fixed hash salts create independent, reproducible chips in the two exposed crack lips.
+        private static final long GROUND_LEFT_EDGE_NOTCH_SALT=0x9E3779B97F4A7C15L;
+        private static final long GROUND_RIGHT_EDGE_NOTCH_SALT=0xD1B54A32D192ED03L;
         // RGB values are invariant across every frame and segment; pack them once at class initialization.
         private static final int GROUND_GLOW_RED_CHANNEL=colorChannel(.20F);
         private static final int GROUND_GLOW_GREEN_CHANNEL=colorChannel(.025F);
@@ -646,7 +649,8 @@ public final class RiftClientState {
 
         private record GroundPoint(double x,double y,double z) {}
         private record GroundSample(double forwardX,double bendX,double forwardZ,double bendZ,double phase,
-                double phaseSin,double phaseCos,double flickerPhaseSin,double flickerPhaseCos) {}
+                double phaseSin,double phaseCos,double flickerPhaseSin,double flickerPhaseCos,
+                boolean leftEdgeNotched,boolean rightEdgeNotched) {}
         private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,
                 GroundSample sample,double taperA,double taperB) {}
         private record GroundMesh(List<GroundSegment> segments,int activeArms,int sampledColumns,int cacheHits,
@@ -656,6 +660,19 @@ public final class RiftClientState {
         // Even mesh samples align exactly with the 12 server-side particle samples.
         // Precompute their trigonometric terms once instead of recalculating them on every mesh rebuild.
         private static final GroundSample[] GROUND_SAMPLES=createGroundSamples();
+
+        // Hash each static sample once so the two exposed lips fracture independently
+        // without adding trigonometry, allocations, or random state to the render loop.
+        private static boolean isGroundEdgeNotched(double phase,long salt) {
+            if(!Double.isFinite(phase)) return true;
+            long hash=Double.doubleToLongBits(phase)^salt;
+            hash ^= hash >>> 33;
+            hash *= 0xff51afd7ed558ccdL;
+            hash ^= hash >>> 33;
+            hash *= 0xc4ceb9fe1a85ec53L;
+            hash ^= hash >>> 33;
+            return (hash & 7L)==0L;
+        }
 
         private static GroundSample[] createGroundSamples() {
             GroundSample[] samples=new GroundSample[ARM_COUNT*SEGMENTS_PER_ARM];
@@ -672,7 +689,9 @@ public final class RiftClientState {
                         cosAngle*distance,sinAngle*bend,
                         sinAngle*distance,cosAngle*bend,phase,
                         Math.sin(phase),Math.cos(phase),
-                        Math.sin(phase*1.9D),Math.cos(phase*1.9D));
+                        Math.sin(phase*1.9D),Math.cos(phase*1.9D),
+                        isGroundEdgeNotched(phase,GROUND_LEFT_EDGE_NOTCH_SALT),
+                        isGroundEdgeNotched(phase,GROUND_RIGHT_EDGE_NOTCH_SALT));
                 }
             }
             return samples;
@@ -721,6 +740,9 @@ public final class RiftClientState {
             if(GROUND_SAMPLES.length!=ARM_COUNT*SEGMENTS_PER_ARM)
                 throw new IllegalStateException("BLACK FREQUENCY ground sample cache size regression");
             int checked=0;
+            int leftEdgeNotches=0;
+            int rightEdgeNotches=0;
+            int asymmetricEdgeSamples=0;
             boolean evenSamplesAligned=true;
             for(int arm=0;arm<ARM_COUNT;arm++) {
                 double angle=arm*Math.PI/2.0D;
@@ -756,8 +778,13 @@ public final class RiftClientState {
                         || !Double.isFinite(sample.forwardZ()) || !Double.isFinite(sample.bendZ())
                         || !Double.isFinite(sample.phase()) || !Double.isFinite(sample.phaseSin())
                         || !Double.isFinite(sample.phaseCos()) || !Double.isFinite(sample.flickerPhaseSin())
-                        || !Double.isFinite(sample.flickerPhaseCos()))
+                        || !Double.isFinite(sample.flickerPhaseCos())
+                        || sample.leftEdgeNotched()!=isGroundEdgeNotched(phase,GROUND_LEFT_EDGE_NOTCH_SALT)
+                        || sample.rightEdgeNotched()!=isGroundEdgeNotched(phase,GROUND_RIGHT_EDGE_NOTCH_SALT))
                         throw new IllegalStateException("BLACK FREQUENCY ground sample cache value regression");
+                    if(sample.leftEdgeNotched()) leftEdgeNotches++;
+                    if(sample.rightEdgeNotched()) rightEdgeNotches++;
+                    if(sample.leftEdgeNotched()!=sample.rightEdgeNotched()) asymmetricEdgeSamples++;
                     double dx=sample.forwardX()-sample.bendX();
                     double dz=sample.forwardZ()+sample.bendZ();
                     if(dx*dx+dz*dz>=(double)RADIUS*RADIUS)
@@ -795,8 +822,12 @@ public final class RiftClientState {
                     checked++;
                 }
             }
-            if(checked!=96 || !evenSamplesAligned)
-                throw new IllegalStateException("BLACK FREQUENCY ground sample cache count/alignment regression");
+            if(checked!=96 || !evenSamplesAligned
+                || leftEdgeNotches!=12 || rightEdgeNotches!=8 || asymmetricEdgeSamples!=18)
+                throw new IllegalStateException("BLACK FREQUENCY ground edge notch profile regression");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED samples={} left={} right={} asymmetricSamples={} deterministic=true",
+                checked,leftEdgeNotches,rightEdgeNotches,asymmetricEdgeSamples);
             sampleOffsetsProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_OFFSETS_VERIFIED samples={} trigPerRebuild=0 bounded=true phaseCached=true",
@@ -1656,7 +1687,7 @@ public final class RiftClientState {
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh static RGB cache regression");
             ribbonColorCacheProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED staticRgbChannels=12 dynamicAlphaChannels=4 edgeAlphaShared=true");
+                "BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED staticRgbChannels=12 dynamicAlphaChannels=4 edgeAlphaBaseShared=true edgeNotchesCached=true");
         }
 
         // Static RGB channels are packed once; only each ribbon's animated alpha is dynamic.
@@ -1936,10 +1967,15 @@ public final class RiftClientState {
                         GROUND_CORE_RED_CHANNEL,GROUND_CORE_GREEN_CHANNEL,GROUND_CORE_BLUE_CHANNEL,coreAlphaChannel);
                     ribbon(builder,matrix,camera,segment,0.0D,halfWidth*.16D,GROUND_FILAMENT_LIFT,
                         GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,filamentAlphaChannel);
-                    ribbon(builder,matrix,camera,segment,halfWidth*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,
-                        GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel);
-                    ribbon(builder,matrix,camera,segment,-halfWidth*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,
-                        GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel);
+                    // Leave small, deterministic gaps in each lip independently. The
+                    // continuous dark core remains visible, so the seam reads as fractured
+                    // earth rather than two uninterrupted luminous rails.
+                    if(!sample.leftEdgeNotched())
+                        ribbon(builder,matrix,camera,segment,halfWidth*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,
+                            GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel);
+                    if(!sample.rightEdgeNotched())
+                        ribbon(builder,matrix,camera,segment,-halfWidth*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,
+                            GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel);
                 }
                 BufferUploader.drawWithShader(builder.end());
             } finally {
