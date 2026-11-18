@@ -404,8 +404,8 @@ def verify_real_beacon_break_source():
     gate_start=controller.find("private static boolean mayActivateBeacon(")
     gate_end=controller.find("\n    private static boolean mayRecoverCiBeaconAimAfterMiss",gate_start)
     gate=controller[gate_start:gate_end] if gate_start>=0 and gate_end>gate_start else ""
-    helper_start=controller.find("private static double ciEyeDistanceSquaredToBlock(")
-    helper_end=controller.find("\n    private static void verifyCiNaturalBeaconBreakNoDrop",helper_start)
+    helper_start=controller.find("private static double eyeDistanceSquaredToBlock(")
+    helper_end=controller.find("\n    private static boolean withinBeaconInteractionReach",helper_start)
     helper=controller[helper_start:helper_end] if helper_start>=0 and helper_end>helper_start else ""
     verify_start=controller.find("private static void verifyCiNaturalBeaconBreakNoDrop(")
     verify_end=controller.find("\n    @SubscribeEvent",verify_start)
@@ -422,12 +422,16 @@ def verify_real_beacon_break_source():
             or "level.setBlock(pos,Blocks.AIR.defaultBlockState(),3)" not in handler
             or "ciPendingNaturalBeaconBreakVerificationPos=pos.immutable();" not in handler
             or "ciPendingNaturalBeaconBreakVerificationSurvival=!miner.isCreative()" not in handler
-            or "ciPendingNaturalBeaconBreakVerificationDistanceSquared=" not in handler
-            or "ciEyeDistanceSquaredToBlock(miner.getEyePosition(),pos)" not in handler
-            or "ciEyeDistanceSquaredToBlock(event.getEntity().getEyePosition(),pos)" not in activation
-            or "distanceSquared<=CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE" not in gate
+            or "ciPendingNaturalBeaconBreakVerificationDistanceSquared=distanceSquared;" not in handler
+            or "eyeDistanceSquaredToBlock(miner.getEyePosition(),pos)" not in handler
+            or "withinBeaconInteractionReach(distanceSquared)" not in handler
+            or "eyeDistanceSquaredToBlock(event.getEntity().getEyePosition(),pos)" not in activation
+            or "withinBeaconInteractionReach(distanceSquared)" not in gate
             or "NATURAL_BEACON_MINED_NO_DROP" not in handler
-            or "private static double ciEyeDistanceSquaredToBlock(" not in controller
+            or "private static double eyeDistanceSquaredToBlock(" not in controller
+            or "private static boolean withinBeaconInteractionReach(" not in controller
+            or "withinBeaconInteractionReach(boundaryX)" not in controller
+            or "NATURAL_BEACON_BREAK_REACH_GUARD_VERIFIED" not in controller
             or "Math.max(minX,Math.min(eye.x,minX+1.0D))" not in helper
             or "Math.max(minY,Math.min(eye.y,minY+1.0D))" not in helper
             or "Math.max(minZ,Math.min(eye.z,minZ+1.0D))" not in helper
@@ -442,7 +446,7 @@ def verify_real_beacon_break_source():
             or "boolean survivalMining=ciPendingNaturalBeaconBreakVerificationSurvival;" not in verify
             or "double distanceSquared=ciPendingNaturalBeaconBreakVerificationDistanceSquared;" not in verify
             or "distanceToSqr(" not in verify
-            or "CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE" not in verify
+            or "withinBeaconInteractionReach(distanceSquared)" not in verify
             or "capturedAtBreak=true" not in verify
             or probe.count("new net.minecraftforge.event.level.BlockEvent.BreakEvent(")!=1
             or "testEvent" in probe
@@ -2571,6 +2575,11 @@ def capture_test_world():
                     "maxDistance=4.5 maxDistanceSquared=20.25 eyeToAabb=true strictBoundary=true remote64Rejected=true invalidRejected=true")
                 if interaction_guard_marker not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon activation did not enforce the real eye-to-AABB reach boundary",flush=True)
+                    return False
+                break_guard_marker=("BLACK_FREQUENCY_TEST NATURAL_BEACON_BREAK_REACH_GUARD_VERIFIED "
+                    "exactBoundary=true outsideRejected=true invalidRejected=true eventGuard=true")
+                if break_guard_marker not in log_after:
+                    print("WORLD_CAPTURE_FAIL: server break event did not enforce the shared beacon reach guard",flush=True)
                     return False
                 initial_pulse=re.search(
                     r"BLACK_FREQUENCY_TEST RESTORE_INITIAL_BEACON_PULSE_EMITTED ring=(\d+) sparks=(\d+) viewer=true",
