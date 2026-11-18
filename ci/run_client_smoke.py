@@ -461,18 +461,18 @@ def point_to_block_aabb_distance_squared(point,origin):
 
 def verify_beacon_interaction_reach_geometry():
     interaction_limit=4.5*4.5
-    pad_eye=(3.75,3.62,0.5)
+    pad_eye=(3.0+.5,1.0+1.62,0.5)
     pad_distance=point_to_block_aabb_distance_squared(pad_eye,(0.0,0.0,0.0))
     edge_distance=point_to_block_aabb_distance_squared((5.5,0.5,0.5),(0.0,0.0,0.0))
     outside_distance=point_to_block_aabb_distance_squared((5.5001,0.5,0.5),(0.0,0.0,0.0))
     invalid_distance=point_to_block_aabb_distance_squared((float("nan"),0.5,0.5),(0.0,0.0,0.0))
-    if (not math.isclose(pad_distance,14.4269,rel_tol=0.0,abs_tol=1.0E-9)
+    if (not math.isclose(pad_distance,8.8744,rel_tol=0.0,abs_tol=1.0E-9)
             or pad_distance>interaction_limit
             or not math.isclose(edge_distance,interaction_limit,rel_tol=0.0,abs_tol=1.0E-9)
             or outside_distance<=interaction_limit
             or math.isfinite(invalid_distance)):
         raise RuntimeError("BLACK FREQUENCY eye-to-block AABB reach geometry regression")
-    print("WORLD_CAPTURE: eye-to-block AABB reach geometry verified pad=14.4269 boundary=20.25 outsideRejected=true invalidRejected=true",flush=True)
+    print("WORLD_CAPTURE: eye-to-block AABB reach geometry verified pad=8.8744 boundary=20.25 outsideRejected=true invalidRejected=true",flush=True)
 
 verify_fissure_target_view_score_profile()
 verify_restoration_particle_source()
