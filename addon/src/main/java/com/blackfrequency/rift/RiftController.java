@@ -1068,14 +1068,23 @@ public final class RiftController {
         // Respect prior protection-mod cancellation: a denied break must not
         // remove the recovery fixture or mutate its persisted position.
         if(event.isCanceled()) return;
-        if(event.getPlayer()==null || !event.getPlayer().isAlive()
-            || event.getPlayer().isRemoved() || event.getPlayer().isSpectator()) return;
+        var miner=event.getPlayer();
+        if(miner==null || !miner.isAlive()
+            || miner.isRemoved() || miner.isSpectator()) return;
         BlockPos pos=event.getPos();
         // Ignore unloaded positions before querying block state: an event from
         // another mod must not cause recovery logic to load a chunk.
         if(!level.hasChunkAt(pos)) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
         if(!isOwnedNaturalBeaconAtLoadedPosition(level,s,pos)) return;
+        // Synthetic Forge break events must not bypass the same server-side reach
+        // boundary used by beacon activation. Ordinary blocks return before this test.
+        double distanceSquared=eyeDistanceSquaredToBlock(miner.getEyePosition(),pos);
+        if(!withinBeaconInteractionReach(distanceSquared)) {
+            if(CI_TEST) LOGGER.warn("BLACK_FREQUENCY_TEST NATURAL_BEACON_BREAK_REJECTED_OUT_OF_REACH distanceSquared={} maxDistanceSquared={}",
+                distanceSquared,CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE);
+            return;
+        }
         // Cancel vanilla harvesting before it creates a valuable beacon item.
         event.setCanceled(true);
         if(level.setBlock(pos,Blocks.AIR.defaultBlockState(),3)
@@ -1084,13 +1093,11 @@ public final class RiftController {
             s.naturalBeaconId=null;
             s.setDirty();
             if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPostRestoreBeaconBreakTest")) {
-                var miner=event.getPlayer();
                 ciPendingNaturalBeaconBreakVerificationPos=pos.immutable();
                 ciPendingNaturalBeaconBreakVerificationPlayer=miner.getUUID();
                 ciPendingNaturalBeaconBreakVerificationSurvival=!miner.isCreative()
                     && !miner.getAbilities().instabuild;
-                ciPendingNaturalBeaconBreakVerificationDistanceSquared=
-                    ciEyeDistanceSquaredToBlock(miner.getEyePosition(),pos);
+                ciPendingNaturalBeaconBreakVerificationDistanceSquared=distanceSquared;
             }
             event.getPlayer().displayClientMessage(recoveryViolet(
                 s.restoring || s.restored
@@ -1412,10 +1419,8 @@ public final class RiftController {
 
         net.minecraft.world.phys.Vec3 eye=new net.minecraft.world.phys.Vec3(
             playerX,playerY+CI_BEACON_PLAYER_EYE_HEIGHT,playerZ);
-        double eyeToBeaconDistanceSquared=ciEyeDistanceSquaredToBlock(eye,beacon);
-        double maxInteractionDistanceSquared=CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE;
-        if(!Double.isFinite(eyeToBeaconDistanceSquared)
-            || eyeToBeaconDistanceSquared>maxInteractionDistanceSquared) return false;
+        double eyeToBeaconDistanceSquared=eyeDistanceSquaredToBlock(eye,beacon);
+        if(!withinBeaconInteractionReach(eyeToBeaconDistanceSquared)) return false;
         net.minecraft.world.phys.Vec3 target=net.minecraft.world.phys.Vec3.atCenterOf(beacon);
         if(!fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ)))
             return false;
@@ -1457,7 +1462,7 @@ public final class RiftController {
             .5D+CI_BEACON_PAD_STANDOFF,
             CI_BEACON_PAD_FLOOR_Y_OFFSET+CI_BEACON_PAD_PLAYER_Y_OFFSET+CI_BEACON_PLAYER_EYE_HEIGHT,
             .5D);
-        return ciEyeDistanceSquaredToBlock(eye,new BlockPos(0,0,0));
+        return eyeDistanceSquaredToBlock(eye,new BlockPos(0,0,0));
     }
 
     private static double ciBeaconSightlineHeightAtProgress(double horizontalProgress) {
@@ -1503,7 +1508,7 @@ public final class RiftController {
             || distanceSquared>maxInteractionDistanceSquared
             || !Double.isFinite(eyeToAabbDistanceSquared)
             || Math.abs(eyeToAabbDistanceSquared-8.8744D)>1.0E-9D
-            || eyeToAabbDistanceSquared>maxInteractionDistanceSquared
+            || !withinBeaconInteractionReach(eyeToAabbDistanceSquared)
             || !Double.isFinite(beaconEntryY) || !(beaconEntryY>0.0D && beaconEntryY<1.0D)
             || !Double.isFinite(padInnerFaceY)
             || !(padInnerFaceY>CI_BEACON_PAD_FLOOR_Y_OFFSET+1.0D))
@@ -2679,8 +2684,7 @@ public final class RiftController {
         return !canceled && useBlock!=net.minecraftforge.eventbus.api.Event.Result.DENY
             && useItem!=net.minecraftforge.eventbus.api.Event.Result.DENY
             && hand==net.minecraft.world.InteractionHand.MAIN_HAND && alive && !spectator
-            && Double.isFinite(distanceSquared) && distanceSquared>=0.0D
-            && distanceSquared<=CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE;
+            && withinBeaconInteractionReach(distanceSquared);
     }
 
     private static boolean mayRecoverCiBeaconAimAfterMiss(
@@ -2701,7 +2705,7 @@ public final class RiftController {
             || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return false;
         BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
         if(!isOwnedNaturalBeaconAtLoadedPosition(level,s,beacon)) return false;
-        double distanceSquared=ciEyeDistanceSquaredToBlock(player.getEyePosition(),beacon);
+        double distanceSquared=eyeDistanceSquaredToBlock(player.getEyePosition(),beacon);
         if(!mayRecoverCiBeaconAimAfterMiss(CI_TEST,
             Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest"),
             Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest"),
@@ -3073,9 +3077,9 @@ public final class RiftController {
         var off=net.minecraft.world.InteractionHand.OFF_HAND;
         double reachSquared=CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE;
         BlockPos target=new BlockPos(0,64,0);
-        double exactAabbReach=ciEyeDistanceSquaredToBlock(
+        double exactAabbReach=eyeDistanceSquaredToBlock(
             new net.minecraft.world.phys.Vec3(-CI_BEACON_INTERACTION_MAX_DISTANCE,64.5D,.5D),target);
-        double outsideAabbReach=ciEyeDistanceSquaredToBlock(
+        double outsideAabbReach=eyeDistanceSquaredToBlock(
             new net.minecraft.world.phys.Vec3(-Math.nextUp(CI_BEACON_INTERACTION_MAX_DISTANCE),64.5D,.5D),target);
         if(Math.abs(exactAabbReach-reachSquared)>1.0E-9D
             || !(outsideAabbReach>reachSquared)
@@ -3256,7 +3260,7 @@ public final class RiftController {
         if(event.getEntity().isRemoved()) return;
         if(!mayActivateBeacon(event.getHand(),event.getEntity().isAlive(),
             event.getEntity().isSpectator(),
-            ciEyeDistanceSquaredToBlock(event.getEntity().getEyePosition(),pos),
+            eyeDistanceSquaredToBlock(event.getEntity().getEyePosition(),pos),
             event.isCanceled(),event.getUseBlock(),event.getUseItem())) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
         if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
@@ -4021,7 +4025,7 @@ public final class RiftController {
         s.setDirty();
     }
 
-    private static double ciEyeDistanceSquaredToBlock(net.minecraft.world.phys.Vec3 eye,BlockPos pos) {
+    private static double eyeDistanceSquaredToBlock(net.minecraft.world.phys.Vec3 eye,BlockPos pos) {
         if(eye==null || !Double.isFinite(eye.x) || !Double.isFinite(eye.y) || !Double.isFinite(eye.z))
             return Double.NaN;
         double minX=pos.getX();
@@ -4033,32 +4037,49 @@ public final class RiftController {
         return eye.distanceToSqr(closestX,closestY,closestZ);
     }
 
+    /** One strict survival-reach predicate shared by activation, pad placement and mining. */
+    private static boolean withinBeaconInteractionReach(double distanceSquared) {
+        double reach=CI_BEACON_INTERACTION_MAX_DISTANCE;
+        return Double.isFinite(distanceSquared) && distanceSquared>=0.0D
+            && distanceSquared<=reach*reach;
+    }
+
     // Exercise the Java helper itself so the Python fixture cannot silently drift
     // from the geometry used when a real Forge break event captures player reach.
     private static void verifyCiBeaconBreakReachGeometry() {
         BlockPos beacon=new BlockPos(-2,64,-3);
-        double inside=ciEyeDistanceSquaredToBlock(
+        double inside=eyeDistanceSquaredToBlock(
             new net.minecraft.world.phys.Vec3(-1.5D,64.5D,-2.5D),beacon);
-        double boundaryX=ciEyeDistanceSquaredToBlock(
+        double boundaryX=eyeDistanceSquaredToBlock(
             new net.minecraft.world.phys.Vec3(3.5D,64.5D,-2.5D),beacon);
-        double boundaryY=ciEyeDistanceSquaredToBlock(
+        double boundaryY=eyeDistanceSquaredToBlock(
             new net.minecraft.world.phys.Vec3(-1.5D,69.5D,-2.5D),beacon);
-        double boundaryZ=ciEyeDistanceSquaredToBlock(
+        double boundaryZ=eyeDistanceSquaredToBlock(
             new net.minecraft.world.phys.Vec3(-1.5D,64.5D,2.5D),beacon);
-        double outside=ciEyeDistanceSquaredToBlock(
+        double outside=eyeDistanceSquaredToBlock(
             new net.minecraft.world.phys.Vec3(3.5001D,64.5D,-2.5D),beacon);
-        double invalid=ciEyeDistanceSquaredToBlock(
+        double invalid=eyeDistanceSquaredToBlock(
             new net.minecraft.world.phys.Vec3(Double.NaN,64.5D,-2.5D),beacon);
         double reachSquared=CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE;
+        boolean exactBoundaryAccepted=withinBeaconInteractionReach(boundaryX)
+            && withinBeaconInteractionReach(boundaryY)
+            && withinBeaconInteractionReach(boundaryZ);
+        boolean outsideRejected=!withinBeaconInteractionReach(outside);
+        boolean invalidRejected=!withinBeaconInteractionReach(invalid)
+            && !withinBeaconInteractionReach(-1.0D)
+            && !withinBeaconInteractionReach(Double.POSITIVE_INFINITY)
+            && !withinBeaconInteractionReach(Double.NEGATIVE_INFINITY);
         if(inside!=0.0D
             || Math.abs(boundaryX-reachSquared)>1.0E-9D
             || Math.abs(boundaryY-reachSquared)>1.0E-9D
             || Math.abs(boundaryZ-reachSquared)>1.0E-9D
             || !(outside>reachSquared)
-            || Double.isFinite(invalid))
+            || Double.isFinite(invalid)
+            || !exactBoundaryAccepted || !outsideRejected || !invalidRejected)
             throw new IllegalStateException("CI Java beacon break AABB reach geometry regression");
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_BREAK_REACH_AABB_VERIFIED boundary={} axes=3 negativeCoordinates=true outsideRejected=true invalidRejected=true",
             reachSquared);
+        LOGGER.info("BLACK_FREQUENCY_TEST NATURAL_BEACON_BREAK_REACH_GUARD_VERIFIED exactBoundary=true outsideRejected=true invalidRejected=true eventGuard=true");
     }
 
     private static void verifyCiNaturalBeaconBreakNoDrop(ServerLevel level,State s) {
@@ -4074,8 +4095,7 @@ public final class RiftController {
             throw new IllegalStateException("CI beacon miner is unavailable during no-drop verification");
         boolean survivalMining=ciPendingNaturalBeaconBreakVerificationSurvival;
         double distanceSquared=ciPendingNaturalBeaconBreakVerificationDistanceSquared;
-        boolean withinReach=Double.isFinite(distanceSquared)
-            && distanceSquared<=CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE;
+        boolean withinReach=withinBeaconInteractionReach(distanceSquared);
         double distanceAfterBreakSquared=player.distanceToSqr(
             pos.getX()+.5D,pos.getY()+.5D,pos.getZ()+.5D);
         if(!Double.isFinite(distanceAfterBreakSquared))
