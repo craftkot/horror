@@ -615,6 +615,8 @@ public final class RiftClientState {
         // Fixed hash salts create independent, reproducible chips in the two exposed crack lips.
         private static final long GROUND_LEFT_EDGE_NOTCH_SALT=0x9E3779B97F4A7C15L;
         private static final long GROUND_RIGHT_EDGE_NOTCH_SALT=0xD1B54A32D192ED03L;
+        // A sparse full-section break interrupts the glow, core, filament and both lips together.
+        private static final long GROUND_CORE_SEGMENT_GAP_SALT=0x94D049BB133111EBL;
         // RGB values are invariant across every frame and segment; pack them once at class initialization.
         private static final int GROUND_GLOW_RED_CHANNEL=colorChannel(.20F);
         private static final int GROUND_GLOW_GREEN_CHANNEL=colorChannel(.025F);
@@ -675,7 +677,8 @@ public final class RiftClientState {
         private record GroundPoint(double x,double y,double z) {}
         private record GroundSample(double forwardX,double bendX,double forwardZ,double bendZ,double phase,
                 double phaseSin,double phaseCos,double flickerPhaseSin,double flickerPhaseCos,
-                double coreWidthScale,double coreSkew,boolean leftEdgeNotched,boolean rightEdgeNotched) {}
+                double coreWidthScale,double coreSkew,boolean coreSegmentGap,
+                boolean leftEdgeNotched,boolean rightEdgeNotched) {}
         private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,
                 GroundSample sample,double taperA,double taperB,double coreWidthScaleA,double coreWidthScaleB,
                 double coreSkewA,double coreSkewB) {}
@@ -689,15 +692,24 @@ public final class RiftClientState {
 
         // Hash each static sample once so the two exposed lips fracture independently.
         // One in four samples interrupts each lip; independent salts keep the seam asymmetric.
-        private static boolean isGroundEdgeNotched(double phase,long salt) {
-            if(!Double.isFinite(phase)) return true;
+        private static long groundSampleHash(double phase,long salt) {
             long hash=Double.doubleToLongBits(phase)^salt;
             hash ^= hash >>> 33;
             hash *= 0xff51afd7ed558ccdL;
             hash ^= hash >>> 33;
             hash *= 0xc4ceb9fe1a85ec53L;
             hash ^= hash >>> 33;
-            return (hash & 3L)==0L;
+            return hash;
+        }
+
+        private static boolean isGroundEdgeNotched(double phase,long salt) {
+            if(!Double.isFinite(phase)) return true;
+            return (groundSampleHash(phase,salt) & 3L)==0L;
+        }
+
+        private static boolean isGroundCoreSegmentGap(double phase) {
+            if(!Double.isFinite(phase)) return true;
+            return (groundSampleHash(phase,GROUND_CORE_SEGMENT_GAP_SALT) & 7L)==0L;
         }
 
         private static double groundCoreWidthScale(double phase,int arm) {
@@ -737,6 +749,7 @@ public final class RiftClientState {
                         phaseSin,phaseCos,
                         Math.sin(phase*1.9D),Math.cos(phase*1.9D),
                         coreWidthScale,coreSkew,
+                        isGroundCoreSegmentGap(phase),
                         isGroundEdgeNotched(phase,GROUND_LEFT_EDGE_NOTCH_SALT),
                         isGroundEdgeNotched(phase,GROUND_RIGHT_EDGE_NOTCH_SALT));
                 }
@@ -787,6 +800,7 @@ public final class RiftClientState {
             if(GROUND_SAMPLES.length!=ARM_COUNT*SEGMENTS_PER_ARM)
                 throw new IllegalStateException("BLACK FREQUENCY ground sample cache size regression");
             int checked=0;
+            int coreSegmentGaps=0;
             int leftEdgeNotches=0;
             int rightEdgeNotches=0;
             int asymmetricEdgeSamples=0;
@@ -849,9 +863,11 @@ public final class RiftClientState {
                         || !Double.isFinite(sample.phase()) || !Double.isFinite(sample.phaseSin())
                         || !Double.isFinite(sample.phaseCos()) || !Double.isFinite(sample.flickerPhaseSin())
                         || !Double.isFinite(sample.flickerPhaseCos())
+                        || sample.coreSegmentGap()!=isGroundCoreSegmentGap(phase)
                         || sample.leftEdgeNotched()!=isGroundEdgeNotched(phase,GROUND_LEFT_EDGE_NOTCH_SALT)
                         || sample.rightEdgeNotched()!=isGroundEdgeNotched(phase,GROUND_RIGHT_EDGE_NOTCH_SALT))
                         throw new IllegalStateException("BLACK FREQUENCY ground sample cache value regression");
+                    if(sample.coreSegmentGap()) coreSegmentGaps++;
                     if(sample.leftEdgeNotched()) leftEdgeNotches++;
                     if(sample.rightEdgeNotched()) rightEdgeNotches++;
                     if(segment>1) {
@@ -914,7 +930,7 @@ public final class RiftClientState {
             if(groundCoreSkew(Double.NaN,0)!=0.0D
                 || groundCoreSkew(0.0D,ARM_COUNT)!=0.0D)
                 throw new IllegalStateException("BLACK FREQUENCY ground core skew invalid-input fallback regression");
-            if(checked!=96 || !evenSamplesAligned
+            if(checked!=96 || !evenSamplesAligned || coreSegmentGaps!=14
                 || leftEdgeNotches!=27 || rightEdgeNotches!=25 || asymmetricEdgeSamples!=38
                 || minimumCoreWidthScale<GROUND_MIN_CORE_WIDTH_SCALE
                 || maximumCoreWidthScale>GROUND_MAX_CORE_WIDTH_SCALE
@@ -923,6 +939,9 @@ public final class RiftClientState {
                 || maximumCoreSkew > GROUND_CORE_SKEW_AMPLITUDE
                 || maximumAdjacentCoreSkewDelta>.04D)
                 throw new IllegalStateException("BLACK FREQUENCY ground edge notch profile regression");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_CORE_SEGMENT_GAP_PROFILE_VERIFIED samples={} gaps={} deterministic=true gapRate=1/8",
+                checked,coreSegmentGaps);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED samples={} left={} right={} asymmetricSamples={} deterministic=true notchRate=1/4",
                 checked,leftEdgeNotches,rightEdgeNotches,asymmetricEdgeSamples);
@@ -2115,6 +2134,9 @@ public final class RiftClientState {
                 double pulseSin=Math.sin(pulseTime),pulseCos=Math.cos(pulseTime);
                 for(GroundSegment segment:cachedSegments) {
                     GroundSample sample=segment.sample();
+                    // Break the whole cross-section occasionally; keeping only a dark ribbon
+                    // through every gap makes the fissure read like a cable on the terrain.
+                    if(sample.coreSegmentGap()) continue;
                     double wave=.5D+.5D*(waveSin*sample.phaseCos()+waveCos*sample.phaseSin());
                     // A slow travelling pulse changes width independently along
                     // the seam; endpoint taper keeps each arm from ending bluntly.

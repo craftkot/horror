@@ -2242,6 +2242,11 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: ground animation still performs trigonometry per segment",flush=True)
                 return False
             print("WORLD_CAPTURE: ground animation uses six shared time-base trig calls per frame",flush=True)
+            core_gap_marker=("BLACK_FREQUENCY_GROUND_MESH_CORE_SEGMENT_GAP_PROFILE_VERIFIED "
+                             "samples=96 gaps=14 deterministic=true gapRate=1/8")
+            if core_gap_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: full-section ground fissure gaps were not verified",flush=True)
+                return False
             edge_notch_marker=("BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED "
                                "samples=96 left=27 right=25 asymmetricSamples=38 deterministic=true notchRate=1/4")
             core_width_marker=("BLACK_FREQUENCY_GROUND_MESH_CORE_WIDTH_PROFILE_VERIFIED "
@@ -2278,7 +2283,10 @@ def capture_test_world():
                     or "private static void coreRibbon(" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: dark core widths are not interpolated between cached surface samples",flush=True)
                 return False
-            if ("boolean leftEdgeNotched,boolean rightEdgeNotched" not in camera_source
+            if ("boolean coreSegmentGap,\n                boolean leftEdgeNotched,boolean rightEdgeNotched" not in camera_source
+                    or "private static boolean isGroundCoreSegmentGap(double phase)" not in camera_source
+                    or "sample.coreSegmentGap()!=isGroundCoreSegmentGap(phase)" not in camera_source
+                    or "if(sample.coreSegmentGap()) continue;" not in camera_source
                     or "private static boolean isGroundEdgeNotched(double phase,long salt)" not in camera_source
                     or "return (hash & 3L)==0L;" not in camera_source
                     or "return (hash & 7L)==0L;" in camera_source
