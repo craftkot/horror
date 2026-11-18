@@ -2243,7 +2243,7 @@ def capture_test_world():
                 return False
             print("WORLD_CAPTURE: ground animation uses six shared time-base trig calls per frame",flush=True)
             edge_notch_marker=("BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED "
-                               "samples=96 left=12 right=8 asymmetricSamples=18 deterministic=true")
+                               "samples=96 left=27 right=25 asymmetricSamples=38 deterministic=true notchRate=1/4")
             core_width_marker=("BLACK_FREQUENCY_GROUND_MESH_CORE_WIDTH_PROFILE_VERIFIED "
                                "samples=96 minBound=0.78 maxBound=1.22 maxAdjacentDeltaLimit=0.075 interpolated=true bounded=true "
                                "harmonics=2 broadAmplitude=0.16 detailAmplitude=0.05 detailFrequency=0.43 armPhase=1.13 invalidFallback=1.0")
@@ -2280,6 +2280,8 @@ def capture_test_world():
                 return False
             if ("boolean leftEdgeNotched,boolean rightEdgeNotched" not in camera_source
                     or "private static boolean isGroundEdgeNotched(double phase,long salt)" not in camera_source
+                    or "return (hash & 3L)==0L;" not in camera_source
+                    or "return (hash & 7L)==0L;" in camera_source
                     or "isGroundEdgeNotched(phase,GROUND_LEFT_EDGE_NOTCH_SALT)" not in camera_source
                     or "isGroundEdgeNotched(phase,GROUND_RIGHT_EDGE_NOTCH_SALT)" not in camera_source
                     or "if(!sample.leftEdgeNotched())" not in camera_source

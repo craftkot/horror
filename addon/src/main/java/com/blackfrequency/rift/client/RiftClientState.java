@@ -687,8 +687,8 @@ public final class RiftClientState {
         // Precompute their trigonometric terms once instead of recalculating them on every mesh rebuild.
         private static final GroundSample[] GROUND_SAMPLES=createGroundSamples();
 
-        // Hash each static sample once so the two exposed lips fracture independently
-        // without adding trigonometry, allocations, or random state to the render loop.
+        // Hash each static sample once so the two exposed lips fracture independently.
+        // One in four samples interrupts each lip; independent salts keep the seam asymmetric.
         private static boolean isGroundEdgeNotched(double phase,long salt) {
             if(!Double.isFinite(phase)) return true;
             long hash=Double.doubleToLongBits(phase)^salt;
@@ -697,7 +697,7 @@ public final class RiftClientState {
             hash ^= hash >>> 33;
             hash *= 0xc4ceb9fe1a85ec53L;
             hash ^= hash >>> 33;
-            return (hash & 7L)==0L;
+            return (hash & 3L)==0L;
         }
 
         private static double groundCoreWidthScale(double phase,int arm) {
@@ -915,7 +915,7 @@ public final class RiftClientState {
                 || groundCoreSkew(0.0D,ARM_COUNT)!=0.0D)
                 throw new IllegalStateException("BLACK FREQUENCY ground core skew invalid-input fallback regression");
             if(checked!=96 || !evenSamplesAligned
-                || leftEdgeNotches!=12 || rightEdgeNotches!=8 || asymmetricEdgeSamples!=18
+                || leftEdgeNotches!=27 || rightEdgeNotches!=25 || asymmetricEdgeSamples!=38
                 || minimumCoreWidthScale<GROUND_MIN_CORE_WIDTH_SCALE
                 || maximumCoreWidthScale>GROUND_MAX_CORE_WIDTH_SCALE
                 || maximumAdjacentCoreWidthDelta>.075D
@@ -924,7 +924,7 @@ public final class RiftClientState {
                 || maximumAdjacentCoreSkewDelta>.04D)
                 throw new IllegalStateException("BLACK FREQUENCY ground edge notch profile regression");
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED samples={} left={} right={} asymmetricSamples={} deterministic=true",
+                "BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED samples={} left={} right={} asymmetricSamples={} deterministic=true notchRate=1/4",
                 checked,leftEdgeNotches,rightEdgeNotches,asymmetricEdgeSamples);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_CORE_WIDTH_PROFILE_VERIFIED samples={} minBound={} maxBound={} maxAdjacentDeltaLimit=0.075 interpolated=true bounded=true harmonics=2 broadAmplitude=0.16 detailAmplitude=0.05 detailFrequency=0.43 armPhase=1.13 invalidFallback=1.0",
