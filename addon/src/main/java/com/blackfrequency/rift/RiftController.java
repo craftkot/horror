@@ -1107,8 +1107,7 @@ public final class RiftController {
         // remove the recovery fixture or mutate its persisted position.
         if(event.isCanceled()) return;
         var miner=event.getPlayer();
-        if(miner==null || !miner.isAlive()
-            || miner.isRemoved() || miner.isSpectator()) return;
+        if(miner==null || !mayMineRecoveryBeacon(miner.isAlive(),miner.isRemoved(),miner.isSpectator(),miner.getAbilities().mayBuild)) return;
         BlockPos pos=event.getPos();
         // Ignore unloaded positions before querying block state: an event from
         // another mod must not cause recovery logic to load a chunk.
@@ -4108,6 +4107,20 @@ public final class RiftController {
                 BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
                 if(!isOwnedNaturalBeaconAtLoadedPosition(level,s,beacon))
                     throw new IllegalStateException("CI recovery beacon ownership marker missing after restoration");
+                var miner=level.players().get(0);
+                boolean previousMayBuild=miner.getAbilities().mayBuild;
+                try {
+                    miner.getAbilities().mayBuild=false;
+                    var adventureEvent=new net.minecraftforge.event.level.BlockEvent.BreakEvent(
+                        level,beacon,level.getBlockState(beacon),miner);
+                    new RiftController().onRecoveryBeaconBreak(adventureEvent);
+                    if(level.getBlockState(beacon).isAir()
+                        || s.naturalBeaconPos!=beacon.asLong() || s.naturalBeaconId==null)
+                        throw new IllegalStateException("CI adventure-mode synthetic break consumed recovery beacon");
+                    LOGGER.info("BLACK_FREQUENCY_TEST REAL_PLAYER_ADVENTURE_BEACON_BREAK_REJECTED mayBuild=false blockPreserved=true ownershipPreserved=true");
+                } finally {
+                    miner.getAbilities().mayBuild=previousMayBuild;
+                }
                 var deniedEvent=new net.minecraftforge.event.level.BlockEvent.BreakEvent(
                     level,beacon,level.getBlockState(beacon),level.players().get(0));
                 deniedEvent.setCanceled(true);
@@ -4158,6 +4171,11 @@ public final class RiftController {
             && distanceSquared<=reach*reach;
     }
 
+    /** Adventure-mode players cannot consume the recovery objective through synthetic break events. */
+    private static boolean mayMineRecoveryBeacon(boolean alive,boolean removed,boolean spectator,boolean mayBuild) {
+        return alive && !removed && !spectator && mayBuild;
+    }
+
     // Exercise the Java helper itself so the Python fixture cannot silently drift
     // from the geometry used when a real Forge break event captures player reach.
     private static void verifyCiBeaconBreakReachGeometry() {
@@ -4183,6 +4201,16 @@ public final class RiftController {
             && !withinBeaconInteractionReach(-1.0D)
             && !withinBeaconInteractionReach(Double.POSITIVE_INFINITY)
             && !withinBeaconInteractionReach(Double.NEGATIVE_INFINITY);
+        boolean survivalAllowed=mayMineRecoveryBeacon(true,false,false,true);
+        boolean creativeAllowed=mayMineRecoveryBeacon(true,false,false,true);
+        boolean adventureRejected=!mayMineRecoveryBeacon(true,false,false,false);
+        boolean spectatorRejected=!mayMineRecoveryBeacon(true,false,true,true);
+        boolean deadRejected=!mayMineRecoveryBeacon(false,false,false,true);
+        boolean removedRejected=!mayMineRecoveryBeacon(true,true,false,true);
+        if(!survivalAllowed || !creativeAllowed || !adventureRejected || !spectatorRejected
+            || !deadRejected || !removedRejected)
+            throw new IllegalStateException("CI recovery beacon build-permission guard regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_BREAK_BUILD_PERMISSION_GUARD_VERIFIED survival=true creative=true adventureRejected=true spectatorRejected=true deadRejected=true removedRejected=true");
         if(inside!=0.0D
             || Math.abs(boundaryX-reachSquared)>1.0E-9D
             || Math.abs(boundaryY-reachSquared)>1.0E-9D

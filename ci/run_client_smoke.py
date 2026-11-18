@@ -458,6 +458,10 @@ def verify_real_beacon_break_source():
             or "private static double eyeDistanceSquaredToBlock(" not in controller
             or "private static boolean withinBeaconInteractionReach(" not in controller
             or "withinBeaconInteractionReach(boundaryX)" not in controller
+            or "private static boolean mayMineRecoveryBeacon(" not in controller
+            or "mayMineRecoveryBeacon(miner.isAlive(),miner.isRemoved(),miner.isSpectator(),miner.getAbilities().mayBuild)" not in handler
+            or "BEACON_BREAK_BUILD_PERMISSION_GUARD_VERIFIED" not in controller
+            or "REAL_PLAYER_ADVENTURE_BEACON_BREAK_REJECTED" not in controller
             or "NATURAL_BEACON_BREAK_REACH_GUARD_VERIFIED" not in controller
             or "Math.max(minX,Math.min(eye.x,minX+1.0D))" not in helper
             or "Math.max(minY,Math.min(eye.y,minY+1.0D))" not in helper
@@ -2768,6 +2772,11 @@ def capture_test_world():
                     "exactBoundary=true outsideRejected=true invalidRejected=true eventGuard=true")
                 if break_guard_marker not in log_after:
                     print("WORLD_CAPTURE_FAIL: server break event did not enforce the shared beacon reach guard",flush=True)
+                    return False
+                build_permission_marker=("BLACK_FREQUENCY_TEST REAL_PLAYER_ADVENTURE_BEACON_BREAK_REJECTED "
+                    "mayBuild=false blockPreserved=true ownershipPreserved=true")
+                if build_permission_marker not in log_after:
+                    print("WORLD_CAPTURE_FAIL: adventure-mode synthetic break mutated the recovery beacon",flush=True)
                     return False
                 initial_pulse=re.search(
                     r"BLACK_FREQUENCY_TEST RESTORE_INITIAL_BEACON_PULSE_EMITTED ring=(\d+) sparks=(\d+) viewer=true",
