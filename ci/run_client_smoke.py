@@ -2427,14 +2427,14 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: ground fissure layers are not vertically separated above the sampled surface",flush=True)
                 return False
             embedded_crack_profile=re.search(
-                r"BLACK_FREQUENCY_GROUND_MESH_EMBEDDED_CRACK_PROFILE_VERIFIED minGlowHalfWidth=([-+0-9.eE]+) maxGlowHalfWidth=([-+0-9.eE]+) minCoreHalfWidth=([-+0-9.eE]+) minEdgeInnerHalfWidth=([-+0-9.eE]+) minCoreEdgeGap=([-+0-9.eE]+) coreClearance=([-+0-9.eE]+) glowClearance=([-+0-9.eE]+) filamentClearance=([-+0-9.eE]+) edgeClearance=([-+0-9.eE]+) surfaceAligned=true",
+                r"BLACK_FREQUENCY_GROUND_MESH_EMBEDDED_CRACK_PROFILE_VERIFIED minGlowHalfWidth=([-+0-9.eE]+) maxGlowHalfWidth=([-+0-9.eE]+) minCoreHalfWidth=([-+0-9.eE]+) minEdgeInnerHalfWidth=([-+0-9.eE]+) maxCoreHalfWidth=([-+0-9.eE]+) maxEdgeInnerHalfWidth=([-+0-9.eE]+) minCoreEdgeGap=([-+0-9.eE]+) coreClearance=([-+0-9.eE]+) glowClearance=([-+0-9.eE]+) filamentClearance=([-+0-9.eE]+) edgeClearance=([-+0-9.eE]+) surfaceAligned=true",
                 final_log)
-            expected_embedded=(.198,.2992,.04563,.0685,.02287,.011,.020,.022,.028)
+            expected_embedded=(.198,.2992,.0387855,.0784,.1240252,.13176,.0077348,.011,.020,.022,.028)
             if (not embedded_crack_profile
                     or any(not math.isclose(float(embedded_crack_profile.group(i)),expected_embedded[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
-                           for i in range(1,10))):
-                print("WORLD_CAPTURE_FAIL: recessed narrow ground-crack geometry profile was not verified",flush=True)
+                           for i in range(1,12))):
+                print("WORLD_CAPTURE_FAIL: embedded ground-core wall and edge-clearance profile was not verified",flush=True)
                 return False
             edge_palette_marker="BLACK_FREQUENCY_GROUND_MESH_EDGE_PALETTE_VERIFIED red=0.46 green=0.18 blue=0.82"
             if edge_palette_marker not in final_log:
