@@ -12,6 +12,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import org.joml.Vector3f;
@@ -323,6 +324,13 @@ public final class RiftController {
         return Math.max(0,Math.min(MAX_EDITS,value));
     }
 
+    /** Reject malformed registry identifiers before NbtUtils attempts to resolve them. */
+    private static boolean isValidSnapshotBlockId(String blockId) {
+        return blockId!=null && !blockId.isEmpty()
+            && blockId.length()<=MAX_SNAPSHOT_BLOCK_ID_LENGTH
+            && ResourceLocation.tryParse(blockId)!=null;
+    }
+
     /** Accept only the compact schema emitted by NbtUtils.writeBlockState. */
     private static boolean isBoundedSnapshotPayload(CompoundTag entry) {
         if(entry.getAllKeys().size()!=2
@@ -334,7 +342,7 @@ public final class RiftController {
         if(state.getAllKeys().size()!=(hasProperties ? 2 : 1)
             || (hasProperties && !state.contains("Properties",Tag.TAG_COMPOUND))) return false;
         String blockId=state.getString("Name");
-        if(blockId.isEmpty() || blockId.length()>MAX_SNAPSHOT_BLOCK_ID_LENGTH) return false;
+        if(!isValidSnapshotBlockId(blockId)) return false;
         if(!hasProperties) return true;
         CompoundTag properties=state.getCompound("Properties");
         if(properties.getAllKeys().size()>MAX_SNAPSHOT_PROPERTY_COUNT) return false;
@@ -2184,6 +2192,35 @@ public final class RiftController {
             throw new IllegalStateException("CI runtime recovery snapshot budget guard regression");
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_RUNTIME_BUDGET_GUARD_VERIFIED candidateEstimate={} capBytes={} invalidRejected=true exactBoundary=true",
             stoneSnapshotEstimate,MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES);
+
+        // A short but syntactically invalid registry name must be quarantined on load.
+        // Otherwise NbtUtils may be asked to resolve malformed ResourceLocation input during recovery.
+        CompoundTag malformedNameState=NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState());
+        malformedNameState.putString("Name","minecraft:bad block");
+        CompoundTag malformedNameEntry=new CompoundTag();
+        malformedNameEntry.putLong("pos",new BlockPos(14,64,-7).asLong());
+        malformedNameEntry.put("state",malformedNameState);
+        boolean resourceLocationGuard=isValidSnapshotBlockId("minecraft:stone")
+            && isValidSnapshotBlockId("blackfrequency:recovery_beacon")
+            && !isValidSnapshotBlockId("minecraft:bad block")
+            && !isValidSnapshotBlockId("minecraft:Uppercase")
+            && !isValidSnapshotBlockId("minecraft:")
+            && boundedSnapshotPayloadEstimate(malformedNameEntry)==0L;
+        ListTag malformedNameSnapshots=new ListTag();
+        malformedNameSnapshots.add(malformedNameEntry);
+        CompoundTag malformedNameSave=new CompoundTag();
+        malformedNameSave.putBoolean("restoring",true);
+        malformedNameSave.putInt("restoreIndex",0);
+        malformedNameSave.putInt("restoreScan",0);
+        malformedNameSave.put("snapshots",malformedNameSnapshots);
+        State malformedNameLoaded=State.load(malformedNameSave);
+        ListTag sanitizedNameSnapshots=malformedNameLoaded.save(new CompoundTag())
+            .getList("snapshots",Tag.TAG_COMPOUND);
+        if(!resourceLocationGuard || !malformedNameLoaded.isDirty()
+            || sanitizedNameSnapshots.size()!=1
+            || !sanitizedNameSnapshots.getCompound(0).getAllKeys().isEmpty())
+            throw new IllegalStateException("CI malformed recovery block identifier quarantine regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_RESOURCE_LOCATION_QUARANTINE_VERIFIED invalidRejected=true validNamespaced=true quarantined=true");
         original.snapshots.add(snapshot);
         State loaded=State.load(original.save(new CompoundTag()));
         if(!loaded.started || !loaded.restoring || loaded.edits!=1
