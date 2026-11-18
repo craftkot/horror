@@ -328,6 +328,7 @@ public final class RiftController {
     private static boolean isValidSnapshotBlockId(String blockId) {
         return blockId!=null && !blockId.isEmpty()
             && blockId.length()<=MAX_SNAPSHOT_BLOCK_ID_LENGTH
+            && ResourceLocation.isValidResourceLocation(blockId)
             && ResourceLocation.tryParse(blockId)!=null;
     }
 
@@ -2216,10 +2217,19 @@ public final class RiftController {
         State malformedNameLoaded=State.load(malformedNameSave);
         ListTag sanitizedNameSnapshots=malformedNameLoaded.save(new CompoundTag())
             .getList("snapshots",Tag.TAG_COMPOUND);
-        if(!resourceLocationGuard || !malformedNameLoaded.isDirty()
-            || sanitizedNameSnapshots.size()!=1
-            || !sanitizedNameSnapshots.getCompound(0).getAllKeys().isEmpty())
-            throw new IllegalStateException("CI malformed recovery block identifier quarantine regression");
+        boolean quarantinedNamePlaceholder=sanitizedNameSnapshots.size()==1
+            && sanitizedNameSnapshots.getCompound(0).getAllKeys().isEmpty();
+        if(!resourceLocationGuard || !malformedNameLoaded.isDirty() || !quarantinedNamePlaceholder)
+            throw new IllegalStateException("CI malformed recovery block identifier quarantine regression"
+                +" validStone="+isValidSnapshotBlockId("minecraft:stone")
+                +" validModded="+isValidSnapshotBlockId("blackfrequency:recovery_beacon")
+                +" invalidSpace="+!isValidSnapshotBlockId("minecraft:bad block")
+                +" invalidUppercase="+!isValidSnapshotBlockId("minecraft:Uppercase")
+                +" invalidEmptyPath="+!isValidSnapshotBlockId("minecraft:")
+                +" invalidEstimate="+(boundedSnapshotPayloadEstimate(malformedNameEntry)==0L)
+                +" dirty="+malformedNameLoaded.isDirty()
+                +" entries="+sanitizedNameSnapshots.size()
+                +" emptyPlaceholder="+quarantinedNamePlaceholder);
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_RESOURCE_LOCATION_QUARANTINE_VERIFIED invalidRejected=true validNamespaced=true quarantined=true");
         original.snapshots.add(snapshot);
         State loaded=State.load(original.save(new CompoundTag()));
