@@ -2203,7 +2203,7 @@ def capture_test_world():
             render_preamble=(camera_source[render_preamble_start:render_loop_start]
                              if render_preamble_start>=0 and render_loop_start>render_preamble_start else "")
             if ("double phaseSin,double phaseCos,double flickerPhaseSin,double flickerPhaseCos" not in camera_source
-                    or "GroundSample sample,double taperA,double taperB" not in camera_source
+                    or "GroundSample sample,double taperA,double taperB,double coreWidthScaleA,double coreWidthScaleB" not in camera_source
                     or "Math.sin(phase),Math.cos(phase)" not in camera_source
                     or "Math.sin(phase*1.9D),Math.cos(phase*1.9D)" not in camera_source
                     or render_preamble.count("Math.sin(")!=3
@@ -2219,8 +2219,22 @@ def capture_test_world():
             print("WORLD_CAPTURE: ground animation uses six shared time-base trig calls per frame",flush=True)
             edge_notch_marker=("BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED "
                                "samples=96 left=12 right=8 asymmetricSamples=18 deterministic=true")
+            core_width_marker=("BLACK_FREQUENCY_GROUND_MESH_CORE_WIDTH_PROFILE_VERIFIED "
+                               "samples=96 minBound=0.78 maxBound=1.22 maxAdjacentDeltaLimit=0.075 interpolated=true bounded=true")
             if edge_notch_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: independently notched ground lips were not verified",flush=True)
+                return False
+            if core_width_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: interpolated ground-core width profile was not verified",flush=True)
+                return False
+            if ("private static final double GROUND_MIN_CORE_WIDTH_SCALE=.78D;" not in camera_source
+                    or "private static final double GROUND_MAX_CORE_WIDTH_SCALE=1.22D;" not in camera_source
+                    or "previousSample.coreWidthScale()" not in camera_source
+                    or "sample.coreWidthScale()" not in camera_source
+                    or "segment.coreWidthScaleA()" not in camera_source
+                    or "segment.coreWidthScaleB()" not in camera_source
+                    or "private static void coreRibbon(" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: dark core widths are not interpolated between cached surface samples",flush=True)
                 return False
             if ("boolean leftEdgeNotched,boolean rightEdgeNotched" not in camera_source
                     or "private static boolean isGroundEdgeNotched(double phase,long salt)" not in camera_source
@@ -2253,7 +2267,6 @@ def capture_test_world():
                     "int edgeAlphaChannel=colorChannel(edgeAlpha);")
                 ribbon_calls=(
                     "GROUND_GLOW_RED_CHANNEL,GROUND_GLOW_GREEN_CHANNEL,GROUND_GLOW_BLUE_CHANNEL,glowAlphaChannel",
-                    "GROUND_CORE_RED_CHANNEL,GROUND_CORE_GREEN_CHANNEL,GROUND_CORE_BLUE_CHANNEL,coreAlphaChannel",
                     "GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,filamentAlphaChannel",
                     "GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel")
                 render_start=camera_source.find("for(GroundSegment segment:cachedSegments)")
@@ -2268,6 +2281,7 @@ def capture_test_world():
                         or any(field not in camera_source for field in expected_static_channels)
                         or any(render_source.count(call)!=1 for call in dynamic_alpha_calls)
                         or render_source.count("colorChannel(")!=4
+                        or "coreRibbon(builder,matrix,camera,segment,halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS," not in render_source
                         or any(call not in render_source for call in ribbon_calls)
                         or render_source.count("GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel")!=2
                         or "if(!sample.leftEdgeNotched())" not in render_source
@@ -2388,7 +2402,7 @@ def capture_test_world():
                     or camera_source.count("a.y()+verticalOffset")!=2
                     or camera_source.count("b.y()+verticalOffset")!=2
                     or "halfWidth*GROUND_GLOW_WIDTH_SCALE,0.0D," not in camera_source
-                    or "halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS," not in camera_source
+                    or "coreRibbon(builder,matrix,camera,segment,halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS," not in camera_source
                     or "halfWidth*.16D,GROUND_FILAMENT_LIFT," not in camera_source
                     or camera_source.count("GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,")!=2):
                 print("WORLD_CAPTURE_FAIL: ground fissure layers are not vertically separated above the sampled surface",flush=True)
@@ -2396,7 +2410,7 @@ def capture_test_world():
             embedded_crack_profile=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_EMBEDDED_CRACK_PROFILE_VERIFIED minGlowHalfWidth=([-+0-9.eE]+) maxGlowHalfWidth=([-+0-9.eE]+) minCoreHalfWidth=([-+0-9.eE]+) minEdgeInnerHalfWidth=([-+0-9.eE]+) minCoreEdgeGap=([-+0-9.eE]+) coreClearance=([-+0-9.eE]+) glowClearance=([-+0-9.eE]+) filamentClearance=([-+0-9.eE]+) edgeClearance=([-+0-9.eE]+) surfaceAligned=true",
                 final_log)
-            expected_embedded=(.198,.2992,.0585,.0685,.01,.011,.020,.022,.028)
+            expected_embedded=(.198,.2992,.04563,.0685,.02287,.011,.020,.022,.028)
             if (not embedded_crack_profile
                     or any(not math.isclose(float(embedded_crack_profile.group(i)),expected_embedded[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)

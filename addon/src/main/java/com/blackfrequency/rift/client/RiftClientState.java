@@ -567,6 +567,9 @@ public final class RiftClientState {
         // Narrow the surface glow and dark core so the fissure reads as a split in terrain, not a raised cable.
         private static final double GROUND_GLOW_WIDTH_SCALE=4.4D;
         private static final double GROUND_CORE_WIDTH_SCALE=1.3D;
+        // The recessed core pinches and widens along the seam; endpoint widths are interpolated per segment.
+        private static final double GROUND_MIN_CORE_WIDTH_SCALE=.78D;
+        private static final double GROUND_MAX_CORE_WIDTH_SCALE=1.22D;
         // Keep both violet lips close to the narrow dark core while preserving a visible gap.
         private static final double GROUND_EDGE_OFFSET_SCALE=2.1D;
         // The render pulse is clamped to this interval for every wave/flicker phase.
@@ -650,9 +653,9 @@ public final class RiftClientState {
         private record GroundPoint(double x,double y,double z) {}
         private record GroundSample(double forwardX,double bendX,double forwardZ,double bendZ,double phase,
                 double phaseSin,double phaseCos,double flickerPhaseSin,double flickerPhaseCos,
-                boolean leftEdgeNotched,boolean rightEdgeNotched) {}
+                double coreWidthScale,boolean leftEdgeNotched,boolean rightEdgeNotched) {}
         private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,
-                GroundSample sample,double taperA,double taperB) {}
+                GroundSample sample,double taperA,double taperB,double coreWidthScaleA,double coreWidthScaleB) {}
         private record GroundMesh(List<GroundSegment> segments,int activeArms,int sampledColumns,int cacheHits,
                 int steepStepBreaks) {}
 
@@ -685,11 +688,16 @@ public final class RiftClientState {
                     double distance=sourceSample*RiftGeometry.FISSURE_SAMPLE_SPACING;
                     double bend=Math.sin(sourceSample*.85D+arm*1.1D)*RiftGeometry.FISSURE_BEND_AMPLITUDE;
                     double phase=arm*1.7D+sourceSample*.63D;
+                    double phaseSin=Math.sin(phase);
+                    double phaseCos=Math.cos(phase);
+                    double coreWidthScale=GROUND_MIN_CORE_WIDTH_SCALE
+                        +(GROUND_MAX_CORE_WIDTH_SCALE-GROUND_MIN_CORE_WIDTH_SCALE)*(.5D+.5D*phaseSin);
                     samples[arm*SEGMENTS_PER_ARM+segment-1]=new GroundSample(
                         cosAngle*distance,sinAngle*bend,
                         sinAngle*distance,cosAngle*bend,phase,
-                        Math.sin(phase),Math.cos(phase),
+                        phaseSin,phaseCos,
                         Math.sin(phase*1.9D),Math.cos(phase*1.9D),
+                        coreWidthScale,
                         isGroundEdgeNotched(phase,GROUND_LEFT_EDGE_NOTCH_SALT),
                         isGroundEdgeNotched(phase,GROUND_RIGHT_EDGE_NOTCH_SALT));
                 }
@@ -743,11 +751,15 @@ public final class RiftClientState {
             int leftEdgeNotches=0;
             int rightEdgeNotches=0;
             int asymmetricEdgeSamples=0;
+            double minimumCoreWidthScale=Double.POSITIVE_INFINITY;
+            double maximumCoreWidthScale=Double.NEGATIVE_INFINITY;
+            double maximumAdjacentCoreWidthDelta=0.0D;
             boolean evenSamplesAligned=true;
             for(int arm=0;arm<ARM_COUNT;arm++) {
                 double angle=arm*Math.PI/2.0D;
                 double sinAngle=Math.sin(angle);
                 double cosAngle=Math.cos(angle);
+                double previousCoreWidthScale=Double.NaN;
                 for(int segment=1;segment<=SEGMENTS_PER_ARM;segment++) {
                     GroundSample sample=GROUND_SAMPLES[arm*SEGMENTS_PER_ARM+segment-1];
                     double sourceSample=segment*.5D;
@@ -762,6 +774,8 @@ public final class RiftClientState {
                     double phaseCos=Math.cos(phase);
                     double flickerPhaseSin=Math.sin(phase*1.9D);
                     double flickerPhaseCos=Math.cos(phase*1.9D);
+                    double coreWidthScale=GROUND_MIN_CORE_WIDTH_SCALE
+                        +(GROUND_MAX_CORE_WIDTH_SCALE-GROUND_MIN_CORE_WIDTH_SCALE)*(.5D+.5D*phaseSin);
                     if(sample==null
                         || Double.doubleToLongBits(sample.forwardX())!=Double.doubleToLongBits(forwardX)
                         || Double.doubleToLongBits(sample.bendX())!=Double.doubleToLongBits(bendX)
@@ -774,6 +788,10 @@ public final class RiftClientState {
                         || Double.doubleToLongBits(sample.phaseCos())!=Double.doubleToLongBits(phaseCos)
                         || Double.doubleToLongBits(sample.flickerPhaseSin())!=Double.doubleToLongBits(flickerPhaseSin)
                         || Double.doubleToLongBits(sample.flickerPhaseCos())!=Double.doubleToLongBits(flickerPhaseCos)
+                        || Double.doubleToLongBits(sample.coreWidthScale())!=Double.doubleToLongBits(coreWidthScale)
+                        || !Double.isFinite(sample.coreWidthScale())
+                        || sample.coreWidthScale()<GROUND_MIN_CORE_WIDTH_SCALE
+                        || sample.coreWidthScale()>GROUND_MAX_CORE_WIDTH_SCALE
                         || !Double.isFinite(sample.forwardX()) || !Double.isFinite(sample.bendX())
                         || !Double.isFinite(sample.forwardZ()) || !Double.isFinite(sample.bendZ())
                         || !Double.isFinite(sample.phase()) || !Double.isFinite(sample.phaseSin())
@@ -784,6 +802,15 @@ public final class RiftClientState {
                         throw new IllegalStateException("BLACK FREQUENCY ground sample cache value regression");
                     if(sample.leftEdgeNotched()) leftEdgeNotches++;
                     if(sample.rightEdgeNotched()) rightEdgeNotches++;
+                    if(segment>1) {
+                        double adjacentDelta=Math.abs(sample.coreWidthScale()-previousCoreWidthScale);
+                        if(!Double.isFinite(adjacentDelta))
+                            throw new IllegalStateException("BLACK FREQUENCY ground core width interpolation regression");
+                        maximumAdjacentCoreWidthDelta=Math.max(maximumAdjacentCoreWidthDelta,adjacentDelta);
+                    }
+                    previousCoreWidthScale=sample.coreWidthScale();
+                    minimumCoreWidthScale=Math.min(minimumCoreWidthScale,sample.coreWidthScale());
+                    maximumCoreWidthScale=Math.max(maximumCoreWidthScale,sample.coreWidthScale());
                     if(sample.leftEdgeNotched()!=sample.rightEdgeNotched()) asymmetricEdgeSamples++;
                     double dx=sample.forwardX()-sample.bendX();
                     double dz=sample.forwardZ()+sample.bendZ();
@@ -823,11 +850,17 @@ public final class RiftClientState {
                 }
             }
             if(checked!=96 || !evenSamplesAligned
-                || leftEdgeNotches!=12 || rightEdgeNotches!=8 || asymmetricEdgeSamples!=18)
+                || leftEdgeNotches!=12 || rightEdgeNotches!=8 || asymmetricEdgeSamples!=18
+                || minimumCoreWidthScale<GROUND_MIN_CORE_WIDTH_SCALE
+                || maximumCoreWidthScale>GROUND_MAX_CORE_WIDTH_SCALE
+                || maximumAdjacentCoreWidthDelta>.075D)
                 throw new IllegalStateException("BLACK FREQUENCY ground edge notch profile regression");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED samples={} left={} right={} asymmetricSamples={} deterministic=true",
                 checked,leftEdgeNotches,rightEdgeNotches,asymmetricEdgeSamples);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_CORE_WIDTH_PROFILE_VERIFIED samples={} minBound={} maxBound={} maxAdjacentDeltaLimit=0.075 interpolated=true bounded=true",
+                checked,GROUND_MIN_CORE_WIDTH_SCALE,GROUND_MAX_CORE_WIDTH_SCALE);
             sampleOffsetsProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SAMPLE_OFFSETS_VERIFIED samples={} trigPerRebuild=0 bounded=true phaseCached=true",
@@ -876,11 +909,11 @@ public final class RiftClientState {
                 double minimumHalfWidth=GROUND_MIN_HALF_WIDTH;
                 double maximumHalfWidth=GROUND_MAX_HALF_WIDTH;
                 double minimumGlowHalfWidth=minimumHalfWidth*GROUND_GLOW_WIDTH_SCALE;
-                double minimumCoreHalfWidth=minimumHalfWidth*GROUND_CORE_WIDTH_SCALE;
+                double minimumCoreHalfWidth=minimumHalfWidth*GROUND_CORE_WIDTH_SCALE*GROUND_MIN_CORE_WIDTH_SCALE;
                 double minimumEdgeInnerHalfWidth=minimumHalfWidth*GROUND_EDGE_OFFSET_SCALE-GROUND_EDGE_HALF_WIDTH;
                 double minimumCoreEdgeGap=minimumEdgeInnerHalfWidth-minimumCoreHalfWidth;
                 double maximumGlowHalfWidth=maximumHalfWidth*GROUND_GLOW_WIDTH_SCALE;
-                double maximumCoreHalfWidth=maximumHalfWidth*GROUND_CORE_WIDTH_SCALE;
+                double maximumCoreHalfWidth=maximumHalfWidth*GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE;
                 double maximumEdgeInnerHalfWidth=maximumHalfWidth*GROUND_EDGE_OFFSET_SCALE-GROUND_EDGE_HALF_WIDTH;
                 if(Math.abs(GROUND_GLOW_WIDTH_SCALE-4.4D)>1.0E-9D
                     || Math.abs(GROUND_CORE_WIDTH_SCALE-1.3D)>1.0E-9D
@@ -937,7 +970,7 @@ public final class RiftClientState {
             double edgeClearance=GROUND_SURFACE_CLEARANCE+GROUND_EDGE_LIFT;
             double minimumGlowHalfWidth=GROUND_MIN_HALF_WIDTH*GROUND_GLOW_WIDTH_SCALE;
             double maximumGlowHalfWidth=GROUND_MAX_HALF_WIDTH*GROUND_GLOW_WIDTH_SCALE;
-            double minimumCoreHalfWidth=GROUND_MIN_HALF_WIDTH*GROUND_CORE_WIDTH_SCALE;
+            double minimumCoreHalfWidth=GROUND_MIN_HALF_WIDTH*GROUND_CORE_WIDTH_SCALE*GROUND_MIN_CORE_WIDTH_SCALE;
             double minimumEdgeInnerHalfWidth=GROUND_MIN_HALF_WIDTH*GROUND_EDGE_OFFSET_SCALE-GROUND_EDGE_HALF_WIDTH;
             double minimumCoreEdgeGap=minimumEdgeInnerHalfWidth-minimumCoreHalfWidth;
             if(!Double.isFinite(coreClearance) || !Double.isFinite(glowClearance)
@@ -1026,7 +1059,8 @@ public final class RiftClientState {
             double cappedTaper=cliffBreakTaper(last.taperB());
             if(cappedTaper>=last.taperB()) return false;
             segments.set(lastIndex,new GroundSegment(last.a(),last.b(),
-                last.normalX(),last.normalZ(),last.sample(),last.taperA(),cappedTaper));
+                last.normalX(),last.normalZ(),last.sample(),last.taperA(),cappedTaper,
+                last.coreWidthScaleA(),last.coreWidthScaleB()));
             return true;
         }
 
@@ -1507,6 +1541,7 @@ public final class RiftClientState {
                 int armStart=result.size();
                 double angle=arm*Math.PI/2.0D;
                 GroundPoint previous=null;
+                GroundSample previousSample=null;
                 GroundPoint pendingStep=null;
                 GroundSample pendingStepSample=null;
                 double pendingStepDistance=0.0D;
@@ -1522,6 +1557,7 @@ public final class RiftClientState {
                     if(dx*dx+dz*dz>(long)RADIUS*RADIUS) {
                         if(capLastGroundSegmentAtGap(result,armStart,previous)) unsupportedGapCaps++;
                         previous=null;
+                        previousSample=null;
                         pendingStep=null;
                         pendingStepSample=null;
                         pendingStepDistance=0.0D;
@@ -1548,6 +1584,7 @@ public final class RiftClientState {
                         // unsupported column, liquid, or obstructed headroom.
                         if(capLastGroundSegmentAtGap(result,armStart,previous)) unsupportedGapCaps++;
                         previous=null;
+                        previousSample=null;
                         pendingStep=null;
                         pendingStepSample=null;
                         pendingStepDistance=0.0D;
@@ -1565,7 +1602,8 @@ public final class RiftClientState {
                                     double startTaper=afterGap ? CLIFF_BREAK_TAPER : endpointTaper(segment-2);
                                     result.add(new GroundSegment(previous,current,
                                         -tangentZ/length,tangentX/length,pendingStepSample,
-                                        startTaper,endpointTaper(segment)));
+                                        startTaper,endpointTaper(segment),
+                                        previousSample.coreWidthScale(),sample.coreWidthScale()));
                                     bridgedSingleSteps++;
                                     afterGap=false;
                                 } else {
@@ -1581,7 +1619,8 @@ public final class RiftClientState {
                                 double startTaper=afterGap ? CLIFF_BREAK_TAPER : endpointTaper(segment-1);
                                 result.add(new GroundSegment(previous,current,
                                     -tangentZ/length,tangentX/length,sample,
-                                    startTaper,endpointTaper(segment)));
+                                    startTaper,endpointTaper(segment),
+                                    previousSample.coreWidthScale(),sample.coreWidthScale()));
                                 afterGap=false;
                             } else if(canStartSingleGroundStepBridge(previous.y(),current.y(),length)) {
                                 // Hold one isolated sample. The next point must prove that
@@ -1599,6 +1638,7 @@ public final class RiftClientState {
                         }
                     }
                     previous=current;
+                    previousSample=sample;
                 }
                 if(pendingStep!=null) {
                     if(capLastGroundSegmentAtGap(result,armStart,previous)) cliffBreakCaps++;
@@ -1698,6 +1738,28 @@ public final class RiftClientState {
                 .endVertex();
         }
 
+        // Interpolate the dark core's precomputed width at both endpoints so adjacent
+        // quads meet without seams while the fissure pinches and widens along its length.
+        private static void coreRibbon(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
+                GroundSegment segment,double halfWidth,double verticalOffset,
+                int redChannel,int greenChannel,int blueChannel,int alphaChannel) {
+            GroundPoint a=segment.a();
+            GroundPoint b=segment.b();
+            double coreOffset=verticalOffset;
+            double leftA=halfWidth*segment.coreWidthScaleA()*segment.taperA();
+            double rightA=-halfWidth*segment.coreWidthScaleA()*segment.taperA();
+            double leftB=halfWidth*segment.coreWidthScaleB()*segment.taperB();
+            double rightB=-halfWidth*segment.coreWidthScaleB()*segment.taperB();
+            vertex(builder,matrix,camera,a.x()+segment.normalX()*leftA,a.y()+coreOffset,a.z()+segment.normalZ()*leftA,
+                redChannel,greenChannel,blueChannel,alphaChannel);
+            vertex(builder,matrix,camera,b.x()+segment.normalX()*leftB,b.y()+coreOffset,b.z()+segment.normalZ()*leftB,
+                redChannel,greenChannel,blueChannel,alphaChannel);
+            vertex(builder,matrix,camera,b.x()+segment.normalX()*rightB,b.y()+coreOffset,b.z()+segment.normalZ()*rightB,
+                redChannel,greenChannel,blueChannel,alphaChannel);
+            vertex(builder,matrix,camera,a.x()+segment.normalX()*rightA,a.y()+coreOffset,a.z()+segment.normalZ()*rightA,
+                redChannel,greenChannel,blueChannel,alphaChannel);
+        }
+
         private static void ribbon(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
                 GroundSegment segment,double offset,double halfWidth,double verticalOffset,
                 int redChannel,int greenChannel,int blueChannel,int alphaChannel) {
@@ -1776,7 +1838,7 @@ public final class RiftClientState {
             cachedAnchorSurfaceY=64;
             cachedReferenceY=64;
             cachedSegments=List.of(new GroundSegment(new GroundPoint(1,64,2),
-                new GroundPoint(2,64,2),1,0,GROUND_SAMPLES[0],1,1));
+                new GroundPoint(2,64,2),1,0,GROUND_SAMPLES[0],1,1,1.0D,1.0D));
             cachedArmCount=1;
             cachedSampledColumns=1;
             cachedColumnCacheHits=1;
@@ -1797,7 +1859,7 @@ public final class RiftClientState {
             cachedLevel=level;
             cachedTick=2L;
             cachedSegments=List.of(new GroundSegment(new GroundPoint(1,64,2),
-                new GroundPoint(2,64,2),1,0,GROUND_SAMPLES[0],1,1));
+                new GroundPoint(2,64,2),1,0,GROUND_SAMPLES[0],1,1,1.0D,1.0D));
             SURFACE_Y_BY_COLUMN.put(columnKey(1,2),64.0D);
             boolean verticalRangeCleared=clearGeometryCacheIfOutsideGroundRenderRange(0L,64.01D,1,2,64);
             if(!verticalRangeCleared || cachedLevel!=null || cachedTick!=Long.MIN_VALUE
@@ -1963,7 +2025,7 @@ public final class RiftClientState {
                     int edgeAlphaChannel=colorChannel(edgeAlpha);
                     ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_GLOW_WIDTH_SCALE,0.0D,
                         GROUND_GLOW_RED_CHANNEL,GROUND_GLOW_GREEN_CHANNEL,GROUND_GLOW_BLUE_CHANNEL,glowAlphaChannel);
-                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS,
+                    coreRibbon(builder,matrix,camera,segment,halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS,
                         GROUND_CORE_RED_CHANNEL,GROUND_CORE_GREEN_CHANNEL,GROUND_CORE_BLUE_CHANNEL,coreAlphaChannel);
                     ribbon(builder,matrix,camera,segment,0.0D,halfWidth*.16D,GROUND_FILAMENT_LIFT,
                         GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,filamentAlphaChannel);
