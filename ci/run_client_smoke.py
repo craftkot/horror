@@ -395,6 +395,12 @@ def verify_real_beacon_break_source():
     handler_start=controller.find("public void onRecoveryBeaconBreak(")
     handler_end=controller.find("\n    /**",handler_start)
     handler=controller[handler_start:handler_end] if handler_start>=0 and handler_end>handler_start else ""
+    activation_start=controller.find("public void onBeacon(")
+    activation_end=controller.find("\n    /**",activation_start)
+    activation=controller[activation_start:activation_end] if activation_start>=0 and activation_end>activation_start else ""
+    gate_start=controller.find("private static boolean mayActivateBeacon(")
+    gate_end=controller.find("\n    private static boolean mayRecoverCiBeaconAimAfterMiss",gate_start)
+    gate=controller[gate_start:gate_end] if gate_start>=0 and gate_end>gate_start else ""
     helper_start=controller.find("private static double ciEyeDistanceSquaredToBlock(")
     helper_end=controller.find("\n    private static void verifyCiNaturalBeaconBreakNoDrop",helper_start)
     helper=controller[helper_start:helper_end] if helper_start>=0 and helper_end>helper_start else ""
@@ -415,6 +421,8 @@ def verify_real_beacon_break_source():
             or "ciPendingNaturalBeaconBreakVerificationSurvival=!miner.isCreative()" not in handler
             or "ciPendingNaturalBeaconBreakVerificationDistanceSquared=" not in handler
             or "ciEyeDistanceSquaredToBlock(miner.getEyePosition(),pos)" not in handler
+            or "ciEyeDistanceSquaredToBlock(event.getEntity().getEyePosition(),pos)" not in activation
+            or "distanceSquared<=CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE" not in gate
             or "NATURAL_BEACON_MINED_NO_DROP" not in handler
             or "private static double ciEyeDistanceSquaredToBlock(" not in controller
             or "Math.max(minX,Math.min(eye.x,minX+1.0D))" not in helper
@@ -440,7 +448,7 @@ def verify_real_beacon_break_source():
             or "REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED" not in script
             or "beacon-after-left-click.png" not in script):
         raise RuntimeError("BLACK FREQUENCY post-restoration beacon mining must capture survival and eye-to-block reach at the real break event")
-    print("WORLD_CAPTURE: beacon mining captures survival mode and eye-to-block AABB reach at the real break event",flush=True)
+    print("WORLD_CAPTURE: beacon activation and mining both enforce eye-to-block AABB reach",flush=True)
 
 def point_to_block_aabb_distance_squared(point,origin):
     if not all(math.isfinite(value) for value in (*point,*origin)):
@@ -2555,6 +2563,11 @@ def capture_test_world():
                 reach_marker="BLACK_FREQUENCY_TEST BEACON_BREAK_REACH_AABB_VERIFIED boundary=20.25 axes=3 negativeCoordinates=true outsideRejected=true invalidRejected=true"
                 if reach_marker not in log_after:
                     print("WORLD_CAPTURE_FAIL: Java AABB reach boundary probe did not execute in the Forge client",flush=True)
+                    return False
+                interaction_guard_marker=("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED "
+                    "maxDistance=4.5 maxDistanceSquared=20.25 eyeToAabb=true strictBoundary=true remote64Rejected=true invalidRejected=true")
+                if interaction_guard_marker not in log_after:
+                    print("WORLD_CAPTURE_FAIL: beacon activation did not enforce the real eye-to-AABB reach boundary",flush=True)
                     return False
                 initial_pulse=re.search(
                     r"BLACK_FREQUENCY_TEST RESTORE_INITIAL_BEACON_PULSE_EMITTED ring=(\d+) sparks=(\d+) viewer=true",

@@ -181,6 +181,7 @@ public final class RiftController {
     private static final int CI_BEACON_PAD_GAP_ROW=2;
     private static final int CI_BEACON_PAD_FIRST_SOLID_ROW=3;
     private static final int CI_BEACON_PAD_LAST_SOLID_ROW=4;
+    // Vanilla survival reach, measured from the player's eyes to the target block AABB.
     private static final double CI_BEACON_INTERACTION_MAX_DISTANCE=4.5D;
 
     private static double fissurePulseWave(double phase,int segment,int arm) {
@@ -2655,7 +2656,8 @@ public final class RiftController {
         return !canceled && useBlock!=net.minecraftforge.eventbus.api.Event.Result.DENY
             && useItem!=net.minecraftforge.eventbus.api.Event.Result.DENY
             && hand==net.minecraft.world.InteractionHand.MAIN_HAND && alive && !spectator
-            && Double.isFinite(distanceSquared) && distanceSquared>=0.0D && distanceSquared<=64.0D;
+            && Double.isFinite(distanceSquared) && distanceSquared>=0.0D
+            && distanceSquared<=CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE;
     }
 
     private static boolean mayRecoverCiBeaconAimAfterMiss(
@@ -2676,8 +2678,7 @@ public final class RiftController {
             || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return false;
         BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
         if(!isOwnedNaturalBeaconAtLoadedPosition(level,s,beacon)) return false;
-        double distanceSquared=player.distanceToSqr(beacon.getX()+0.5D,
-            beacon.getY()+0.5D,beacon.getZ()+0.5D);
+        double distanceSquared=ciEyeDistanceSquaredToBlock(player.getEyePosition(),beacon);
         if(!mayRecoverCiBeaconAimAfterMiss(CI_TEST,
             Boolean.getBoolean("blackfrequency.ciPlayerBeaconTest"),
             Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest"),
@@ -3047,19 +3048,31 @@ public final class RiftController {
     private static void verifyBeaconInteractionGuard() {
         var main=net.minecraft.world.InteractionHand.MAIN_HAND;
         var off=net.minecraft.world.InteractionHand.OFF_HAND;
-        if(!mayActivateBeacon(main,true,false,64.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+        double reachSquared=CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE;
+        BlockPos target=new BlockPos(0,64,0);
+        double exactAabbReach=ciEyeDistanceSquaredToBlock(
+            new net.minecraft.world.phys.Vec3(-CI_BEACON_INTERACTION_MAX_DISTANCE,64.5D,.5D),target);
+        double outsideAabbReach=ciEyeDistanceSquaredToBlock(
+            new net.minecraft.world.phys.Vec3(-Math.nextUp(CI_BEACON_INTERACTION_MAX_DISTANCE),64.5D,.5D),target);
+        if(Math.abs(exactAabbReach-reachSquared)>1.0E-9D
+            || !(outsideAabbReach>reachSquared)
+            || !mayActivateBeacon(main,true,false,exactAabbReach,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,false,outsideAabbReach,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayActivateBeacon(main,true,false,64.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
             || mayActivateBeacon(off,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
             || mayActivateBeacon(main,false,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
             || mayActivateBeacon(main,true,true,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
-            || mayActivateBeacon(main,true,false,64.0001D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
             || mayActivateBeacon(main,true,false,Double.NaN,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
             || mayActivateBeacon(main,true,false,Double.POSITIVE_INFINITY,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
             || mayActivateBeacon(main,true,false,Double.NEGATIVE_INFINITY,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
             || mayActivateBeacon(main,true,false,-0.001D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
             || !mayActivateBeacon(main,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT))
-            throw new IllegalStateException("CI beacon interaction guard regression");
+            throw new IllegalStateException("CI beacon interaction reach/AABB regression");
         if(!mayRecoverCiBeaconAimAfterMiss(true,true,true,true,false,false,true,
-                main,true,false,false,64.0D,false,
+                main,true,false,false,exactAabbReach,false,
+                net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
+            || mayRecoverCiBeaconAimAfterMiss(true,true,true,true,false,false,true,
+                main,true,false,false,outsideAabbReach,false,
                 net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
             || mayRecoverCiBeaconAimAfterMiss(false,true,true,true,false,false,true,
                 main,true,false,false,0.0D,false,
@@ -3076,7 +3089,7 @@ public final class RiftController {
             || mayRecoverCiBeaconAimAfterMiss(true,true,true,true,false,false,true,
                 main,true,false,false,0.0D,false,
                 net.minecraftforge.eventbus.api.Event.Result.DENY,net.minecraftforge.eventbus.api.Event.Result.DEFAULT))
-            throw new IllegalStateException("CI beacon aim recovery guard regression");
+            throw new IllegalStateException("CI beacon aim recovery reach regression");
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_AIM_RECOVERY_GUARD_VERIFIED");
         if(mayActivateBeacon(main,true,false,0.0D,true,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
             || mayActivateBeacon(main,true,false,0.0D,false,net.minecraftforge.eventbus.api.Event.Result.DENY,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
@@ -3140,7 +3153,8 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST IDLE_BEACON_PARTICLE_CADENCE_VERIFIED intervalTicks={} particles={} cachedDust=true",
             IDLE_BEACON_PULSE_INTERVAL_TICKS,IDLE_BEACON_PULSE_PARTICLE_COUNT);
         verifyRestorationParticleProfile();
-        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED");
+        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED maxDistance={} maxDistanceSquared={} eyeToAabb=true strictBoundary=true remote64Rejected=true invalidRejected=true",
+            CI_BEACON_INTERACTION_MAX_DISTANCE,reachSquared);
     }
 
     /** Progress remains below 100% until the final stabilization hold has completed. */
@@ -3219,7 +3233,7 @@ public final class RiftController {
         if(event.getEntity().isRemoved()) return;
         if(!mayActivateBeacon(event.getHand(),event.getEntity().isAlive(),
             event.getEntity().isSpectator(),
-            event.getEntity().distanceToSqr(pos.getX()+0.5D,pos.getY()+0.5D,pos.getZ()+0.5D),
+            ciEyeDistanceSquaredToBlock(event.getEntity().getEyePosition(),pos),
             event.isCanceled(),event.getUseBlock(),event.getUseItem())) return;
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
         if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
