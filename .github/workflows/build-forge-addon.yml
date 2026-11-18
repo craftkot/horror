@@ -5,6 +5,8 @@ on:
     branches: [feature/world-sky-rift]
     paths:
       - 'addon/**'
+      - 'ci/run_client_smoke.py'
+      - '.github/workflows/world-integration.yml'
       - '.github/workflows/build-forge-addon.yml'
 jobs:
   build:
