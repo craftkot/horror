@@ -42,6 +42,8 @@ public final class RiftController {
     private static double gravityFieldTurbulenceTimeOffset;
     private static double gravityFieldMicroPhase;
     private static double gravityFieldMicroTimeOffset;
+    // Reuse the diagonal cross-wave to warp micro-anomaly phase without another trig call per player.
+    private static final double GRAVITY_MICRO_PHASE_WARP_AMPLITUDE=.55D;
     // The legacy dark-purple formatting code is magenta; use the actual deep-violet brand color.
     private static final int RECOVERY_UI_VIOLET_RGB=0x5714C7;
     private static final boolean CI_TEST = Boolean.getBoolean("blackfrequency.ciTestMode");
@@ -449,6 +451,7 @@ public final class RiftController {
      * One bounded field drives both player impulses and their visible cues.
      * A diagonal cross-wave and a smaller time-warped spatial wave shear the broad
      * lift/sink bands into irregular drifting pockets without changing impulse caps.
+     * The micro-wave borrows the cross-wave phase, adding nonlinear local variation at no extra trig cost.
      */
     /** Cache all time-dependent phase terms once per distinct finale tick. */
     private static void updateGravityFieldPhaseCache(int ticks) {
@@ -475,7 +478,8 @@ public final class RiftController {
         double cross=Math.sin((x+z)*.047D+gravityFieldCrossPhase-gravityFieldCrossTimeOffset);
         double turbulence=Math.sin((x-z)*.083D+gravityFieldTurbulencePhase+gravityFieldTurbulenceTimeOffset);
         double microTurbulence=Math.sin((x*.17D+z*.13D)
-            +gravityFieldMicroPhase+gravityFieldMicroTimeOffset);
+            +gravityFieldMicroPhase+gravityFieldMicroTimeOffset
+            +cross*GRAVITY_MICRO_PHASE_WARP_AMPLITUDE);
         double field=base+.12D*cross+.06D*turbulence+.035D*microTurbulence;
         return Math.max(-1.0D,Math.min(1.0D,field));
     }
@@ -517,9 +521,15 @@ public final class RiftController {
         double expectedTurbulence=Math.sin((sampleX-sampleZ)*.083D
             +Math.sin(sampleTime*.017D)*1.3D+sampleTime*.021D);
         double expectedMicroTurbulence=Math.sin((sampleX*.17D+sampleZ*.13D)
-            +Math.sin(sampleTime*.027D)*.8D+sampleTime*.031D);
-        double expectedMicroAtZero=Math.sin(sampleX*.17D+sampleZ*.13D);
+            +Math.sin(sampleTime*.027D)*.8D+sampleTime*.031D
+            +expectedCross*GRAVITY_MICRO_PHASE_WARP_AMPLITUDE);
+        double expectedCrossAtZero=Math.sin((sampleX+sampleZ)*.047D);
+        double expectedMicroAtZero=Math.sin(sampleX*.17D+sampleZ*.13D
+            +expectedCrossAtZero*GRAVITY_MICRO_PHASE_WARP_AMPLITUDE);
         double expectedMicroLater=Math.sin((sampleX*.17D+sampleZ*.13D)
+            +Math.sin(85.0D*.027D)*.8D+85.0D*.031D
+            +expectedCross*GRAVITY_MICRO_PHASE_WARP_AMPLITUDE);
+        double expectedMicroLaterUnwarped=Math.sin((sampleX*.17D+sampleZ*.13D)
             +Math.sin(85.0D*.027D)*.8D+85.0D*.031D);
         double expected=Math.max(-1.0D,Math.min(1.0D,
             expectedBase+.12D*expectedCross+.06D*expectedTurbulence+.035D*expectedMicroTurbulence));
@@ -545,8 +555,10 @@ public final class RiftController {
             || Math.abs(atZeroAfterRewind-expectedAtZero)>1.0E-12D
             || Math.abs(at85AfterRewind-expected)>1.0E-12D
             || gravityFieldCachedTick!=85
-            || Math.abs(expectedMicroLater-expectedMicroAtZero)<=.1D)
+            || Math.abs(expectedMicroLater-expectedMicroAtZero)<=.1D
+            || Math.abs(expectedMicroLater-expectedMicroLaterUnwarped)<=.05D)
             throw new IllegalStateException("CI multi-scale gravity anomaly composition/cache regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_PHASE_WARP_VERIFIED amplitude=0.55 source=crossWave extraTrigPerPlayer=0 nonlinearCoupling=true");
         LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_MULTI_SCALE_VERIFIED turbulenceAmplitude=0.06 samples={} deterministic=true bounded=true",samples);
         LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_MICRO_TURBULENCE_VERIFIED amplitude=0.035 spatialFrequencyX=0.17 spatialFrequencyZ=0.13 timeWarped=true");
         LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_TIME_PHASE_CACHE_VERIFIED cachedOffsets=8 sameTickReuse=true tickRewind=true");
