@@ -2229,6 +2229,11 @@ def capture_test_world():
             if core_width_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: interpolated ground-core width profile was not verified",flush=True)
                 return False
+            core_skew_marker=("BLACK_FREQUENCY_GROUND_MESH_CORE_ASYMMETRY_PROFILE_VERIFIED "
+                              "samples=96 minBound=-0.15 maxBound=0.15 maxAdjacentDeltaLimit=0.04 interpolated=true deterministic=true invalidFallback=0.0")
+            if core_skew_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: cached asymmetric core-wall profile was not verified",flush=True)
+                return False
             if ("private static final double GROUND_MIN_CORE_WIDTH_SCALE=.78D;" not in camera_source
                     or "private static final double GROUND_MAX_CORE_WIDTH_SCALE=1.22D;" not in camera_source
                     or "private static double groundCoreWidthScale(double phase,int arm)" not in camera_source
@@ -2240,6 +2245,12 @@ def capture_test_world():
                     or "sample.coreWidthScale()" not in camera_source
                     or "segment.coreWidthScaleA()" not in camera_source
                     or "segment.coreWidthScaleB()" not in camera_source
+                    or "private static double groundCoreSkew(double phase,int arm)" not in camera_source
+                    or "groundCoreSkew(phase,arm)" not in camera_source
+                    or "previousSample.coreSkew()" not in camera_source
+                    or "sample.coreSkew()" not in camera_source
+                    or "segment.coreSkewA()" not in camera_source
+                    or "segment.coreSkewB()" not in camera_source
                     or "private static void coreRibbon(" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: dark core widths are not interpolated between cached surface samples",flush=True)
                 return False
@@ -2367,7 +2378,7 @@ def capture_test_world():
                     or "BLACK_FREQUENCY_GROUND_MESH_TAPER_EASING_VERIFIED curve=smoothstep zeroSlopeAtEnds=true sameSpan=true" not in final_log):
                 print("WORLD_CAPTURE_FAIL: ground fissure endpoint taper is not symmetric or bounded",flush=True)
                 return False
-            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=4.4 coreScale=1.3 edgeOffsetScale=2.1 edgeHalfWidth=0.026 pulseMin=0.045 pulseMax=0.068 coreInsideEdgeBand=true"
+            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=4.4 coreScale=1.3 edgeOffsetScale=2.32 edgeHalfWidth=0.026 pulseMin=0.045 pulseMax=0.068 coreInsideEdgeBand=true"
             if visual_profile_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: narrowed ground fissure visual profile self-check was not executed",flush=True)
                 return False
@@ -2383,7 +2394,8 @@ def capture_test_world():
                 return False
             if ("GROUND_GLOW_WIDTH_SCALE=4.4D;" not in camera_source
                     or "GROUND_CORE_WIDTH_SCALE=1.3D;" not in camera_source
-                    or "GROUND_EDGE_OFFSET_SCALE=2.1D;" not in camera_source
+                    or "GROUND_EDGE_OFFSET_SCALE=2.32D;" not in camera_source
+                    or "GROUND_CORE_SKEW_AMPLITUDE=.15D;" not in camera_source
                     or "GROUND_EDGE_HALF_WIDTH=.026D;" not in camera_source
                     or "GROUND_MIN_CORE_EDGE_GAP=.0075D;" not in camera_source
                     or "minimumCoreEdgeGap<GROUND_MIN_CORE_EDGE_GAP" not in camera_source
