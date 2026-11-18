@@ -51,6 +51,9 @@ public final class RiftClientState {
     // Camera-facing ribbons keep the cage readable without relying on platform-specific GL line widths.
     private static final double BEACON_AURA_OUTER_HALF_WIDTH=.022D;
     private static final double BEACON_AURA_INNER_HALF_WIDTH=.012D;
+    // The outer cage frames the physical beacon without competing with its core.
+    private static final double BEACON_AURA_OUTER_ALPHA_BASE=.30D;
+    private static final double BEACON_AURA_OUTER_ALPHA_PULSE=.18D;
     // Both cages complete whole turns at the same 60-second boundary, so wrapping
     // game time cannot snap the client-only containment animation.
     private static final long BEACON_AURA_ROTATION_PERIOD=1200L;
@@ -291,7 +294,12 @@ public final class RiftClientState {
             || BEACON_AURA_OUTER_HALF_WIDTH<=0.0D
             || BEACON_AURA_OUTER_HALF_WIDTH>=BEACON_AURA_OUTER_MARGIN
             || BEACON_AURA_INNER_HALF_WIDTH<=0.0D
-            || BEACON_AURA_INNER_HALF_WIDTH>=BEACON_AURA_INNER_MARGIN)
+            || BEACON_AURA_INNER_HALF_WIDTH>=BEACON_AURA_INNER_MARGIN
+            || !Double.isFinite(BEACON_AURA_OUTER_ALPHA_BASE)
+            || !Double.isFinite(BEACON_AURA_OUTER_ALPHA_PULSE)
+            || BEACON_AURA_OUTER_ALPHA_BASE<=0.0D
+            || BEACON_AURA_OUTER_ALPHA_PULSE<0.0D
+            || BEACON_AURA_OUTER_ALPHA_BASE+BEACON_AURA_OUTER_ALPHA_PULSE>1.0D)
             throw new IllegalStateException("BLACK FREQUENCY beacon aura range/geometry regression");
         beaconAuraProfileLogged=true;
         com.mojang.logging.LogUtils.getLogger().info(
@@ -311,6 +319,8 @@ public final class RiftClientState {
             "BLACK_FREQUENCY_TEST BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true");
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST BEACON_AURA_RIBBON_PROFILE_VERIFIED outerHalfWidth=0.022 innerHalfWidth=0.012 cameraFacing=true allocationFree=true");
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST BEACON_AURA_OUTER_CAGE_DEEMPHASIS_VERIFIED min=0.3 max=0.48 innerUnchanged=true");
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST BEACON_AURA_PROFILE_VERIFIED radius={} cages=2 edges=24 loadedOnly=true boundaryStrict=true invalidRejected=true",
             BEACON_AURA_RENDER_DISTANCE);
@@ -435,7 +445,8 @@ public final class RiftClientState {
         double pulse=.5D+.5D*Math.sin(time*.12D);
         double outerAngle=beaconAuraRotationAngle(level.getGameTime(),partial,1);
         double innerAngle=.35D+beaconAuraRotationAngle(level.getGameTime(),partial,-2);
-        int outerAlpha=beaconAuraChannel((float)((.42D+.22D*pulse)*distanceFade));
+        int outerAlpha=beaconAuraChannel((float)((BEACON_AURA_OUTER_ALPHA_BASE+
+            BEACON_AURA_OUTER_ALPHA_PULSE*pulse)*distanceFade));
         int innerAlpha=beaconAuraChannel((float)((.58D+.30D*pulse)*distanceFade));
         Matrix4f matrix=event.getPoseStack().last().pose();
         BufferBuilder builder=Tesselator.getInstance().getBuilder();

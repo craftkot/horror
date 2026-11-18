@@ -83,6 +83,10 @@ def verify_beacon_aura_source():
             or "beaconAuraDistanceFade(distanceSquared)" not in client
             or "distanceSquared<=BEACON_AURA_FADE_START_DISTANCE_SQR" not in client
             or "BEACON_AURA_RIBBON_PROFILE_VERIFIED outerHalfWidth=0.022 innerHalfWidth=0.012 cameraFacing=true allocationFree=true" not in client
+            or "BEACON_AURA_OUTER_CAGE_DEEMPHASIS_VERIFIED min=0.3 max=0.48 innerUnchanged=true" not in client
+            or "private static final double BEACON_AURA_OUTER_ALPHA_BASE=.30D;" not in client
+            or "private static final double BEACON_AURA_OUTER_ALPHA_PULSE=.18D;" not in client
+            or "BEACON_AURA_OUTER_ALPHA_BASE+BEACON_AURA_OUTER_ALPHA_PULSE*pulse" not in client
             or "private static void beaconAuraRibbon(" not in client
             or "BEACON_AURA_ROTATION_PROFILE_VERIFIED periodTicks=1200 outerTurns=1 innerTurns=-2 wrapContinuous=true partialBounded=true" not in client
             or "BEACON_AURA_ROTATION_PERIOD=1200L" not in client
@@ -1223,6 +1227,11 @@ def capture_test_world():
             or is_compact_restoration_dust_component(513,26,25)):
         raise RuntimeError("BLACK FREQUENCY restoration Dust component classifier regression")
 
+    def is_legacy_magenta_pixel(r,g,b):
+        # The previous hot-magenta palette has near-equal red/blue channels.
+        # Blue-heavy blends from the current deep-violet cage are not legacy magenta.
+        return r>=180 and b>=180 and g<=90 and abs(r-b)<=70
+
     def measure_restoration_palette(frame):
         width,height=frame.size
         pixels=frame.load()
@@ -1236,7 +1245,7 @@ def capture_test_world():
         for y in range(top,bottom):
             for x in range(left,right):
                 r,g,b=pixels[x,y]
-                if r>150 and b>150 and g<100 and abs(r-b)<90:
+                if is_legacy_magenta_pixel(r,g,b):
                     legacy_magenta+=1
                 if (is_ground_violet_dust_pixel(r,g,b)
                         or is_ground_shaded_violet_dust_pixel(r,g,b)
@@ -1338,6 +1347,13 @@ def capture_test_world():
         raise RuntimeError("BLACK FREQUENCY completion-title density/fissure classifier regression")
     print("WORLD_CAPTURE: completion title width classifier verified",flush=True)
 
+
+    if (not is_legacy_magenta_pixel(201,66,214)
+            or not is_legacy_magenta_pixel(255,0,255)
+            or is_legacy_magenta_pixel(151,63,219)
+            or is_legacy_magenta_pixel(153,65,220)):
+        raise RuntimeError("BLACK FREQUENCY legacy-magenta classifier rejects current violet cage blends")
+    print("WORLD_CAPTURE: legacy magenta classifier separates violet cage blends from the retired palette",flush=True)
 
     _palette_valid={"legacyMagentaPixels":0,"violetDustPixels":1000}
     _palette_missing={"legacyMagentaPixels":0,"violetDustPixels":0}
