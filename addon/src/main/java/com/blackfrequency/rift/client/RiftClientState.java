@@ -564,11 +564,11 @@ public final class RiftClientState {
         private static final double MAX_GROUND_SEGMENT_GRADE=2.5D;
         // Keep cliff-side ribbon tips visible without bridging terrain discontinuities.
         private static final double CLIFF_BREAK_TAPER=.22D;
-        // Keep the violet halo subordinate to a more legible dark fissure core without adding draw calls or vertices.
-        private static final double GROUND_GLOW_WIDTH_SCALE=5.8D;
-        private static final double GROUND_CORE_WIDTH_SCALE=1.65D;
-        // Move both violet edge rails outward so the wider dark core remains visibly separated.
-        private static final double GROUND_EDGE_OFFSET_SCALE=2.4D;
+        // Narrow the surface glow and dark core so the fissure reads as a split in terrain, not a raised cable.
+        private static final double GROUND_GLOW_WIDTH_SCALE=4.4D;
+        private static final double GROUND_CORE_WIDTH_SCALE=1.3D;
+        // Keep both violet lips close to the narrow dark core while preserving a visible gap.
+        private static final double GROUND_EDGE_OFFSET_SCALE=2.1D;
         // The render pulse is clamped to this interval for every wave/flicker phase.
         private static final double GROUND_MIN_HALF_WIDTH=.045D;
         private static final double GROUND_BASE_HALF_WIDTH=.048D;
@@ -578,11 +578,11 @@ public final class RiftClientState {
             GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE+GROUND_WIDTH_FLICKER;
         private static final double GROUND_EDGE_HALF_WIDTH=.026D;
         private static final double GROUND_MIN_CORE_EDGE_GAP=.0075D;
-        // Keep every ribbon above the sampled block outline while separating the dark core and violet lips vertically.
-        private static final double GROUND_SURFACE_CLEARANCE=.035D;
-        private static final double GROUND_CORE_RECESS=.020D;
-        private static final double GROUND_FILAMENT_LIFT=.006D;
-        private static final double GROUND_EDGE_LIFT=.020D;
+        // Keep the fissure layers close to the sampled surface; only a small offset is used to avoid depth fighting.
+        private static final double GROUND_SURFACE_CLEARANCE=.020D;
+        private static final double GROUND_CORE_RECESS=.009D;
+        private static final double GROUND_FILAMENT_LIFT=.002D;
+        private static final double GROUND_EDGE_LIFT=.008D;
         // Shift the ground rails away from hot magenta toward the sky-rift's deep violet palette.
         private static final float GROUND_EDGE_RED=.46F;
         private static final float GROUND_EDGE_GREEN=.18F;
@@ -852,9 +852,9 @@ public final class RiftClientState {
                 double maximumGlowHalfWidth=maximumHalfWidth*GROUND_GLOW_WIDTH_SCALE;
                 double maximumCoreHalfWidth=maximumHalfWidth*GROUND_CORE_WIDTH_SCALE;
                 double maximumEdgeInnerHalfWidth=maximumHalfWidth*GROUND_EDGE_OFFSET_SCALE-GROUND_EDGE_HALF_WIDTH;
-                if(Math.abs(GROUND_GLOW_WIDTH_SCALE-5.8D)>1.0E-9D
-                    || Math.abs(GROUND_CORE_WIDTH_SCALE-1.65D)>1.0E-9D
-                    || Math.abs(GROUND_EDGE_OFFSET_SCALE-2.4D)>1.0E-9D
+                if(Math.abs(GROUND_GLOW_WIDTH_SCALE-4.4D)>1.0E-9D
+                    || Math.abs(GROUND_CORE_WIDTH_SCALE-1.3D)>1.0E-9D
+                    || Math.abs(GROUND_EDGE_OFFSET_SCALE-2.1D)>1.0E-9D
                     || Math.abs(GROUND_EDGE_HALF_WIDTH-.026D)>1.0E-9D
                     || Math.abs(maximumHalfWidth-.068D)>1.0E-9D
                     || !Float.isFinite(GROUND_EDGE_RED) || !Float.isFinite(GROUND_EDGE_GREEN)
@@ -909,20 +909,36 @@ public final class RiftClientState {
             double glowClearance=GROUND_SURFACE_CLEARANCE;
             double filamentClearance=GROUND_SURFACE_CLEARANCE+GROUND_FILAMENT_LIFT;
             double edgeClearance=GROUND_SURFACE_CLEARANCE+GROUND_EDGE_LIFT;
+            double minimumGlowHalfWidth=GROUND_MIN_HALF_WIDTH*GROUND_GLOW_WIDTH_SCALE;
+            double maximumGlowHalfWidth=GROUND_MAX_HALF_WIDTH*GROUND_GLOW_WIDTH_SCALE;
+            double minimumCoreHalfWidth=GROUND_MIN_HALF_WIDTH*GROUND_CORE_WIDTH_SCALE;
+            double minimumEdgeInnerHalfWidth=GROUND_MIN_HALF_WIDTH*GROUND_EDGE_OFFSET_SCALE-GROUND_EDGE_HALF_WIDTH;
+            double minimumCoreEdgeGap=minimumEdgeInnerHalfWidth-minimumCoreHalfWidth;
             if(!Double.isFinite(coreClearance) || !Double.isFinite(glowClearance)
                 || !Double.isFinite(filamentClearance) || !Double.isFinite(edgeClearance)
+                || !Double.isFinite(minimumGlowHalfWidth) || !Double.isFinite(maximumGlowHalfWidth)
+                || !Double.isFinite(minimumCoreHalfWidth) || !Double.isFinite(minimumEdgeInnerHalfWidth)
+                || !Double.isFinite(minimumCoreEdgeGap)
                 || coreClearance<.01D || !(coreClearance<glowClearance)
                 || !(glowClearance<filamentClearance) || !(filamentClearance<edgeClearance)
-                || Math.abs(GROUND_SURFACE_CLEARANCE-.035D)>1.0E-9D
-                || Math.abs(GROUND_CORE_RECESS-.020D)>1.0E-9D
-                || Math.abs(GROUND_FILAMENT_LIFT-.006D)>1.0E-9D
-                || Math.abs(GROUND_EDGE_LIFT-.020D)>1.0E-9D)
+                || minimumCoreEdgeGap<GROUND_MIN_CORE_EDGE_GAP
+                || !(minimumCoreHalfWidth<minimumEdgeInnerHalfWidth
+                    && minimumEdgeInnerHalfWidth<minimumGlowHalfWidth)
+                || Math.abs(GROUND_SURFACE_CLEARANCE-.020D)>1.0E-9D
+                || Math.abs(GROUND_CORE_RECESS-.009D)>1.0E-9D
+                || Math.abs(GROUND_FILAMENT_LIFT-.002D)>1.0E-9D
+                || Math.abs(GROUND_EDGE_LIFT-.008D)>1.0E-9D)
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh surface relief regression");
             reliefProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SURFACE_RELIEF_VERIFIED coreRecess={} filamentLift={} edgeLift={} coreClearance={} glowClearance={} filamentClearance={} edgeClearance={} ordered=true",
                 GROUND_CORE_RECESS,GROUND_FILAMENT_LIFT,GROUND_EDGE_LIFT,
                 coreClearance,glowClearance,filamentClearance,edgeClearance);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_EMBEDDED_CRACK_PROFILE_VERIFIED minGlowHalfWidth={} maxGlowHalfWidth={} minCoreHalfWidth={} minEdgeInnerHalfWidth={} minCoreEdgeGap={} coreClearance={} glowClearance={} filamentClearance={} edgeClearance={} surfaceAligned=true",
+                minimumGlowHalfWidth,maximumGlowHalfWidth,minimumCoreHalfWidth,
+                minimumEdgeInnerHalfWidth,minimumCoreEdgeGap,coreClearance,glowClearance,
+                filamentClearance,edgeClearance);
         }
 
         private static double boundedShapeHeight(double height,double fallback) {
