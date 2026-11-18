@@ -2475,7 +2475,7 @@ def capture_test_world():
             if not 1<=rebuild_interval<=20:
                 print(f"WORLD_CAPTURE_FAIL: ground mesh rebuild interval is outside the safe 1..20 tick range: {rebuild_interval}",flush=True)
                 return False
-            empty_rebuild_match=re.search(r"EMPTY_MESH_REBUILD_INTERVAL\\s*=\\s*(\\d+)L",rebuild_source)
+            empty_rebuild_match=re.search(r"EMPTY_MESH_REBUILD_INTERVAL\s*=\s*(\d+)L",rebuild_source)
             if not empty_rebuild_match:
                 print("WORLD_CAPTURE_FAIL: empty-mesh rebuild backoff is missing",flush=True)
                 return False
