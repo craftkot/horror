@@ -1738,8 +1738,8 @@ public final class RiftClientState {
                 .endVertex();
         }
 
-        // Interpolate the dark core's precomputed width at both endpoints so adjacent
-        // quads meet without seams while the fissure pinches and widens along its length.
+        // Interpolate the dark core's precomputed spatial width at both endpoints so
+        // its static profile changes gradually across sample boundaries.
         private static void coreRibbon(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
                 GroundSegment segment,double halfWidth,double verticalOffset,
                 int redChannel,int greenChannel,int blueChannel,int alphaChannel) {

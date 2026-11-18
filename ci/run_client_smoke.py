@@ -2204,7 +2204,8 @@ def capture_test_world():
                              if render_preamble_start>=0 and render_loop_start>render_preamble_start else "")
             if ("double phaseSin,double phaseCos,double flickerPhaseSin,double flickerPhaseCos" not in camera_source
                     or "GroundSample sample,double taperA,double taperB,double coreWidthScaleA,double coreWidthScaleB" not in camera_source
-                    or "Math.sin(phase),Math.cos(phase)" not in camera_source
+                    or "double phaseSin=Math.sin(phase);" not in camera_source
+                    or "double phaseCos=Math.cos(phase);" not in camera_source
                     or "Math.sin(phase*1.9D),Math.cos(phase*1.9D)" not in camera_source
                     or render_preamble.count("Math.sin(")!=3
                     or render_preamble.count("Math.cos(")!=3
