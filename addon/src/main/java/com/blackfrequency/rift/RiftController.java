@@ -324,12 +324,16 @@ public final class RiftController {
         return Math.max(0,Math.min(MAX_EDITS,value));
     }
 
-    /** Reject malformed registry identifiers before NbtUtils attempts to resolve them. */
+    /** Reject non-canonical or malformed registry identifiers before NbtUtils resolves them. */
     private static boolean isValidSnapshotBlockId(String blockId) {
-        return blockId!=null && !blockId.isEmpty()
-            && blockId.length()<=MAX_SNAPSHOT_BLOCK_ID_LENGTH
-            && ResourceLocation.isValidResourceLocation(blockId)
-            && ResourceLocation.tryParse(blockId)!=null;
+        if(blockId==null || blockId.isEmpty()
+            || blockId.length()>MAX_SNAPSHOT_BLOCK_ID_LENGTH
+            || !ResourceLocation.isValidResourceLocation(blockId)) return false;
+        int separator=blockId.indexOf(':');
+        if(separator<=0 || separator==blockId.length()-1
+            || separator!=blockId.lastIndexOf(':')) return false;
+        ResourceLocation parsed=ResourceLocation.tryParse(blockId);
+        return parsed!=null && !parsed.getNamespace().isEmpty() && !parsed.getPath().isEmpty();
     }
 
     /** Accept only the compact schema emitted by NbtUtils.writeBlockState. */
@@ -497,7 +501,6 @@ public final class RiftController {
         double field=base+.12D*cross+.06D*turbulence+.035D*microTurbulence;
         return Math.max(-1.0D,Math.min(1.0D,field));
     }
-
     private static void verifyGravityAnomalyField() {
         double lift=gravityAnomalyField(-17.5D,20.5D,0);
         double sink=gravityAnomalyField(-19.5D,-3.5D,0);
@@ -997,8 +1000,7 @@ public final class RiftController {
             for(int i=0;i<snapshotCount;i++) {
                 CompoundTag entry=saved.getCompound(i);
                 long candidateEstimate=boundedSnapshotPayloadEstimate(entry);
-                if(candidateEstimate>0L
-                    && withinSnapshotRetentionBudget(s.retainedSnapshotEstimateBytes,candidateEstimate)) {
+                if(candidateEstimate>0L                    && withinSnapshotRetentionBudget(s.retainedSnapshotEstimateBytes,candidateEstimate)) {
                     // Preserve the oldest, anchor-nearest snapshots first when a damaged
                     // save exceeds the aggregate budget; these are the recovery core.
                     s.snapshots.add(entry);
@@ -1498,7 +1500,6 @@ public final class RiftController {
             .5D);
         return eyeDistanceSquaredToBlock(eye,new BlockPos(0,0,0));
     }
-
     private static double ciBeaconSightlineHeightAtProgress(double horizontalProgress) {
         double horizontal=CI_BEACON_PAD_STANDOFF;
         if(!Double.isFinite(horizontal) || horizontal<=0.0D
@@ -1997,8 +1998,7 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLE_BUDGET_VERIFIED total={} accentDust={} violetDust={} edgeDust={}",
             totalParticles,accentDustMotes,violetDustMotes,edgeDustCount);
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_LAYOUT_VERIFIED count={} color=violet perArm=1 outerTip=true",
-            edgeDustCount);
-        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_CACHE_VERIFIED cached={} scale={}",
+            edgeDustCount);        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_CACHE_VERIFIED cached={} scale={}",
             FISSURE_VIOLET_EDGE_DUST!=null,FISSURE_VIOLET_EDGE_DUST.getScale());
     }
 
@@ -2206,6 +2206,7 @@ public final class RiftController {
             && !isValidSnapshotBlockId("minecraft:bad block")
             && !isValidSnapshotBlockId("minecraft:Uppercase")
             && !isValidSnapshotBlockId("minecraft:")
+            && !isValidSnapshotBlockId("stone")
             && boundedSnapshotPayloadEstimate(malformedNameEntry)==0L;
         ListTag malformedNameSnapshots=new ListTag();
         malformedNameSnapshots.add(malformedNameEntry);
@@ -2226,6 +2227,7 @@ public final class RiftController {
                 +" invalidSpace="+!isValidSnapshotBlockId("minecraft:bad block")
                 +" invalidUppercase="+!isValidSnapshotBlockId("minecraft:Uppercase")
                 +" invalidEmptyPath="+!isValidSnapshotBlockId("minecraft:")
+                +" invalidUnqualified="+!isValidSnapshotBlockId("stone")
                 +" invalidEstimate="+(boundedSnapshotPayloadEstimate(malformedNameEntry)==0L)
                 +" dirty="+malformedNameLoaded.isDirty()
                 +" entries="+sanitizedNameSnapshots.size()
@@ -2497,7 +2499,6 @@ public final class RiftController {
             && Math.abs(dx)<=limit && Math.abs(dz)<=limit
             && dx*dx+dz*dz<=limit*limit;
     }
-
     private static boolean isValidNaturalBeaconPosition(ServerLevel level,State s,BlockPos beacon) {
         return s.started && s.naturalBeaconPos!=Long.MIN_VALUE && s.naturalBeaconId!=null
             && beacon.asLong()==s.naturalBeaconPos
@@ -2997,8 +2998,7 @@ public final class RiftController {
             new BlockPos(30_000_000,0,-30_000_000)
         };
         for(BlockPos expected:samples) {
-            long packed=expected.asLong();
-            cursor.set(BlockPos.getX(packed),BlockPos.getY(packed),BlockPos.getZ(packed));
+            long packed=expected.asLong();            cursor.set(BlockPos.getX(packed),BlockPos.getY(packed),BlockPos.getZ(packed));
             if(owner.restoreCursor!=cursor || cursor.getX()!=expected.getX()
                 || cursor.getY()!=expected.getY() || cursor.getZ()!=expected.getZ())
                 throw new IllegalStateException("CI restore snapshot cursor decode/reuse regression");
@@ -3497,8 +3497,7 @@ public final class RiftController {
                     // beacon stand above a real snow layer, rather than relying
                     // on a random snowy biome. Never enabled in normal worlds.
                     boolean snowFixture=CI_TEST && Boolean.getBoolean("blackfrequency.ciSnowBeaconTest")
-                        && s.ciNaturalBeaconRemoved;
-                    if(snowFixture && level.getBlockState(pos).isAir()
+                        && s.ciNaturalBeaconRemoved;                    if(snowFixture && level.getBlockState(pos).isAir()
                         && level.getBlockState(pos.above()).isAir()
                         && level.getBlockState(pos.below()).blocksMotion()
                         && level.getBlockState(pos.below()).getFluidState().isEmpty()
@@ -3997,8 +3996,7 @@ public final class RiftController {
                         failedWritesThisTick.add(pos.asLong());
                         if(testWriteFailure) {
                             s.ciRejectedRestorePos=pos.asLong();
-                            LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_WRITE_DEFERRED x={} y={} z={} tick={}",pos.getX(),pos.getY(),pos.getZ(),s.restoreTicks);
-                        }
+                            LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_WRITE_DEFERRED x={} y={} z={} tick={}",pos.getX(),pos.getY(),pos.getZ(),s.restoreTicks);                        }
                         s.restoreScan--;
                         continue;
                     }
@@ -4497,8 +4495,7 @@ public final class RiftController {
                         beacon.getX(),beacon.getY(),beacon.getZ());
                 } else {
                     // A local cached Dust pulse is enough for an idle objective.
-                    // Six particles once per second replace the old 30-per-second
-                    // portal burst; the loaded-chunk guard above remains unchanged.
+                    // Six particles once per second replace the old 30-per-second                    // portal burst; the loaded-chunk guard above remains unchanged.
                     if(shouldEmitIdleBeaconParticles(s.finaleTicks)
                         && level.players().stream().anyMatch(player ->
                             player.isAlive() && !player.isRemoved() && !player.isSpectator()
