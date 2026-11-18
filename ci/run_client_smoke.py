@@ -169,16 +169,17 @@ def verify_restoration_particle_source():
     if ("public static final double FISSURE_BEND_AMPLITUDE=.24D;" not in geometry_contract
             or source.count("RiftGeometry.FISSURE_BEND_AMPLITUDE")<5
             or client_source.count("RiftGeometry.FISSURE_BEND_AMPLITUDE")<4
-            or "CI_BEACON_PAD_FLOOR_Y_OFFSET=1;" not in source
-            or "CI_BEACON_PAD_PLAYER_Y_OFFSET=2;" not in source
-            or "CI_BEACON_PAD_STANDOFF=3.25D;" not in source
+            or "CI_BEACON_PAD_FLOOR_Y_OFFSET=0;" not in source
+            or "CI_BEACON_PAD_PLAYER_Y_OFFSET=1;" not in source
+            or "CI_BEACON_PAD_LATERAL_RADIUS=0;" not in source
+            or "CI_BEACON_PAD_STANDOFF=3.0D;" not in source
             or "CI_BEACON_PAD_GAP_ROW=2;" not in source
             or "CI_BEACON_PAD_FIRST_SOLID_ROW=3;" not in source
-            or "CI_BEACON_PAD_LAST_SOLID_ROW=4;" not in source
+            or "CI_BEACON_PAD_LAST_SOLID_ROW=3;" not in source
             or "CI_BEACON_PLAYER_EYE_HEIGHT=1.62D;" not in source
             or "ciBeaconSightlineHeightAtBeaconFace()" not in source
             or "ciBeaconSightlineHeightAtPadInnerFace()" not in source
-            or "Math.abs(distanceSquared-12.8125D)>1.0E-9D" not in source
+            or "Math.abs(distanceSquared-9.25D)>1.0E-9D" not in source
             or "beaconEntryY>0.0D && beaconEntryY<1.0D" not in source
             or "padInnerFaceY>CI_BEACON_PAD_FLOOR_Y_OFFSET+1.0D" not in source
             or "BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_BLOCKER_DIAGNOSTIC" not in source
@@ -194,6 +195,7 @@ def verify_restoration_particle_source():
             or "fissureVisibilityRequired=true" not in source
             or "verifyCiBeaconPadSignSelection();" not in source
             or "for(int offset=CI_BEACON_PAD_FIRST_SOLID_ROW;offset<=CI_BEACON_PAD_LAST_SOLID_ROW;offset++)" not in pad_body
+            or "for(int lateral=-CI_BEACON_PAD_LATERAL_RADIUS;lateral<=CI_BEACON_PAD_LATERAL_RADIUS;lateral++)" not in pad_body
             or "ciBeaconSightlineHitsBeacon(level,demoPlayer,demoPos)" not in pad_body
             or "BEACON_SIGHTLINE_VERIFIED" not in pad_body
             or "demoPos.offset(dx,CI_BEACON_PAD_FLOOR_Y_OFFSET,dz)" not in pad_body
@@ -1676,7 +1678,7 @@ def capture_test_world():
                     r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
                     logs)
                 pad_profile=re.search(
-                    r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset=1 playerOffset=2 axis=([XZ]) firstSolidRow=3 gapRow=2 lastSolidRow=4 standoff=3\.25 distanceSquared=([-+0-9.eE]+) padBlocks=(\d+) withinReach=true beamColumnUntouched=true withinRiftRadius=true perpendicular=true",
+                    r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset=0 playerOffset=1 lateralRadius=0 axis=([XZ]) firstSolidRow=3 gapRow=2 lastSolidRow=3 standoff=3\.0 distanceSquared=([-+0-9.eE]+) padBlocks=(\d+) withinReach=true beamColumnUntouched=true withinRiftRadius=true perpendicular=true",
                     logs)
                 aim=re.search(
                     r"BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)",
@@ -1732,7 +1734,7 @@ def capture_test_world():
                         or not math.isfinite(pad_distance_squared)
                         or pad_distance_squared<0.0
                         or pad_distance_squared>4.5*4.5
-                        or pad_block_count!=6):
+                        or pad_block_count!=1):
                     terrain_capture_failed=True
                     print("WORLD_CAPTURE_FAIL: perpendicular beacon pad is outside interaction reach or incomplete",
                           pad_axis,pad_distance_squared,pad_block_count,flush=True)

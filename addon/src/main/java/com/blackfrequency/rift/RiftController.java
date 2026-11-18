@@ -173,14 +173,16 @@ public final class RiftController {
     private static final double FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE = 6.0D;
     // The disposable CI pad is perpendicular to the anchor-to-beacon vector.
     // Two empty near rows let the raised player's eye ray enter the beacon instead of passing above it.
-    private static final int CI_BEACON_PAD_FLOOR_Y_OFFSET=1;
-    private static final int CI_BEACON_PAD_PLAYER_Y_OFFSET=2;
+    private static final int CI_BEACON_PAD_FLOOR_Y_OFFSET=0;
+    private static final int CI_BEACON_PAD_PLAYER_Y_OFFSET=1;
     private static final double CI_BEACON_PLAYER_EYE_HEIGHT=1.62D;
-    private static final double CI_BEACON_PAD_STANDOFF=3.25D;
-    // Row 2 stays empty; the support platform starts at row 3, outside the beacon sightline.
+    // One centered support block keeps the fissure ray above the pad and out of the screenshot foreground.
+    private static final double CI_BEACON_PAD_STANDOFF=3.0D;
+    // Row 2 stays empty; the single support block starts at row 3.
     private static final int CI_BEACON_PAD_GAP_ROW=2;
     private static final int CI_BEACON_PAD_FIRST_SOLID_ROW=3;
-    private static final int CI_BEACON_PAD_LAST_SOLID_ROW=4;
+    private static final int CI_BEACON_PAD_LAST_SOLID_ROW=3;
+    private static final int CI_BEACON_PAD_LATERAL_RADIUS=0;
     // Vanilla survival reach, measured from the player's eyes to the target block AABB.
     private static final double CI_BEACON_INTERACTION_MAX_DISTANCE=4.5D;
 
@@ -1378,7 +1380,7 @@ public final class RiftController {
             boolean alongX,int sign) {
         if(sign!=1 && sign!=-1) return false;
         for(int offset=CI_BEACON_PAD_FIRST_SOLID_ROW;offset<=CI_BEACON_PAD_LAST_SOLID_ROW;offset++) {
-            for(int lateral=-1;lateral<=1;lateral++) {
+            for(int lateral=-CI_BEACON_PAD_LATERAL_RADIUS;lateral<=CI_BEACON_PAD_LATERAL_RADIUS;lateral++) {
                 int dx=alongX?sign*offset:lateral;
                 int dz=alongX?lateral:sign*offset;
                 BlockPos floor=beacon.offset(dx,CI_BEACON_PAD_FLOOR_Y_OFFSET,dz);
@@ -1467,28 +1469,29 @@ public final class RiftController {
         double distanceSquared=ciBeaconPadDistanceSquared();
         double beaconEntryY=ciBeaconSightlineHeightAtBeaconFace();
         double padInnerFaceY=ciBeaconSightlineHeightAtPadInnerFace();
-        if(CI_BEACON_PAD_FLOOR_Y_OFFSET!=1
-            || CI_BEACON_PAD_PLAYER_Y_OFFSET!=2
-            || Math.abs(CI_BEACON_PAD_STANDOFF-3.25D)>1.0E-9D
+        if(CI_BEACON_PAD_FLOOR_Y_OFFSET!=0
+            || CI_BEACON_PAD_PLAYER_Y_OFFSET!=1
+            || CI_BEACON_PAD_LATERAL_RADIUS!=0
+            || Math.abs(CI_BEACON_PAD_STANDOFF-3.0D)>1.0E-9D
             || CI_BEACON_PAD_GAP_ROW!=2
             || CI_BEACON_PAD_FIRST_SOLID_ROW!=3
-            || CI_BEACON_PAD_LAST_SOLID_ROW!=4
+            || CI_BEACON_PAD_LAST_SOLID_ROW!=3
             || CI_BEACON_PAD_FIRST_SOLID_ROW!=CI_BEACON_PAD_GAP_ROW+1
-            || CI_BEACON_PAD_LAST_SOLID_ROW<CI_BEACON_PAD_FIRST_SOLID_ROW
+            || CI_BEACON_PAD_LAST_SOLID_ROW!=CI_BEACON_PAD_FIRST_SOLID_ROW
             || !ciBeaconPadAlongX(2,8,2,11)
             || ciBeaconPadAlongX(2,8,5,8)
             || !ciBeaconPadAlongX(2,8,5,11)
             || !ciBeaconPadAlongX(0,Integer.MIN_VALUE,0,Integer.MAX_VALUE)
             || ciBeaconPadAlongX(Integer.MIN_VALUE,0,Integer.MAX_VALUE,0)
             || !Double.isFinite(distanceSquared)
-            || Math.abs(distanceSquared-12.8125D)>1.0E-9D
+            || Math.abs(distanceSquared-9.25D)>1.0E-9D
             || distanceSquared>CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE
             || !Double.isFinite(beaconEntryY) || !(beaconEntryY>0.0D && beaconEntryY<1.0D)
             || !Double.isFinite(padInnerFaceY)
             || !(padInnerFaceY>CI_BEACON_PAD_FLOOR_Y_OFFSET+1.0D))
             throw new IllegalStateException("CI beacon pad reach/perpendicular sightline profile regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset={} playerOffset={} axisPolicy=perpendicular firstSolidRow={} gapRow={} lastSolidRow={} standoff={} distanceSquared={} padInnerFaceY={} beaconEntryY={} withinReach=true beamColumnUntouched=true perpendicular=true",
-            CI_BEACON_PAD_FLOOR_Y_OFFSET,CI_BEACON_PAD_PLAYER_Y_OFFSET,
+        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset={} playerOffset={} lateralRadius={} axisPolicy=perpendicular firstSolidRow={} gapRow={} lastSolidRow={} standoff={} distanceSquared={} padInnerFaceY={} beaconEntryY={} withinReach=true beamColumnUntouched=true perpendicular=true",
+            CI_BEACON_PAD_FLOOR_Y_OFFSET,CI_BEACON_PAD_PLAYER_Y_OFFSET,CI_BEACON_PAD_LATERAL_RADIUS,
             CI_BEACON_PAD_FIRST_SOLID_ROW,CI_BEACON_PAD_GAP_ROW,CI_BEACON_PAD_LAST_SOLID_ROW,
             CI_BEACON_PAD_STANDOFF,distanceSquared,padInnerFaceY,beaconEntryY);
         verifyFissureRayChunkTraversalProfile();
@@ -4484,7 +4487,7 @@ public final class RiftController {
                     int padBlocks=0;
                     // Keep the first two rows free; choose the side with a real, loaded-only sightline.
                     for(int offset=CI_BEACON_PAD_FIRST_SOLID_ROW;offset<=CI_BEACON_PAD_LAST_SOLID_ROW;offset++)
-                        for(int lateral=-1;lateral<=1;lateral++) {
+                        for(int lateral=-CI_BEACON_PAD_LATERAL_RADIUS;lateral<=CI_BEACON_PAD_LATERAL_RADIUS;lateral++) {
                             int dx=padAlongX?padSign*offset:lateral;
                             int dz=padAlongX?lateral:padSign*offset;
                             BlockPos floor=demoPos.offset(dx,CI_BEACON_PAD_FLOOR_Y_OFFSET,dz);
