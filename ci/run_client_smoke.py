@@ -206,6 +206,7 @@ def verify_restoration_particle_source():
             or "demoPos.getY()+CI_BEACON_PAD_PLAYER_Y_OFFSET" not in pad_body
             or "demoPos.getX()+.5D+padDirectionX*CI_BEACON_PAD_STANDOFF" not in pad_body
             or "demoPos.getZ()+.5D+padDirectionZ*CI_BEACON_PAD_STANDOFF" not in pad_body
+            or "lateralRadius={}" not in pad_body
             or "PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED" not in pad_body):
         raise RuntimeError("BLACK FREQUENCY elevated perpendicular beacon pad must stay loaded, bounded, visible and within interaction reach")
     if ("BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();" not in target_body

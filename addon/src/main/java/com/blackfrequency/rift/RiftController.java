@@ -4553,9 +4553,9 @@ public final class RiftController {
                             padBlocks,beaconDistanceSquared,supportWithinRiftRadius);
                         return;
                     }
-                    LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset={} playerOffset={} axis={} firstSolidRow={} gapRow={} lastSolidRow={} standoff={} distanceSquared={} padBlocks={} withinReach=true beamColumnUntouched=true withinRiftRadius=true perpendicular=true",
-                        CI_BEACON_PAD_FLOOR_Y_OFFSET,CI_BEACON_PAD_PLAYER_Y_OFFSET,padAlongX?"X":"Z",
-                        CI_BEACON_PAD_FIRST_SOLID_ROW,CI_BEACON_PAD_GAP_ROW,CI_BEACON_PAD_LAST_SOLID_ROW,
+                    LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset={} playerOffset={} lateralRadius={} axis={} firstSolidRow={} gapRow={} lastSolidRow={} standoff={} distanceSquared={} padBlocks={} withinReach=true beamColumnUntouched=true withinRiftRadius=true perpendicular=true",
+                        CI_BEACON_PAD_FLOOR_Y_OFFSET,CI_BEACON_PAD_PLAYER_Y_OFFSET,CI_BEACON_PAD_LATERAL_RADIUS,
+                        padAlongX?"X":"Z",CI_BEACON_PAD_FIRST_SOLID_ROW,CI_BEACON_PAD_GAP_ROW,CI_BEACON_PAD_LAST_SOLID_ROW,
                         CI_BEACON_PAD_STANDOFF,beaconDistanceSquared,padBlocks);
                     FissureTarget visibleFissure=findVisibleFissureTarget(level,s,demoPlayer);
                     if(visibleFissure==null) {
