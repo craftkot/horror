@@ -830,6 +830,13 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_VELOCITY_BOUNDS_VERIFIED");
     }
 
+    /** A missing legacy key is valid; a present malformed list must be normalized and saved. */
+    private static boolean isWellFormedSnapshotListTag(Tag tag) {
+        if(tag==null) return true;
+        if(!(tag instanceof ListTag list)) return false;
+        return list.isEmpty() || list.getElementType()==Tag.TAG_COMPOUND;
+    }
+
     private static final class State extends SavedData {
         long elapsed;
         int x, z, cursorX=-RADIUS, cursorZ=-RADIUS, cursorY;
@@ -937,7 +944,16 @@ public final class RiftController {
                 LOGGER.warn("BLACK FREQUENCY: quarantined orphaned recovery beacon metadata");
                 s.setDirty();
             }
-            ListTag saved=n.getList("snapshots",Tag.TAG_COMPOUND);
+            Tag rawSnapshots=n.get("snapshots");
+            boolean malformedSnapshotList=!isWellFormedSnapshotListTag(rawSnapshots);
+            ListTag saved=rawSnapshots instanceof ListTag list && !malformedSnapshotList
+                ? list : new ListTag();
+            if(malformedSnapshotList) {
+                // A wrong outer tag type or heterogeneous list cannot contain trusted snapshots.
+                // Quarantine the whole container and persist the normalized empty list.
+                LOGGER.warn("BLACK FREQUENCY: quarantined malformed recovery snapshot list container");
+                s.setDirty();
+            }
             int snapshotCount=boundedSnapshotCount(saved.size());
             boolean snapshotStateRepaired=false;
             int quarantinedSnapshotPayloads=0;
@@ -2057,9 +2073,36 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_FAILURE_CACHE_REUSED");
     }
 
+    /** Verify malformed snapshot containers are quarantined without dirtying legacy saves. */
+    private static void verifySnapshotListContainerQuarantine() {
+        CompoundTag wrongOuterType=new CompoundTag();
+        wrongOuterType.putString("snapshots","not-a-list");
+        State outerTypeLoaded=State.load(wrongOuterType);
+        CompoundTag outerTypeSaved=outerTypeLoaded.save(new CompoundTag());
+
+        ListTag wrongElementType=new ListTag();
+        wrongElementType.add(net.minecraft.nbt.StringTag.valueOf("not-a-compound"));
+        CompoundTag heterogeneous=new CompoundTag();
+        heterogeneous.put("snapshots",wrongElementType);
+        State elementTypeLoaded=State.load(heterogeneous);
+        CompoundTag elementTypeSaved=elementTypeLoaded.save(new CompoundTag());
+
+        State legacyWithoutSnapshots=State.load(new CompoundTag());
+        if(!outerTypeLoaded.isDirty() || !outerTypeLoaded.snapshots.isEmpty()
+            || !outerTypeSaved.contains("snapshots",Tag.TAG_LIST)
+            || !outerTypeSaved.getList("snapshots",Tag.TAG_COMPOUND).isEmpty()
+            || !elementTypeLoaded.isDirty() || !elementTypeLoaded.snapshots.isEmpty()
+            || !elementTypeSaved.contains("snapshots",Tag.TAG_LIST)
+            || !elementTypeSaved.getList("snapshots",Tag.TAG_COMPOUND).isEmpty()
+            || legacyWithoutSnapshots.isDirty())
+            throw new IllegalStateException("CI malformed recovery snapshot list quarantine regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_LIST_CONTAINER_QUARANTINE_VERIFIED wrongTagType=true wrongElementType=true normalized=true legacyMissingAllowed=true");
+    }
+
     /** Verify that a pending terrain snapshot survives a SavedData round trip. */
     private static void verifyPendingSnapshotPersistence() {
         verifyRestoreFailureCacheReuse();
+        verifySnapshotListContainerQuarantine();
         State original=new State();
         original.started=true;
         original.restoring=true;
