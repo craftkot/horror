@@ -114,9 +114,13 @@ def verify_beacon_aura_source():
             or "gameTimeUniform.set(interpolatedGameTime(" not in render_body
             or ".getUniform(" in render_body
             or "return shaderReady && shader!=null" not in sky
-            or "gameTimeUniform!=null" not in sky):
+            or "gameTimeUniform!=null" not in sky
+            or "shaderReloadAwaitingDraw=reloadingReadyShader;" not in registration_body
+            or "SKY_SHADER_RELOAD_INVALIDATION_VERIFIED" not in registration_body
+            or "SKY_SHADER_RELOAD_REBOUND_VERIFIED" not in registration_body
+            or "SKY_SHADER_RELOAD_POST_DRAW_VERIFIED" not in render_body):
         raise RuntimeError("BLACK FREQUENCY sky shader uniforms must be cached per shader instance and invalidated on reload")
-    print("WORLD_CAPTURE: shader uniform cache is reload-safe and render-loop lookups are eliminated",flush=True)
+    print("WORLD_CAPTURE: shader uniform cache and resource-reload lifecycle source contract verified",flush=True)
     print("WORLD_CAPTURE: loaded-only physical beacon aura packet and render contract verified",flush=True)
 
 def verify_restoration_particle_source():
@@ -1679,6 +1683,8 @@ def capture_test_world():
             terrain_capture_failed=False
             sky_shot=False
             sky_capture_attempted=False
+            shader_reload_attempted=False
+            shader_reload_verified=False
             def capture_terrain_fracture(logs):
                 nonlocal terrain_shot,terrain_capture_attempted,terrain_capture_failed
                 # A server particle marker alone is not proof that the client can
@@ -1882,6 +1888,41 @@ def capture_test_world():
                       "meshAnchor",mesh_anchor_x,mesh_anchor_z,
                       "visibility",metrics,
                       "aim",round(target_yaw,1),round(target_pitch,1),flush=True)
+            def verify_shader_resource_reload():
+                nonlocal shader_reload_attempted,shader_reload_verified
+                if shader_reload_attempted:
+                    return shader_reload_verified
+                shader_reload_attempted=True
+                before=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                ready_marker="BLACK_FREQUENCY_SHADER_READY sky_rift"
+                initial_ready_count=before.count(ready_marker)
+                if initial_ready_count<1:
+                    print("WORLD_CAPTURE_FAIL: initial sky shader readiness was not logged before resource reload",flush=True)
+                    return False
+                print("WORLD_CAPTURE_INPUT: triggering real Minecraft F3+T resource reload",flush=True)
+                key("F3+t")
+                deadline=time.monotonic()+60.0
+                while time.monotonic()<deadline and p.poll() is None:
+                    current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                    invalidated="BLACK_FREQUENCY_TEST SKY_SHADER_RELOAD_INVALIDATION_VERIFIED oldUniformsCleared=true readyDisabled=true" in current
+                    rebound="BLACK_FREQUENCY_TEST SKY_SHADER_RELOAD_REBOUND_VERIFIED uniforms=true ready=true" in current
+                    redrawn="BLACK_FREQUENCY_TEST SKY_SHADER_RELOAD_POST_DRAW_VERIFIED stage=after_weather depthRestored=true" in current
+                    ready_count=current.count(ready_marker)
+                    if invalidated and rebound and redrawn and ready_count>=initial_ready_count+1:
+                        shader_reload_verified=True
+                        print("WORLD_CAPTURE: real F3+T reload invalidated old uniforms, rebound the new shader, and completed a depth-safe draw",
+                              "readyRegistrations",ready_count,flush=True)
+                        return True
+                    time.sleep(0.2)
+                current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                print("WORLD_CAPTURE_FAIL: real F3+T resource reload did not complete invalidation/rebind/post-draw",
+                      {"initialReady":initial_ready_count,
+                       "readyRegistrations":current.count(ready_marker),
+                       "invalidated":"BLACK_FREQUENCY_TEST SKY_SHADER_RELOAD_INVALIDATION_VERIFIED" in current,
+                       "rebound":"BLACK_FREQUENCY_TEST SKY_SHADER_RELOAD_REBOUND_VERIFIED" in current,
+                       "redrawn":"BLACK_FREQUENCY_TEST SKY_SHADER_RELOAD_POST_DRAW_VERIFIED" in current},
+                      flush=True)
+                return False
             def capture_sky_before_beacon():
                 nonlocal sky_shot,sky_capture_attempted
                 if sky_capture_attempted:
@@ -2025,6 +2066,8 @@ def capture_test_world():
                     print("WORLD_CAPTURE: SKY_RIFT_HORIZON_ONLY_VERIFIED_BEFORE_BEACON_CLICK",flush=True)
                 else:
                     print("WORLD_CAPTURE_FAIL: neither horizon nor upper-sky frame passed visibility checks; still attempting real interaction",flush=True)
+                if not verify_shader_resource_reload():
+                    sky_shot=False
             for stage in range(32):
                 if p.poll() is not None:
                     break
@@ -2967,8 +3010,14 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST SKY_SHADER_READY_STATE_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: shader readiness lifecycle was not verified",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST SKY_SHADER_UNIFORM_CACHE_VERIFIED strength=true green=true time=true reloadSafe=true" not in log_after:
-                print("WORLD_CAPTURE_FAIL: sky shader uniforms were not cached and refreshed on reload",flush=True)
+            if log_after.count("BLACK_FREQUENCY_TEST SKY_SHADER_UNIFORM_CACHE_VERIFIED strength=true green=true time=true")<2:
+                print("WORLD_CAPTURE_FAIL: shader uniform cache was not populated both before and after resource reload",flush=True)
+                return False
+            if (not shader_reload_verified
+                    or "BLACK_FREQUENCY_TEST SKY_SHADER_RELOAD_INVALIDATION_VERIFIED oldUniformsCleared=true readyDisabled=true" not in log_after
+                    or "BLACK_FREQUENCY_TEST SKY_SHADER_RELOAD_REBOUND_VERIFIED uniforms=true ready=true" not in log_after
+                    or "BLACK_FREQUENCY_TEST SKY_SHADER_RELOAD_POST_DRAW_VERIFIED stage=after_weather depthRestored=true" not in log_after):
+                print("WORLD_CAPTURE_FAIL: actual F3+T resource reload did not invalidate, rebind, and draw the sky shader",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST FOG_INTERPOLATION_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: render-rate fog interpolation self-check was not executed",flush=True)

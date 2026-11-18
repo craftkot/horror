@@ -42,6 +42,8 @@ public final class RiftSkyRenderer {
     // A reload invalidates the old shader and its uniforms until the replacement is registered.
     // Cloud suppression must follow the live shader, not stale non-null references.
     private static boolean shaderReady;
+    // Set only when a previously valid shader is replaced; cleared after its first successful draw.
+    private static boolean shaderReloadAwaitingDraw;
 
     private static void clearShaderUniforms() {
         riftStrengthUniform=null;
@@ -180,11 +182,16 @@ public final class RiftSkyRenderer {
     public static final class Registration {
         @SubscribeEvent
         public static void shaders(RegisterShadersEvent event) throws IOException {
-            // RegisterShadersEvent also runs on resource reload. Do not keep
-            // suppressing vanilla clouds while the previous shader is invalidated.
+            // RegisterShadersEvent also runs on resource reload. Record whether a live
+            // shader is being replaced, then disable it before clearing its uniforms.
+            boolean reloadingReadyShader=isShaderReady();
             shaderReady=false;
             shader=null;
             clearShaderUniforms();
+            shaderReloadAwaitingDraw=reloadingReadyShader;
+            if(CI_TEST_MODE && reloadingReadyShader)
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_TEST SKY_SHADER_RELOAD_INVALIDATION_VERIFIED oldUniformsCleared=true readyDisabled=true");
             verifyRenderThreshold();
             event.registerShader(
                 new ShaderInstance(event.getResourceProvider(),
@@ -193,6 +200,7 @@ public final class RiftSkyRenderer {
                     shader=loaded;
                     if(!cacheShaderUniforms(loaded)) {
                         shaderReady=false;
+                        shaderReloadAwaitingDraw=false;
                         com.mojang.logging.LogUtils.getLogger().error(
                             "BLACK FREQUENCY: sky shader is missing a required animation uniform");
                         return;
@@ -201,9 +209,12 @@ public final class RiftSkyRenderer {
                     com.mojang.logging.LogUtils.getLogger().info("BLACK_FREQUENCY_SHADER_READY sky_rift");
                     if(CI_TEST_MODE) {
                         com.mojang.logging.LogUtils.getLogger().info(
-                            "BLACK_FREQUENCY_TEST SKY_SHADER_UNIFORM_CACHE_VERIFIED strength=true green=true time=true reloadSafe=true");
+                            "BLACK_FREQUENCY_TEST SKY_SHADER_UNIFORM_CACHE_VERIFIED strength=true green=true time=true");
                         com.mojang.logging.LogUtils.getLogger().info(
                             "BLACK_FREQUENCY_TEST SKY_SHADER_READY_STATE_VERIFIED");
+                        if(reloadingReadyShader)
+                            com.mojang.logging.LogUtils.getLogger().info(
+                                "BLACK_FREQUENCY_TEST SKY_SHADER_RELOAD_REBOUND_VERIFIED uniforms=true ready=true");
                     }
                 });
         }
@@ -290,6 +301,11 @@ public final class RiftSkyRenderer {
             }
             // The smoke-test marker means the draw call returned and the depth
             // contract was restored; entering AFTER_SKY alone is not a successful pass.
+            if(CI_TEST_MODE && depthAwareDrawSubmitted && shaderReloadAwaitingDraw) {
+                shaderReloadAwaitingDraw=false;
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_TEST SKY_SHADER_RELOAD_POST_DRAW_VERIFIED stage=after_weather depthRestored=true");
+            }
             if(CI_TEST_MODE && depthAwareDrawSubmitted && !firstDepthAwareFrameLogged) {
                 firstDepthAwareFrameLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
