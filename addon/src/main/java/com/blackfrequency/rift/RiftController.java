@@ -1412,6 +1412,10 @@ public final class RiftController {
 
         net.minecraft.world.phys.Vec3 eye=new net.minecraft.world.phys.Vec3(
             playerX,playerY+CI_BEACON_PLAYER_EYE_HEIGHT,playerZ);
+        double eyeToBeaconDistanceSquared=ciEyeDistanceSquaredToBlock(eye,beacon);
+        double maxInteractionDistanceSquared=CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE;
+        if(!Double.isFinite(eyeToBeaconDistanceSquared)
+            || eyeToBeaconDistanceSquared>maxInteractionDistanceSquared) return false;
         net.minecraft.world.phys.Vec3 target=net.minecraft.world.phys.Vec3.atCenterOf(beacon);
         if(!fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ)))
             return false;
@@ -1447,6 +1451,15 @@ public final class RiftController {
         return horizontal*horizontal+vertical*vertical;
     }
 
+    /** Uses the same eye-to-block-AABB metric as the real beacon interaction guard. */
+    private static double ciBeaconPadEyeDistanceSquared() {
+        net.minecraft.world.phys.Vec3 eye=new net.minecraft.world.phys.Vec3(
+            .5D+CI_BEACON_PAD_STANDOFF,
+            CI_BEACON_PAD_FLOOR_Y_OFFSET+CI_BEACON_PAD_PLAYER_Y_OFFSET+CI_BEACON_PLAYER_EYE_HEIGHT,
+            .5D);
+        return ciEyeDistanceSquaredToBlock(eye,new BlockPos(0,0,0));
+    }
+
     private static double ciBeaconSightlineHeightAtProgress(double horizontalProgress) {
         double horizontal=CI_BEACON_PAD_STANDOFF;
         if(!Double.isFinite(horizontal) || horizontal<=0.0D
@@ -1467,6 +1480,8 @@ public final class RiftController {
 
     private static void verifyCiBeaconPadProfile() {
         double distanceSquared=ciBeaconPadDistanceSquared();
+        double eyeToAabbDistanceSquared=ciBeaconPadEyeDistanceSquared();
+        double maxInteractionDistanceSquared=CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE;
         double beaconEntryY=ciBeaconSightlineHeightAtBeaconFace();
         double padInnerFaceY=ciBeaconSightlineHeightAtPadInnerFace();
         if(CI_BEACON_PAD_FLOOR_Y_OFFSET!=0
@@ -1485,7 +1500,10 @@ public final class RiftController {
             || ciBeaconPadAlongX(Integer.MIN_VALUE,0,Integer.MAX_VALUE,0)
             || !Double.isFinite(distanceSquared)
             || Math.abs(distanceSquared-9.25D)>1.0E-9D
-            || distanceSquared>CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE
+            || distanceSquared>maxInteractionDistanceSquared
+            || !Double.isFinite(eyeToAabbDistanceSquared)
+            || Math.abs(eyeToAabbDistanceSquared-8.8744D)>1.0E-9D
+            || eyeToAabbDistanceSquared>maxInteractionDistanceSquared
             || !Double.isFinite(beaconEntryY) || !(beaconEntryY>0.0D && beaconEntryY<1.0D)
             || !Double.isFinite(padInnerFaceY)
             || !(padInnerFaceY>CI_BEACON_PAD_FLOOR_Y_OFFSET+1.0D))
@@ -1494,6 +1512,8 @@ public final class RiftController {
             CI_BEACON_PAD_FLOOR_Y_OFFSET,CI_BEACON_PAD_PLAYER_Y_OFFSET,CI_BEACON_PAD_LATERAL_RADIUS,
             CI_BEACON_PAD_FIRST_SOLID_ROW,CI_BEACON_PAD_GAP_ROW,CI_BEACON_PAD_LAST_SOLID_ROW,
             CI_BEACON_PAD_STANDOFF,distanceSquared,padInnerFaceY,beaconEntryY);
+        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_SAFE_PAD_EYE_REACH_VERIFIED distanceSquared={} maxDistanceSquared={} withinReach=true",
+            eyeToAabbDistanceSquared,maxInteractionDistanceSquared);
         verifyFissureRayChunkTraversalProfile();
         verifyCiBeaconPadSignSelection();
         verifyCiBeaconBreakReachGeometry();
