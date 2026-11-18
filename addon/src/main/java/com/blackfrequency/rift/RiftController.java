@@ -69,6 +69,11 @@ public final class RiftController {
         ? Math.max(1L, Math.min(2400L, Long.getLong("blackfrequency.ciTickStep", 2400L))) : 1L;
     // Shared with the client mesh so particles and the rendered ground scar use identical bounds.
     private static final int RADIUS = RiftGeometry.RADIUS;
+    // Keep the anomaly's outer 16-block envelope, but ease force to zero with a C1-continuous curve.
+    private static final double GRAVITY_ANOMALY_FADE_WIDTH=16.0D;
+    private static final double GRAVITY_ANOMALY_OUTER_RADIUS=RADIUS+GRAVITY_ANOMALY_FADE_WIDTH;
+    // Smoothstep(0.125) preserves the old linear fade's particle cutoff distance.
+    private static final double GRAVITY_ANOMALY_PARTICLE_MIN_FADE=0.04296875D;
     private static final String NATURAL_BEACON_ID_TAG = "blackfrequency:natural_recovery_beacon";
     private static final int FISSURE_ARM_COUNT = RiftGeometry.FISSURE_ARM_COUNT;
     private static final int FISSURE_SEGMENTS_PER_ARM = RiftGeometry.FISSURE_SEGMENTS_PER_ARM;
@@ -704,6 +709,15 @@ public final class RiftController {
         return applyRiftGravityImpulse(level,s,player,1.0D);
     }
 
+    /** Smooth, bounded radial falloff shared by player impulses and their visual cues. */
+    private static double gravityAnomalyRadialFade(double distanceSquared) {
+        if(!Double.isFinite(distanceSquared) || distanceSquared<0.0D) return 0.0D;
+        double distance=Math.sqrt(distanceSquared);
+        double progress=(GRAVITY_ANOMALY_OUTER_RADIUS-distance)/GRAVITY_ANOMALY_FADE_WIDTH;
+        double t=Math.max(0.0D,Math.min(1.0D,progress));
+        return t*t*(3.0D-2.0D*t);
+    }
+
     private static boolean applyRiftGravityImpulse(
             ServerLevel level,State s,net.minecraft.server.level.ServerPlayer player,double strength) {
         if(!shouldApplyRiftGravity(player) || !Double.isFinite(strength) || strength<=0.0D) return false;
@@ -711,10 +725,9 @@ public final class RiftController {
         double px=player.getX(),pz=player.getZ();
         double ax=px-s.x,ay=player.getY()-level.getSeaLevel(),az=pz-s.z;
         double distanceSquared=ax*ax+ay*ay+az*az;
-        final double outerRadius=RADIUS+16.0;
-        if(distanceSquared>=outerRadius*outerRadius) return false;
-        double fade=Math.min(1.0,Math.max(0.0,
-            (outerRadius-Math.sqrt(distanceSquared))/16.0));
+        if(distanceSquared>=GRAVITY_ANOMALY_OUTER_RADIUS*GRAVITY_ANOMALY_OUTER_RADIUS) return false;
+        double fade=gravityAnomalyRadialFade(distanceSquared);
+        if(fade<=0.0D) return false;
         double zone=gravityAnomalyField(px,pz,s.finaleTicks);
         if(zone>.42) {
             var v=player.getDeltaMovement();
@@ -2635,6 +2648,41 @@ public final class RiftController {
         return 1.0D-eased;
     }
 
+    private static void verifyGravityAnomalyRadialFade() {
+        double[] radii={0.0D,RADIUS,RADIUS+4.0D,RADIUS+8.0D,
+            RADIUS+12.0D,RADIUS+14.0D,GRAVITY_ANOMALY_OUTER_RADIUS};
+        double[] expected={1.0D,1.0D,.84375D,.5D,.15625D,.04296875D,0.0D};
+        for(int i=0;i<radii.length;i++) {
+            double actual=gravityAnomalyRadialFade(radii[i]*radii[i]);
+            if(!Double.isFinite(actual) || Math.abs(actual-expected[i])>1.0E-12D)
+                throw new IllegalStateException("CI gravity anomaly radial falloff profile regression at radius "+radii[i]);
+        }
+        double previous=1.0D;
+        for(int i=0;i<=256;i++) {
+            double radius=GRAVITY_ANOMALY_OUTER_RADIUS*i/256.0D;
+            double actual=gravityAnomalyRadialFade(radius*radius);
+            if(!Double.isFinite(actual) || actual<0.0D || actual>1.0D
+                || actual>previous+1.0E-12D)
+                throw new IllegalStateException("CI gravity anomaly radial falloff monotonicity regression");
+            previous=actual;
+        }
+        double linearParticleCutoff=.125D;
+        double smoothParticleCutoff=linearParticleCutoff*linearParticleCutoff
+            *(3.0D-2.0D*linearParticleCutoff);
+        boolean invalidNeutral=gravityAnomalyRadialFade(-1.0D)==0.0D
+            && gravityAnomalyRadialFade(Double.NaN)==0.0D
+            && gravityAnomalyRadialFade(Double.POSITIVE_INFINITY)==0.0D
+            && gravityAnomalyRadialFade(Double.NEGATIVE_INFINITY)==0.0D;
+        if(!invalidNeutral
+            || Math.abs(GRAVITY_ANOMALY_PARTICLE_MIN_FADE-smoothParticleCutoff)>1.0E-12D
+            || gravityAnomalyRadialFade(Math.nextUp(GRAVITY_ANOMALY_OUTER_RADIUS
+                *GRAVITY_ANOMALY_OUTER_RADIUS))!=0.0D)
+            throw new IllegalStateException("CI gravity anomaly radial falloff boundary/particle regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_RADIAL_FALLOFF_VERIFIED innerRadius={} outerRadius={} width={} curve=smoothstep midpoint=0.5 monotonic=true invalidNeutral=true particleThreshold={}",
+            (double)RADIUS,GRAVITY_ANOMALY_OUTER_RADIUS,GRAVITY_ANOMALY_FADE_WIDTH,
+            GRAVITY_ANOMALY_PARTICLE_MIN_FADE);
+    }
+
     private static void verifyRestorationGravityFade() {
         int[] ticks={-1,0,10,20,30,40,Integer.MAX_VALUE};
         double[] expected={1.0D,1.0D,.84375D,.5D,.15625D,0.0D,0.0D};
@@ -3165,6 +3213,7 @@ public final class RiftController {
         verifyBoundedSinkDrag();
         verifyRiftGravityEligibility();
         verifyGravityAnomalyField();
+        verifyGravityAnomalyRadialFade();
         verifyRestorationGravityFade();
         verifyGravityAnomalyParticlePalette();
         verifyPendingSnapshotPersistence();
@@ -4344,12 +4393,10 @@ public final class RiftController {
                 double ax=player.getX()-s.x, ay=player.getY()-level.getSeaLevel(), az=player.getZ()-s.z;
                 // Mirror the impulse falloff at the outer boundary. Avoid
                 // sending a full particle burst where gravity is almost zero.
-                final double outerRadius=RADIUS+16.0;
                 double distanceSquared=ax*ax+ay*ay+az*az;
-                if(distanceSquared>=outerRadius*outerRadius) continue;
-                double fade=Math.min(1.0,Math.max(0.0,
-                    (outerRadius-Math.sqrt(distanceSquared))/16.0));
-                if(fade<.125) continue;
+                if(distanceSquared>=GRAVITY_ANOMALY_OUTER_RADIUS*GRAVITY_ANOMALY_OUTER_RADIUS) continue;
+                double fade=gravityAnomalyRadialFade(distanceSquared);
+                if(fade<GRAVITY_ANOMALY_PARTICLE_MIN_FADE) continue;
                 // Match the server-side gravity field so particles mark actual
                 // lift/sink zones instead of an unrelated moving pattern.
                 double zone=gravityAnomalyField(player.getX(),player.getZ(),s.finaleTicks);
