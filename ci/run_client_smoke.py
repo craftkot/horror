@@ -1247,10 +1247,12 @@ def capture_test_world():
                     column_counts[x]+=1
         active=[x for x,count in enumerate(column_counts) if count>=6]
         if not active:
-            return {"left":0,"right":0,"width":0,"fraction":0.0,"centerOffset":float("inf")}
+            return {"left":0,"right":0,"width":0,"pixels":0,
+                    "fraction":0.0,"centerOffset":float("inf")}
         left,right=active[0],active[-1]
         title_width=right-left+1
         return {"left":left,"right":right,"width":title_width,
+                "pixels":sum(column_counts),
                 "fraction":title_width/width,
                 "centerOffset":abs((left+right)/2-width/2)}
 
@@ -1258,19 +1260,35 @@ def capture_test_world():
         return (200<=metrics["width"]<=frame_width*.78
                 and metrics["centerOffset"]<=frame_width*.08)
 
+    def completion_title_visible(metrics,frame_width):
+        # A centered thin fissure can span the title width without being a title.
+        # Combine the existing width/centering test with a pixel-density floor.
+        return (completion_title_width_passes(metrics,frame_width)
+                and metrics["pixels"]>=5000)
+
     from PIL import Image,ImageDraw
     _compact_title_fixture=Image.new("RGB",(1280,720),(0,0,0))
     ImageDraw.Draw(_compact_title_fixture).rectangle((300,240,980,320),fill=(86,20,197))
     _wide_title_fixture=Image.new("RGB",(1280,720),(0,0,0))
     ImageDraw.Draw(_wide_title_fixture).rectangle((50,240,1230,320),fill=(86,20,197))
     _blank_title_fixture=Image.new("RGB",(1280,720),(0,0,0))
-    if (not completion_title_width_passes(
-            measure_completion_title_width(_compact_title_fixture),1280)
-            or completion_title_width_passes(
-                measure_completion_title_width(_wide_title_fixture),1280)
-            or completion_title_width_passes(
-                measure_completion_title_width(_blank_title_fixture),1280)):
-        raise RuntimeError("BLACK FREQUENCY compact completion-title width classifier regression")
+    _sparse_fissure_fixture=Image.new("RGB",(1280,720),(0,0,0))
+    ImageDraw.Draw(_sparse_fissure_fixture).line(
+        (280,280,1000,280),fill=(86,20,197),width=6)
+    _compact_title_metrics=measure_completion_title_width(_compact_title_fixture)
+    _wide_title_metrics=measure_completion_title_width(_wide_title_fixture)
+    _blank_title_metrics=measure_completion_title_width(_blank_title_fixture)
+    _sparse_fissure_metrics=measure_completion_title_width(_sparse_fissure_fixture)
+    if (not completion_title_width_passes(_compact_title_metrics,1280)
+            or completion_title_width_passes(_wide_title_metrics,1280)
+            or completion_title_width_passes(_blank_title_metrics,1280)
+            or not completion_title_visible(_compact_title_metrics,1280)
+            or completion_title_visible(_blank_title_metrics,1280)
+            or completion_title_visible(_sparse_fissure_metrics,1280)
+            or not completion_title_width_passes(_sparse_fissure_metrics,1280)
+            or _compact_title_metrics["pixels"]<5000
+            or _sparse_fissure_metrics["pixels"]>=5000):
+        raise RuntimeError("BLACK FREQUENCY completion-title density/fissure classifier regression")
     print("WORLD_CAPTURE: completion title width classifier verified",flush=True)
 
 
@@ -1472,14 +1490,39 @@ def capture_test_world():
             print("WORLD_CAPTURE_FAIL: completion title start time was not observed",flush=True)
             return False
         title_clear_at=completion_title_started_at+52/20.0+.25
-        remaining_title_time=title_clear_at-time.monotonic()
-        if remaining_title_time>0:
-            time.sleep(remaining_title_time)
-        print("WORLD_CAPTURE: completion title cleared before pre-mining beacon frame",flush=True)
-        snap("beacon-before-left-click.png")
-        if not (shots/"beacon-before-left-click.png").is_file():
-            print("WORLD_CAPTURE_FAIL: pre-mining beacon screenshot was not captured",flush=True)
+        title_capture_deadline=title_clear_at+5.0
+        title_cleared=False
+        title_attempts=0
+        last_title_metrics=None
+        while time.monotonic()<title_capture_deadline and p.poll() is None:
+            remaining_title_time=title_clear_at-time.monotonic()
+            if remaining_title_time>0:
+                time.sleep(min(.1,remaining_title_time))
+                continue
+            snap("beacon-before-left-click.png")
+            try:
+                with Image.open(shots/"beacon-before-left-click.png") as frame:
+                    title_metrics=measure_completion_title_width(frame.convert("RGB"))
+                    frame_width=frame.width
+            except (OSError,ValueError) as error:
+                print("WORLD_CAPTURE: pre-mining frame not readable yet",str(error),flush=True)
+                time.sleep(.1)
+                continue
+            title_attempts+=1
+            last_title_metrics=title_metrics
+            if not completion_title_visible(title_metrics,frame_width):
+                title_cleared=True
+                break
+            if title_attempts==1 or title_attempts%10==0:
+                print("WORLD_CAPTURE: completion title still visible in pre-mining frame",
+                      title_metrics,flush=True)
+            time.sleep(.1)
+        if not title_cleared:
+            print("WORLD_CAPTURE_FAIL: completion title remained visible in pre-mining frame",
+                  {"attempts":title_attempts,"lastMetrics":last_title_metrics},flush=True)
             return False
+        print("WORLD_CAPTURE: completion title absent in pre-mining frame",
+              {"attempts":title_attempts,"metrics":last_title_metrics},flush=True)
         log_before=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else log_text
         marker_offset=len(log_before)
         focus_game()
