@@ -2475,20 +2475,39 @@ def capture_test_world():
             if not 1<=rebuild_interval<=20:
                 print(f"WORLD_CAPTURE_FAIL: ground mesh rebuild interval is outside the safe 1..20 tick range: {rebuild_interval}",flush=True)
                 return False
+            empty_rebuild_match=re.search(r"EMPTY_MESH_REBUILD_INTERVAL\\s*=\\s*(\\d+)L",rebuild_source)
+            if not empty_rebuild_match:
+                print("WORLD_CAPTURE_FAIL: empty-mesh rebuild backoff is missing",flush=True)
+                return False
+            empty_rebuild_interval=int(empty_rebuild_match.group(1))
+            if not rebuild_interval<empty_rebuild_interval<=80 or empty_rebuild_interval%rebuild_interval:
+                print(f"WORLD_CAPTURE_FAIL: empty-mesh rebuild backoff is unsafe: {empty_rebuild_interval}",flush=True)
+                return False
             rebuild_marker=f"BLACK_FREQUENCY_GROUND_MESH_REBUILD_PROFILE_VERIFIED verticalDelta=2 interval={rebuild_interval}"
             if rebuild_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: player-height cache invalidation self-check was not executed",flush=True)
+                return False
+            empty_rebuild_marker=(f"BLACK_FREQUENCY_GROUND_MESH_EMPTY_REBUILD_BACKOFF_VERIFIED "
+                                 f"populatedInterval={rebuild_interval} emptyInterval={empty_rebuild_interval} "
+                                 f"ratio={empty_rebuild_interval//rebuild_interval} immediateInvalidation=true")
+            if empty_rebuild_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: empty-mesh retry backoff self-check was not executed",flush=True)
+                return False
+            if ("long interval=hasSegments ? REBUILD_INTERVAL : EMPTY_MESH_REBUILD_INTERVAL;" not in rebuild_source
+                    or "!cachedSegments.isEmpty()" not in rebuild_source):
+                print("WORLD_CAPTURE_FAIL: empty-mesh backoff is not selected from the cached mesh state",flush=True)
                 return False
             overflow_marker=("BLACK_FREQUENCY_TEST GROUND_MESH_REBUILD_LONG_OVERFLOW_GUARD_VERIFIED "
                              "forwardExtreme=true nearMaxBefore=true nearMaxAt=true negativeClock=true backwardReset=true")
             if overflow_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: ground mesh rebuild interval overflow guard was not verified",flush=True)
                 return False
-            if ("previousTick<=Long.MAX_VALUE-REBUILD_INTERVAL" not in rebuild_source
-                    or "tick>=previousTick+REBUILD_INTERVAL" not in rebuild_source
-                    or "tick-previousTick>=REBUILD_INTERVAL" in rebuild_source):
+            if ("previousTick<=Long.MAX_VALUE-interval" not in rebuild_source
+                    or "tick>=previousTick+interval" not in rebuild_source
+                    or "tick-previousTick>=interval" in rebuild_source):
                 print("WORLD_CAPTURE_FAIL: ground mesh rebuild interval is not overflow-safe",flush=True)
                 return False
+            print(f"WORLD_CAPTURE: empty ground meshes retry every {empty_rebuild_interval} ticks; populated meshes every {rebuild_interval}",flush=True)
             if os.environ.get("BF_TEST_RESTORATION")=="1":
                 # A full fracture can reach 95,000 snapshots. Recovery restores at
                 # most 12 blocks per 20 TPS tick (~396s at the cap); leave headroom

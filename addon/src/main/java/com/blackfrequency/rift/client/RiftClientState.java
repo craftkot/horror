@@ -532,6 +532,10 @@ public final class RiftClientState {
         // Surface sampling may inspect a 40-block vertical window per unique column.
         // Rebuild twice per second; anchor and two-block vertical changes still invalidate immediately.
         private static final long REBUILD_INTERVAL=10L;
+        // Empty meshes often mean the camera is outside the bounded surface-search window
+        // or nearby arm chunks have not arrived yet. Retry less often; anchor/height changes
+        // still invalidate immediately and populated meshes keep the responsive 10-tick cadence.
+        private static final long EMPTY_MESH_REBUILD_INTERVAL=40L;
         private static final int GROUND_REBUILD_VERTICAL_DELTA=2;
         // Reuse these render-thread-only scratch objects between mesh rebuilds.
         // fastutil clear() retains the backing arrays, avoiding a fresh map allocation every 10 ticks.
@@ -1187,12 +1191,16 @@ public final class RiftClientState {
         }
 
         private static boolean shouldRebuild(long tick,long previousTick,boolean anchorChanged,
-                int referenceY,int previousReferenceY) {
+                int referenceY,int previousReferenceY,boolean hasSegments) {
+            // Empty meshes are expensive to rediscover when the camera is above the
+            // bounded surface window or arm chunks are still absent. Back off only
+            // those retries; a populated mesh keeps the responsive normal interval.
+            long interval=hasSegments ? REBUILD_INTERVAL : EMPTY_MESH_REBUILD_INTERVAL;
             // Avoid signed overflow when a corrupted world clock jumps across the
             // long range. A saturated previous tick cannot have another interval.
             boolean intervalElapsed=tick>=previousTick
-                && previousTick<=Long.MAX_VALUE-REBUILD_INTERVAL
-                && tick>=previousTick+REBUILD_INTERVAL;
+                && previousTick<=Long.MAX_VALUE-interval
+                && tick>=previousTick+interval;
             return anchorChanged || previousTick==Long.MIN_VALUE || tick<previousTick
                 || intervalElapsed
                 || previousReferenceY==Integer.MIN_VALUE
@@ -1201,22 +1209,35 @@ public final class RiftClientState {
 
         private static void verifyGroundRebuildProfile() {
             if(rebuildProfileLogged) return;
-            boolean stable=!shouldRebuild(101L,100L,false,65,65);
-            boolean oneBlockStable=!shouldRebuild(101L,100L,false,66,65);
-            boolean twoBlockMove=shouldRebuild(101L,100L,false,67,65);
-            boolean teleport=shouldRebuild(101L,100L,false,80,65);
-            boolean sixTickStable=!shouldRebuild(106L,100L,false,65,65);
-            boolean beforeInterval=!shouldRebuild(109L,100L,false,65,65);
-            boolean interval=shouldRebuild(110L,100L,false,65,65);
-            boolean anchor=shouldRebuild(101L,100L,true,65,65);
-            boolean extremeForward=shouldRebuild(Long.MAX_VALUE,-1L,false,65,65);
-            boolean nearMaxBeforeInterval=!shouldRebuild(Long.MAX_VALUE-1L,Long.MAX_VALUE-5L,false,65,65);
-            boolean nearMaxAtInterval=shouldRebuild(Long.MAX_VALUE,Long.MAX_VALUE-10L,false,65,65);
-            boolean negativeClockInterval=shouldRebuild(-1L,-11L,false,65,65);
-            boolean backwardExtremeReset=shouldRebuild(Long.MIN_VALUE+5L,Long.MAX_VALUE-5L,false,65,65);
+            boolean stable=!shouldRebuild(101L,100L,false,65,65,true);
+            boolean oneBlockStable=!shouldRebuild(101L,100L,false,66,65,true);
+            boolean twoBlockMove=shouldRebuild(101L,100L,false,67,65,true);
+            boolean teleport=shouldRebuild(101L,100L,false,80,65,true);
+            boolean sixTickStable=!shouldRebuild(106L,100L,false,65,65,true);
+            boolean beforeInterval=!shouldRebuild(109L,100L,false,65,65,true);
+            boolean interval=shouldRebuild(110L,100L,false,65,65,true);
+            boolean anchor=shouldRebuild(101L,100L,true,65,65,true);
+            boolean extremeForward=shouldRebuild(Long.MAX_VALUE,-1L,false,65,65,true);
+            boolean nearMaxBeforeInterval=!shouldRebuild(Long.MAX_VALUE-1L,Long.MAX_VALUE-5L,false,65,65,true);
+            boolean nearMaxAtInterval=shouldRebuild(Long.MAX_VALUE,Long.MAX_VALUE-10L,false,65,65,true);
+            boolean negativeClockInterval=shouldRebuild(-1L,-11L,false,65,65,true);
+            boolean backwardExtremeReset=shouldRebuild(Long.MIN_VALUE+5L,Long.MAX_VALUE-5L,false,65,65,true);
+            boolean emptyStable=!shouldRebuild(101L,100L,false,65,65,false);
+            boolean emptyBeforeInterval=!shouldRebuild(139L,100L,false,65,65,false);
+            boolean emptyInterval=shouldRebuild(140L,100L,false,65,65,false);
+            boolean emptyHeightMove=shouldRebuild(101L,100L,false,67,65,false);
+            boolean emptyAnchor=shouldRebuild(101L,100L,true,65,65,false);
+            boolean emptyExtremeForward=shouldRebuild(Long.MAX_VALUE,-1L,false,65,65,false);
+            boolean emptyNearMaxBefore=!shouldRebuild(Long.MAX_VALUE-1L,Long.MAX_VALUE-5L,false,65,65,false);
+            boolean emptyNearMaxAt=shouldRebuild(Long.MAX_VALUE,Long.MAX_VALUE-40L,false,65,65,false);
+            boolean emptyNegativeClock=shouldRebuild(-1L,-41L,false,65,65,false);
+            boolean emptyBackwardReset=shouldRebuild(Long.MIN_VALUE+5L,Long.MAX_VALUE-5L,false,65,65,false);
             if(!(stable && oneBlockStable && twoBlockMove && teleport && sixTickStable
                 && beforeInterval && interval && anchor && extremeForward && nearMaxBeforeInterval
-                && nearMaxAtInterval && negativeClockInterval && backwardExtremeReset))
+                && nearMaxAtInterval && negativeClockInterval && backwardExtremeReset
+                && emptyStable && emptyBeforeInterval && emptyInterval && emptyHeightMove && emptyAnchor
+                && emptyExtremeForward && emptyNearMaxBefore && emptyNearMaxAt
+                && emptyNegativeClock && emptyBackwardReset))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh rebuild profile regression");
             rebuildProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
@@ -1225,6 +1246,9 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_REBUILD_LONG_OVERFLOW_GUARD_VERIFIED forwardExtreme={} nearMaxBefore={} nearMaxAt={} negativeClock={} backwardReset={}",
                 extremeForward,nearMaxBeforeInterval,nearMaxAtInterval,negativeClockInterval,backwardExtremeReset);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_EMPTY_REBUILD_BACKOFF_VERIFIED populatedInterval={} emptyInterval={} ratio={} immediateInvalidation=true",
+                REBUILD_INTERVAL,EMPTY_MESH_REBUILD_INTERVAL,EMPTY_MESH_REBUILD_INTERVAL/REBUILD_INTERVAL);
         }
 
         private static boolean isSafeCameraPosition(Vec3 camera) {
@@ -2000,7 +2024,8 @@ public final class RiftClientState {
             boolean verticalWindowChanged=previousReferenceY!=Integer.MIN_VALUE
                 && Math.abs((long)surfaceReferenceY-previousReferenceY)>=GROUND_REBUILD_VERTICAL_DELTA;
             if(anchorChanged) emptyMeshLogged=false;
-            if(shouldRebuild(tick,cachedTick,anchorChanged,surfaceReferenceY,cachedReferenceY)) {
+            if(shouldRebuild(tick,cachedTick,anchorChanged,surfaceReferenceY,cachedReferenceY,
+                    !cachedSegments.isEmpty())) {
                 GroundMesh mesh=buildSegments(level,worldAnchorX,worldAnchorZ,surfaceReferenceY);
                 cachedSegments=mesh.segments();
                 cachedArmCount=mesh.activeArms();
