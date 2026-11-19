@@ -1352,6 +1352,18 @@ public final class RiftClientState {
             return 1.0D-smooth;
         }
 
+        // Fade each short mesh segment from its own midpoint, not from the distant rift anchor.
+        // This keeps the nearest arms readable while distant arms disappear independently.
+        private static double groundSegmentDistanceFade(GroundSegment segment,Vec3 camera) {
+            if(segment==null || camera==null) return 0.0D;
+            GroundPoint a=segment.a();
+            GroundPoint b=segment.b();
+            double dx=(a.x()+b.x())*.5D-camera.x;
+            double dy=(a.y()+b.y())*.5D-camera.y;
+            double dz=(a.z()+b.z())*.5D-camera.z;
+            return groundDistanceFade(dx*dx+dy*dy+dz*dz);
+        }
+
         // A vertically distant camera should release the sampled ClientLevel and
         // mesh just like a camera that leaves the horizontal radius.
         private static boolean clearGeometryCacheIfOutsideGroundRenderRange(
@@ -1425,6 +1437,25 @@ public final class RiftClientState {
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh distance fade regression");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_DISTANCE_FADE_VERIFIED start=48 end=64 midpoint=0.5 monotonic=true invalidRejected=true");
+            GroundSegment nearSegment=new GroundSegment(new GroundPoint(40.0D,64.0D,0.0D),
+                new GroundPoint(42.0D,64.0D,0.0D),1.0D,0.0D,GROUND_SAMPLES[0],1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
+            GroundSegment midSegment=new GroundSegment(new GroundPoint(55.0D,64.0D,0.0D),
+                new GroundPoint(57.0D,64.0D,0.0D),1.0D,0.0D,GROUND_SAMPLES[0],1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
+            GroundSegment farSegment=new GroundSegment(new GroundPoint(63.0D,64.0D,0.0D),
+                new GroundPoint(65.0D,64.0D,0.0D),1.0D,0.0D,GROUND_SAMPLES[0],1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
+            Vec3 fadeCamera=new Vec3(0.0D,64.0D,0.0D);
+            double nearSegmentFade=groundSegmentDistanceFade(nearSegment,fadeCamera);
+            double midSegmentFade=groundSegmentDistanceFade(midSegment,fadeCamera);
+            double farSegmentFade=groundSegmentDistanceFade(farSegment,fadeCamera);
+            double invalidSegmentFade=groundSegmentDistanceFade(nearSegment,
+                new Vec3(Double.NaN,64.0D,0.0D));
+            if(nearSegmentFade!=1.0D || !(midSegmentFade>0.0D && midSegmentFade<1.0D)
+                || farSegmentFade!=0.0D || invalidSegmentFade!=0.0D
+                || !(nearSegmentFade>midSegmentFade && midSegmentFade>farSegmentFade))
+                throw new IllegalStateException("BLACK FREQUENCY ground mesh segment distance fade regression");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_SEGMENT_DISTANCE_FADE_VERIFIED metric=midpoint start=48 end=64 near={} mid={} far={} invalidRejected=true monotonic=true",
+                nearSegmentFade,midSegmentFade,farSegmentFade);
             verticallyCulled=true;
             verticallyCulledAnchorX=1;
             verticallyCulledAnchorZ=2;
@@ -2146,8 +2177,6 @@ public final class RiftClientState {
                 return;
             }
 
-            double rangeFade=groundDistanceFade(cameraDistanceSquared);
-            if(rangeFade<=0.0D) return;
             Matrix4f matrix=event.getPoseStack().last().pose();
             BufferBuilder builder=Tesselator.getInstance().getBuilder();
             RenderSystem.enableBlend();
@@ -2160,7 +2189,7 @@ public final class RiftClientState {
             try {
                 builder.begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.POSITION_COLOR);
                 double time=(double)tick+boundedRenderPartialTick(event.getPartialTick());
-                float boundedStrength=(float)(Math.min(1.0F,strength)*rangeFade);
+                float boundedStrength=(float)Math.min(1.0F,strength);
                 // Three time bases are shared by every segment. Cached phase sine/cosine
                 // values turn per-segment Math.sin calls into multiply-add pairs.
                 double waveTime=time*.14D;
@@ -2174,6 +2203,9 @@ public final class RiftClientState {
                     // Break the whole cross-section occasionally; keeping only a dark ribbon
                     // through every gap makes the fissure read like a cable on the terrain.
                     if(sample.coreSegmentGap()) continue;
+                    double segmentFade=groundSegmentDistanceFade(segment,camera);
+                    if(segmentFade<=0.0D) continue;
+                    float segmentStrength=boundedStrength*(float)segmentFade;
                     double wave=.5D+.5D*(waveSin*sample.phaseCos()+waveCos*sample.phaseSin());
                     // A slow travelling pulse changes width independently along
                     // the seam; endpoint taper keeps each arm from ending bluntly.
@@ -2182,12 +2214,12 @@ public final class RiftClientState {
                     double halfWidth=Math.max(GROUND_MIN_HALF_WIDTH,
                         GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE*wave+widthFlicker);
                     float pulse=(float)(.78D+.22D*(pulseSin*sample.phaseCos()+pulseCos*sample.phaseSin()));
-                    float alpha=boundedStrength*pulse;
+                    float alpha=segmentStrength*pulse;
                     int glowAlphaChannel=colorChannel(alpha*GROUND_GLOW_ALPHA);
                     int coreAlphaChannel=colorChannel(alpha*.94F);
                     float corePulse=(float)boundedCorePulse(wave);
                     int filamentAlphaChannel=colorChannel(alpha*corePulse);
-                    float edgeAlpha=Math.min(1.0F,boundedStrength*(.94F*pulse+.06F));
+                    float edgeAlpha=Math.min(1.0F,segmentStrength*(.94F*pulse+.06F));
                     int edgeAlphaChannel=colorChannel(edgeAlpha);
                     double edgeOffsetSkew=sample.coreSkew()*GROUND_EDGE_OFFSET_SKEW_SCALE;
                     double leftEdgeOffset=halfWidth*GROUND_EDGE_OFFSET_SCALE*(1.0D+edgeOffsetSkew);
