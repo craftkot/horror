@@ -95,12 +95,7 @@ public final class RiftController {
         IDLE_BEACON_PARTICLE_PACKET_RANGE_SQR;
     // Recovery effects use cached blue-violet Dust and bounded, deterministic pulses.
     private static final int RESTORE_RING_INTERVAL_TICKS = 20;
-    // Keep the success title brief so it marks recovery without hiding the physical beacon.
-    private static final int RESTORE_TITLE_FADE_IN_TICKS=8;
-    private static final int RESTORE_TITLE_STAY_TICKS=32;
-    private static final int RESTORE_TITLE_FADE_OUT_TICKS=12;
-    private static final String RESTORE_SUCCESS_TITLE="МИР СПАСЁН";
-    private static final String RESTORE_PARTIAL_TITLE="ЕСТЬ ПРОПУСКИ";
+    // Recovery completion stays in the action bar; the physical beacon remains unobstructed.
     private static final int RESTORE_RING_PARTICLE_COUNT = 24;
     private static final int RESTORE_RISING_SPARK_PARTICLE_COUNT = 4;
     private static final int RESTORE_HELIX_INTERVAL_TICKS = 8;
@@ -3141,18 +3136,31 @@ public final class RiftController {
         verifyIdleBeaconParticleAudienceBounds();
     }
 
+    private static Component restorationCompletionMessage(int restoredBlocks,int skippedOccupied,int skippedInvalid) {
+        if(restoredBlocks<0 || skippedOccupied<0 || skippedInvalid<0)
+            throw new IllegalArgumentException("Recovery completion counters cannot be negative");
+        long skipped=(long)skippedOccupied+(long)skippedInvalid;
+        String status=skipped==0L ? "✦ МИР СТАБИЛИЗИРОВАН" : "✦ ВОССТАНОВЛЕНИЕ НЕПОЛНО";
+        return recoveryViolet(status+" — восстановлено "+restoredBlocks+" блоков; пропущено "+skipped);
+    }
+
     private static void verifyRecoveryUiPalette() {
-        Component title=recoveryViolet(RESTORE_SUCCESS_TITLE);
-        Component partialTitle=recoveryViolet(RESTORE_PARTIAL_TITLE);
-        Component actionBar=recoveryViolet("✦ СТАБИЛИЗАЦИЯ 100%");
-        if(!hasRecoveryViolet(title) || !hasRecoveryViolet(partialTitle) || !hasRecoveryViolet(actionBar)
-            || !RESTORE_SUCCESS_TITLE.equals(title.getString())
-            || !RESTORE_PARTIAL_TITLE.equals(partialTitle.getString())
-            || RESTORE_SUCCESS_TITLE.length()>10 || RESTORE_PARTIAL_TITLE.length()>13)
-            throw new IllegalStateException("CI recovery UI must use compact deep-violet completion titles");
+        Component success=restorationCompletionMessage(160,0,0);
+        Component partial=restorationCompletionMessage(159,2,1);
+        boolean invalidRejected=false;
+        try {
+            restorationCompletionMessage(-1,0,0);
+        } catch(IllegalArgumentException expected) {
+            invalidRejected=true;
+        }
+        if(!hasRecoveryViolet(success) || !hasRecoveryViolet(partial)
+            || !success.getString().contains("МИР СТАБИЛИЗИРОВАН")
+            || !partial.getString().contains("ВОССТАНОВЛЕНИЕ НЕПОЛНО")
+            || !partial.getString().contains("пропущено 3")
+            || !invalidRejected)
+            throw new IllegalStateException("CI recovery completion action bar must be violet, accurate and reject invalid counters");
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_UI_PALETTE_VERIFIED rgb=5714c7 legacyFormatting=false");
-        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_COMPLETION_TITLE_WIDTH_VERIFIED successChars={} partialChars={} maxChars=13",
-            RESTORE_SUCCESS_TITLE.length(),RESTORE_PARTIAL_TITLE.length());
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_ACTIONBAR_ONLY_VERIFIED success=true partial=true titlePackets=false");
     }
 
     private static void verifyRestorationParticleProfile() {
@@ -3170,9 +3178,6 @@ public final class RiftController {
             && !shouldEmitRestoreAudiencePulse(-RESTORE_RING_INTERVAL_TICKS)
             && !shouldEmitRestoreBlockCue(0)
             && !shouldEmitRestoreBlockCue(-RESTORE_BLOCK_CUE_INTERVAL);
-        boolean completionTitleTiming=RESTORE_TITLE_FADE_IN_TICKS==8
-            && RESTORE_TITLE_STAY_TICKS==32 && RESTORE_TITLE_FADE_OUT_TICKS==12
-            && RESTORE_TITLE_FADE_IN_TICKS+RESTORE_TITLE_STAY_TICKS+RESTORE_TITLE_FADE_OUT_TICKS<=60;
         boolean boundedCounts=RESTORE_RING_PARTICLE_COUNT==24
             && RESTORE_RISING_SPARK_PARTICLE_COUNT==4
             && RESTORE_HELIX_PARTICLE_COUNT==16
@@ -3212,7 +3217,7 @@ public final class RiftController {
             restorationCadenceTick(Integer.MAX_VALUE,3L),true);
         if(!(ringInitial && ringBoundary && ringBetween && helixBoundary && helixBetween
             && blockBoundary && blockBetween && blockNext && invalidTicks
-            && completionTitleTiming && boundedCounts && cachedPalette && boundedRestoreDust && ringClearsBeaconBlock
+            && boundedCounts && cachedPalette && boundedRestoreDust && ringClearsBeaconBlock
             && playerScanInitial && playerScanInitialWithoutBeacon
             && playerScanBoundary && playerScanBetween && playerScanWithoutBeacon
             && playerScanInvalid && playerScanSaturated))
@@ -3222,9 +3227,6 @@ public final class RiftController {
             RESTORE_HELIX_PARTICLE_COUNT,RESTORE_HELIX_INTERVAL_TICKS,
             RESTORE_BLOCK_CUE_PARTICLE_COUNT,RESTORE_BLOCK_CUE_INTERVAL,
             RESTORE_AUDIENCE_PARTICLE_COUNT,RESTORE_RING_INTERVAL_TICKS);
-        LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_TITLE_TIMING_VERIFIED fadeIn={} stay={} fadeOut={} total={} packetBeforeTitle=true",
-            RESTORE_TITLE_FADE_IN_TICKS,RESTORE_TITLE_STAY_TICKS,RESTORE_TITLE_FADE_OUT_TICKS,
-            RESTORE_TITLE_FADE_IN_TICKS+RESTORE_TITLE_STAY_TICKS+RESTORE_TITLE_FADE_OUT_TICKS);
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_SIZE_VERIFIED baseScale={} accentScale={} audienceSpreadXZ={} audienceSpreadY={} cachedDust=true",
             RESTORE_VIOLET_DUST_SCALE,RESTORE_VIOLET_ACCENT_DUST_SCALE,
             RESTORE_AUDIENCE_SPREAD_XZ,RESTORE_AUDIENCE_SPREAD_Y);
@@ -4212,13 +4214,8 @@ public final class RiftController {
                 // Completion titles share the tested 3D radius with recovery particles.
                 if(!player.isAlive() || player.isRemoved() || player.isSpectator()
                     || !withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z)) continue;
-                player.displayClientMessage(recoveryViolet("✦ СТАБИЛИЗАЦИЯ 100% §7— восстановлено "+s.restoredBlocks+" блоков; пропущено "+s.skippedOccupied),true);
-                player.connection.send(new ClientboundSetTitlesAnimationPacket(
-                    RESTORE_TITLE_FADE_IN_TICKS,RESTORE_TITLE_STAY_TICKS,RESTORE_TITLE_FADE_OUT_TICKS));
-                player.connection.send(new ClientboundSetTitleTextPacket(recoveryViolet(
-                    s.skippedOccupied==0 && s.skippedInvalid==0 ? RESTORE_SUCCESS_TITLE : RESTORE_PARTIAL_TITLE)));
-                player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal(
-                    s.skippedOccupied==0 && s.skippedInvalid==0 ? "§7Разлом закрывается" : "§7Пропущено занятых: "+s.skippedOccupied+"; повреждённых записей: "+s.skippedInvalid)));
+                player.displayClientMessage(restorationCompletionMessage(
+                    s.restoredBlocks,s.skippedOccupied,s.skippedInvalid),true);
             }
         }
         s.setDirty();
