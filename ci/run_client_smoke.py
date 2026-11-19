@@ -2185,8 +2185,9 @@ def capture_test_world():
                                              rel_tol=0.0,abs_tol=1.0e-6)
                            for i in range(1,6))
                     or "GROUND_GLOW_ALPHA=.66F;" not in camera_source
-                    or "alpha*GROUND_GLOW_ALPHA" not in camera_source):
-                print("WORLD_CAPTURE_FAIL: violet ground halo alpha profile is missing or outside its tested bounds",flush=True)
+                    or "int glowAlphaChannelA=colorChannel(alphaA*GROUND_GLOW_ALPHA);" not in camera_source
+                    or "int glowAlphaChannelB=colorChannel(alphaB*GROUND_GLOW_ALPHA);" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: per-endpoint violet ground halo alpha profile is missing or outside its tested bounds",flush=True)
                 return False
             vertex_start=camera_source.find("private static void vertex(")
             vertex_end=camera_source.find("private static void ribbon(",vertex_start+1)
