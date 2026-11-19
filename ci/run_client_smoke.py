@@ -479,7 +479,8 @@ def verify_real_beacon_break_source():
             or "distanceToSqr(" not in verify
             or "withinBeaconInteractionReach(distanceSquared)" not in verify
             or "capturedAtBreak=true" not in verify
-            or probe.count("new net.minecraftforge.event.level.BlockEvent.BreakEvent(")!=1
+            or probe.count("new net.minecraftforge.event.level.BlockEvent.BreakEvent(")!=2
+            or "adventureEvent" not in probe or "mayBuild=false" not in probe
             or "testEvent" in probe
             or "POST_RESTORE_BEACON_BREAK_CONSUMED" in probe
             or 'subprocess.run(["xdotool","mousedown","1"]' not in script
