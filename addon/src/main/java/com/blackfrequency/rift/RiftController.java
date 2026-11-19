@@ -3413,11 +3413,11 @@ public final class RiftController {
         // Keep the physical beacon visible during activation. A full-screen title
         // covered the object in the player's view; use the action bar instead.
         // Only nearby, active players should receive this world-local notice.
-        for(var player:level.players()) {
-            if(!player.isAlive() || player.isRemoved() || player.isSpectator()
-                || player.distanceToSqr(pos.getX()+0.5D,pos.getY()+0.5D,pos.getZ()+0.5D)>128.0D*128.0D)
+        for(var nearbyPlayer:level.players()) {
+            if(!nearbyPlayer.isAlive() || nearbyPlayer.isRemoved() || nearbyPlayer.isSpectator()
+                || nearbyPlayer.distanceToSqr(pos.getX()+0.5D,pos.getY()+0.5D,pos.getZ()+0.5D)>128.0D*128.0D)
                 continue;
-            player.displayClientMessage(recoveryViolet("✦ Маяк запустил восстановление мира"),true);
+            nearbyPlayer.displayClientMessage(recoveryViolet("✦ Маяк запустил восстановление мира"),true);
         }
         if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_START_ACTIONBAR_ONLY");
         event.setCanceled(true);
