@@ -3846,6 +3846,38 @@ public final class RiftController {
         return s.restoreFailedWrites;
     }
 
+    // A syntactically bounded NBT payload is not necessarily a valid block state:
+    // unknown blocks and invalid property names/values can decode to a default state.
+    // Require an exact registry decode/encode round trip before any recovery write.
+    private static BlockState readCanonicalSnapshotBlockState(ServerLevel level,CompoundTag stateTag) {
+        try {
+            BlockState decoded=NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK),stateTag);
+            return !decoded.isAir() && NbtUtils.writeBlockState(decoded).equals(stateTag)
+                ? decoded : Blocks.AIR.defaultBlockState();
+        } catch(RuntimeException invalidSnapshot) {
+            return Blocks.AIR.defaultBlockState();
+        }
+    }
+
+    private static void verifyCanonicalSnapshotBlockState(ServerLevel level) {
+        CompoundTag validState=NbtUtils.writeBlockState(Blocks.OAK_LOG.defaultBlockState());
+        if(!validState.contains("Properties",Tag.TAG_COMPOUND))
+            throw new IllegalStateException("CI canonical snapshot fixture has no block properties");
+        BlockState decoded=readCanonicalSnapshotBlockState(level,validState);
+        CompoundTag invalidValue=validState.copy();
+        invalidValue.getCompound("Properties").putString("axis","diagonal");
+        CompoundTag unknownProperty=validState.copy();
+        unknownProperty.getCompound("Properties").putString("blackfrequency_unknown","x");
+        CompoundTag unknownBlock=validState.copy();
+        unknownBlock.putString("Name","blackfrequency:missing_recovery_test_block");
+        if(decoded.isAir() || !NbtUtils.writeBlockState(decoded).equals(validState)
+            || !readCanonicalSnapshotBlockState(level,invalidValue).isAir()
+            || !readCanonicalSnapshotBlockState(level,unknownProperty).isAir()
+            || !readCanonicalSnapshotBlockState(level,unknownBlock).isAir())
+            throw new IllegalStateException("CI recovery snapshot canonical block-state round-trip regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_BLOCK_STATE_CANONICAL_ROUNDTRIP_VERIFIED valid=true invalidPropertyValue=true unknownProperty=true unknownBlock=true");
+    }
+
     private static void restore(ServerLevel level,State s) {
         BlockPos activatedBeacon=recoveryVisualAnchor(s,level.getSeaLevel());
         // Resolve the physical beacon once per restoration tick using loaded-only access.
@@ -3943,7 +3975,10 @@ public final class RiftController {
             if(CI_TEST && s.restoreTicks==20)
                 LOGGER.info("BLACK_FREQUENCY_TEST BEACON_STABILIZATION_PULSE viewerScan=shared");
         }
-        if(CI_TEST && s.restoreTicks==1) verifyBeaconInteractionGuard();
+        if(CI_TEST && s.restoreTicks==1) {
+            verifyBeaconInteractionGuard();
+            verifyCanonicalSnapshotBlockState(level);
+        }
         // Exercise boundary and overflow-safe checks in the disposable
         // integration world; this does not mutate any terrain.
         if(CI_TEST && s.restoreTicks==1
@@ -4055,11 +4090,10 @@ public final class RiftController {
                 // Duplicate records can share a position but contain different block states.
                 // Validate this rare path before deferring the retry, or a corrupt air record
                 // could remain hidden behind a repeatedly rejected valid snapshot.
-                BlockState duplicateOriginal=NbtUtils.readBlockState(
-                    level.holderLookup(Registries.BLOCK),entry.getCompound("state"));
+                BlockState duplicateOriginal=readCanonicalSnapshotBlockState(level,entry.getCompound("state"));
                 if(duplicateOriginal.isAir()) {
                     s.skippedInvalid++;
-                    warnInvalidSnapshotOnce(s,"duplicate resolves to air",pos);
+                    warnInvalidSnapshotOnce(s,"duplicate has invalid or non-canonical block state",pos);
                     if(CI_TEST && entry.getBoolean("ciDuplicateInvalid")) {
                         if(s.restoreTicks!=1)
                             throw new IllegalStateException("CI duplicate invalid snapshot was not quarantined in the failed-write tick");
@@ -4092,7 +4126,7 @@ public final class RiftController {
             if(!current.isAir() && !flowingFluid) {
                 s.skippedOccupied++;
             } else {
-                BlockState original=NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK),entry.getCompound("state"));
+                BlockState original=readCanonicalSnapshotBlockState(level,entry.getCompound("state"));
                 if(!original.isAir()) {
                     // Simulate one rejected write in the disposable integration
                     // world to prove that the snapshot survives and is retried.
@@ -4129,7 +4163,7 @@ public final class RiftController {
                     // Fractures never record air. An unknown block id decoded as
                     // air is corrupt data, not a successfully restored block.
                     s.skippedInvalid++;
-                    warnInvalidSnapshotOnce(s,"block state resolves to air",pos);
+                    warnInvalidSnapshotOnce(s,"block state is invalid or non-canonical",pos);
                 }
             }
             // O(1) swap keeps all still-pending entries in [0,restoreIndex].
