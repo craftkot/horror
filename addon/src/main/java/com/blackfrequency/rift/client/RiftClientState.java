@@ -658,6 +658,10 @@ public final class RiftClientState {
         private static boolean surfaceWindowLogged;
         // Keep only the first few rebuild timings: the first includes one-time profile checks.
         private static int groundBuildTimingSamplesLogged;
+        // Expensive invariant probes belong in disposable smoke clients, not production render frames.
+        private static final boolean VERIFY_GROUND_MESH_PROFILES=
+            Boolean.getBoolean("blackfrequency.verifyGroundMeshProfiles");
+        private static boolean groundMeshProfileModeLogged;
         private static boolean supportSurfaceProfileLogged;
         private static boolean rebuildProfileLogged;
         private static boolean animationProfileLogged;
@@ -1812,21 +1816,28 @@ public final class RiftClientState {
         private static GroundMesh buildSegments(
                 net.minecraft.client.multiplayer.ClientLevel level,int worldAnchorX,int worldAnchorZ,
                 int referenceY) {
-            verifyInactiveCacheCleanup(level);
-            verifyGroundMeshSamplingProfile();
-            verifyGroundSampleCacheProfile();
-            verifySurfaceSearchOrder();
-            verifyTaperProfile();
-            verifyGroundSurfaceReliefProfile();
-            verifyGroundEdgeInterpolationProfile();
-            verifyGroundContinuityProfile();
-            verifyGroundRebuildProfile();
-            verifyGroundRenderRangeProfile();
-            verifyGroundAnimationProfile();
-            verifyPackedColorProfile();
-            verifyRibbonColorCacheProfile();
-            verifyGroundSupportProfile();
-            verifySurfaceCacheReuse();
+            if(VERIFY_GROUND_MESH_PROFILES) {
+                if(!groundMeshProfileModeLogged) {
+                    com.mojang.logging.LogUtils.getLogger().info(
+                        "BLACK_FREQUENCY_GROUND_MESH_PROFILE_TEST_MODE enabled=true");
+                    groundMeshProfileModeLogged=true;
+                }
+                verifyInactiveCacheCleanup(level);
+                verifyGroundMeshSamplingProfile();
+                verifyGroundSampleCacheProfile();
+                verifySurfaceSearchOrder();
+                verifyTaperProfile();
+                verifyGroundSurfaceReliefProfile();
+                verifyGroundEdgeInterpolationProfile();
+                verifyGroundContinuityProfile();
+                verifyGroundRebuildProfile();
+                verifyGroundRenderRangeProfile();
+                verifyGroundAnimationProfile();
+                verifyPackedColorProfile();
+                verifyRibbonColorCacheProfile();
+                verifyGroundSupportProfile();
+                verifySurfaceCacheReuse();
+            }
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
             // The static primitive map and mutable cursor are owned by the render
             // thread and reused across rebuilds; clear() keeps the map's capacity.
@@ -2268,8 +2279,8 @@ public final class RiftClientState {
                 if(groundBuildTimingSamplesLogged<4) {
                     int timingSample=groundBuildTimingSamplesLogged++;
                     com.mojang.logging.LogUtils.getLogger().info(
-                        "BLACK_FREQUENCY_GROUND_MESH_BUILD_TIMING elapsedMicros={} firstBuild={} sampledColumns={} cacheHits={} segments={} arms={} steepStepBreaks={}",
-                        Math.max(0L,buildElapsedNanos/1_000L),timingSample==0,mesh.sampledColumns(),
+                        "BLACK_FREQUENCY_GROUND_MESH_BUILD_TIMING elapsedMicros={} firstBuild={} profileChecks={} sampledColumns={} cacheHits={} segments={} arms={} steepStepBreaks={}",
+                        Math.max(0L,buildElapsedNanos/1_000L),timingSample==0,VERIFY_GROUND_MESH_PROFILES,mesh.sampledColumns(),
                         mesh.cacheHits(),mesh.segments().size(),mesh.activeArms(),mesh.steepStepBreaks());
                 }
                 cachedSegments=mesh.segments();
