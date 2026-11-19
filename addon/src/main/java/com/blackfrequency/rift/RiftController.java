@@ -1659,9 +1659,20 @@ public final class RiftController {
     /** True only when a loaded-only outline ray reaches the actual physical beacon. */
     private static boolean hasLoadedBeaconSightline(ServerLevel level,
             net.minecraft.server.level.ServerPlayer player,BlockPos beacon) {
-        if(level==null || player==null || beacon==null) return false;
+        return level!=null && beacon!=null
+            && hasLoadedBeaconSightline(level,player,beacon,
+                net.minecraft.world.phys.Vec3.atCenterOf(beacon));
+    }
+
+    private static boolean hasLoadedBeaconSightline(ServerLevel level,
+            net.minecraft.server.level.ServerPlayer player,BlockPos beacon,
+            net.minecraft.world.phys.Vec3 target) {
+        if(level==null || player==null || beacon==null || target==null
+            || !Double.isFinite(target.x) || !Double.isFinite(target.y) || !Double.isFinite(target.z)
+            || target.x<beacon.getX()-1.0E-5D || target.x>beacon.getX()+1.0D+1.0E-5D
+            || target.y<beacon.getY()-1.0E-5D || target.y>beacon.getY()+1.0D+1.0E-5D
+            || target.z<beacon.getZ()-1.0E-5D || target.z>beacon.getZ()+1.0D+1.0E-5D) return false;
         net.minecraft.world.phys.Vec3 eye=player.getEyePosition();
-        net.minecraft.world.phys.Vec3 target=net.minecraft.world.phys.Vec3.atCenterOf(beacon);
         if(eye==null || !Double.isFinite(eye.y)
             || !fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ))) {
             if(CI_TEST && !ciBeaconSightlineFailureLogged) {
@@ -3380,7 +3391,7 @@ public final class RiftController {
         if(!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         // Reach alone is insufficient: a forged or stale interaction must not activate
         // a beacon through a wall. Trace only chunks already loaded along the eye ray.
-        if(!hasLoadedBeaconSightline(level,player,pos)) {
+        if(!hasLoadedBeaconSightline(level,player,pos,event.getHitVec().getLocation())) {
             if(CI_TEST) LOGGER.warn("BLACK_FREQUENCY_TEST BEACON_ACTIVATION_SIGHTLINE_REJECTED loadedChunksOnly=true");
             return;
         }
