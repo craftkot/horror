@@ -2488,7 +2488,11 @@ def capture_test_world():
                     or "halfWidth*GROUND_GLOW_WIDTH_SCALE,0.0D," not in camera_source
                     or "coreRibbon(builder,matrix,camera,segment,halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS," not in camera_source
                     or "halfWidth*.16D,GROUND_FILAMENT_LIFT," not in camera_source
-                    or camera_source.count("GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,")!=2):
+                    or "GROUND_EDGE_HALF_WIDTH" not in camera_source
+                    or "a.y()+GROUND_EDGE_LIFT" not in camera_source
+                    or "b.y()+GROUND_EDGE_LIFT" not in camera_source
+                    or camera_source.count("edgeRibbon(builder,matrix,camera,segment,halfWidth,true,")!=1
+                    or camera_source.count("edgeRibbon(builder,matrix,camera,segment,halfWidth,false,")!=1):
                 print("WORLD_CAPTURE_FAIL: ground fissure layers are not vertically separated above the sampled surface",flush=True)
                 return False
             embedded_crack_profile=re.search(
@@ -2513,10 +2517,20 @@ def capture_test_world():
                     or any(not math.isclose(float(edge_skew_match.group(i)),expected_edge_skew[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
                            for i in range(1,4))
-                    or "double edgeOffsetSkew=sample.coreSkew()*GROUND_EDGE_OFFSET_SKEW_SCALE;" not in camera_source
-                    or "double leftEdgeOffset=halfWidth*GROUND_EDGE_OFFSET_SCALE*(1.0D+edgeOffsetSkew);" not in camera_source
-                    or "double rightEdgeOffset=-halfWidth*GROUND_EDGE_OFFSET_SCALE*(1.0D-edgeOffsetSkew);" not in camera_source):
+                    or "private static double groundEdgeCenterOffset(double halfWidth,double coreSkew,boolean left)" not in camera_source
+                    or "groundEdgeCenterOffset(halfWidth,segment.coreSkewA(),left)" not in camera_source
+                    or "groundEdgeCenterOffset(halfWidth,segment.coreSkewB(),left)" not in camera_source
+                    or "private static void edgeRibbon(" not in camera_source
+                    or camera_source.count("edgeRibbon(builder,matrix,camera,segment,halfWidth,true,")!=1
+                    or camera_source.count("edgeRibbon(builder,matrix,camera,segment,halfWidth,false,")!=1):
                 print("WORLD_CAPTURE_FAIL: asymmetric violet edge rails are not tied to the bounded core skew",flush=True)
+                return False
+            edge_interpolation_match=re.search(
+                r"BLACK_FREQUENCY_GROUND_MESH_EDGE_ENDPOINT_INTERPOLATION_VERIFIED maxOffsetDelta=([-+0-9.eE]+) sharedBoundary=true invalidRejected=true",
+                final_log)
+            if (not edge_interpolation_match
+                    or not math.isclose(float(edge_interpolation_match.group(1)),.003996,rel_tol=0.0,abs_tol=1.0e-9)):
+                print("WORLD_CAPTURE_FAIL: violet edge rails do not interpolate their skew continuously at segment endpoints",flush=True)
                 return False
             endpoint_distance_fade=re.search(
                 r"BLACK_FREQUENCY_TEST GROUND_MESH_ENDPOINT_DISTANCE_FADE_VERIFIED metric=per-endpoint start=48 end=64 near=([-+0-9.eE]+) mid=([-+0-9.eE]+) crossing=([-+0-9.eE]+) crossingEnd=([-+0-9.eE]+) far=([-+0-9.eE]+) invalidRejected=true monotonic=true",
