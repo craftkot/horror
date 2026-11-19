@@ -3143,7 +3143,9 @@ public final class RiftController {
         String status=skipped==0L ? "✦ МИР СТАБИЛИЗИРОВАН" : "✦ ВОССТАНОВЛЕНИЕ НЕПОЛНО";
         Component details=Component.literal(" — восстановлено "+restoredBlocks+" блоков; пропущено "+skipped)
             .withStyle(style -> style.withColor(TextColor.fromRgb(0xC8C2D4)));
-        return recoveryViolet(status).append(details);
+        return Component.literal(status)
+            .withStyle(style -> style.withColor(TextColor.fromRgb(RECOVERY_UI_VIOLET_RGB)))
+            .append(details);
     }
 
     private static void verifyRecoveryUiPalette() {
