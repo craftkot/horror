@@ -66,6 +66,7 @@ jobs:
             # Recovery-only diagnostics are emitted when this mode actually starts restoration.
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_PAYLOAD_QUARANTINE_VERIFIED entries=2 retainedPayload=false' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_RESOURCE_LOCATION_QUARANTINE_VERIFIED invalidRejected=true validNamespaced=true quarantined=true' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_BLOCK_STATE_CANONICAL_ROUNDTRIP_VERIFIED valid=true invalidPropertyValue=true unknownProperty=true unknownBlock=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_RETENTION_BUDGET_VERIFIED' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_AGGREGATE_BUDGET_QUARANTINED' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_RUNTIME_BUDGET_GUARD_VERIFIED' world-test.log
