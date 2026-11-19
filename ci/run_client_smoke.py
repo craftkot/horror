@@ -2509,6 +2509,21 @@ def capture_test_world():
                     or "double rightEdgeOffset=-halfWidth*GROUND_EDGE_OFFSET_SCALE*(1.0D-edgeOffsetSkew);" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: asymmetric violet edge rails are not tied to the bounded core skew",flush=True)
                 return False
+            segment_distance_fade=re.search(
+                r"BLACK_FREQUENCY_TEST GROUND_MESH_SEGMENT_DISTANCE_FADE_VERIFIED metric=midpoint start=48 end=64 near=([-+0-9.eE]+) mid=([-+0-9.eE]+) far=([-+0-9.eE]+) invalidRejected=true monotonic=true",
+                final_log)
+            expected_segment_fade=(1.0,.5534803206997085,0.0)
+            if (not segment_distance_fade
+                    or any(not math.isclose(float(segment_distance_fade.group(i)),expected_segment_fade[i-1],
+                                             rel_tol=0.0,abs_tol=1.0e-9)
+                           for i in range(1,4))
+                    or "private static double groundSegmentDistanceFade(GroundSegment segment,Vec3 camera)" not in camera_source
+                    or "double segmentFade=groundSegmentDistanceFade(segment,camera);" not in camera_source
+                    or "float segmentStrength=boundedStrength*(float)segmentFade;" not in camera_source
+                    or "float boundedStrength=(float)Math.min(1.0F,strength);" not in camera_source
+                    or "float edgeAlpha=Math.min(1.0F,segmentStrength*(.94F*pulse+.06F));" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: camera-local ground fissure fade was not verified or is not used by every ribbon layer",flush=True)
+                return False
             if ribbon_cache_marker in final_log:
                 edge_rail_pattern = re.compile(
                     r"ribbon\(builder,matrix,camera,segment,(leftEdgeOffset|rightEdgeOffset),GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,\s*"
