@@ -125,6 +125,11 @@ def verify_beacon_aura_source():
             or "SKY_SHADER_RELOAD_POST_DRAW_VERIFIED" not in render_body):
         raise RuntimeError("BLACK FREQUENCY sky shader uniforms must be cached per shader instance and invalidated on reload")
     print("WORLD_CAPTURE: shader uniform cache and resource-reload lifecycle source contract verified",flush=True)
+    if ("private static BlockState readCanonicalSnapshotBlockState(ServerLevel level,CompoundTag stateTag)" not in source
+            or source.count('readCanonicalSnapshotBlockState(level,entry.getCompound("state"))')!=2
+            or "NbtUtils.writeBlockState(decoded).equals(stateTag)" not in source
+            or "RECOVERY_SNAPSHOT_BLOCK_STATE_CANONICAL_ROUNDTRIP_VERIFIED" not in source):
+        raise RuntimeError("BLACK FREQUENCY recovery must reject non-canonical saved block states before writes")
     print("WORLD_CAPTURE: loaded-only physical beacon aura packet and render contract verified",flush=True)
 
 def verify_restoration_particle_source():
@@ -2772,6 +2777,11 @@ def capture_test_world():
                     return False
                 print("WORLD_CAPTURE: restoration finished in integrated client",flush=True)
             log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+            canonical_snapshot_marker=("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_BLOCK_STATE_CANONICAL_ROUNDTRIP_VERIFIED "
+                                       "valid=true invalidPropertyValue=true unknownProperty=true unknownBlock=true")
+            if canonical_snapshot_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: recovery accepted a non-canonical saved block state",flush=True)
+                return False
             if os.environ.get("BF_TEST_NATURAL_BEACON")=="1":
                 if not mine_beacon_after_restoration(log_after):
                     return False
