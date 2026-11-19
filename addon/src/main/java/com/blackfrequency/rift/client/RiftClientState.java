@@ -580,7 +580,7 @@ public final class RiftClientState {
         private static final double CLIFF_BREAK_TAPER=.22D;
         // Broaden the recessed core and halo so the fissure reads as a ground rupture at normal camera distance.
         private static final double GROUND_GLOW_WIDTH_SCALE=5.0D;
-        private static final double GROUND_CORE_WIDTH_SCALE=1.55D;
+        private static final double GROUND_CORE_WIDTH_SCALE=1.70D;
         // The recessed core pinches and widens along the seam; endpoint widths are interpolated per segment.
         private static final double GROUND_MIN_CORE_WIDTH_SCALE=.78D;
         private static final double GROUND_MAX_CORE_WIDTH_SCALE=1.22D;
@@ -593,7 +593,7 @@ public final class RiftClientState {
         private static final double GROUND_CORE_SKEW_FREQUENCY=.71D;
         private static final double GROUND_CORE_SKEW_ARM_PHASE=2.17D;
         // Place both violet lips outside the widened dark core while keeping them inside the soft halo.
-        private static final double GROUND_EDGE_OFFSET_SCALE=2.7D;
+        private static final double GROUND_EDGE_OFFSET_SCALE=3.0D;
         // Let each violet lip follow a small fraction of the dark core's cached skew.
         private static final double GROUND_EDGE_OFFSET_SKEW_SCALE=.12D;
         // The render pulse is clamped to this interval for every wave/flicker phase.
@@ -1027,8 +1027,8 @@ public final class RiftClientState {
                 double minimumCoreEdgeGap=Math.min(leftCoreEdgeGap,rightCoreEdgeGap);
                 double maximumEdgeOffsetDelta=maximumHalfWidth*GROUND_EDGE_OFFSET_SCALE*edgeOffsetSkew;
                 if(Math.abs(GROUND_GLOW_WIDTH_SCALE-5.0D)>1.0E-9D
-                    || Math.abs(GROUND_CORE_WIDTH_SCALE-1.55D)>1.0E-9D
-                    || Math.abs(GROUND_EDGE_OFFSET_SCALE-2.7D)>1.0E-9D
+                    || Math.abs(GROUND_CORE_WIDTH_SCALE-1.70D)>1.0E-9D
+                    || Math.abs(GROUND_EDGE_OFFSET_SCALE-3.0D)>1.0E-9D
                     || Math.abs(GROUND_EDGE_OFFSET_SKEW_SCALE-.12D)>1.0E-9D
                     || !Double.isFinite(maximumEdgeOffsetDelta) || maximumEdgeOffsetDelta>.004D
                     || Math.abs(GROUND_CORE_SKEW_AMPLITUDE-.15D)>1.0E-9D
@@ -1117,7 +1117,7 @@ public final class RiftClientState {
                     && minimumEdgeInnerHalfWidth<minimumGlowHalfWidth)
                 || !(maximumCoreHalfWidth<maximumEdgeInnerHalfWidth
                     && maximumEdgeInnerHalfWidth<maximumGlowHalfWidth)
-                || Math.abs(GROUND_EDGE_OFFSET_SCALE-2.7D)>1.0E-9D
+                || Math.abs(GROUND_EDGE_OFFSET_SCALE-3.0D)>1.0E-9D
                 || Math.abs(GROUND_EDGE_OFFSET_SKEW_SCALE-.12D)>1.0E-9D
                 || Math.abs(GROUND_CORE_SKEW_AMPLITUDE-.15D)>1.0E-9D
                 || Math.abs(GROUND_SURFACE_CLEARANCE-.015D)>1.0E-9D

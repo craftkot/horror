@@ -2432,7 +2432,7 @@ def capture_test_world():
             visual_profile_match=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=([-+0-9.eE]+) coreScale=([-+0-9.eE]+) edgeOffsetScale=([-+0-9.eE]+) edgeHalfWidth=([-+0-9.eE]+) pulseMin=([-+0-9.eE]+) pulseMax=([-+0-9.eE]+) coreInsideEdgeBand=(true|false)",
                 final_log)
-            expected_visual_profile=(5.0,1.55,2.7,.026,.045,.074)
+            expected_visual_profile=(5.0,1.7,3.0,.026,.045,.074)
             if (not visual_profile_match
                     or any(not math.isclose(float(visual_profile_match.group(i)),expected_visual_profile[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
@@ -2452,8 +2452,8 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: visible cliff-end taper or non-finite input guards were not verified",flush=True)
                 return False
             if ("GROUND_GLOW_WIDTH_SCALE=5.0D;" not in camera_source
-                    or "GROUND_CORE_WIDTH_SCALE=1.55D;" not in camera_source
-                    or "GROUND_EDGE_OFFSET_SCALE=2.7D;" not in camera_source
+                    or "GROUND_CORE_WIDTH_SCALE=1.70D;" not in camera_source
+                    or "GROUND_EDGE_OFFSET_SCALE=3.0D;" not in camera_source
                     or "GROUND_EDGE_OFFSET_SKEW_SCALE=.12D;" not in camera_source
                     or "GROUND_CORE_SKEW_AMPLITUDE=.15D;" not in camera_source
                     or "GROUND_EDGE_HALF_WIDTH=.026D;" not in camera_source
@@ -2494,7 +2494,7 @@ def capture_test_world():
             embedded_crack_profile=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_EMBEDDED_CRACK_PROFILE_VERIFIED minGlowHalfWidth=([-+0-9.eE]+) maxGlowHalfWidth=([-+0-9.eE]+) minCoreHalfWidth=([-+0-9.eE]+) minEdgeInnerHalfWidth=([-+0-9.eE]+) maxCoreHalfWidth=([-+0-9.eE]+) maxEdgeInnerHalfWidth=([-+0-9.eE]+) minCoreEdgeGap=([-+0-9.eE]+) coreClearance=([-+0-9.eE]+) glowClearance=([-+0-9.eE]+) filamentClearance=([-+0-9.eE]+) edgeClearance=([-+0-9.eE]+) surfaceAligned=true",
                 final_log)
-            expected_embedded=(.225,.37,.04624425,.093313,.1609241,.1773964,.0164723,.006,.015,.017,.023)
+            expected_embedded=(.225,.37,.0507195,.10657,.1764974,.199996,.0234986,.006,.015,.017,.023)
             if (not embedded_crack_profile
                     or any(not math.isclose(float(embedded_crack_profile.group(i)),expected_embedded[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
@@ -2508,7 +2508,7 @@ def capture_test_world():
             edge_skew_match=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_EDGE_OFFSET_ASYMMETRY_VERIFIED scale=([-+0-9.eE]+) maxSkew=([-+0-9.eE]+) maxOffsetDelta=([-+0-9.eE]+) correlatedWithCore=true bounded=true",
                 final_log)
-            expected_edge_skew=(.12,.018,.0035964)
+            expected_edge_skew=(.12,.018,.003996)
             if (not edge_skew_match
                     or any(not math.isclose(float(edge_skew_match.group(i)),expected_edge_skew[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
