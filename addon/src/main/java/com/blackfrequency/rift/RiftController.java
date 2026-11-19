@@ -3391,7 +3391,14 @@ public final class RiftController {
         if(!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         // Reach alone is insufficient: a forged or stale interaction must not activate
         // a beacon through a wall. Trace only chunks already loaded along the eye ray.
-        if(!hasLoadedBeaconSightline(level,player,pos,event.getHitVec().getLocation())) {
+        var hit=event.getHitVec();
+        if(hit==null || !hit.getBlockPos().equals(pos)) return;
+        var face=hit.getDirection();
+        // Move a fraction inside the clicked face so a boundary hit at x/z=16
+        // does not falsely require the adjacent, unrelated chunk to be loaded.
+        var hitPoint=hit.getLocation().subtract(
+            face.getStepX()*1.0E-4D,face.getStepY()*1.0E-4D,face.getStepZ()*1.0E-4D);
+        if(!hasLoadedBeaconSightline(level,player,pos,hitPoint)) {
             if(CI_TEST) LOGGER.warn("BLACK_FREQUENCY_TEST BEACON_ACTIVATION_SIGHTLINE_REJECTED loadedChunksOnly=true");
             return;
         }
