@@ -681,7 +681,7 @@ opts.update({
     "executablePath":"java",
     "defaultExecutablePath":"java",
     "gameDirectory":str(MC),
-    "jvmArguments":["-Xms1G","-Xmx6G","-Djava.awt.headless=false","-Dblackfrequency.ciTestMode=true","-Dblackfrequency.ciTickStep=2400"] + (["-Dblackfrequency.ciClientSmokeTest=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []) + (["-Dblackfrequency.ciExerciseRestoration=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []) + (["-Dblackfrequency.ciPlayerBeaconTest=true"] if os.environ.get("BF_TEST_PLAYER_BEACON")=="1" else []) + (["-Dblackfrequency.ciNaturalBeaconTest=true"] if os.environ.get("BF_TEST_NATURAL_BEACON")=="1" else []) + (["-Dblackfrequency.ciPostRestoreBeaconBreakTest=true"] if os.environ.get("BF_TEST_NATURAL_BEACON")=="1" else []) + (["-Dblackfrequency.ciSparseRecoveryTest=true"] if os.environ.get("BF_TEST_SPARSE_RECOVERY")=="1" else []) + (["-Dblackfrequency.ciSnowBeaconTest=true"] if os.environ.get("BF_TEST_SNOW_BEACON")=="1" else []),
+    "jvmArguments":["-Xms1G","-Xmx6G","-Djava.awt.headless=false","-Dblackfrequency.ciTestMode=true","-Dblackfrequency.verifyGroundMeshProfiles=true","-Dblackfrequency.ciTickStep=2400"] + (["-Dblackfrequency.ciClientSmokeTest=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []) + (["-Dblackfrequency.ciExerciseRestoration=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []) + (["-Dblackfrequency.ciPlayerBeaconTest=true"] if os.environ.get("BF_TEST_PLAYER_BEACON")=="1" else []) + (["-Dblackfrequency.ciNaturalBeaconTest=true"] if os.environ.get("BF_TEST_NATURAL_BEACON")=="1" else []) + (["-Dblackfrequency.ciPostRestoreBeaconBreakTest=true"] if os.environ.get("BF_TEST_NATURAL_BEACON")=="1" else []) + (["-Dblackfrequency.ciSparseRecoveryTest=true"] if os.environ.get("BF_TEST_SPARSE_RECOVERY")=="1" else []) + (["-Dblackfrequency.ciSnowBeaconTest=true"] if os.environ.get("BF_TEST_SNOW_BEACON")=="1" else []),
     "customResolution":True,
     "resolutionWidth":"1280",
     "resolutionHeight":"720",
@@ -2960,20 +2960,24 @@ def capture_test_world():
                     log_after):
                 print("WORLD_CAPTURE_FAIL: ground surface window is not bounded to the 64-block render radius",flush=True)
                 return False
+            if "BLACK_FREQUENCY_GROUND_MESH_PROFILE_TEST_MODE enabled=true" not in log_after:
+                print("WORLD_CAPTURE_FAIL: expensive ground mesh profile probes were not enabled in the smoke client",flush=True)
+                return False
             build_timings = re.findall(
-                r"BLACK_FREQUENCY_GROUND_MESH_BUILD_TIMING elapsedMicros=(\d+) firstBuild=(true|false) sampledColumns=(\d+) cacheHits=(\d+) segments=(\d+) arms=(\d+) steepStepBreaks=(\d+)",
+                r"BLACK_FREQUENCY_GROUND_MESH_BUILD_TIMING elapsedMicros=(\d+) firstBuild=(true|false) profileChecks=(true|false) sampledColumns=(\d+) cacheHits=(\d+) segments=(\d+) arms=(\d+) steepStepBreaks=(\d+)",
                 log_after)
             if (len(build_timings)<2 or build_timings[0][1]!="true"
-                    or any(sample[1]=="true" for sample in build_timings[1:])):
-                print("WORLD_CAPTURE_FAIL: ground mesh rebuild timing did not include warmup and steady-state samples",flush=True)
+                    or any(sample[1]=="true" for sample in build_timings[1:])
+                    or any(sample[2]!="true" for sample in build_timings)):
+                print("WORLD_CAPTURE_FAIL: ground mesh rebuild timing did not include profile-enabled warmup and steady-state samples",flush=True)
                 return False
-            for elapsed,first,sampled,hits,segments,arms,steep in build_timings:
+            for elapsed,first,profile_checks,sampled,hits,segments,arms,steep in build_timings:
                 values=tuple(map(int,(elapsed,sampled,hits,segments,arms,steep)))
                 if (values[0]<0 or values[1]>96 or values[2]>96 or values[3]>92
                         or values[4]>4 or values[5]>96):
                     print("WORLD_CAPTURE_FAIL: ground mesh timing counters exceeded bounded geometry limits",flush=True)
                     return False
-            print(f"WORLD_CAPTURE: GROUND_MESH_BUILD_TIMING_VERIFIED samples={len(build_timings)} firstBuildSeparated=true",flush=True)
+            print(f"WORLD_CAPTURE: GROUND_MESH_BUILD_TIMING_VERIFIED samples={len(build_timings)} firstBuildSeparated=true profileChecks=true",flush=True)
             if "BLACK_FREQUENCY_GROUND_MESH_BLOCK_ENTITY_FILTER_VERIFIED support=true surface=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: client ground mesh did not reject block-entity fixtures",flush=True)
                 return False
