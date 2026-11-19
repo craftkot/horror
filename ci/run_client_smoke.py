@@ -181,18 +181,15 @@ def verify_restoration_particle_source():
     completion_start=source.find("if(s.restoreIndex<0 && s.restoreTicks>=100)")
     completion_end=source.find("\n        s.setDirty();",completion_start)
     completion_body=source[completion_start:completion_end] if completion_start>=0 and completion_end>completion_start else ""
-    completion_animation=completion_body.find("ClientboundSetTitlesAnimationPacket(")
-    completion_title=completion_body.find("ClientboundSetTitleTextPacket(")
-    if ("RESTORE_TITLE_FADE_IN_TICKS=8;" not in source
-            or "RESTORE_TITLE_STAY_TICKS=32;" not in source
-            or "RESTORE_TITLE_FADE_OUT_TICKS=12;" not in source
-            or completion_animation<0 or completion_title<0 or completion_animation>completion_title
-            or 'private static final String RESTORE_SUCCESS_TITLE="МИР СПАСЁН";' not in source
-            or 'private static final String RESTORE_PARTIAL_TITLE="ЕСТЬ ПРОПУСКИ";' not in source
-            or "s.skippedOccupied==0 && s.skippedInvalid==0 ? RESTORE_SUCCESS_TITLE : RESTORE_PARTIAL_TITLE" not in completion_body
-            or "RESTORE_COMPLETION_TITLE_WIDTH_VERIFIED successChars={} partialChars={} maxChars=13" not in source
-            or "RESTORATION_COMPLETION_TITLE_TIMING_VERIFIED" not in source):
-        raise RuntimeError("BLACK FREQUENCY completion title must set and verify explicit fade timing before the title packet")
+    completion_title_packets=("ClientboundSetTitlesAnimationPacket(","ClientboundSetTitleTextPacket(","ClientboundSetSubtitleTextPacket(")
+    if ("private static Component restorationCompletionMessage(" not in source
+            or "player.displayClientMessage(restorationCompletionMessage(" not in completion_body
+            or any(packet in completion_body for packet in completion_title_packets)
+            or "RESTORATION_COMPLETION_ACTIONBAR_ONLY_VERIFIED success=true partial=true titlePackets=false" not in source
+            or "RESTORE_SUCCESS_TITLE" in source
+            or "RESTORE_PARTIAL_TITLE" in source
+            or "RESTORE_TITLE_FADE_" in source):
+        raise RuntimeError("BLACK FREQUENCY recovery completion must use a verified action-bar message without title packets")
     if ("public static final double FISSURE_BEND_AMPLITUDE=.24D;" not in geometry_contract
             or source.count("RiftGeometry.FISSURE_BEND_AMPLITUDE")<5
             or client_source.count("RiftGeometry.FISSURE_BEND_AMPLITUDE")<4
@@ -2872,8 +2869,8 @@ def capture_test_world():
                 if not initial_pulse or tuple(map(int,initial_pulse.groups()))!=(24,4):
                     print("WORLD_CAPTURE_FAIL: the real beacon click did not emit its initial ring and rising sparks",flush=True)
                     return False
-                if "BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_TITLE_TIMING_VERIFIED fadeIn=8 stay=32 fadeOut=12 total=52 packetBeforeTitle=true" not in log_after:
-                    print("WORLD_CAPTURE_FAIL: explicit completion title timing was not verified",flush=True)
+                if "BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_ACTIONBAR_ONLY_VERIFIED success=true partial=true titlePackets=false" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: recovery completion action bar or no-title contract was not verified",flush=True)
                     return False
                 counts=re.search(r"BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored=([0-9]+) destroyed=([0-9]+) skippedOccupied=([0-9]+)",log_after)
                 if not counts:
