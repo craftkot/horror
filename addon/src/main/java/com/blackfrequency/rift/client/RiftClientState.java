@@ -656,6 +656,8 @@ public final class RiftClientState {
         private static boolean visualProfileLogged;
         private static boolean reliefProfileLogged;
         private static boolean surfaceWindowLogged;
+        // Keep only the first few rebuild timings: the first includes one-time profile checks.
+        private static int groundBuildTimingSamplesLogged;
         private static boolean supportSurfaceProfileLogged;
         private static boolean rebuildProfileLogged;
         private static boolean animationProfileLogged;
@@ -2260,7 +2262,16 @@ public final class RiftClientState {
             if(anchorChanged) emptyMeshLogged=false;
             if(shouldRebuild(tick,cachedTick,anchorChanged,surfaceReferenceY,cachedReferenceY,
                     !cachedSegments.isEmpty())) {
+                long buildStartedNanos=System.nanoTime();
                 GroundMesh mesh=buildSegments(level,worldAnchorX,worldAnchorZ,surfaceReferenceY);
+                long buildElapsedNanos=System.nanoTime()-buildStartedNanos;
+                if(groundBuildTimingSamplesLogged<4) {
+                    int timingSample=groundBuildTimingSamplesLogged++;
+                    com.mojang.logging.LogUtils.getLogger().info(
+                        "BLACK_FREQUENCY_GROUND_MESH_BUILD_TIMING elapsedMicros={} firstBuild={} sampledColumns={} cacheHits={} segments={} arms={} steepStepBreaks={}",
+                        Math.max(0L,buildElapsedNanos/1_000L),timingSample==0,mesh.sampledColumns(),
+                        mesh.cacheHits(),mesh.segments().size(),mesh.activeArms(),mesh.steepStepBreaks());
+                }
                 cachedSegments=mesh.segments();
                 cachedArmCount=mesh.activeArms();
                 cachedSampledColumns=mesh.sampledColumns();
