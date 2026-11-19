@@ -4220,6 +4220,8 @@ public final class RiftController {
                     || !withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z)) continue;
                 player.displayClientMessage(restorationCompletionMessage(
                     s.restoredBlocks,s.skippedOccupied,s.skippedInvalid),true);
+                if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_ACTIONBAR_SENT restored={} skippedOccupied={} skippedInvalid={} player=true",
+                    s.restoredBlocks,s.skippedOccupied,s.skippedInvalid);
             }
         }
         s.setDirty();

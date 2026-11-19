@@ -184,6 +184,7 @@ def verify_restoration_particle_source():
     completion_title_packets=("ClientboundSetTitlesAnimationPacket(","ClientboundSetTitleTextPacket(","ClientboundSetSubtitleTextPacket(")
     if ("private static Component restorationCompletionMessage(" not in source
             or "player.displayClientMessage(restorationCompletionMessage(" not in completion_body
+            or "RESTORATION_COMPLETION_ACTIONBAR_SENT" not in completion_body
             or any(packet in completion_body for packet in completion_title_packets)
             or "RESTORATION_COMPLETION_ACTIONBAR_ONLY_VERIFIED success=true partial=true titlePackets=false" not in source
             or "RESTORE_SUCCESS_TITLE" in source
@@ -1313,7 +1314,7 @@ def capture_test_world():
         return (restoration_palette_passes(active_metrics)
                 or restoration_palette_passes(finished_metrics))
 
-    def measure_completion_title_width(frame):
+    def measure_completion_overlay(frame):
         width,height=frame.size
         top,bottom=int(height*.28),int(height*.55)
         pixels=frame.load()
@@ -1328,47 +1329,40 @@ def capture_test_world():
             return {"left":0,"right":0,"width":0,"pixels":0,
                     "fraction":0.0,"centerOffset":float("inf")}
         left,right=active[0],active[-1]
-        title_width=right-left+1
-        return {"left":left,"right":right,"width":title_width,
+        overlay_width=right-left+1
+        return {"left":left,"right":right,"width":overlay_width,
                 "pixels":sum(column_counts),
-                "fraction":title_width/width,
+                "fraction":overlay_width/width,
                 "centerOffset":abs((left+right)/2-width/2)}
 
-    def completion_title_width_passes(metrics,frame_width):
-        return (200<=metrics["width"]<=frame_width*.78
-                and metrics["centerOffset"]<=frame_width*.08)
-
-    def completion_title_visible(metrics,frame_width):
-        # A centered thin fissure can span the title width without being a title.
-        # Combine the existing width/centering test with a pixel-density floor.
-        return (completion_title_width_passes(metrics,frame_width)
+    def completion_overlay_visible(metrics,frame_width):
+        # A dense centered violet overlay can obscure the physical beacon.
+        # The pixel-density floor keeps thin ground-fissure ribbons out of this classification.
+        return (metrics["width"]>=200
+                and metrics["centerOffset"]<=frame_width*.08
                 and metrics["pixels"]>=5000)
 
     from PIL import Image,ImageDraw
-    _compact_title_fixture=Image.new("RGB",(1280,720),(0,0,0))
-    ImageDraw.Draw(_compact_title_fixture).rectangle((300,240,980,320),fill=(86,20,197))
-    _wide_title_fixture=Image.new("RGB",(1280,720),(0,0,0))
-    ImageDraw.Draw(_wide_title_fixture).rectangle((50,240,1230,320),fill=(86,20,197))
-    _blank_title_fixture=Image.new("RGB",(1280,720),(0,0,0))
+    _compact_overlay_fixture=Image.new("RGB",(1280,720),(0,0,0))
+    ImageDraw.Draw(_compact_overlay_fixture).rectangle((300,240,980,320),fill=(86,20,197))
+    _wide_overlay_fixture=Image.new("RGB",(1280,720),(0,0,0))
+    ImageDraw.Draw(_wide_overlay_fixture).rectangle((50,240,1230,320),fill=(86,20,197))
+    _blank_overlay_fixture=Image.new("RGB",(1280,720),(0,0,0))
     _sparse_fissure_fixture=Image.new("RGB",(1280,720),(0,0,0))
     ImageDraw.Draw(_sparse_fissure_fixture).line(
         (280,280,1000,280),fill=(86,20,197),width=6)
-    _compact_title_metrics=measure_completion_title_width(_compact_title_fixture)
-    _wide_title_metrics=measure_completion_title_width(_wide_title_fixture)
-    _blank_title_metrics=measure_completion_title_width(_blank_title_fixture)
-    _sparse_fissure_metrics=measure_completion_title_width(_sparse_fissure_fixture)
-    if (not completion_title_width_passes(_compact_title_metrics,1280)
-            or completion_title_width_passes(_wide_title_metrics,1280)
-            or completion_title_width_passes(_blank_title_metrics,1280)
-            or not completion_title_visible(_compact_title_metrics,1280)
-            or completion_title_visible(_blank_title_metrics,1280)
-            or completion_title_visible(_sparse_fissure_metrics,1280)
-            or not completion_title_width_passes(_sparse_fissure_metrics,1280)
-            or _compact_title_metrics["pixels"]<5000
+    _compact_overlay_metrics=measure_completion_overlay(_compact_overlay_fixture)
+    _wide_overlay_metrics=measure_completion_overlay(_wide_overlay_fixture)
+    _blank_overlay_metrics=measure_completion_overlay(_blank_overlay_fixture)
+    _sparse_fissure_metrics=measure_completion_overlay(_sparse_fissure_fixture)
+    if (not completion_overlay_visible(_compact_overlay_metrics,1280)
+            or not completion_overlay_visible(_wide_overlay_metrics,1280)
+            or completion_overlay_visible(_blank_overlay_metrics,1280)
+            or completion_overlay_visible(_sparse_fissure_metrics,1280)
+            or _compact_overlay_metrics["pixels"]<5000
             or _sparse_fissure_metrics["pixels"]>=5000):
-        raise RuntimeError("BLACK FREQUENCY completion-title density/fissure classifier regression")
-    print("WORLD_CAPTURE: completion title width classifier verified",flush=True)
-
+        raise RuntimeError("BLACK FREQUENCY completion-overlay classifier regression")
+    print("WORLD_CAPTURE: completion overlay classifier verified",flush=True)
 
     if (not is_legacy_magenta_pixel(201,66,214)
             or not is_legacy_magenta_pixel(255,0,255)
@@ -1478,7 +1472,6 @@ def capture_test_world():
     beacon_ready_at=None
     last_beacon_attempt=0
     beacon_aim_verified=False
-    completion_title_started_at=None
     def try_beacon_click(logs):
         nonlocal beacon_attempts,beacon_ready_at,last_beacon_attempt,beacon_aim_verified
         if os.environ.get("BF_TEST_PLAYER_BEACON")!="1":
@@ -1572,43 +1565,35 @@ def capture_test_world():
             return False
         if not aim_camera_at_beacon(log_text):
             return False
-        if completion_title_started_at is None:
-            print("WORLD_CAPTURE_FAIL: completion title start time was not observed",flush=True)
-            return False
-        title_clear_at=completion_title_started_at+52/20.0+.25
-        title_capture_deadline=title_clear_at+5.0
-        title_cleared=False
-        title_attempts=0
-        last_title_metrics=None
-        while time.monotonic()<title_capture_deadline and p.poll() is None:
-            remaining_title_time=title_clear_at-time.monotonic()
-            if remaining_title_time>0:
-                time.sleep(min(.1,remaining_title_time))
-                continue
+        overlay_deadline=time.monotonic()+3.0
+        overlay_absent=False
+        overlay_attempts=0
+        last_overlay_metrics=None
+        while time.monotonic()<overlay_deadline and p.poll() is None:
             snap("beacon-before-left-click.png")
             try:
                 with Image.open(shots/"beacon-before-left-click.png") as frame:
-                    title_metrics=measure_completion_title_width(frame.convert("RGB"))
+                    overlay_metrics=measure_completion_overlay(frame.convert("RGB"))
                     frame_width=frame.width
             except (OSError,ValueError) as error:
                 print("WORLD_CAPTURE: pre-mining frame not readable yet",str(error),flush=True)
                 time.sleep(.1)
                 continue
-            title_attempts+=1
-            last_title_metrics=title_metrics
-            if not completion_title_visible(title_metrics,frame_width):
-                title_cleared=True
+            overlay_attempts+=1
+            last_overlay_metrics=overlay_metrics
+            if not completion_overlay_visible(overlay_metrics,frame_width):
+                overlay_absent=True
                 break
-            if title_attempts==1 or title_attempts%10==0:
-                print("WORLD_CAPTURE: completion title still visible in pre-mining frame",
-                      title_metrics,flush=True)
+            if overlay_attempts==1 or overlay_attempts%10==0:
+                print("WORLD_CAPTURE: completion overlay still visible before beacon break",
+                      overlay_metrics,flush=True)
             time.sleep(.1)
-        if not title_cleared:
-            print("WORLD_CAPTURE_FAIL: completion title remained visible in pre-mining frame",
-                  {"attempts":title_attempts,"lastMetrics":last_title_metrics},flush=True)
+        if not overlay_absent:
+            print("WORLD_CAPTURE_FAIL: completion overlay remained visible before physical beacon break",
+                  {"attempts":overlay_attempts,"lastMetrics":last_overlay_metrics},flush=True)
             return False
-        print("WORLD_CAPTURE: completion title absent in pre-mining frame",
-              {"attempts":title_attempts,"metrics":last_title_metrics},flush=True)
+        print("WORLD_CAPTURE: completion overlay absent before physical beacon break",
+              {"attempts":overlay_attempts,"metrics":last_overlay_metrics},flush=True)
         log_before=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else log_text
         marker_offset=len(log_before)
         focus_game()
@@ -2670,14 +2655,12 @@ def capture_test_world():
                                 print("WORLD_CAPTURE: pulse reached the client but no bounded Dust frame was visible yet",
                                       pulse_marker,flush=True)
                     if "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" in current:
-                        if completion_title_started_at is None:
-                            completion_title_started_at=time.monotonic()
                         restored=True
                         break
                     capture_sky_before_beacon()
                     time.sleep(.1)
                 if restored:
-                    # The server sends the inactive state before the completion title.
+                    # The server sends the inactive state before the completion overlay.
                     # Require one real client render from the short aura fade, even if
                     # the server consumes the physical beacon immediately afterward.
                     fade_start_marker="BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_RENDERED"
@@ -2732,7 +2715,7 @@ def capture_test_world():
                     # the final UI, not 99% or the preceding containment effect.
                     time.sleep(0.75)
                     snap("beacon-restoration-finished.png")
-                    print("WORLD_CAPTURE: restoration fade-out and final title captured",flush=True)
+                    print("WORLD_CAPTURE: restoration fade-out and action-bar-only final frame captured",flush=True)
                 else:
                     snap("beacon-restoration-timeout.png")
                     print("WORLD_CAPTURE_FAIL: restoration did not finish in client",flush=True)
@@ -2753,7 +2736,7 @@ def capture_test_world():
                 with Image.open(finished_restoration_path) as source:
                     finished_frame=source.convert("RGB")
                     finished_restoration_metrics=measure_restoration_palette(finished_frame)
-                    finished_title_metrics=measure_completion_title_width(finished_frame)
+                    finished_overlay_metrics=measure_completion_overlay(finished_frame)
                 if not restoration_palette_evidence_passes(
                         active_restoration_metrics,finished_restoration_metrics):
                     print("WORLD_CAPTURE_FAIL: neither active nor completion frame shows bounded violet restoration Dust",
@@ -2764,12 +2747,12 @@ def capture_test_world():
                 print("WORLD_CAPTURE: restoration violet Dust palette verified",
                       {"capture":palette_frame,"active":active_restoration_metrics,
                        "finished":finished_restoration_metrics},flush=True)
-                if not completion_title_width_passes(finished_title_metrics,finished_frame.size[0]):
-                    print("WORLD_CAPTURE_FAIL: completion title exceeds compact width budget",
-                          finished_title_metrics,flush=True)
+                if completion_overlay_visible(finished_overlay_metrics,finished_frame.size[0]):
+                    print("WORLD_CAPTURE_FAIL: centered completion overlay still covers the physical beacon",
+                          finished_overlay_metrics,flush=True)
                     return False
-                print("WORLD_CAPTURE: compact completion title width verified",
-                      finished_title_metrics,flush=True)
+                print("WORLD_CAPTURE: completion overlay absent; physical beacon unobstructed",
+                      finished_overlay_metrics,flush=True)
                 if not terrain_shot:
                     print("WORLD_CAPTURE_FAIL: no player-visible ground fissure was captured",flush=True)
                     return False
@@ -2872,15 +2855,28 @@ def capture_test_world():
                 if "BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_ACTIONBAR_ONLY_VERIFIED success=true partial=true titlePackets=false" not in log_after:
                     print("WORLD_CAPTURE_FAIL: recovery completion action bar or no-title contract was not verified",flush=True)
                     return False
-                counts=re.search(r"BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored=([0-9]+) destroyed=([0-9]+) skippedOccupied=([0-9]+)",log_after)
+                counts=re.search(r"BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored=([0-9]+) destroyed=([0-9]+) skippedOccupied=([0-9]+) skippedInvalid=([0-9]+)",log_after)
                 if not counts:
                     print("WORLD_CAPTURE_FAIL: missing final restoration accounting",flush=True)
                     return False
-                restored_count,damaged_count,skipped_count=map(int,counts.groups())
+                restored_count,damaged_count,skipped_occupied_count,skipped_invalid_count=map(int,counts.groups())
+                skipped_count=skipped_occupied_count+skipped_invalid_count
                 if restored_count+skipped_count!=damaged_count:
-                    print("WORLD_CAPTURE_FAIL: unaccounted damaged blocks",restored_count,damaged_count,skipped_count,flush=True)
+                    print("WORLD_CAPTURE_FAIL: unaccounted damaged blocks",restored_count,skipped_count,damaged_count,flush=True)
                     return False
-                print("WORLD_CAPTURE: restoration accounting verified",restored_count,skipped_count,damaged_count,flush=True)
+                actionbar_match=re.search(
+                    r"BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_ACTIONBAR_SENT restored=([0-9]+) skippedOccupied=([0-9]+) skippedInvalid=([0-9]+) player=true",
+                    log_after)
+                if not actionbar_match:
+                    print("WORLD_CAPTURE_FAIL: the real player did not receive the completion action-bar message",flush=True)
+                    return False
+                actionbar_counts=tuple(map(int,actionbar_match.groups()))
+                if actionbar_counts!=(restored_count,skipped_occupied_count,skipped_invalid_count):
+                    print("WORLD_CAPTURE_FAIL: completion action-bar counters disagree with restoration accounting",
+                          actionbar_counts,(restored_count,skipped_occupied_count,skipped_invalid_count),flush=True)
+                    return False
+                print("WORLD_CAPTURE: real player received matching completion action-bar accounting",
+                      restored_count,skipped_occupied_count,skipped_invalid_count,flush=True)
                 if os.environ.get("BF_TEST_SPARSE_RECOVERY")=="1":
                     sparse=re.search(r"BLACK_FREQUENCY_TEST SPARSE_RECOVERY_ELIGIBLE edits=(\d+) pending=(\d+)",log_after)
                     if not sparse:
