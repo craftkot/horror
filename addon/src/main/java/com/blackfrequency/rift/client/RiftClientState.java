@@ -1364,6 +1364,17 @@ public final class RiftClientState {
             return groundDistanceFade(dx*dx+dy*dy+dz*dz);
         }
 
+        // Avoid beginning an empty BufferBuilder when the anchor is in range but
+        // every remaining fissure segment is outside the camera's local fade envelope.
+        private static boolean hasVisibleGroundSegment(List<GroundSegment> segments,Vec3 camera) {
+            if(segments==null || camera==null) return false;
+            for(GroundSegment segment:segments) {
+                if(segment!=null && !segment.sample().coreSegmentGap()
+                    && groundSegmentDistanceFade(segment,camera)>0.0D) return true;
+            }
+            return false;
+        }
+
         // A vertically distant camera should release the sampled ClientLevel and
         // mesh just like a camera that leaves the horizontal radius.
         private static boolean clearGeometryCacheIfOutsideGroundRenderRange(
@@ -1437,12 +1448,18 @@ public final class RiftClientState {
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh distance fade regression");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_DISTANCE_FADE_VERIFIED start=48 end=64 midpoint=0.5 monotonic=true invalidRejected=true");
+            GroundSample fadeSample=null;
+            for(GroundSample candidate:GROUND_SAMPLES) {
+                if(!candidate.coreSegmentGap()) { fadeSample=candidate; break; }
+            }
+            if(fadeSample==null)
+                throw new IllegalStateException("BLACK FREQUENCY ground mesh has no non-gap fade fixture");
             GroundSegment nearSegment=new GroundSegment(new GroundPoint(40.0D,64.0D,0.0D),
-                new GroundPoint(42.0D,64.0D,0.0D),1.0D,0.0D,GROUND_SAMPLES[0],1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
+                new GroundPoint(42.0D,64.0D,0.0D),1.0D,0.0D,fadeSample,1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
             GroundSegment midSegment=new GroundSegment(new GroundPoint(55.0D,64.0D,0.0D),
-                new GroundPoint(57.0D,64.0D,0.0D),1.0D,0.0D,GROUND_SAMPLES[0],1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
+                new GroundPoint(57.0D,64.0D,0.0D),1.0D,0.0D,fadeSample,1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
             GroundSegment farSegment=new GroundSegment(new GroundPoint(63.0D,64.0D,0.0D),
-                new GroundPoint(65.0D,64.0D,0.0D),1.0D,0.0D,GROUND_SAMPLES[0],1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
+                new GroundPoint(65.0D,64.0D,0.0D),1.0D,0.0D,fadeSample,1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
             Vec3 fadeCamera=new Vec3(0.0D,64.0D,0.0D);
             double nearSegmentFade=groundSegmentDistanceFade(nearSegment,fadeCamera);
             double midSegmentFade=groundSegmentDistanceFade(midSegment,fadeCamera);
@@ -1453,6 +1470,14 @@ public final class RiftClientState {
                 || farSegmentFade!=0.0D || invalidSegmentFade!=0.0D
                 || !(nearSegmentFade>midSegmentFade && midSegmentFade>farSegmentFade))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh segment distance fade regression");
+            boolean nearMeshVisible=hasVisibleGroundSegment(List.of(nearSegment),fadeCamera);
+            boolean farMeshHidden=!hasVisibleGroundSegment(List.of(farSegment),fadeCamera);
+            boolean invalidCameraHidden=!hasVisibleGroundSegment(List.of(nearSegment),
+                new Vec3(Double.NaN,64.0D,0.0D));
+            if(!(nearMeshVisible && farMeshHidden && invalidCameraHidden))
+                throw new IllegalStateException("BLACK FREQUENCY ground mesh empty-buffer guard regression");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_EMPTY_BUFFER_GUARD_VERIFIED nearVisible=true farHidden=true invalidCameraHidden=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_SEGMENT_DISTANCE_FADE_VERIFIED metric=midpoint start=48 end=64 near={} mid={} far={} invalidRejected=true monotonic=true",
                 nearSegmentFade,midSegmentFade,farSegmentFade);
@@ -2177,6 +2202,7 @@ public final class RiftClientState {
                 return;
             }
 
+            if(!hasVisibleGroundSegment(cachedSegments,camera)) return;
             Matrix4f matrix=event.getPoseStack().last().pose();
             BufferBuilder builder=Tesselator.getInstance().getBuilder();
             RenderSystem.enableBlend();
