@@ -1095,9 +1095,9 @@ public final class RiftClientState {
                     || GROUND_EDGE_RED<0.0F || GROUND_EDGE_RED>1.0F
                     || GROUND_EDGE_GREEN<0.0F || GROUND_EDGE_GREEN>1.0F
                     || GROUND_EDGE_BLUE<0.0F || GROUND_EDGE_BLUE>1.0F
-                    || Math.abs(GROUND_EDGE_RED-.46F)>1.0E-6F
-                    || Math.abs(GROUND_EDGE_GREEN-.18F)>1.0E-6F
-                    || Math.abs(GROUND_EDGE_BLUE-.82F)>1.0E-6F
+                    || Math.abs(GROUND_EDGE_RED-.50F)>1.0E-6F
+                    || Math.abs(GROUND_EDGE_GREEN-.14F)>1.0E-6F
+                    || Math.abs(GROUND_EDGE_BLUE-.90F)>1.0E-6F
                     || !(GROUND_EDGE_BLUE>GROUND_EDGE_RED && GROUND_EDGE_RED>GROUND_EDGE_GREEN)
                     || !Double.isFinite(minimumCoreEdgeGap) || minimumCoreEdgeGap<GROUND_MIN_CORE_EDGE_GAP
                     || !(minimumCoreHalfWidth<minimumEdgeInnerHalfWidth

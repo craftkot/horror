@@ -979,13 +979,14 @@ def capture_test_world():
     def is_ground_fissure_pixel(r,g,b):
         return is_ground_violet_dust_pixel(r,g,b) or is_ground_fissure_accent_pixel(r,g,b)
     def is_ground_mesh_pixel(r,g,b):
-        # The mesh edge is a restrained purple, distinct from both cached Dust colors.
-        return (105 <= r <= 155 and 40 <= g <= 100 and b >= 165
+        # The more saturated blue-violet mesh edge remains distinct from cached Dust colors.
+        return (105 <= r <= 155 and 30 <= g <= 100 and b >= 165
                 and b-r >= 45 and b > r*1.25)
-    # Samples include deep-violet Dust and the darker mesh edge; reject legacy magenta.
+    # Samples include deep-violet Dust and both the previous and current mesh edge; reject legacy magenta.
     if (is_rift_violet_pixel(142,127,155)
             or not is_rift_violet_pixel(134,44,150)
             or not is_rift_violet_pixel(117,46,209)
+            or not is_ground_mesh_pixel(128,36,230)
             or is_ground_fissure_pixel(142,127,155)
             or is_ground_fissure_pixel(134,44,150)
             or not is_ground_violet_dust_pixel(87,20,199)
@@ -1001,6 +1002,7 @@ def capture_test_world():
             or is_ground_fissure_accent_pixel(201,66,214)
             or is_ground_fissure_pixel(201,66,214)
             or not is_ground_mesh_pixel(117,46,209)
+            or not is_ground_mesh_pixel(128,36,230)
             or not is_ground_mesh_pixel(130,55,220)
             or is_ground_mesh_pixel(158,26,250)
             or is_ground_mesh_pixel(198,0,229)
