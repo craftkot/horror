@@ -657,6 +657,7 @@ public final class RiftClientState {
         private static boolean animationProfileLogged;
         private static boolean packedColorProfileLogged;
         private static boolean ribbonColorCacheProfileLogged;
+        private static boolean edgeInterpolationProfileLogged;
         private static boolean samplingProfileLogged;
         private static boolean rangeRejectLogged;
         private static boolean rangeProfileLogged;
@@ -729,6 +730,61 @@ public final class RiftClientState {
             double skew=Math.sin(phase*GROUND_CORE_SKEW_FREQUENCY
                 +arm*GROUND_CORE_SKEW_ARM_PHASE)*GROUND_CORE_SKEW_AMPLITUDE;
             return Math.max(-GROUND_CORE_SKEW_AMPLITUDE,Math.min(GROUND_CORE_SKEW_AMPLITUDE,skew));
+        }
+
+        private static double groundEdgeCenterOffset(double halfWidth,double coreSkew,boolean left) {
+            if(!Double.isFinite(halfWidth) || halfWidth<0.0D || !Double.isFinite(coreSkew)) return 0.0D;
+            double boundedSkew=Math.max(-GROUND_CORE_SKEW_AMPLITUDE,Math.min(GROUND_CORE_SKEW_AMPLITUDE,coreSkew));
+            double edgeOffsetSkew=boundedSkew*GROUND_EDGE_OFFSET_SKEW_SCALE;
+            double magnitude=halfWidth*GROUND_EDGE_OFFSET_SCALE*(left ? 1.0D+edgeOffsetSkew : 1.0D-edgeOffsetSkew);
+            double offset=left ? magnitude : -magnitude;
+            return Double.isFinite(offset) ? offset : 0.0D;
+        }
+
+        private static void verifyGroundEdgeInterpolationProfile() {
+            if(edgeInterpolationProfileLogged) return;
+            double halfWidth=GROUND_MAX_HALF_WIDTH;
+            double centeredLeft=groundEdgeCenterOffset(halfWidth,0.0D,true);
+            double centeredRight=groundEdgeCenterOffset(halfWidth,0.0D,false);
+            double positiveLeft=groundEdgeCenterOffset(halfWidth,GROUND_CORE_SKEW_AMPLITUDE,true);
+            double negativeLeft=groundEdgeCenterOffset(halfWidth,-GROUND_CORE_SKEW_AMPLITUDE,true);
+            double positiveRight=groundEdgeCenterOffset(halfWidth,GROUND_CORE_SKEW_AMPLITUDE,false);
+            double negativeRight=groundEdgeCenterOffset(halfWidth,-GROUND_CORE_SKEW_AMPLITUDE,false);
+            double maximumOffsetDelta=halfWidth*GROUND_EDGE_OFFSET_SCALE
+                *GROUND_CORE_SKEW_AMPLITUDE*GROUND_EDGE_OFFSET_SKEW_SCALE;
+            GroundSample sample=GROUND_SAMPLES[0];
+            GroundSegment first=new GroundSegment(new GroundPoint(0.0D,0.0D,0.0D),
+                new GroundPoint(1.0D,0.0D,0.0D),0.0D,1.0D,sample,1.0D,1.0D,
+                1.0D,1.0D,-.15D,.075D);
+            GroundSegment second=new GroundSegment(new GroundPoint(1.0D,0.0D,0.0D),
+                new GroundPoint(2.0D,0.0D,0.0D),0.0D,1.0D,sample,1.0D,1.0D,
+                1.0D,1.0D,.075D,.15D);
+            double firstLeftEnd=groundEdgeCenterOffset(halfWidth,first.coreSkewB(),true);
+            double secondLeftStart=groundEdgeCenterOffset(halfWidth,second.coreSkewA(),true);
+            double firstRightEnd=groundEdgeCenterOffset(halfWidth,first.coreSkewB(),false);
+            double secondRightStart=groundEdgeCenterOffset(halfWidth,second.coreSkewA(),false);
+            boolean centered=Math.abs(centeredLeft-.222D)<1.0E-9D
+                && Math.abs(centeredRight+.222D)<1.0E-9D;
+            boolean skewed=Math.abs(positiveLeft-(centeredLeft+maximumOffsetDelta))<1.0E-9D
+                && Math.abs(negativeLeft-(centeredLeft-maximumOffsetDelta))<1.0E-9D
+                && Math.abs(positiveRight-(centeredRight+maximumOffsetDelta))<1.0E-9D
+                && Math.abs(negativeRight-(centeredRight-maximumOffsetDelta))<1.0E-9D;
+            boolean bounded=Math.abs(positiveLeft-centeredLeft)<=maximumOffsetDelta+1.0E-12D
+                && Math.abs(negativeLeft-centeredLeft)<=maximumOffsetDelta+1.0E-12D
+                && Math.abs(positiveRight-centeredRight)<=maximumOffsetDelta+1.0E-12D
+                && Math.abs(negativeRight-centeredRight)<=maximumOffsetDelta+1.0E-12D;
+            boolean sharedBoundary=Double.doubleToLongBits(firstLeftEnd)==Double.doubleToLongBits(secondLeftStart)
+                && Double.doubleToLongBits(firstRightEnd)==Double.doubleToLongBits(secondRightStart);
+            boolean invalidRejected=groundEdgeCenterOffset(Double.NaN,.1D,true)==0.0D
+                && groundEdgeCenterOffset(halfWidth,Double.POSITIVE_INFINITY,false)==0.0D
+                && groundEdgeCenterOffset(-.1D,.1D,true)==0.0D;
+            if(!(centered && skewed && bounded && sharedBoundary && invalidRejected
+                && Double.isFinite(maximumOffsetDelta) && maximumOffsetDelta<=.004D))
+                throw new IllegalStateException("BLACK FREQUENCY ground edge endpoint interpolation regression");
+            edgeInterpolationProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_EDGE_ENDPOINT_INTERPOLATION_VERIFIED maxOffsetDelta={} sharedBoundary=true invalidRejected=true",
+                maximumOffsetDelta);
         }
 
         private static GroundSample[] createGroundSamples() {
@@ -1746,6 +1802,7 @@ public final class RiftClientState {
             verifySurfaceSearchOrder();
             verifyTaperProfile();
             verifyGroundSurfaceReliefProfile();
+            verifyGroundEdgeInterpolationProfile();
             verifyGroundContinuityProfile();
             verifyGroundRebuildProfile();
             verifyGroundRenderRangeProfile();
@@ -1991,6 +2048,29 @@ public final class RiftClientState {
                 redChannel,greenChannel,blueChannel,alphaChannelA);
         }
 
+        // Keep each violet lip aligned with the dark core's interpolated skew at both segment ends.
+        // This removes per-quad offset jumps without adding vertices, draw calls or trigonometry.
+        private static void edgeRibbon(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
+                GroundSegment segment,double halfWidth,boolean left,
+                int redChannel,int greenChannel,int blueChannel,int alphaChannelA,int alphaChannelB) {
+            GroundPoint a=segment.a();
+            GroundPoint b=segment.b();
+            double centerA=groundEdgeCenterOffset(halfWidth,segment.coreSkewA(),left);
+            double centerB=groundEdgeCenterOffset(halfWidth,segment.coreSkewB(),left);
+            double leftA=(centerA+GROUND_EDGE_HALF_WIDTH)*segment.taperA();
+            double rightA=(centerA-GROUND_EDGE_HALF_WIDTH)*segment.taperA();
+            double leftB=(centerB+GROUND_EDGE_HALF_WIDTH)*segment.taperB();
+            double rightB=(centerB-GROUND_EDGE_HALF_WIDTH)*segment.taperB();
+            vertex(builder,matrix,camera,a.x()+segment.normalX()*leftA,a.y()+GROUND_EDGE_LIFT,a.z()+segment.normalZ()*leftA,
+                redChannel,greenChannel,blueChannel,alphaChannelA);
+            vertex(builder,matrix,camera,b.x()+segment.normalX()*leftB,b.y()+GROUND_EDGE_LIFT,b.z()+segment.normalZ()*leftB,
+                redChannel,greenChannel,blueChannel,alphaChannelB);
+            vertex(builder,matrix,camera,b.x()+segment.normalX()*rightB,b.y()+GROUND_EDGE_LIFT,b.z()+segment.normalZ()*rightB,
+                redChannel,greenChannel,blueChannel,alphaChannelB);
+            vertex(builder,matrix,camera,a.x()+segment.normalX()*rightA,a.y()+GROUND_EDGE_LIFT,a.z()+segment.normalZ()*rightA,
+                redChannel,greenChannel,blueChannel,alphaChannelA);
+        }
+
         private static void ribbon(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
                 GroundSegment segment,double offset,double halfWidth,double verticalOffset,
                 int redChannel,int greenChannel,int blueChannel,int alphaChannelA,int alphaChannelB) {
@@ -2049,6 +2129,7 @@ public final class RiftClientState {
             taperProfileLogged=false;
             visualProfileLogged=false;
             reliefProfileLogged=false;
+            edgeInterpolationProfileLogged=false;
             surfaceWindowLogged=false;
             supportSurfaceProfileLogged=false;
             rebuildProfileLogged=false;
@@ -2268,9 +2349,6 @@ public final class RiftClientState {
                     float edgeAlphaB=Math.min(1.0F,segmentStrengthB*(.94F*pulse+.06F));
                     int edgeAlphaChannelA=colorChannel(edgeAlphaA);
                     int edgeAlphaChannelB=colorChannel(edgeAlphaB);
-                    double edgeOffsetSkew=sample.coreSkew()*GROUND_EDGE_OFFSET_SKEW_SCALE;
-                    double leftEdgeOffset=halfWidth*GROUND_EDGE_OFFSET_SCALE*(1.0D+edgeOffsetSkew);
-                    double rightEdgeOffset=-halfWidth*GROUND_EDGE_OFFSET_SCALE*(1.0D-edgeOffsetSkew);
                     ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_GLOW_WIDTH_SCALE,0.0D,
                         GROUND_GLOW_RED_CHANNEL,GROUND_GLOW_GREEN_CHANNEL,GROUND_GLOW_BLUE_CHANNEL,
                         glowAlphaChannelA,glowAlphaChannelB);
@@ -2284,11 +2362,11 @@ public final class RiftClientState {
                     // continuous dark core remains visible, so the seam reads as fractured
                     // earth rather than two uninterrupted luminous rails.
                     if(!sample.leftEdgeNotched())
-                        ribbon(builder,matrix,camera,segment,leftEdgeOffset,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,
+                        edgeRibbon(builder,matrix,camera,segment,halfWidth,true,
                             GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,
                             edgeAlphaChannelA,edgeAlphaChannelB);
                     if(!sample.rightEdgeNotched())
-                        ribbon(builder,matrix,camera,segment,rightEdgeOffset,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,
+                        edgeRibbon(builder,matrix,camera,segment,halfWidth,false,
                             GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,
                             edgeAlphaChannelA,edgeAlphaChannelB);
                 }
