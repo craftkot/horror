@@ -2524,6 +2524,11 @@ def capture_test_world():
                     or "float edgeAlpha=Math.min(1.0F,segmentStrength*(.94F*pulse+.06F));" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: camera-local ground fissure fade was not verified or is not used by every ribbon layer",flush=True)
                 return False
+            if ("BLACK_FREQUENCY_TEST GROUND_MESH_EMPTY_BUFFER_GUARD_VERIFIED nearVisible=true farHidden=true invalidCameraHidden=true" not in final_log
+                    or "private static boolean hasVisibleGroundSegment(List<GroundSegment> segments,Vec3 camera)" not in camera_source
+                    or "if(!hasVisibleGroundSegment(cachedSegments,camera)) return;" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: empty ground-mesh buffer guard was not executed before render setup",flush=True)
+                return False
             if ribbon_cache_marker in final_log:
                 edge_rail_pattern = re.compile(
                     r"ribbon\(builder,matrix,camera,segment,(leftEdgeOffset|rightEdgeOffset),GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,\s*"
