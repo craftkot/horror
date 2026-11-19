@@ -1012,10 +1012,16 @@ public final class RiftController {
             ListTag saved=rawSnapshots instanceof ListTag list && !malformedSnapshotList
                 ? list : new ListTag();
             if(malformedSnapshotList) {
-                // A wrong outer tag type or heterogeneous list cannot contain trusted snapshots.
-                // Quarantine the whole container and persist the normalized empty list.
-                LOGGER.warn("BLACK FREQUENCY: quarantined malformed recovery snapshot list container");
-                s.setDirty();
+                // A wrong outer tag type or non-compound list cannot contain trusted snapshots.
+                // If terrain was already damaged, record the lost container as an incomplete
+                // recovery item so the completion action bar cannot claim full stabilization.
+                if(s.restoring || s.edits>0) {
+                    s.skippedInvalid=boundedCounter(s.skippedInvalid+1,MAX_EDITS);
+                    warnInvalidSnapshotOnce(s,"malformed snapshot list container","snapshots");
+                } else {
+                    LOGGER.warn("BLACK FREQUENCY: quarantined malformed recovery snapshot list container");
+                    s.setDirty();
+                }
             }
             int snapshotCount=boundedSnapshotCount(saved.size());
             boolean snapshotStateRepaired=false;
@@ -2233,14 +2239,42 @@ public final class RiftController {
         CompoundTag elementTypeSaved=elementTypeLoaded.save(new CompoundTag());
 
         State legacyWithoutSnapshots=State.load(new CompoundTag());
+
+        // A corrupt container in an active damaged world is not a successful
+        // empty recovery: preserve an explicit partial result across another save.
+        CompoundTag activeOuterType=new CompoundTag();
+        activeOuterType.putBoolean("restoring",true);
+        activeOuterType.putInt("edits",160);
+        activeOuterType.putInt("restoreIndex",159);
+        activeOuterType.putInt("restoreScan",159);
+        activeOuterType.putString("snapshots","not-a-list");
+        State activeOuterLoaded=State.load(activeOuterType);
+        State activeOuterReloaded=State.load(activeOuterLoaded.save(new CompoundTag()));
+
+        CompoundTag activeElementType=new CompoundTag();
+        activeElementType.putBoolean("restoring",true);
+        activeElementType.putInt("edits",160);
+        activeElementType.putInt("restoreIndex",159);
+        activeElementType.putInt("restoreScan",159);
+        activeElementType.put("snapshots",wrongElementType.copy());
+        State activeElementLoaded=State.load(activeElementType);
+        Component partial=restorationCompletionMessage(
+            activeOuterLoaded.restoredBlocks,activeOuterLoaded.skippedOccupied,activeOuterLoaded.skippedInvalid);
+
         if(!outerTypeLoaded.isDirty() || !outerTypeLoaded.snapshots.isEmpty()
             || !outerTypeSaved.contains("snapshots",Tag.TAG_LIST)
             || !outerTypeSaved.getList("snapshots",Tag.TAG_COMPOUND).isEmpty()
             || !elementTypeLoaded.isDirty() || !elementTypeLoaded.snapshots.isEmpty()
             || !elementTypeSaved.contains("snapshots",Tag.TAG_LIST)
             || !elementTypeSaved.getList("snapshots",Tag.TAG_COMPOUND).isEmpty()
-            || legacyWithoutSnapshots.isDirty())
-            throw new IllegalStateException("CI malformed recovery snapshot list quarantine regression");
+            || legacyWithoutSnapshots.isDirty()
+            || activeOuterLoaded.skippedInvalid!=1 || activeElementLoaded.skippedInvalid!=1
+            || activeOuterLoaded.restoreIndex!=-1 || activeOuterLoaded.restoreScan!=-1
+            || activeOuterReloaded.skippedInvalid!=1 || !activeOuterReloaded.restoring
+            || !partial.getString().contains("ВОССТАНОВЛЕНИЕ НЕПОЛНО")
+            || !partial.getString().contains("пропущено 1"))
+            throw new IllegalStateException("CI malformed recovery snapshot list quarantine/partial-status regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_LIST_CORRUPTION_PARTIAL_STATUS_VERIFIED activeRecovery=true invalidContainers=2 restored=0 partialMessage=true persisted=true");
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_LIST_CONTAINER_QUARANTINE_VERIFIED wrongTagType=true wrongElementType=true normalized=true legacyMissingAllowed=true");
     }
 

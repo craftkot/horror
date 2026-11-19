@@ -128,7 +128,8 @@ def verify_beacon_aura_source():
     if ("private static BlockState readCanonicalSnapshotBlockState(ServerLevel level,CompoundTag stateTag)" not in controller
             or controller.count('readCanonicalSnapshotBlockState(level,entry.getCompound("state"))')!=2
             or "NbtUtils.writeBlockState(decoded).equals(stateTag)" not in controller
-            or "RECOVERY_SNAPSHOT_BLOCK_STATE_CANONICAL_ROUNDTRIP_VERIFIED" not in controller):
+            or "RECOVERY_SNAPSHOT_BLOCK_STATE_CANONICAL_ROUNDTRIP_VERIFIED" not in controller
+            or "RECOVERY_SNAPSHOT_LIST_CORRUPTION_PARTIAL_STATUS_VERIFIED" not in controller):
         raise RuntimeError("BLACK FREQUENCY recovery must reject non-canonical saved block states before writes")
     print("WORLD_CAPTURE: loaded-only physical beacon aura packet and render contract verified",flush=True)
 
@@ -2781,6 +2782,11 @@ def capture_test_world():
                                        "valid=true invalidPropertyValue=true unknownProperty=true unknownBlock=true")
             if canonical_snapshot_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: recovery accepted a non-canonical saved block state",flush=True)
+                return False
+            list_corruption_marker=("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_LIST_CORRUPTION_PARTIAL_STATUS_VERIFIED "
+                                    "activeRecovery=true invalidContainers=2 restored=0 partialMessage=true persisted=true")
+            if list_corruption_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: corrupt recovery snapshot container was not reported as incomplete",flush=True)
                 return False
             if os.environ.get("BF_TEST_NATURAL_BEACON")=="1":
                 if not mine_beacon_after_restoration(log_after):
