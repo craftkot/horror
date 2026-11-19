@@ -2956,7 +2956,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: ground surface sampling does not cover the full vertical render radius",flush=True)
                 return False
             if not re.search(
-                    r"BLACK_FREQUENCY_GROUND_MESH_SURFACE_WINDOW referenceY=-?\\d+ topOffset=8 bottomOffset=64 segments=\\d+ arms=\\d+ sampledColumns=\\d+ cacheHits=\\d+",
+                    r"BLACK_FREQUENCY_GROUND_MESH_SURFACE_WINDOW referenceY=-?\d+ topOffset=8 bottomOffset=64 segments=\d+ arms=\d+ sampledColumns=\d+ cacheHits=\d+",
                     log_after):
                 print("WORLD_CAPTURE_FAIL: ground surface window is not bounded to the 64-block render radius",flush=True)
                 return False
