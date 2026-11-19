@@ -3141,7 +3141,9 @@ public final class RiftController {
             throw new IllegalArgumentException("Recovery completion counters cannot be negative");
         long skipped=(long)skippedOccupied+(long)skippedInvalid;
         String status=skipped==0L ? "✦ МИР СТАБИЛИЗИРОВАН" : "✦ ВОССТАНОВЛЕНИЕ НЕПОЛНО";
-        return recoveryViolet(status+" — восстановлено "+restoredBlocks+" блоков; пропущено "+skipped);
+        Component details=Component.literal(" — восстановлено "+restoredBlocks+" блоков; пропущено "+skipped)
+            .withStyle(style -> style.withColor(TextColor.fromRgb(0xC8C2D4)));
+        return recoveryViolet(status).append(details);
     }
 
     private static void verifyRecoveryUiPalette() {
@@ -4210,8 +4212,8 @@ public final class RiftController {
             }
             for(var player:level.players()) {
                 // Completion is a local event. Do not interrupt distant players
-                // or spectators with an unrelated full-screen title.
-                // Completion titles share the tested 3D radius with recovery particles.
+                // or spectators with a full-screen overlay.
+                // Keep the physical beacon visible; only the action bar receives the result.
                 if(!player.isAlive() || player.isRemoved() || player.isSpectator()
                     || !withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z)) continue;
                 player.displayClientMessage(restorationCompletionMessage(
