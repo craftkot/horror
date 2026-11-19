@@ -465,6 +465,9 @@ def verify_real_beacon_break_source():
             or "for(var nearbyPlayer:level.players())" not in activation
             or "for(var player:level.players())" in activation
             or "BEACON_ACTIVATION_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" not in activation
+            or "private static boolean verifyBeaconSightlineOcclusion(" not in sightline
+            or "Blocks.BARRIER.defaultBlockState()" not in sightline
+            or "BEACON_SIGHTLINE_OCCLUSION_REJECTED" not in sightline
             or "private static boolean hasLoadedBeaconSightline(" not in sightline
             or "fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ))" not in sightline
             or "ClipContext.Block.OUTLINE" not in sightline
@@ -3167,6 +3170,9 @@ def capture_test_world():
                     return False
                 if "BLACK_FREQUENCY_TEST BEACON_ACTIVATION_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: actual beacon activation did not pass the server-side loaded-only sightline guard",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_OCCLUSION_REJECTED temporaryBarrier=true restored=true loadedChunksOnly=true" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: server sightline guard did not reject and restore a temporary obstruction",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST BEACON_AURA_ROTATION_PROFILE_VERIFIED periodTicks=1200 outerTurns=1 innerTurns=-2 wrapContinuous=true partialBounded=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon aura rotation profile was not verified",flush=True)

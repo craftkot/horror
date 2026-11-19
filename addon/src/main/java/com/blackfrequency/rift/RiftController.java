@@ -1696,6 +1696,50 @@ public final class RiftController {
     }
 
     /**
+     * Disposable-client regression: prove that a loaded obstruction between the player
+     * and the physical beacon is rejected by the same server ray used for activation.
+     * The original air state is restored in a finally block before the real mouse click.
+     */
+    private static boolean verifyBeaconSightlineOcclusion(ServerLevel level,
+            net.minecraft.server.level.ServerPlayer player,BlockPos beacon,int anchorX,int anchorZ) {
+        if(level==null || player==null || beacon==null) return false;
+        net.minecraft.world.phys.Vec3 eye=player.getEyePosition();
+        net.minecraft.world.phys.Vec3 target=net.minecraft.world.phys.Vec3.atCenterOf(beacon);
+        if(eye==null || !Double.isFinite(eye.x) || !Double.isFinite(eye.y) || !Double.isFinite(eye.z))
+            return false;
+        net.minecraft.world.phys.Vec3 delta=target.subtract(eye);
+        // Try several interior points because the first may share the player's or beacon's block cell.
+        for(int step=2;step<=8;step++) {
+            double fraction=step/10.0D;
+            BlockPos blocker=BlockPos.containing(
+                eye.x+delta.x*fraction,eye.y+delta.y*fraction,eye.z+delta.z*fraction);
+            if(blocker.equals(beacon) || blocker.equals(player.blockPosition())) continue;
+            long dx=(long)blocker.getX()-anchorX;
+            long dz=(long)blocker.getZ()-anchorZ;
+            if(Math.abs(dx)>RADIUS || Math.abs(dz)>RADIUS
+                || dx*dx+dz*dz>(long)RADIUS*RADIUS
+                || blocker.getY()<level.getMinBuildHeight() || blocker.getY()>=level.getMaxBuildHeight()
+                || !level.getWorldBorder().isWithinBounds(blocker)
+                || !level.hasChunk(blocker.getX()>>4,blocker.getZ()>>4)) continue;
+            BlockState original=level.getBlockState(blocker);
+            if(!original.isAir()) continue;
+            if(!level.setBlock(blocker,Blocks.BARRIER.defaultBlockState(),3)) continue;
+            boolean blocked;
+            try {
+                blocked=!hasLoadedBeaconSightline(level,player,beacon);
+            } finally {
+                if(!level.setBlock(blocker,original,3))
+                    throw new IllegalStateException("CI temporary beacon sightline blocker was not restored");
+            }
+            if(blocked) {
+                LOGGER.info("BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_OCCLUSION_REJECTED temporaryBarrier=true restored=true loadedChunksOnly=true");
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Pick a real emitted fissure sample that the test player can see from the
      * verified beacon pad. A nearby surface hidden behind a cliff is not a
      * useful camera target, even when its particles were sent successfully.
@@ -4731,6 +4775,9 @@ public final class RiftController {
                         return;
                     }
                     LOGGER.info("BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true");
+                    if(playerInteractionTest
+                        && !verifyBeaconSightlineOcclusion(level,demoPlayer,demoPos,s.x,s.z))
+                        throw new IllegalStateException("CI beacon sightline accepted a temporary obstruction");
                     demoPlayer.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
                     // teleportTo changes position but does not clear accumulated fall damage.
                     // The player may already be falling because the fracture removed the
