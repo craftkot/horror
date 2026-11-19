@@ -612,9 +612,9 @@ public final class RiftClientState {
         private static final double GROUND_FILAMENT_LIFT=.002D;
         private static final double GROUND_EDGE_LIFT=.008D;
         // Shift the ground rails away from hot magenta toward the sky-rift's deep violet palette.
-        private static final float GROUND_EDGE_RED=.46F;
-        private static final float GROUND_EDGE_GREEN=.18F;
-        private static final float GROUND_EDGE_BLUE=.82F;
+        private static final float GROUND_EDGE_RED=.50F;
+        private static final float GROUND_EDGE_GREEN=.14F;
+        private static final float GROUND_EDGE_BLUE=.90F;
         // Fixed hash salts create independent, reproducible chips in the two exposed crack lips.
         private static final long GROUND_LEFT_EDGE_NOTCH_SALT=0x9E3779B97F4A7C15L;
         private static final long GROUND_RIGHT_EDGE_NOTCH_SALT=0xD1B54A32D192ED03L;
@@ -2009,13 +2009,17 @@ public final class RiftClientState {
                 && GROUND_CORE_GREEN_CHANNEL==0 && GROUND_CORE_BLUE_CHANNEL==6;
             boolean filament=GROUND_FILAMENT_RED_CHANNEL==71
                 && GROUND_FILAMENT_GREEN_CHANNEL==4 && GROUND_FILAMENT_BLUE_CHANNEL==158;
-            boolean edge=GROUND_EDGE_RED_CHANNEL==117
-                && GROUND_EDGE_GREEN_CHANNEL==46 && GROUND_EDGE_BLUE_CHANNEL==209;
-            if(!(glow && core && filament && edge))
+            boolean edge=GROUND_EDGE_RED_CHANNEL==128
+                && GROUND_EDGE_GREEN_CHANNEL==36 && GROUND_EDGE_BLUE_CHANNEL==230;
+            boolean edgePaletteBound=GROUND_EDGE_RED_CHANNEL==colorChannel(GROUND_EDGE_RED)
+                && GROUND_EDGE_GREEN_CHANNEL==colorChannel(GROUND_EDGE_GREEN)
+                && GROUND_EDGE_BLUE_CHANNEL==colorChannel(GROUND_EDGE_BLUE);
+            if(!(glow && core && filament && edge && edgePaletteBound))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh static RGB cache regression");
             ribbonColorCacheProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED staticRgbChannels=12 dynamicAlphaChannels=8 edgeAlphaBaseShared=true edgeNotchesCached=true");
+                "BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED staticRgbChannels=12 dynamicAlphaChannels=8 edgeAlphaBaseShared=true edgeNotchesCached=true edgePaletteBound={}",
+                edgePaletteBound);
         }
 
         // Static RGB channels are packed once; each ribbon interpolates two endpoint alphas.

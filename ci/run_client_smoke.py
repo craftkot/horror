@@ -2309,7 +2309,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: crack-lip notches are not cached and independently applied",flush=True)
                 return False
             ribbon_cache_marker=("BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED "
-                                 "staticRgbChannels=12 dynamicAlphaChannels=8 edgeAlphaBaseShared=true edgeNotchesCached=true")
+                                 "staticRgbChannels=12 dynamicAlphaChannels=8 edgeAlphaBaseShared=true edgeNotchesCached=true edgePaletteBound=true")
             if ribbon_cache_marker in final_log:
                 expected_static_channels=(
                     "private static final int GROUND_GLOW_RED_CHANNEL=colorChannel(.20F);",
@@ -2505,7 +2505,7 @@ def capture_test_world():
                            for i in range(1,12))):
                 print("WORLD_CAPTURE_FAIL: embedded ground-core wall and edge-clearance profile was not verified",flush=True)
                 return False
-            edge_palette_marker="BLACK_FREQUENCY_GROUND_MESH_EDGE_PALETTE_VERIFIED red=0.46 green=0.18 blue=0.82"
+            edge_palette_marker="BLACK_FREQUENCY_GROUND_MESH_EDGE_PALETTE_VERIFIED red=0.5 green=0.14 blue=0.9"
             if edge_palette_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: violet ground-edge palette self-check was not executed",flush=True)
                 return False
@@ -2562,23 +2562,21 @@ def capture_test_world():
                     or "if(!hasVisibleGroundSegment(cachedSegments,camera)) return;" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: empty ground-mesh buffer guard was not executed before render setup",flush=True)
                 return False
-            if ribbon_cache_marker in final_log:
-                edge_rail_pattern = re.compile(
-                    r"ribbon\(builder,matrix,camera,segment,(leftEdgeOffset|rightEdgeOffset),GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,\s*"
-                    r"GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,\s*edgeAlphaChannelA,edgeAlphaChannelB\);"
-                )
-            else:
-                edge_rail_pattern = re.compile(
-                    r"ribbon\(builder,matrix,camera,segment,(leftEdgeOffset|rightEdgeOffset),GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,\s*"
-                    r"GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE,\s*edgeAlpha\);"
-                )
-            edge_rail_offsets = edge_rail_pattern.findall(camera_source)
-            if ("private static final float GROUND_EDGE_RED=.46F;" not in camera_source
-                    or "private static final float GROUND_EDGE_GREEN=.18F;" not in camera_source
-                    or "private static final float GROUND_EDGE_BLUE=.82F;" not in camera_source
+            edge_rail_pattern = re.compile(
+                r"edgeRibbon\(builder,matrix,camera,segment,halfWidth,(true|false),\s*"
+                r"GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,\s*"
+                r"edgeAlphaChannelA,edgeAlphaChannelB\);"
+            )
+            edge_rail_sides = edge_rail_pattern.findall(camera_source)
+            if ("private static final float GROUND_EDGE_RED=.50F;" not in camera_source
+                    or "private static final float GROUND_EDGE_GREEN=.14F;" not in camera_source
+                    or "private static final float GROUND_EDGE_BLUE=.90F;" not in camera_source
                     or "GROUND_EDGE_HALF_WIDTH=.026D;" not in camera_source
-                    or sorted(edge_rail_offsets) != ["leftEdgeOffset", "rightEdgeOffset"]):
-                print("WORLD_CAPTURE_FAIL: current violet edge palette is not used by both skew-following ground rails",flush=True)
+                    or "private static void edgeRibbon(" not in camera_source
+                    or "GROUND_EDGE_HALF_WIDTH)*segment.taperA()" not in camera_source
+                    or "GROUND_EDGE_LIFT" not in camera_source
+                    or sorted(edge_rail_sides) != ["false", "true"]):
+                print("WORLD_CAPTURE_FAIL: saturated violet palette is not bound to both endpoint-interpolated edge rails",flush=True)
                 return False
             if ("private static final double GROUND_MIN_HALF_WIDTH=.045D;" not in camera_source
                     or "GROUND_BASE_HALF_WIDTH=.052D;" not in camera_source
