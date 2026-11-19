@@ -223,7 +223,7 @@ def verify_restoration_particle_source():
             or "verifyCiBeaconPadSignSelection();" not in source
             or "for(int offset=CI_BEACON_PAD_FIRST_SOLID_ROW;offset<=CI_BEACON_PAD_LAST_SOLID_ROW;offset++)" not in pad_body
             or "for(int lateral=-CI_BEACON_PAD_LATERAL_RADIUS;lateral<=CI_BEACON_PAD_LATERAL_RADIUS;lateral++)" not in pad_body
-            or "ciBeaconSightlineHitsBeacon(level,demoPlayer,demoPos)" not in pad_body
+            or "hasLoadedBeaconSightline(level,demoPlayer,demoPos)" not in pad_body
             or "BEACON_SIGHTLINE_VERIFIED" not in pad_body
             or "demoPos.offset(dx,CI_BEACON_PAD_FLOOR_Y_OFFSET,dz)" not in pad_body
             or "Math.abs(padDx)>RADIUS" not in pad_body
@@ -431,6 +431,9 @@ def verify_real_beacon_break_source():
     gate_start=controller.find("private static boolean mayActivateBeacon(")
     gate_end=controller.find("\n    private static boolean mayRecoverCiBeaconAimAfterMiss",gate_start)
     gate=controller[gate_start:gate_end] if gate_start>=0 and gate_end>gate_start else ""
+    sightline_start=controller.find("private static boolean hasLoadedBeaconSightline(")
+    sightline_end=controller.find("\n    /**\n     * Pick a real emitted fissure sample",sightline_start)
+    sightline=controller[sightline_start:sightline_end] if sightline_start>=0 and sightline_end> sightline_start else ""
     helper_start=controller.find("private static double eyeDistanceSquaredToBlock(")
     helper_end=controller.find("\n    private static boolean withinBeaconInteractionReach",helper_start)
     helper=controller[helper_start:helper_end] if helper_start>=0 and helper_end>helper_start else ""
@@ -453,6 +456,13 @@ def verify_real_beacon_break_source():
             or "eyeDistanceSquaredToBlock(miner.getEyePosition(),pos)" not in handler
             or "withinBeaconInteractionReach(distanceSquared)" not in handler
             or "eyeDistanceSquaredToBlock(event.getEntity().getEyePosition(),pos)" not in activation
+            or "hasLoadedBeaconSightline(level,player,pos)" not in activation
+            or "BEACON_ACTIVATION_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" not in activation
+            or "private static boolean hasLoadedBeaconSightline(" not in sightline
+            or "fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ))" not in sightline
+            or "ClipContext.Block.OUTLINE" not in sightline
+            or "ClipContext.Fluid.NONE" not in sightline
+            or "level.clip(new net.minecraft.world.level.ClipContext(eye,target," not in sightline
             or "withinBeaconInteractionReach(distanceSquared)" not in gate
             or "NATURAL_BEACON_MINED_NO_DROP" not in handler
             or "private static double eyeDistanceSquaredToBlock(" not in controller
@@ -487,7 +497,7 @@ def verify_real_beacon_break_source():
             or "REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED" not in script
             or "beacon-after-left-click.png" not in script):
         raise RuntimeError("BLACK FREQUENCY post-restoration beacon mining must capture survival and eye-to-block reach at the real break event")
-    print("WORLD_CAPTURE: beacon activation and mining both enforce eye-to-block AABB reach",flush=True)
+    print("WORLD_CAPTURE: beacon activation enforces eye-to-AABB reach and loaded-only line of sight; mining enforces reach",flush=True)
 
 def point_to_block_aabb_distance_squared(point,origin):
     if not all(math.isfinite(value) for value in (*point,*origin)):
@@ -1522,6 +1532,7 @@ def capture_test_world():
         while time.monotonic()<interaction_deadline and p.poll() is None:
             interaction_logs=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
             if ("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in interaction_logs
+                    and "BLACK_FREQUENCY_TEST BEACON_ACTIVATION_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" in interaction_logs
                     and "BLACK_FREQUENCY_TEST BEACON_START_ACTIONBAR_ONLY" in interaction_logs
                     and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in interaction_logs):
                 interaction_confirmed=True
@@ -3146,6 +3157,9 @@ def capture_test_world():
                     return False
                 if "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon was not activated by actual player right-click",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST BEACON_ACTIVATION_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: actual beacon activation did not pass the server-side loaded-only sightline guard",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST BEACON_AURA_ROTATION_PROFILE_VERIFIED periodTicks=1200 outerTurns=1 innerTurns=-2 wrapContinuous=true partialBounded=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon aura rotation profile was not verified",flush=True)
