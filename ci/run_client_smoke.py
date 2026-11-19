@@ -2952,6 +2952,14 @@ def capture_test_world():
             if "BLACK_FREQUENCY_GROUND_MESH_STRUCTURAL_SUPPORT_FILTER_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: client ground mesh did not verify structural-surface filtering",flush=True)
                 return False
+            if "BLACK_FREQUENCY_TEST GROUND_MESH_SURFACE_SEARCH_RANGE_VERIFIED renderRadius=64 searchBelow=64 searchAbove=8 bounded=true" not in log_after:
+                print("WORLD_CAPTURE_FAIL: ground surface sampling does not cover the full vertical render radius",flush=True)
+                return False
+            if not re.search(
+                    r"BLACK_FREQUENCY_GROUND_MESH_SURFACE_WINDOW referenceY=-?\\d+ topOffset=8 bottomOffset=64 segments=\\d+ arms=\\d+ sampledColumns=\\d+ cacheHits=\\d+",
+                    log_after):
+                print("WORLD_CAPTURE_FAIL: ground surface window is not bounded to the 64-block render radius",flush=True)
+                return False
             if "BLACK_FREQUENCY_GROUND_MESH_BLOCK_ENTITY_FILTER_VERIFIED support=true surface=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: client ground mesh did not reject block-entity fixtures",flush=True)
                 return False
