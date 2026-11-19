@@ -3112,13 +3112,13 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_STRUCTURAL_SUPPORT_FILTER_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: server did not reject structural blocks as fissure terrain",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_VERIFIED red=0.42 green=0.18 blue=0.92 scale=0.5" not in log_after:
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_VERIFIED red=0.42 green=0.18 blue=0.92 scale=0.6" not in log_after:
                 print("WORLD_CAPTURE_FAIL: compact violet fissure edge Dust profile was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_LAYOUT_VERIFIED count=4 color=violet perArm=1 outerTip=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: four compact violet edge Dust motes were not verified",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_CACHE_VERIFIED cached=true scale=0.5" not in log_after:
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_CACHE_VERIFIED cached=true scale=0.6" not in log_after:
                 print("WORLD_CAPTURE_FAIL: compact violet edge Dust option was not verified as cached",flush=True)
                 return False
             if not valid_fissure_particle_emission(fissure):
@@ -3126,7 +3126,7 @@ def capture_test_world():
                       fissure,flush=True)
                 return False
             edge_dust=re.search(
-                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_EMITTED count=([0-9]+) material=dust scale=0.5 fallbackArms=([0-9]+)",
+                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_EMITTED count=([0-9]+) material=dust scale=0.6 fallbackArms=([0-9]+)",
                 log_after)
             if (not edge_dust or int(edge_dust.group(1))!=4
                     or int(edge_dust.group(1))!=fissure[3]
