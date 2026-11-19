@@ -533,13 +533,17 @@ public final class RiftClientState {
      */
     public static final class GroundRenderer {
         private static final int RADIUS=RiftGeometry.RADIUS;
+        // Keep the sampled vertical window consistent with the 64-block 3D render envelope.
+        private static final int GROUND_RENDER_RADIUS=64;
+        private static final int GROUND_SURFACE_SEARCH_BELOW=GROUND_RENDER_RADIUS;
+        private static final int GROUND_SURFACE_SEARCH_ABOVE=8;
         private static final int ARM_COUNT=RiftGeometry.FISSURE_ARM_COUNT;
         // Double the cosmetic mesh density while preserving every server-particle sample at even indices.
         private static final int SEGMENTS_PER_ARM=RiftGeometry.FISSURE_SEGMENTS_PER_ARM*2;
         private static final double SAMPLE_SPACING=RiftGeometry.FISSURE_SAMPLE_SPACING*.5D;
         private static final int GROUND_ENDPOINT_TAPER_SAMPLES=RiftGeometry.FISSURE_SEGMENTS_PER_ARM/2;
         // Terrain sampling is throttled; the fissure pulse itself still renders every frame.
-        // Surface sampling may inspect a 40-block vertical window per unique column.
+        // Surface sampling is bounded to the full vertical render radius below and eight blocks above the camera.
         // Rebuild twice per second; anchor and two-block vertical changes still invalidate immediately.
         private static final long REBUILD_INTERVAL=10L;
         // Empty meshes often mean the camera is outside the bounded surface-search window
@@ -1390,9 +1394,10 @@ public final class RiftClientState {
         // used by its visual culling. Reject non-finite deltas instead of letting
         // NaN bypass the comparison and keep an invisible mesh pinned in memory.
         private static boolean isWithinGroundRenderRange(long horizontalDistanceSquared,double verticalDelta) {
-            return horizontalDistanceSquared>=0L && horizontalDistanceSquared<=64L*64L
+            long renderRadiusSquared=(long)GROUND_RENDER_RADIUS*GROUND_RENDER_RADIUS;
+            return horizontalDistanceSquared>=0L && horizontalDistanceSquared<=renderRadiusSquared
                 && Double.isFinite(verticalDelta)
-                && horizontalDistanceSquared+verticalDelta*verticalDelta<=64.0D*64.0D;
+                && horizontalDistanceSquared+verticalDelta*verticalDelta<=(double)renderRadiusSquared;
         }
 
         // Fade the cosmetic ground mesh over the last 16 blocks of its existing
@@ -1696,7 +1701,9 @@ public final class RiftClientState {
 
         private static void verifySurfaceSearchOrder() {
             if(surfaceSearchProfileLogged) return;
-            int min=36,reference=68,max=76;
+            int reference=68;
+            int min=reference-GROUND_SURFACE_SEARCH_BELOW;
+            int max=reference+GROUND_SURFACE_SEARCH_ABOVE;
             int start=Math.max(min,Math.min(max,reference));
             int candidateCount=max-min+1;
             boolean[] visited=new boolean[candidateCount];
@@ -1711,13 +1718,20 @@ public final class RiftClientState {
             if(surfaceSearchCandidateY(0,start,min,max)!=68
                 || surfaceSearchCandidateY(1,start,min,max)!=67
                 || surfaceSearchCandidateY(32,start,min,max)!=36
-                || surfaceSearchCandidateY(33,start,min,max)!=69
-                || surfaceSearchCandidateY(40,start,min,max)!=76
+                || surfaceSearchCandidateY(63,start,min,max)!=5
+                || surfaceSearchCandidateY(64,start,min,max)!=4
+                || surfaceSearchCandidateY(65,start,min,max)!=69
+                || surfaceSearchCandidateY(72,start,min,max)!=76
                 || !lowClamp || !highClamp)
                 throw new IllegalStateException("BLACK FREQUENCY ground surface search priority regression");
+            if(GROUND_RENDER_RADIUS!=64 || GROUND_SURFACE_SEARCH_BELOW!=GROUND_RENDER_RADIUS
+                || GROUND_SURFACE_SEARCH_ABOVE!=8 || candidateCount!=73)
+                throw new IllegalStateException("BLACK FREQUENCY ground surface search/render range mismatch");
             surfaceSearchProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_SURFACE_SEARCH_ORDER_VERIFIED nearestBelowFirst=true bounded=true unique=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_SURFACE_SEARCH_RANGE_VERIFIED renderRadius=64 searchBelow=64 searchAbove=8 bounded=true");
         }
 
         private static double sampleGroundY(net.minecraft.client.multiplayer.ClientLevel level,
@@ -1732,8 +1746,8 @@ public final class RiftClientState {
             // A no-leaves heightmap can still select the top of a tall tree trunk.
             // Search a bounded window around the nearby player's actual height instead:
             // this finds the ground below canopies without scanning an entire column.
-            int maxSurfaceY=Math.min(referenceY+8,level.getMaxBuildHeight()-2);
-            int minSurfaceY=Math.max(level.getMinBuildHeight()+1,referenceY-32);
+            int maxSurfaceY=Math.min(referenceY+GROUND_SURFACE_SEARCH_ABOVE,level.getMaxBuildHeight()-2);
+            int minSurfaceY=Math.max(level.getMinBuildHeight()+1,referenceY-GROUND_SURFACE_SEARCH_BELOW);
             if(maxSurfaceY<minSurfaceY) return Double.NaN;
             int startY=Math.max(minSurfaceY,Math.min(maxSurfaceY,referenceY));
             int candidateCount=maxSurfaceY-minSurfaceY+1;
@@ -2263,7 +2277,7 @@ public final class RiftClientState {
                 if(!surfaceWindowLogged) {
                     surfaceWindowLogged=true;
                     com.mojang.logging.LogUtils.getLogger().info(
-                        "BLACK_FREQUENCY_GROUND_MESH_SURFACE_WINDOW referenceY={} topOffset=8 bottomOffset=32 segments={} arms={} sampledColumns={} cacheHits={}",
+                        "BLACK_FREQUENCY_GROUND_MESH_SURFACE_WINDOW referenceY={} topOffset=8 bottomOffset=64 segments={} arms={} sampledColumns={} cacheHits={}",
                         surfaceReferenceY,cachedSegments.size(),cachedArmCount,cachedSampledColumns,cachedColumnCacheHits);
                 }
                 cachedLevel=level;
