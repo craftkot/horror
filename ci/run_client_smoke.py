@@ -2963,6 +2963,9 @@ def capture_test_world():
             if "BLACK_FREQUENCY_GROUND_MESH_PROFILE_TEST_MODE enabled=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: expensive ground mesh profile probes were not enabled in the smoke client",flush=True)
                 return False
+            if "BLACK_FREQUENCY_GROUND_MESH_TIMING_BUDGET_VERIFIED maxSamples=4 first=true last=true afterBudget=false invalidCounter=false" not in log_after:
+                print("WORLD_CAPTURE_FAIL: ground mesh timing continued beyond its bounded diagnostic budget",flush=True)
+                return False
             build_timings = re.findall(
                 r"BLACK_FREQUENCY_GROUND_MESH_BUILD_TIMING elapsedMicros=(\d+) firstBuild=(true|false) profileChecks=(true|false) sampledColumns=(\d+) cacheHits=(\d+) segments=(\d+) arms=(\d+) steepStepBreaks=(\d+)",
                 log_after)

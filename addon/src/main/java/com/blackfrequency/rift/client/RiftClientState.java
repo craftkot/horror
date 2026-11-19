@@ -658,6 +658,10 @@ public final class RiftClientState {
         private static boolean surfaceWindowLogged;
         // Keep only the first few rebuild timings: the first includes one-time profile checks.
         private static int groundBuildTimingSamplesLogged;
+
+        private static boolean shouldMeasureGroundMeshBuild(int samplesLogged) {
+            return samplesLogged>=0 && samplesLogged<4;
+        }
         // Expensive invariant probes belong in disposable smoke clients, not production render frames.
         private static final boolean VERIFY_GROUND_MESH_PROFILES=
             Boolean.getBoolean("blackfrequency.verifyGroundMeshProfiles");
@@ -1364,6 +1368,14 @@ public final class RiftClientState {
             boolean emptyNearMaxAt=shouldRebuild(Long.MAX_VALUE,Long.MAX_VALUE-40L,false,65,65,false);
             boolean emptyNegativeClock=shouldRebuild(-1L,-41L,false,65,65,false);
             boolean emptyBackwardReset=shouldRebuild(Long.MIN_VALUE+5L,Long.MAX_VALUE-5L,false,65,65,false);
+            boolean firstTimingSample=shouldMeasureGroundMeshBuild(0);
+            boolean lastTimingSample=shouldMeasureGroundMeshBuild(3);
+            boolean timingBudgetExhausted=!shouldMeasureGroundMeshBuild(4)
+                && !shouldMeasureGroundMeshBuild(Integer.MAX_VALUE);
+            boolean invalidTimingCounterRejected=!shouldMeasureGroundMeshBuild(-1);
+            if(!(firstTimingSample && lastTimingSample && timingBudgetExhausted
+                && invalidTimingCounterRejected))
+                throw new IllegalStateException("BLACK FREQUENCY ground mesh timing budget regression");
             if(!(stable && oneBlockStable && twoBlockMove && teleport && sixTickStable
                 && beforeInterval && interval && anchor && extremeForward && nearMaxBeforeInterval
                 && nearMaxAtInterval && negativeClockInterval && backwardExtremeReset
@@ -1381,6 +1393,8 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_EMPTY_REBUILD_BACKOFF_VERIFIED populatedInterval={} emptyInterval={} ratio={} immediateInvalidation=true",
                 REBUILD_INTERVAL,EMPTY_MESH_REBUILD_INTERVAL,EMPTY_MESH_REBUILD_INTERVAL/REBUILD_INTERVAL);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_TIMING_BUDGET_VERIFIED maxSamples=4 first=true last=true afterBudget=false invalidCounter=false");
         }
 
         private static boolean isSafeCameraPosition(Vec3 camera) {
@@ -2273,10 +2287,11 @@ public final class RiftClientState {
             if(anchorChanged) emptyMeshLogged=false;
             if(shouldRebuild(tick,cachedTick,anchorChanged,surfaceReferenceY,cachedReferenceY,
                     !cachedSegments.isEmpty())) {
-                long buildStartedNanos=System.nanoTime();
+                boolean measureBuildTiming=shouldMeasureGroundMeshBuild(groundBuildTimingSamplesLogged);
+                long buildStartedNanos=measureBuildTiming?System.nanoTime():0L;
                 GroundMesh mesh=buildSegments(level,worldAnchorX,worldAnchorZ,surfaceReferenceY);
-                long buildElapsedNanos=System.nanoTime()-buildStartedNanos;
-                if(groundBuildTimingSamplesLogged<4) {
+                if(measureBuildTiming) {
+                    long buildElapsedNanos=System.nanoTime()-buildStartedNanos;
                     int timingSample=groundBuildTimingSamplesLogged++;
                     com.mojang.logging.LogUtils.getLogger().info(
                         "BLACK_FREQUENCY_GROUND_MESH_BUILD_TIMING elapsedMicros={} firstBuild={} profileChecks={} sampledColumns={} cacheHits={} segments={} arms={} steepStepBreaks={}",
