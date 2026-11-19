@@ -1352,16 +1352,22 @@ public final class RiftClientState {
             return 1.0D-smooth;
         }
 
-        // Fade each short mesh segment from its own midpoint, not from the distant rift anchor.
-        // This keeps the nearest arms readable while distant arms disappear independently.
+        // Evaluate the 3D fade at each endpoint so a short quad can taper across the
+        // 64-block boundary instead of disappearing when only its midpoint crosses it.
+        private static double groundPointDistanceFade(GroundPoint point,Vec3 camera) {
+            if(point==null || camera==null) return 0.0D;
+            double dx=point.x()-camera.x;
+            double dy=point.y()-camera.y;
+            double dz=point.z()-camera.z;
+            return groundDistanceFade(dx*dx+dy*dy+dz*dz);
+        }
+
+        // A segment remains drawable while either endpoint overlaps the fade envelope.
+        // Its two vertex alphas are interpolated independently by the GPU.
         private static double groundSegmentDistanceFade(GroundSegment segment,Vec3 camera) {
             if(segment==null || camera==null) return 0.0D;
-            GroundPoint a=segment.a();
-            GroundPoint b=segment.b();
-            double dx=(a.x()+b.x())*.5D-camera.x;
-            double dy=(a.y()+b.y())*.5D-camera.y;
-            double dz=(a.z()+b.z())*.5D-camera.z;
-            return groundDistanceFade(dx*dx+dy*dy+dz*dz);
+            return Math.max(groundPointDistanceFade(segment.a(),camera),
+                groundPointDistanceFade(segment.b(),camera));
         }
 
         // Avoid beginning an empty BufferBuilder when the anchor is in range but
@@ -1458,29 +1464,36 @@ public final class RiftClientState {
                 new GroundPoint(42.0D,64.0D,0.0D),1.0D,0.0D,fadeSample,1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
             GroundSegment midSegment=new GroundSegment(new GroundPoint(55.0D,64.0D,0.0D),
                 new GroundPoint(57.0D,64.0D,0.0D),1.0D,0.0D,fadeSample,1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
-            GroundSegment farSegment=new GroundSegment(new GroundPoint(63.0D,64.0D,0.0D),
+            GroundSegment crossingSegment=new GroundSegment(new GroundPoint(63.0D,64.0D,0.0D),
                 new GroundPoint(65.0D,64.0D,0.0D),1.0D,0.0D,fadeSample,1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
+            GroundSegment farSegment=new GroundSegment(new GroundPoint(65.0D,64.0D,0.0D),
+                new GroundPoint(67.0D,64.0D,0.0D),1.0D,0.0D,fadeSample,1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
             Vec3 fadeCamera=new Vec3(0.0D,64.0D,0.0D);
             double nearSegmentFade=groundSegmentDistanceFade(nearSegment,fadeCamera);
             double midSegmentFade=groundSegmentDistanceFade(midSegment,fadeCamera);
+            double crossingSegmentFade=groundSegmentDistanceFade(crossingSegment,fadeCamera);
+            double crossingEndFade=groundPointDistanceFade(crossingSegment.b(),fadeCamera);
             double farSegmentFade=groundSegmentDistanceFade(farSegment,fadeCamera);
             double invalidSegmentFade=groundSegmentDistanceFade(nearSegment,
                 new Vec3(Double.NaN,64.0D,0.0D));
             if(nearSegmentFade!=1.0D || !(midSegmentFade>0.0D && midSegmentFade<1.0D)
+                || !(crossingSegmentFade>0.0D) || crossingEndFade!=0.0D
                 || farSegmentFade!=0.0D || invalidSegmentFade!=0.0D
-                || !(nearSegmentFade>midSegmentFade && midSegmentFade>farSegmentFade))
-                throw new IllegalStateException("BLACK FREQUENCY ground mesh segment distance fade regression");
+                || !(nearSegmentFade>midSegmentFade && midSegmentFade>crossingSegmentFade
+                    && crossingSegmentFade>farSegmentFade))
+                throw new IllegalStateException("BLACK FREQUENCY ground mesh endpoint distance fade regression");
             boolean nearMeshVisible=hasVisibleGroundSegment(List.of(nearSegment),fadeCamera);
+            boolean crossingMeshVisible=hasVisibleGroundSegment(List.of(crossingSegment),fadeCamera);
             boolean farMeshHidden=!hasVisibleGroundSegment(List.of(farSegment),fadeCamera);
             boolean invalidCameraHidden=!hasVisibleGroundSegment(List.of(nearSegment),
                 new Vec3(Double.NaN,64.0D,0.0D));
-            if(!(nearMeshVisible && farMeshHidden && invalidCameraHidden))
+            if(!(nearMeshVisible && crossingMeshVisible && farMeshHidden && invalidCameraHidden))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh empty-buffer guard regression");
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_MESH_EMPTY_BUFFER_GUARD_VERIFIED nearVisible=true farHidden=true invalidCameraHidden=true");
+                "BLACK_FREQUENCY_TEST GROUND_MESH_EMPTY_BUFFER_GUARD_VERIFIED nearVisible=true crossingVisible=true farHidden=true invalidCameraHidden=true");
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_MESH_SEGMENT_DISTANCE_FADE_VERIFIED metric=midpoint start=48 end=64 near={} mid={} far={} invalidRejected=true monotonic=true",
-                nearSegmentFade,midSegmentFade,farSegmentFade);
+                "BLACK_FREQUENCY_TEST GROUND_MESH_ENDPOINT_DISTANCE_FADE_VERIFIED metric=per-endpoint start=48 end=64 near={} mid={} crossing={} crossingEnd={} far={} invalidRejected=true monotonic=true",
+                nearSegmentFade,midSegmentFade,crossingSegmentFade,crossingEndFade,farSegmentFade);
             verticallyCulled=true;
             verticallyCulledAnchorX=1;
             verticallyCulledAnchorZ=2;
@@ -1945,10 +1958,10 @@ public final class RiftClientState {
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh static RGB cache regression");
             ribbonColorCacheProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED staticRgbChannels=12 dynamicAlphaChannels=4 edgeAlphaBaseShared=true edgeNotchesCached=true");
+                "BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED staticRgbChannels=12 dynamicAlphaChannels=8 edgeAlphaBaseShared=true edgeNotchesCached=true");
         }
 
-        // Static RGB channels are packed once; only each ribbon's animated alpha is dynamic.
+        // Static RGB channels are packed once; each ribbon interpolates two endpoint alphas.
         private static void vertex(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
                 double x,double y,double z,int red,int green,int blue,int alpha) {
             builder.vertex(matrix,(float)(x-camera.x),(float)(y-camera.y),(float)(z-camera.z))
@@ -1960,7 +1973,7 @@ public final class RiftClientState {
         // its static profile changes gradually across sample boundaries.
         private static void coreRibbon(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
                 GroundSegment segment,double halfWidth,double verticalOffset,
-                int redChannel,int greenChannel,int blueChannel,int alphaChannel) {
+                int redChannel,int greenChannel,int blueChannel,int alphaChannelA,int alphaChannelB) {
             GroundPoint a=segment.a();
             GroundPoint b=segment.b();
             double coreOffset=verticalOffset;
@@ -1969,18 +1982,18 @@ public final class RiftClientState {
             double leftB=halfWidth*segment.coreWidthScaleB()*(1.0D+segment.coreSkewB())*segment.taperB();
             double rightB=-halfWidth*segment.coreWidthScaleB()*(1.0D-segment.coreSkewB())*segment.taperB();
             vertex(builder,matrix,camera,a.x()+segment.normalX()*leftA,a.y()+coreOffset,a.z()+segment.normalZ()*leftA,
-                redChannel,greenChannel,blueChannel,alphaChannel);
+                redChannel,greenChannel,blueChannel,alphaChannelA);
             vertex(builder,matrix,camera,b.x()+segment.normalX()*leftB,b.y()+coreOffset,b.z()+segment.normalZ()*leftB,
-                redChannel,greenChannel,blueChannel,alphaChannel);
+                redChannel,greenChannel,blueChannel,alphaChannelB);
             vertex(builder,matrix,camera,b.x()+segment.normalX()*rightB,b.y()+coreOffset,b.z()+segment.normalZ()*rightB,
-                redChannel,greenChannel,blueChannel,alphaChannel);
+                redChannel,greenChannel,blueChannel,alphaChannelB);
             vertex(builder,matrix,camera,a.x()+segment.normalX()*rightA,a.y()+coreOffset,a.z()+segment.normalZ()*rightA,
-                redChannel,greenChannel,blueChannel,alphaChannel);
+                redChannel,greenChannel,blueChannel,alphaChannelA);
         }
 
         private static void ribbon(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
                 GroundSegment segment,double offset,double halfWidth,double verticalOffset,
-                int redChannel,int greenChannel,int blueChannel,int alphaChannel) {
+                int redChannel,int greenChannel,int blueChannel,int alphaChannelA,int alphaChannelB) {
             GroundPoint a=segment.a();
             GroundPoint b=segment.b();
             // Scale the offset and half-width together so glow, dark core and
@@ -1990,13 +2003,13 @@ public final class RiftClientState {
             double leftB=(offset+halfWidth)*segment.taperB();
             double rightB=(offset-halfWidth)*segment.taperB();
             vertex(builder,matrix,camera,a.x()+segment.normalX()*leftA,a.y()+verticalOffset,a.z()+segment.normalZ()*leftA,
-                redChannel,greenChannel,blueChannel,alphaChannel);
+                redChannel,greenChannel,blueChannel,alphaChannelA);
             vertex(builder,matrix,camera,b.x()+segment.normalX()*leftB,b.y()+verticalOffset,b.z()+segment.normalZ()*leftB,
-                redChannel,greenChannel,blueChannel,alphaChannel);
+                redChannel,greenChannel,blueChannel,alphaChannelB);
             vertex(builder,matrix,camera,b.x()+segment.normalX()*rightB,b.y()+verticalOffset,b.z()+segment.normalZ()*rightB,
-                redChannel,greenChannel,blueChannel,alphaChannel);
+                redChannel,greenChannel,blueChannel,alphaChannelB);
             vertex(builder,matrix,camera,a.x()+segment.normalX()*rightA,a.y()+verticalOffset,a.z()+segment.normalZ()*rightA,
-                redChannel,greenChannel,blueChannel,alphaChannel);
+                redChannel,greenChannel,blueChannel,alphaChannelA);
         }
 
         private static void clearGeometryCache() {
@@ -2229,9 +2242,11 @@ public final class RiftClientState {
                     // Break the whole cross-section occasionally; keeping only a dark ribbon
                     // through every gap makes the fissure read like a cable on the terrain.
                     if(sample.coreSegmentGap()) continue;
-                    double segmentFade=groundSegmentDistanceFade(segment,camera);
-                    if(segmentFade<=0.0D) continue;
-                    float segmentStrength=boundedStrength*(float)segmentFade;
+                    double segmentFadeA=groundPointDistanceFade(segment.a(),camera);
+                    double segmentFadeB=groundPointDistanceFade(segment.b(),camera);
+                    if(segmentFadeA<=0.0D && segmentFadeB<=0.0D) continue;
+                    float segmentStrengthA=boundedStrength*(float)segmentFadeA;
+                    float segmentStrengthB=boundedStrength*(float)segmentFadeB;
                     double wave=.5D+.5D*(waveSin*sample.phaseCos()+waveCos*sample.phaseSin());
                     // A slow travelling pulse changes width independently along
                     // the seam; endpoint taper keeps each arm from ending bluntly.
@@ -2240,31 +2255,42 @@ public final class RiftClientState {
                     double halfWidth=Math.max(GROUND_MIN_HALF_WIDTH,
                         GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE*wave+widthFlicker);
                     float pulse=(float)(.78D+.22D*(pulseSin*sample.phaseCos()+pulseCos*sample.phaseSin()));
-                    float alpha=segmentStrength*pulse;
-                    int glowAlphaChannel=colorChannel(alpha*GROUND_GLOW_ALPHA);
-                    int coreAlphaChannel=colorChannel(alpha*.94F);
+                    float alphaA=segmentStrengthA*pulse;
+                    float alphaB=segmentStrengthB*pulse;
+                    int glowAlphaChannelA=colorChannel(alphaA*GROUND_GLOW_ALPHA);
+                    int glowAlphaChannelB=colorChannel(alphaB*GROUND_GLOW_ALPHA);
+                    int coreAlphaChannelA=colorChannel(alphaA*.94F);
+                    int coreAlphaChannelB=colorChannel(alphaB*.94F);
                     float corePulse=(float)boundedCorePulse(wave);
-                    int filamentAlphaChannel=colorChannel(alpha*corePulse);
-                    float edgeAlpha=Math.min(1.0F,segmentStrength*(.94F*pulse+.06F));
-                    int edgeAlphaChannel=colorChannel(edgeAlpha);
+                    int filamentAlphaChannelA=colorChannel(alphaA*corePulse);
+                    int filamentAlphaChannelB=colorChannel(alphaB*corePulse);
+                    float edgeAlphaA=Math.min(1.0F,segmentStrengthA*(.94F*pulse+.06F));
+                    float edgeAlphaB=Math.min(1.0F,segmentStrengthB*(.94F*pulse+.06F));
+                    int edgeAlphaChannelA=colorChannel(edgeAlphaA);
+                    int edgeAlphaChannelB=colorChannel(edgeAlphaB);
                     double edgeOffsetSkew=sample.coreSkew()*GROUND_EDGE_OFFSET_SKEW_SCALE;
                     double leftEdgeOffset=halfWidth*GROUND_EDGE_OFFSET_SCALE*(1.0D+edgeOffsetSkew);
                     double rightEdgeOffset=-halfWidth*GROUND_EDGE_OFFSET_SCALE*(1.0D-edgeOffsetSkew);
                     ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_GLOW_WIDTH_SCALE,0.0D,
-                        GROUND_GLOW_RED_CHANNEL,GROUND_GLOW_GREEN_CHANNEL,GROUND_GLOW_BLUE_CHANNEL,glowAlphaChannel);
+                        GROUND_GLOW_RED_CHANNEL,GROUND_GLOW_GREEN_CHANNEL,GROUND_GLOW_BLUE_CHANNEL,
+                        glowAlphaChannelA,glowAlphaChannelB);
                     coreRibbon(builder,matrix,camera,segment,halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS,
-                        GROUND_CORE_RED_CHANNEL,GROUND_CORE_GREEN_CHANNEL,GROUND_CORE_BLUE_CHANNEL,coreAlphaChannel);
+                        GROUND_CORE_RED_CHANNEL,GROUND_CORE_GREEN_CHANNEL,GROUND_CORE_BLUE_CHANNEL,
+                        coreAlphaChannelA,coreAlphaChannelB);
                     ribbon(builder,matrix,camera,segment,0.0D,halfWidth*.16D,GROUND_FILAMENT_LIFT,
-                        GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,filamentAlphaChannel);
+                        GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,
+                        filamentAlphaChannelA,filamentAlphaChannelB);
                     // Leave small, deterministic gaps in each lip independently. The
                     // continuous dark core remains visible, so the seam reads as fractured
                     // earth rather than two uninterrupted luminous rails.
                     if(!sample.leftEdgeNotched())
                         ribbon(builder,matrix,camera,segment,leftEdgeOffset,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,
-                            GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel);
+                            GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,
+                            edgeAlphaChannelA,edgeAlphaChannelB);
                     if(!sample.rightEdgeNotched())
                         ribbon(builder,matrix,camera,segment,rightEdgeOffset,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,
-                            GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel);
+                            GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,
+                            edgeAlphaChannelA,edgeAlphaChannelB);
                 }
                 BufferUploader.drawWithShader(builder.end());
             } finally {

@@ -2305,7 +2305,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: crack-lip notches are not cached and independently applied",flush=True)
                 return False
             ribbon_cache_marker=("BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED "
-                                 "staticRgbChannels=12 dynamicAlphaChannels=4 edgeAlphaBaseShared=true edgeNotchesCached=true")
+                                 "staticRgbChannels=12 dynamicAlphaChannels=8 edgeAlphaBaseShared=true edgeNotchesCached=true")
             if ribbon_cache_marker in final_log:
                 expected_static_channels=(
                     "private static final int GROUND_GLOW_RED_CHANNEL=colorChannel(.20F);",
@@ -2321,37 +2321,42 @@ def capture_test_world():
                     "private static final int GROUND_EDGE_GREEN_CHANNEL=colorChannel(GROUND_EDGE_GREEN);",
                     "private static final int GROUND_EDGE_BLUE_CHANNEL=colorChannel(GROUND_EDGE_BLUE);")
                 dynamic_alpha_calls=(
-                    "int glowAlphaChannel=colorChannel(alpha*GROUND_GLOW_ALPHA);",
-                    "int coreAlphaChannel=colorChannel(alpha*.94F);",
-                    "int filamentAlphaChannel=colorChannel(alpha*corePulse);",
-                    "int edgeAlphaChannel=colorChannel(edgeAlpha);")
-                ribbon_calls=(
-                    "GROUND_GLOW_RED_CHANNEL,GROUND_GLOW_GREEN_CHANNEL,GROUND_GLOW_BLUE_CHANNEL,glowAlphaChannel",
-                    "GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,filamentAlphaChannel",
-                    "GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel")
+                    "int glowAlphaChannelA=colorChannel(alphaA*GROUND_GLOW_ALPHA);",
+                    "int glowAlphaChannelB=colorChannel(alphaB*GROUND_GLOW_ALPHA);",
+                    "int coreAlphaChannelA=colorChannel(alphaA*.94F);",
+                    "int coreAlphaChannelB=colorChannel(alphaB*.94F);",
+                    "int filamentAlphaChannelA=colorChannel(alphaA*corePulse);",
+                    "int filamentAlphaChannelB=colorChannel(alphaB*corePulse);",
+                    "int edgeAlphaChannelA=colorChannel(edgeAlphaA);",
+                    "int edgeAlphaChannelB=colorChannel(edgeAlphaB);")
+                ribbon_call_patterns=(
+                    r"GROUND_GLOW_RED_CHANNEL,GROUND_GLOW_GREEN_CHANNEL,GROUND_GLOW_BLUE_CHANNEL,\s*glowAlphaChannelA,glowAlphaChannelB",
+                    r"GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,\s*filamentAlphaChannelA,filamentAlphaChannelB",
+                    r"GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,\s*edgeAlphaChannelA,edgeAlphaChannelB")
                 render_start=camera_source.find("for(GroundSegment segment:cachedSegments)")
                 render_end=camera_source.find("BufferUploader.drawWithShader(builder.end());",render_start)
                 render_source=(camera_source[render_start:render_end]
                                if render_start>=0 and render_end>render_start else "")
                 if (not vertex_source or ".color(red,green,blue,alpha)" not in vertex_source
                         or "colorChannel(" in vertex_source or not ribbon_source
-                        or "int redChannel,int greenChannel,int blueChannel,int alphaChannel" not in ribbon_source
+                        or "int redChannel,int greenChannel,int blueChannel,int alphaChannelA,int alphaChannelB" not in ribbon_source
                         or "colorChannel(" in ribbon_source
-                        or ribbon_source.count("redChannel,greenChannel,blueChannel,alphaChannel")!=4
+                        or ribbon_source.count("redChannel,greenChannel,blueChannel,alphaChannelA")!=2
+                        or ribbon_source.count("redChannel,greenChannel,blueChannel,alphaChannelB")!=2
                         or any(field not in camera_source for field in expected_static_channels)
                         or any(render_source.count(call)!=1 for call in dynamic_alpha_calls)
-                        or render_source.count("colorChannel(")!=4
+                        or render_source.count("colorChannel(")!=8
                         or "coreRibbon(builder,matrix,camera,segment,halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS," not in render_source
-                        or any(call not in render_source for call in ribbon_calls)
-                        or render_source.count("GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel")!=2
+                        or any(re.search(pattern,render_source) is None for pattern in ribbon_call_patterns)
+                        or len(re.findall(r"GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,\s*edgeAlphaChannelA,edgeAlphaChannelB",render_source))!=2
                         or "if(!sample.leftEdgeNotched())" not in render_source
                         or "if(!sample.rightEdgeNotched())" not in render_source
                         or "isGroundEdgeNotched(" in render_source
                         or "verifyPackedColorProfile();" not in build_source
                         or "verifyRibbonColorCacheProfile();" not in build_source):
-                    print("WORLD_CAPTURE_FAIL: ground ribbon must cache 12 static RGB channels and convert only four dynamic alpha channels per segment",flush=True)
+                    print("WORLD_CAPTURE_FAIL: ground ribbon must cache 12 static RGB channels and compute two endpoint alphas for each of four layers",flush=True)
                     return False
-                print("WORLD_CAPTURE: ground ribbon reuses 12 static RGB channels and computes four alpha channels per segment",flush=True)
+                print("WORLD_CAPTURE: ground ribbon reuses 12 static RGB channels and computes eight endpoint alpha channels per segment",flush=True)
             else:
                 channel_calls=("int redChannel=colorChannel(red);",
                                "int greenChannel=colorChannel(green);",
@@ -2509,22 +2514,32 @@ def capture_test_world():
                     or "double rightEdgeOffset=-halfWidth*GROUND_EDGE_OFFSET_SCALE*(1.0D-edgeOffsetSkew);" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: asymmetric violet edge rails are not tied to the bounded core skew",flush=True)
                 return False
-            segment_distance_fade=re.search(
-                r"BLACK_FREQUENCY_TEST GROUND_MESH_SEGMENT_DISTANCE_FADE_VERIFIED metric=midpoint start=48 end=64 near=([-+0-9.eE]+) mid=([-+0-9.eE]+) far=([-+0-9.eE]+) invalidRejected=true monotonic=true",
+            endpoint_distance_fade=re.search(
+                r"BLACK_FREQUENCY_TEST GROUND_MESH_ENDPOINT_DISTANCE_FADE_VERIFIED metric=per-endpoint start=48 end=64 near=([-+0-9.eE]+) mid=([-+0-9.eE]+) crossing=([-+0-9.eE]+) crossingEnd=([-+0-9.eE]+) far=([-+0-9.eE]+) invalidRejected=true monotonic=true",
                 final_log)
-            expected_segment_fade=(1.0,.5534803206997085,0.0)
-            if (not segment_distance_fade
-                    or any(not math.isclose(float(segment_distance_fade.group(i)),expected_segment_fade[i-1],
+            expected_endpoint_fade=(1.0,.644621729850769,.014355985138228555,0.0,0.0)
+            if (not endpoint_distance_fade
+                    or any(not math.isclose(float(endpoint_distance_fade.group(i)),expected_endpoint_fade[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
-                           for i in range(1,4))
+                           for i in range(1,6))
+                    or "private static double groundPointDistanceFade(GroundPoint point,Vec3 camera)" not in camera_source
                     or "private static double groundSegmentDistanceFade(GroundSegment segment,Vec3 camera)" not in camera_source
-                    or "double segmentFade=groundSegmentDistanceFade(segment,camera);" not in camera_source
-                    or "float segmentStrength=boundedStrength*(float)segmentFade;" not in camera_source
-                    or "float boundedStrength=(float)Math.min(1.0F,strength);" not in camera_source
-                    or "float edgeAlpha=Math.min(1.0F,segmentStrength*(.94F*pulse+.06F));" not in camera_source):
-                print("WORLD_CAPTURE_FAIL: camera-local ground fissure fade was not verified or is not used by every ribbon layer",flush=True)
+                    or "double segmentFadeA=groundPointDistanceFade(segment.a(),camera);" not in camera_source
+                    or "double segmentFadeB=groundPointDistanceFade(segment.b(),camera);" not in camera_source
+                    or "float segmentStrengthA=boundedStrength*(float)segmentFadeA;" not in camera_source
+                    or "float segmentStrengthB=boundedStrength*(float)segmentFadeB;" not in camera_source
+                    or "int glowAlphaChannelA=colorChannel(alphaA*GROUND_GLOW_ALPHA);" not in camera_source
+                    or "int glowAlphaChannelB=colorChannel(alphaB*GROUND_GLOW_ALPHA);" not in camera_source
+                    or "int coreAlphaChannelA=colorChannel(alphaA*.94F);" not in camera_source
+                    or "int coreAlphaChannelB=colorChannel(alphaB*.94F);" not in camera_source
+                    or "int filamentAlphaChannelA=colorChannel(alphaA*corePulse);" not in camera_source
+                    or "int filamentAlphaChannelB=colorChannel(alphaB*corePulse);" not in camera_source
+                    or "int edgeAlphaChannelA=colorChannel(edgeAlphaA);" not in camera_source
+                    or "int edgeAlphaChannelB=colorChannel(edgeAlphaB);" not in camera_source
+                    or "float boundedStrength=(float)Math.min(1.0F,strength);" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: per-endpoint ground fissure fade is not verified across every ribbon layer",flush=True)
                 return False
-            if ("BLACK_FREQUENCY_TEST GROUND_MESH_EMPTY_BUFFER_GUARD_VERIFIED nearVisible=true farHidden=true invalidCameraHidden=true" not in final_log
+            if ("BLACK_FREQUENCY_TEST GROUND_MESH_EMPTY_BUFFER_GUARD_VERIFIED nearVisible=true crossingVisible=true farHidden=true invalidCameraHidden=true" not in final_log
                     or "private static boolean hasVisibleGroundSegment(List<GroundSegment> segments,Vec3 camera)" not in camera_source
                     or "if(!hasVisibleGroundSegment(cachedSegments,camera)) return;" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: empty ground-mesh buffer guard was not executed before render setup",flush=True)
@@ -2532,12 +2547,12 @@ def capture_test_world():
             if ribbon_cache_marker in final_log:
                 edge_rail_pattern = re.compile(
                     r"ribbon\(builder,matrix,camera,segment,(leftEdgeOffset|rightEdgeOffset),GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,\s*"
-                    r"GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel\);"
+                    r"GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,\s*edgeAlphaChannelA,edgeAlphaChannelB\);"
                 )
             else:
                 edge_rail_pattern = re.compile(
                     r"ribbon\(builder,matrix,camera,segment,(leftEdgeOffset|rightEdgeOffset),GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,\s*"
-                    r"GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE,edgeAlpha\);"
+                    r"GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE,\s*edgeAlpha\);"
                 )
             edge_rail_offsets = edge_rail_pattern.findall(camera_source)
             if ("private static final float GROUND_EDGE_RED=.46F;" not in camera_source
