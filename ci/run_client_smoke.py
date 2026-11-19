@@ -2252,12 +2252,12 @@ def capture_test_world():
                 return False
             print("WORLD_CAPTURE: ground animation uses six shared time-base trig calls per frame",flush=True)
             core_gap_marker=("BLACK_FREQUENCY_GROUND_MESH_CORE_SEGMENT_GAP_PROFILE_VERIFIED "
-                             "samples=96 gaps=7 adjacentGapPairs=0 deterministic=true gapRate=1/16")
+                             "samples=96 gaps=3 adjacentGapPairs=0 deterministic=true gapRate=1/32")
             if core_gap_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: full-section ground fissure gaps were not verified",flush=True)
                 return False
             edge_notch_marker=("BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED "
-                               "samples=96 left=27 right=25 asymmetricSamples=38 deterministic=true notchRate=1/4")
+                               "samples=96 left=12 right=8 asymmetricSamples=18 deterministic=true notchRate=1/8")
             core_width_marker=("BLACK_FREQUENCY_GROUND_MESH_CORE_WIDTH_PROFILE_VERIFIED "
                                "samples=96 minBound=0.78 maxBound=1.22 maxAdjacentDeltaLimit=0.075 interpolated=true bounded=true "
                                "harmonics=2 broadAmplitude=0.16 detailAmplitude=0.05 detailFrequency=0.43 armPhase=1.13 invalidFallback=1.0")
@@ -2297,8 +2297,8 @@ def capture_test_world():
                     or "sample.coreSegmentGap()!=isGroundCoreSegmentGap(phase)" not in camera_source
                     or "if(sample.coreSegmentGap()) continue;" not in camera_source
                     or "private static boolean isGroundEdgeNotched(double phase,long salt)" not in camera_source
-                    or "return (groundSampleHash(phase,salt) & 3L)==0L;" not in camera_source
-                    or "return (groundSampleHash(phase,GROUND_CORE_SEGMENT_GAP_SALT) & 15L)==0L;" not in camera_source
+                    or "return (groundSampleHash(phase,salt) & 7L)==0L;" not in camera_source
+                    or "return (groundSampleHash(phase,GROUND_CORE_SEGMENT_GAP_SALT) & 31L)==0L;" not in camera_source
                     or "int adjacentCoreGapPairs=0;" not in camera_source
                     or "if(previousCoreSegmentGap) adjacentCoreGapPairs++;" not in camera_source
                     or "adjacentCoreGapPairs!=0" not in camera_source
