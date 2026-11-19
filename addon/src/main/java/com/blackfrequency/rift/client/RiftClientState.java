@@ -578,9 +578,9 @@ public final class RiftClientState {
         private static final double MAX_GROUND_SEGMENT_GRADE=2.5D;
         // Keep cliff-side ribbon tips visible without bridging terrain discontinuities.
         private static final double CLIFF_BREAK_TAPER=.22D;
-        // Narrow the surface glow and dark core so the fissure reads as a split in terrain, not a raised cable.
-        private static final double GROUND_GLOW_WIDTH_SCALE=4.4D;
-        private static final double GROUND_CORE_WIDTH_SCALE=1.3D;
+        // Broaden the recessed core and halo so the fissure reads as a ground rupture at normal camera distance.
+        private static final double GROUND_GLOW_WIDTH_SCALE=5.0D;
+        private static final double GROUND_CORE_WIDTH_SCALE=1.55D;
         // The recessed core pinches and widens along the seam; endpoint widths are interpolated per segment.
         private static final double GROUND_MIN_CORE_WIDTH_SCALE=.78D;
         private static final double GROUND_MAX_CORE_WIDTH_SCALE=1.22D;
@@ -592,13 +592,13 @@ public final class RiftClientState {
         private static final double GROUND_CORE_SKEW_AMPLITUDE=.15D;
         private static final double GROUND_CORE_SKEW_FREQUENCY=.71D;
         private static final double GROUND_CORE_SKEW_ARM_PHASE=2.17D;
-        // Keep both violet lips close to the narrow dark core while preserving a visible gap.
-        private static final double GROUND_EDGE_OFFSET_SCALE=2.32D;
+        // Place both violet lips outside the widened dark core while keeping them inside the soft halo.
+        private static final double GROUND_EDGE_OFFSET_SCALE=2.7D;
         // The render pulse is clamped to this interval for every wave/flicker phase.
         private static final double GROUND_MIN_HALF_WIDTH=.045D;
-        private static final double GROUND_BASE_HALF_WIDTH=.048D;
-        private static final double GROUND_WAVE_HALF_WIDTH_RANGE=.016D;
-        private static final double GROUND_WIDTH_FLICKER=.004D;
+        private static final double GROUND_BASE_HALF_WIDTH=.052D;
+        private static final double GROUND_WAVE_HALF_WIDTH_RANGE=.017D;
+        private static final double GROUND_WIDTH_FLICKER=.005D;
         private static final double GROUND_MAX_HALF_WIDTH=
             GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE+GROUND_WIDTH_FLICKER;
         private static final double GROUND_EDGE_HALF_WIDTH=.026D;
@@ -1013,12 +1013,12 @@ public final class RiftClientState {
                     *(1.0D+GROUND_CORE_SKEW_AMPLITUDE);
                 double maximumEdgeInnerHalfWidth=maximumHalfWidth*GROUND_EDGE_OFFSET_SCALE-GROUND_EDGE_HALF_WIDTH;
                 double minimumCoreEdgeGap=maximumEdgeInnerHalfWidth-maximumCoreHalfWidth;
-                if(Math.abs(GROUND_GLOW_WIDTH_SCALE-4.4D)>1.0E-9D
-                    || Math.abs(GROUND_CORE_WIDTH_SCALE-1.3D)>1.0E-9D
-                    || Math.abs(GROUND_EDGE_OFFSET_SCALE-2.32D)>1.0E-9D
+                if(Math.abs(GROUND_GLOW_WIDTH_SCALE-5.0D)>1.0E-9D
+                    || Math.abs(GROUND_CORE_WIDTH_SCALE-1.55D)>1.0E-9D
+                    || Math.abs(GROUND_EDGE_OFFSET_SCALE-2.7D)>1.0E-9D
                     || Math.abs(GROUND_CORE_SKEW_AMPLITUDE-.15D)>1.0E-9D
                     || Math.abs(GROUND_EDGE_HALF_WIDTH-.026D)>1.0E-9D
-                    || Math.abs(maximumHalfWidth-.068D)>1.0E-9D
+                    || Math.abs(maximumHalfWidth-.074D)>1.0E-9D
                     || !Float.isFinite(GROUND_EDGE_RED) || !Float.isFinite(GROUND_EDGE_GREEN)
                     || !Float.isFinite(GROUND_EDGE_BLUE)
                     || GROUND_EDGE_RED<0.0F || GROUND_EDGE_RED>1.0F
@@ -1090,7 +1090,7 @@ public final class RiftClientState {
                     && minimumEdgeInnerHalfWidth<minimumGlowHalfWidth)
                 || !(maximumCoreHalfWidth<maximumEdgeInnerHalfWidth
                     && maximumEdgeInnerHalfWidth<maximumGlowHalfWidth)
-                || Math.abs(GROUND_EDGE_OFFSET_SCALE-2.32D)>1.0E-9D
+                || Math.abs(GROUND_EDGE_OFFSET_SCALE-2.7D)>1.0E-9D
                 || Math.abs(GROUND_CORE_SKEW_AMPLITUDE-.15D)>1.0E-9D
                 || Math.abs(GROUND_SURFACE_CLEARANCE-.020D)>1.0E-9D
                 || Math.abs(GROUND_CORE_RECESS-.009D)>1.0E-9D
