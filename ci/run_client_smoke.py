@@ -125,10 +125,10 @@ def verify_beacon_aura_source():
             or "SKY_SHADER_RELOAD_POST_DRAW_VERIFIED" not in render_body):
         raise RuntimeError("BLACK FREQUENCY sky shader uniforms must be cached per shader instance and invalidated on reload")
     print("WORLD_CAPTURE: shader uniform cache and resource-reload lifecycle source contract verified",flush=True)
-    if ("private static BlockState readCanonicalSnapshotBlockState(ServerLevel level,CompoundTag stateTag)" not in source
-            or source.count('readCanonicalSnapshotBlockState(level,entry.getCompound("state"))')!=2
-            or "NbtUtils.writeBlockState(decoded).equals(stateTag)" not in source
-            or "RECOVERY_SNAPSHOT_BLOCK_STATE_CANONICAL_ROUNDTRIP_VERIFIED" not in source):
+    if ("private static BlockState readCanonicalSnapshotBlockState(ServerLevel level,CompoundTag stateTag)" not in controller
+            or controller.count('readCanonicalSnapshotBlockState(level,entry.getCompound("state"))')!=2
+            or "NbtUtils.writeBlockState(decoded).equals(stateTag)" not in controller
+            or "RECOVERY_SNAPSHOT_BLOCK_STATE_CANONICAL_ROUNDTRIP_VERIFIED" not in controller):
         raise RuntimeError("BLACK FREQUENCY recovery must reject non-canonical saved block states before writes")
     print("WORLD_CAPTURE: loaded-only physical beacon aura packet and render contract verified",flush=True)
 
