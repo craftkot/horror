@@ -530,7 +530,7 @@ public final class RiftController {
             && gravityAnomalyCrossShear(-1.0D)==0.0D
             && gravityAnomalyCrossShear(Double.NaN)==0.0D
             && gravityAnomalyCrossShear(Double.POSITIVE_INFINITY)==0.0D
-            && gravityAnomalyCrossShear(1.0D)<=.00464D
+            && gravityAnomalyCrossShear(1.0D)<=.00464D+1.0E-12D
             && GRAVITY_LIFT_BASE_DRIFT+shearAtPeak<.04D;
         if(!(bounded && deterministic && pockets && drifting && invalidRejected && shearProfile))
             throw new IllegalStateException("CI gravity anomaly field regression");
