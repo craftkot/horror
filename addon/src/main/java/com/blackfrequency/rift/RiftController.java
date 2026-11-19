@@ -1017,6 +1017,9 @@ public final class RiftController {
                 // recovery item so the completion action bar cannot claim full stabilization.
                 if(s.restoring || s.edits>0) {
                     s.skippedInvalid=boundedCounter(s.skippedInvalid+1,MAX_EDITS);
+                    // The warning is one-shot, but every newly quarantined container must persist.
+                    // A previous warning must not suppress the dirty flag for this new counter value.
+                    s.setDirty();
                     warnInvalidSnapshotOnce(s,"malformed snapshot list container","snapshots");
                 } else {
                     LOGGER.warn("BLACK FREQUENCY: quarantined malformed recovery snapshot list container");
@@ -2251,6 +2254,19 @@ public final class RiftController {
         State activeOuterLoaded=State.load(activeOuterType);
         State activeOuterReloaded=State.load(activeOuterLoaded.save(new CompoundTag()));
 
+        // Once the one-shot warning has already fired, a later corrupt container
+        // must still dirty SavedData so its newly incremented count reaches disk.
+        CompoundTag previouslyWarnedType=new CompoundTag();
+        previouslyWarnedType.putBoolean("restoring",true);
+        previouslyWarnedType.putInt("edits",160);
+        previouslyWarnedType.putInt("restoreIndex",159);
+        previouslyWarnedType.putInt("restoreScan",159);
+        previouslyWarnedType.putInt("skippedInvalid",4);
+        previouslyWarnedType.putBoolean("invalidSnapshotWarningLogged",true);
+        previouslyWarnedType.putString("snapshots","not-a-list");
+        State previouslyWarnedLoaded=State.load(previouslyWarnedType);
+        State previouslyWarnedReloaded=State.load(previouslyWarnedLoaded.save(new CompoundTag()));
+
         CompoundTag activeElementType=new CompoundTag();
         activeElementType.putBoolean("restoring",true);
         activeElementType.putInt("edits",160);
@@ -2271,10 +2287,14 @@ public final class RiftController {
             || activeOuterLoaded.skippedInvalid!=1 || activeElementLoaded.skippedInvalid!=1
             || activeOuterLoaded.restoreIndex!=-1 || activeOuterLoaded.restoreScan!=-1
             || activeOuterReloaded.skippedInvalid!=1 || !activeOuterReloaded.restoring
+            || !previouslyWarnedLoaded.isDirty() || previouslyWarnedLoaded.skippedInvalid!=5
+            || !previouslyWarnedLoaded.invalidSnapshotWarningLogged
+            || previouslyWarnedReloaded.skippedInvalid!=5 || !previouslyWarnedReloaded.restoring
             || !partial.getString().contains("ВОССТАНОВЛЕНИЕ НЕПОЛНО")
             || !partial.getString().contains("пропущено 1"))
             throw new IllegalStateException("CI malformed recovery snapshot list quarantine/partial-status regression");
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_LIST_CORRUPTION_PARTIAL_STATUS_VERIFIED activeRecovery=true invalidContainers=2 restored=0 partialMessage=true persisted=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_CORRUPTION_COUNTER_PERSISTENCE_VERIFIED previousWarning=true incremented=true dirty=true roundTrip=true");
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_LIST_CONTAINER_QUARANTINE_VERIFIED wrongTagType=true wrongElementType=true normalized=true legacyMissingAllowed=true");
     }
 
