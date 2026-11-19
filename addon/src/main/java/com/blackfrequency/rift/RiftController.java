@@ -45,6 +45,9 @@ public final class RiftController {
     private static double gravityFieldMicroTimeOffset;
     // Reuse the diagonal cross-wave to warp micro-anomaly phase without another trig call per player.
     private static final double GRAVITY_MICRO_PHASE_WARP_AMPLITUDE=.55D;
+    private static final double GRAVITY_LIFT_ZONE_THRESHOLD=.42D;
+    private static final double GRAVITY_LIFT_BASE_DRIFT=.035D;
+    private static final double GRAVITY_LIFT_CROSS_SHEAR_SCALE=.008D;
     // The legacy dark-purple formatting code is magenta; use the actual deep-violet brand color.
     private static final int RECOVERY_UI_VIOLET_RGB=0x5714C7;
     private static final boolean CI_TEST = Boolean.getBoolean("blackfrequency.ciTestMode");
@@ -482,6 +485,14 @@ public final class RiftController {
         if(gravityFieldCacheRefreshCount<Long.MAX_VALUE) gravityFieldCacheRefreshCount++;
     }
 
+    /** A small field-coupled cross-current makes lift pockets shear sideways without another trig call. */
+    private static double gravityAnomalyCrossShear(double zone) {
+        if(!Double.isFinite(zone)) return 0.0D;
+        double boundedZone=Math.max(-1.0D,Math.min(1.0D,zone));
+        return Math.max(0.0D,boundedZone-GRAVITY_LIFT_ZONE_THRESHOLD)
+            *GRAVITY_LIFT_CROSS_SHEAR_SCALE;
+    }
+
     private static double gravityAnomalyField(double x,double z,int ticks) {
         if(!Double.isFinite(x) || !Double.isFinite(z)
             || Math.abs(x)>30_000_000.0D || Math.abs(z)>30_000_000.0D) return 0.0D;
@@ -505,13 +516,26 @@ public final class RiftController {
         boolean bounded=Double.isFinite(lift) && Double.isFinite(sink)
             && lift>=-1.0D && lift<=1.0D && sink>=-1.0D && sink<=1.0D;
         boolean deterministic=Math.abs(lift-repeated)<=1.0E-12D;
-        boolean pockets=lift>.42D && sink<-.68D;
+        boolean pockets=lift>GRAVITY_LIFT_ZONE_THRESHOLD && sink<-.68D;
         boolean drifting=Math.abs(later-lift)>.05D;
         boolean invalidRejected=gravityAnomalyField(Double.NaN,0.0D,0)==0.0D
             && gravityAnomalyField(30_000_001.0D,0.0D,0)==0.0D;
-        if(!(bounded && deterministic && pockets && drifting && invalidRejected))
+        double shearAtThreshold=gravityAnomalyCrossShear(GRAVITY_LIFT_ZONE_THRESHOLD);
+        double shearAtMidpoint=gravityAnomalyCrossShear(.71D);
+        double shearAtPeak=gravityAnomalyCrossShear(1.0D);
+        boolean shearProfile=shearAtThreshold==0.0D
+            && Math.abs(shearAtMidpoint-.00232D)<1.0E-12D
+            && Math.abs(shearAtPeak-.00464D)<1.0E-12D
+            && gravityAnomalyCrossShear(2.0D)==shearAtPeak
+            && gravityAnomalyCrossShear(-1.0D)==0.0D
+            && gravityAnomalyCrossShear(Double.NaN)==0.0D
+            && gravityAnomalyCrossShear(Double.POSITIVE_INFINITY)==0.0D
+            && gravityAnomalyCrossShear(1.0D)<=.00464D
+            && GRAVITY_LIFT_BASE_DRIFT+shearAtPeak<.04D;
+        if(!(bounded && deterministic && pockets && drifting && invalidRejected && shearProfile))
             throw new IllegalStateException("CI gravity anomaly field regression");
         LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_TURBULENCE_VERIFIED baseWeight=1.0 crossAmplitude=0.12 bounded=true deterministic=true liftPocket=true sinkPocket=true timeDrift=true invalidRejected=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_CROSS_SHEAR_PROFILE_VERIFIED threshold=0.42 max=0.00464 maxCombinedDrift=0.03964 monotonic=true bounded=true deterministic=true invalidRejected=true");
 
         double[] coordinates={-48.0D,-24.0D,0.0D,24.0D,48.0D};
         int[] ticks={86,240,1200,6000};
@@ -641,7 +665,7 @@ public final class RiftController {
         double probeZone=Double.NaN;
         for(int tick=0;tick<10000;tick++) {
             double zone=gravityAnomalyField(testX,testZ,tick);
-            if(zone>.42D) {
+            if(zone>GRAVITY_LIFT_ZONE_THRESHOLD) {
                 probeTicks=tick;
                 probeZone=zone;
                 break;
@@ -737,11 +761,14 @@ public final class RiftController {
         double fade=gravityAnomalyRadialFade(distanceSquared);
         if(fade<=0.0D) return false;
         double zone=gravityAnomalyField(px,pz,s.finaleTicks);
-        if(zone>.42) {
+        if(zone>GRAVITY_LIFT_ZONE_THRESHOLD) {
             var v=player.getDeltaMovement();
             double lift=Math.max(.045,Math.min(.19,.11+zone*.07))*fade*impulseStrength;
-            double dx=Math.sin(pz*.14+s.finaleTicks*.022)*.035*fade*impulseStrength;
-            double dz=Math.cos(px*.13-s.finaleTicks*.018)*.035*fade*impulseStrength;
+            double crossShear=gravityAnomalyCrossShear(zone);
+            double dx=(Math.sin(pz*.14+s.finaleTicks*.022)*GRAVITY_LIFT_BASE_DRIFT+crossShear)
+                *fade*impulseStrength;
+            double dz=(Math.cos(px*.13-s.finaleTicks*.018)*GRAVITY_LIFT_BASE_DRIFT-crossShear)
+                *fade*impulseStrength;
             // Limit only the anomaly's additional drift. Never clamp
             // existing sprint, knockback or mod-provided velocity.
             double nextX=boundedAnomalyVelocity(v.x,dx);
@@ -4556,7 +4583,7 @@ public final class RiftController {
                 // Match the server-side gravity field so particles mark actual
                 // lift/sink zones instead of an unrelated moving pattern.
                 double zone=gravityAnomalyField(player.getX(),player.getZ(),s.finaleTicks);
-                if(zone>.42) {
+                if(zone>GRAVITY_LIFT_ZONE_THRESHOLD) {
                     // Deep-violet motes mark lift; smaller bright-violet sparks define the edge.
                     level.sendParticles(ANOMALY_VIOLET_DUST,
                         player.getX(),player.getY()+.5,player.getZ(),
