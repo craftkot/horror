@@ -594,6 +594,8 @@ public final class RiftClientState {
         private static final double GROUND_CORE_SKEW_ARM_PHASE=2.17D;
         // Place both violet lips outside the widened dark core while keeping them inside the soft halo.
         private static final double GROUND_EDGE_OFFSET_SCALE=2.7D;
+        // Let each violet lip follow a small fraction of the dark core's cached skew.
+        private static final double GROUND_EDGE_OFFSET_SKEW_SCALE=.12D;
         // The render pulse is clamped to this interval for every wave/flicker phase.
         private static final double GROUND_MIN_HALF_WIDTH=.045D;
         private static final double GROUND_BASE_HALF_WIDTH=.052D;
@@ -1008,15 +1010,27 @@ public final class RiftClientState {
                 double minimumGlowHalfWidth=minimumHalfWidth*GROUND_GLOW_WIDTH_SCALE;
                 double minimumCoreHalfWidth=minimumHalfWidth*GROUND_CORE_WIDTH_SCALE*GROUND_MIN_CORE_WIDTH_SCALE
                     *(1.0D-GROUND_CORE_SKEW_AMPLITUDE);
-                double minimumEdgeInnerHalfWidth=minimumHalfWidth*GROUND_EDGE_OFFSET_SCALE-GROUND_EDGE_HALF_WIDTH;
+                double edgeOffsetSkew=GROUND_CORE_SKEW_AMPLITUDE*GROUND_EDGE_OFFSET_SKEW_SCALE;
+                double minimumEdgeInnerHalfWidth=minimumHalfWidth*GROUND_EDGE_OFFSET_SCALE
+                    *(1.0D-edgeOffsetSkew)-GROUND_EDGE_HALF_WIDTH;
                 double maximumGlowHalfWidth=maximumHalfWidth*GROUND_GLOW_WIDTH_SCALE;
                 double maximumCoreHalfWidth=maximumHalfWidth*GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE
                     *(1.0D+GROUND_CORE_SKEW_AMPLITUDE);
-                double maximumEdgeInnerHalfWidth=maximumHalfWidth*GROUND_EDGE_OFFSET_SCALE-GROUND_EDGE_HALF_WIDTH;
-                double minimumCoreEdgeGap=maximumEdgeInnerHalfWidth-maximumCoreHalfWidth;
+                double maximumEdgeInnerHalfWidth=maximumHalfWidth*GROUND_EDGE_OFFSET_SCALE
+                    *(1.0D+edgeOffsetSkew)-GROUND_EDGE_HALF_WIDTH;
+                double leftCoreEdgeGap=maximumHalfWidth*(GROUND_EDGE_OFFSET_SCALE*(1.0D+edgeOffsetSkew)
+                    -GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE*(1.0D+GROUND_CORE_SKEW_AMPLITUDE))
+                    -GROUND_EDGE_HALF_WIDTH;
+                double rightCoreEdgeGap=maximumHalfWidth*(GROUND_EDGE_OFFSET_SCALE*(1.0D-edgeOffsetSkew)
+                    -GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE*(1.0D-GROUND_CORE_SKEW_AMPLITUDE))
+                    -GROUND_EDGE_HALF_WIDTH;
+                double minimumCoreEdgeGap=Math.min(leftCoreEdgeGap,rightCoreEdgeGap);
+                double maximumEdgeOffsetDelta=maximumHalfWidth*GROUND_EDGE_OFFSET_SCALE*edgeOffsetSkew;
                 if(Math.abs(GROUND_GLOW_WIDTH_SCALE-5.0D)>1.0E-9D
                     || Math.abs(GROUND_CORE_WIDTH_SCALE-1.55D)>1.0E-9D
                     || Math.abs(GROUND_EDGE_OFFSET_SCALE-2.7D)>1.0E-9D
+                    || Math.abs(GROUND_EDGE_OFFSET_SKEW_SCALE-.12D)>1.0E-9D
+                    || !Double.isFinite(maximumEdgeOffsetDelta) || maximumEdgeOffsetDelta>.004D
                     || Math.abs(GROUND_CORE_SKEW_AMPLITUDE-.15D)>1.0E-9D
                     || Math.abs(GROUND_EDGE_HALF_WIDTH-.026D)>1.0E-9D
                     || Math.abs(maximumHalfWidth-.074D)>1.0E-9D
@@ -1043,6 +1057,9 @@ public final class RiftClientState {
                 com.mojang.logging.LogUtils.getLogger().info(
                     "BLACK_FREQUENCY_GROUND_MESH_CORE_EDGE_GAP_VERIFIED min={} required={} valid=true",
                     minimumCoreEdgeGap,GROUND_MIN_CORE_EDGE_GAP);
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_GROUND_MESH_EDGE_OFFSET_ASYMMETRY_VERIFIED scale={} maxSkew={} maxOffsetDelta={} correlatedWithCore=true bounded=true",
+                    GROUND_EDGE_OFFSET_SKEW_SCALE,edgeOffsetSkew,maximumEdgeOffsetDelta);
                 com.mojang.logging.LogUtils.getLogger().info(
                     "BLACK_FREQUENCY_GROUND_MESH_EDGE_PALETTE_VERIFIED red={} green={} blue={}",
                     GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE);
@@ -1072,12 +1089,21 @@ public final class RiftClientState {
             double maximumGlowHalfWidth=GROUND_MAX_HALF_WIDTH*GROUND_GLOW_WIDTH_SCALE;
             double minimumCoreHalfWidth=GROUND_MIN_HALF_WIDTH*GROUND_CORE_WIDTH_SCALE*GROUND_MIN_CORE_WIDTH_SCALE
                 *(1.0D-GROUND_CORE_SKEW_AMPLITUDE);
-            double minimumEdgeInnerHalfWidth=GROUND_MIN_HALF_WIDTH*GROUND_EDGE_OFFSET_SCALE-GROUND_EDGE_HALF_WIDTH;
+            double edgeOffsetSkew=GROUND_CORE_SKEW_AMPLITUDE*GROUND_EDGE_OFFSET_SKEW_SCALE;
+            double minimumEdgeInnerHalfWidth=GROUND_MIN_HALF_WIDTH*GROUND_EDGE_OFFSET_SCALE
+                *(1.0D-edgeOffsetSkew)-GROUND_EDGE_HALF_WIDTH;
             double maximumHalfWidth=GROUND_MAX_HALF_WIDTH;
             double maximumCoreHalfWidth=maximumHalfWidth*GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE
                 *(1.0D+GROUND_CORE_SKEW_AMPLITUDE);
-            double maximumEdgeInnerHalfWidth=maximumHalfWidth*GROUND_EDGE_OFFSET_SCALE-GROUND_EDGE_HALF_WIDTH;
-            double minimumCoreEdgeGap=maximumEdgeInnerHalfWidth-maximumCoreHalfWidth;
+            double maximumEdgeInnerHalfWidth=maximumHalfWidth*GROUND_EDGE_OFFSET_SCALE
+                *(1.0D+edgeOffsetSkew)-GROUND_EDGE_HALF_WIDTH;
+            double leftCoreEdgeGap=maximumHalfWidth*(GROUND_EDGE_OFFSET_SCALE*(1.0D+edgeOffsetSkew)
+                -GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE*(1.0D+GROUND_CORE_SKEW_AMPLITUDE))
+                -GROUND_EDGE_HALF_WIDTH;
+            double rightCoreEdgeGap=maximumHalfWidth*(GROUND_EDGE_OFFSET_SCALE*(1.0D-edgeOffsetSkew)
+                -GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE*(1.0D-GROUND_CORE_SKEW_AMPLITUDE))
+                -GROUND_EDGE_HALF_WIDTH;
+            double minimumCoreEdgeGap=Math.min(leftCoreEdgeGap,rightCoreEdgeGap);
             if(!Double.isFinite(coreClearance) || !Double.isFinite(glowClearance)
                 || !Double.isFinite(filamentClearance) || !Double.isFinite(edgeClearance)
                 || !Double.isFinite(minimumGlowHalfWidth) || !Double.isFinite(maximumGlowHalfWidth)
@@ -1092,6 +1118,7 @@ public final class RiftClientState {
                 || !(maximumCoreHalfWidth<maximumEdgeInnerHalfWidth
                     && maximumEdgeInnerHalfWidth<maximumGlowHalfWidth)
                 || Math.abs(GROUND_EDGE_OFFSET_SCALE-2.7D)>1.0E-9D
+                || Math.abs(GROUND_EDGE_OFFSET_SKEW_SCALE-.12D)>1.0E-9D
                 || Math.abs(GROUND_CORE_SKEW_AMPLITUDE-.15D)>1.0E-9D
                 || Math.abs(GROUND_SURFACE_CLEARANCE-.015D)>1.0E-9D
                 || Math.abs(GROUND_CORE_RECESS-.009D)>1.0E-9D
@@ -2162,6 +2189,9 @@ public final class RiftClientState {
                     int filamentAlphaChannel=colorChannel(alpha*corePulse);
                     float edgeAlpha=Math.min(1.0F,boundedStrength*(.94F*pulse+.06F));
                     int edgeAlphaChannel=colorChannel(edgeAlpha);
+                    double edgeOffsetSkew=sample.coreSkew()*GROUND_EDGE_OFFSET_SKEW_SCALE;
+                    double leftEdgeOffset=halfWidth*GROUND_EDGE_OFFSET_SCALE*(1.0D+edgeOffsetSkew);
+                    double rightEdgeOffset=-halfWidth*GROUND_EDGE_OFFSET_SCALE*(1.0D-edgeOffsetSkew);
                     ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_GLOW_WIDTH_SCALE,0.0D,
                         GROUND_GLOW_RED_CHANNEL,GROUND_GLOW_GREEN_CHANNEL,GROUND_GLOW_BLUE_CHANNEL,glowAlphaChannel);
                     coreRibbon(builder,matrix,camera,segment,halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS,
@@ -2172,10 +2202,10 @@ public final class RiftClientState {
                     // continuous dark core remains visible, so the seam reads as fractured
                     // earth rather than two uninterrupted luminous rails.
                     if(!sample.leftEdgeNotched())
-                        ribbon(builder,matrix,camera,segment,halfWidth*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,
+                        ribbon(builder,matrix,camera,segment,leftEdgeOffset,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,
                             GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel);
                     if(!sample.rightEdgeNotched())
-                        ribbon(builder,matrix,camera,segment,-halfWidth*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,
+                        ribbon(builder,matrix,camera,segment,rightEdgeOffset,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,
                             GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel);
                 }
                 BufferUploader.drawWithShader(builder.end());

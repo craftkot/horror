@@ -2445,6 +2445,7 @@ def capture_test_world():
             if ("GROUND_GLOW_WIDTH_SCALE=5.0D;" not in camera_source
                     or "GROUND_CORE_WIDTH_SCALE=1.55D;" not in camera_source
                     or "GROUND_EDGE_OFFSET_SCALE=2.7D;" not in camera_source
+                    or "GROUND_EDGE_OFFSET_SKEW_SCALE=.12D;" not in camera_source
                     or "GROUND_CORE_SKEW_AMPLITUDE=.15D;" not in camera_source
                     or "GROUND_EDGE_HALF_WIDTH=.026D;" not in camera_source
                     or "GROUND_MIN_CORE_EDGE_GAP=.0075D;" not in camera_source
@@ -2484,7 +2485,7 @@ def capture_test_world():
             embedded_crack_profile=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_EMBEDDED_CRACK_PROFILE_VERIFIED minGlowHalfWidth=([-+0-9.eE]+) maxGlowHalfWidth=([-+0-9.eE]+) minCoreHalfWidth=([-+0-9.eE]+) minEdgeInnerHalfWidth=([-+0-9.eE]+) maxCoreHalfWidth=([-+0-9.eE]+) maxEdgeInnerHalfWidth=([-+0-9.eE]+) minCoreEdgeGap=([-+0-9.eE]+) coreClearance=([-+0-9.eE]+) glowClearance=([-+0-9.eE]+) filamentClearance=([-+0-9.eE]+) edgeClearance=([-+0-9.eE]+) surfaceAligned=true",
                 final_log)
-            expected_embedded=(.225,.37,.04624425,.0955,.1609241,.1738,.0128759,.006,.015,.017,.023)
+            expected_embedded=(.225,.37,.04624425,.093313,.1609241,.1773964,.0164723,.006,.015,.017,.023)
             if (not embedded_crack_profile
                     or any(not math.isclose(float(embedded_crack_profile.group(i)),expected_embedded[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
@@ -2495,14 +2496,27 @@ def capture_test_world():
             if edge_palette_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: violet ground-edge palette self-check was not executed",flush=True)
                 return False
+            edge_skew_match=re.search(
+                r"BLACK_FREQUENCY_GROUND_MESH_EDGE_OFFSET_ASYMMETRY_VERIFIED scale=([-+0-9.eE]+) maxSkew=([-+0-9.eE]+) maxOffsetDelta=([-+0-9.eE]+) correlatedWithCore=true bounded=true",
+                final_log)
+            expected_edge_skew=(.12,.018,.0035964)
+            if (not edge_skew_match
+                    or any(not math.isclose(float(edge_skew_match.group(i)),expected_edge_skew[i-1],
+                                             rel_tol=0.0,abs_tol=1.0e-9)
+                           for i in range(1,4))
+                    or "double edgeOffsetSkew=sample.coreSkew()*GROUND_EDGE_OFFSET_SKEW_SCALE;" not in camera_source
+                    or "double leftEdgeOffset=halfWidth*GROUND_EDGE_OFFSET_SCALE*(1.0D+edgeOffsetSkew);" not in camera_source
+                    or "double rightEdgeOffset=-halfWidth*GROUND_EDGE_OFFSET_SCALE*(1.0D-edgeOffsetSkew);" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: asymmetric violet edge rails are not tied to the bounded core skew",flush=True)
+                return False
             if ribbon_cache_marker in final_log:
                 edge_rail_pattern = re.compile(
-                    r"ribbon\(builder,matrix,camera,segment,(-?)halfWidth\*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,\s*"
+                    r"ribbon\(builder,matrix,camera,segment,(leftEdgeOffset|rightEdgeOffset),GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,\s*"
                     r"GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,edgeAlphaChannel\);"
                 )
             else:
                 edge_rail_pattern = re.compile(
-                    r"ribbon\(builder,matrix,camera,segment,(-?)halfWidth\*GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,\s*"
+                    r"ribbon\(builder,matrix,camera,segment,(leftEdgeOffset|rightEdgeOffset),GROUND_EDGE_HALF_WIDTH,GROUND_EDGE_LIFT,\s*"
                     r"GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE,edgeAlpha\);"
                 )
             edge_rail_offsets = edge_rail_pattern.findall(camera_source)
@@ -2510,8 +2524,8 @@ def capture_test_world():
                     or "private static final float GROUND_EDGE_GREEN=.18F;" not in camera_source
                     or "private static final float GROUND_EDGE_BLUE=.82F;" not in camera_source
                     or "GROUND_EDGE_HALF_WIDTH=.026D;" not in camera_source
-                    or sorted(edge_rail_offsets) != ["", "-"]):
-                print("WORLD_CAPTURE_FAIL: current violet edge palette is not used by both symmetric ground rails",flush=True)
+                    or sorted(edge_rail_offsets) != ["leftEdgeOffset", "rightEdgeOffset"]):
+                print("WORLD_CAPTURE_FAIL: current violet edge palette is not used by both skew-following ground rails",flush=True)
                 return False
             if ("private static final double GROUND_MIN_HALF_WIDTH=.045D;" not in camera_source
                     or "GROUND_BASE_HALF_WIDTH=.052D;" not in camera_source
