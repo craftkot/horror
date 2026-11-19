@@ -2259,8 +2259,10 @@ public final class RiftController {
         CompoundTag previouslyWarnedType=new CompoundTag();
         previouslyWarnedType.putBoolean("restoring",true);
         previouslyWarnedType.putInt("edits",160);
-        previouslyWarnedType.putInt("restoreIndex",159);
-        previouslyWarnedType.putInt("restoreScan",159);
+        // Keep the cursor valid for an empty quarantined list, so no cursor repair
+        // can set the dirty flag and mask a missing snapshot-counter persistence call.
+        previouslyWarnedType.putInt("restoreIndex",-1);
+        previouslyWarnedType.putInt("restoreScan",-1);
         previouslyWarnedType.putInt("skippedInvalid",4);
         previouslyWarnedType.putBoolean("invalidSnapshotWarningLogged",true);
         previouslyWarnedType.putString("snapshots","not-a-list");
