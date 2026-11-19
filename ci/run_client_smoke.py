@@ -456,7 +456,12 @@ def verify_real_beacon_break_source():
             or "eyeDistanceSquaredToBlock(miner.getEyePosition(),pos)" not in handler
             or "withinBeaconInteractionReach(distanceSquared)" not in handler
             or "eyeDistanceSquaredToBlock(event.getEntity().getEyePosition(),pos)" not in activation
-            or "hasLoadedBeaconSightline(level,player,pos,event.getHitVec().getLocation())" not in activation
+            or "hit.getBlockPos().equals(pos)" not in activation
+            or "hit.getDirection()" not in activation
+            or "face.getStepX()*1.0E-4D" not in activation
+            or "face.getStepY()*1.0E-4D" not in activation
+            or "face.getStepZ()*1.0E-4D" not in activation
+            or "hasLoadedBeaconSightline(level,player,pos,hitPoint)" not in activation
             or "BEACON_ACTIVATION_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" not in activation
             or "private static boolean hasLoadedBeaconSightline(" not in sightline
             or "fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ))" not in sightline
