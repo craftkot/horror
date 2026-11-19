@@ -2420,9 +2420,9 @@ def capture_test_world():
                     or "BLACK_FREQUENCY_GROUND_MESH_TAPER_EASING_VERIFIED curve=smoothstep zeroSlopeAtEnds=true sameSpan=true" not in final_log):
                 print("WORLD_CAPTURE_FAIL: ground fissure endpoint taper is not symmetric or bounded",flush=True)
                 return False
-            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=4.4 coreScale=1.3 edgeOffsetScale=2.32 edgeHalfWidth=0.026 pulseMin=0.045 pulseMax=0.068 coreInsideEdgeBand=true"
+            visual_profile_marker="BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=5.0 coreScale=1.55 edgeOffsetScale=2.7 edgeHalfWidth=0.026 pulseMin=0.045 pulseMax=0.074 coreInsideEdgeBand=true"
             if visual_profile_marker not in final_log:
-                print("WORLD_CAPTURE_FAIL: narrowed ground fissure visual profile self-check was not executed",flush=True)
+                print("WORLD_CAPTURE_FAIL: broadened ground fissure visual profile self-check was not executed",flush=True)
                 return False
             cliff_taper_match=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_CLIFF_TAPER_PROFILE_VERIFIED taper=([-+0-9.eE]+) previousTaper=0.25 wider=true invalidInputsZero=true",
@@ -2434,15 +2434,15 @@ def capture_test_world():
                     or "cliffBreakTaper(Double.NEGATIVE_INFINITY)==0.0D" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: visible cliff-end taper or non-finite input guards were not verified",flush=True)
                 return False
-            if ("GROUND_GLOW_WIDTH_SCALE=4.4D;" not in camera_source
-                    or "GROUND_CORE_WIDTH_SCALE=1.3D;" not in camera_source
-                    or "GROUND_EDGE_OFFSET_SCALE=2.32D;" not in camera_source
+            if ("GROUND_GLOW_WIDTH_SCALE=5.0D;" not in camera_source
+                    or "GROUND_CORE_WIDTH_SCALE=1.55D;" not in camera_source
+                    or "GROUND_EDGE_OFFSET_SCALE=2.7D;" not in camera_source
                     or "GROUND_CORE_SKEW_AMPLITUDE=.15D;" not in camera_source
                     or "GROUND_EDGE_HALF_WIDTH=.026D;" not in camera_source
                     or "GROUND_MIN_CORE_EDGE_GAP=.0075D;" not in camera_source
                     or "minimumCoreEdgeGap<GROUND_MIN_CORE_EDGE_GAP" not in camera_source
                     or "BLACK_FREQUENCY_GROUND_MESH_CORE_EDGE_GAP_VERIFIED min={} required={} valid=true" not in camera_source):
-                print("WORLD_CAPTURE_FAIL: narrowed ground fissure halo/core constants are not active",flush=True)
+                print("WORLD_CAPTURE_FAIL: broadened ground fissure halo/core constants are not active",flush=True)
                 return False
             relief_profile_match=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_SURFACE_RELIEF_VERIFIED coreRecess=([-+0-9.eE]+) filamentLift=([-+0-9.eE]+) edgeLift=([-+0-9.eE]+) coreClearance=([-+0-9.eE]+) glowClearance=([-+0-9.eE]+) filamentClearance=([-+0-9.eE]+) edgeClearance=([-+0-9.eE]+) ordered=true",
@@ -2471,7 +2471,7 @@ def capture_test_world():
             embedded_crack_profile=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_EMBEDDED_CRACK_PROFILE_VERIFIED minGlowHalfWidth=([-+0-9.eE]+) maxGlowHalfWidth=([-+0-9.eE]+) minCoreHalfWidth=([-+0-9.eE]+) minEdgeInnerHalfWidth=([-+0-9.eE]+) maxCoreHalfWidth=([-+0-9.eE]+) maxEdgeInnerHalfWidth=([-+0-9.eE]+) minCoreEdgeGap=([-+0-9.eE]+) coreClearance=([-+0-9.eE]+) glowClearance=([-+0-9.eE]+) filamentClearance=([-+0-9.eE]+) edgeClearance=([-+0-9.eE]+) surfaceAligned=true",
                 final_log)
-            expected_embedded=(.198,.2992,.0387855,.0784,.1240252,.13176,.0077348,.011,.020,.022,.028)
+            expected_embedded=(.225,.37,.04624425,.0955,.1609241,.1738,.0128759,.011,.020,.022,.028)
             if (not embedded_crack_profile
                     or any(not math.isclose(float(embedded_crack_profile.group(i)),expected_embedded[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
@@ -2501,6 +2501,9 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: current violet edge palette is not used by both symmetric ground rails",flush=True)
                 return False
             if ("private static final double GROUND_MIN_HALF_WIDTH=.045D;" not in camera_source
+                    or "GROUND_BASE_HALF_WIDTH=.052D;" not in camera_source
+                    or "GROUND_WAVE_HALF_WIDTH_RANGE=.017D;" not in camera_source
+                    or "GROUND_WIDTH_FLICKER=.005D;" not in camera_source
                     or "private static final double GROUND_MAX_HALF_WIDTH=" not in camera_source
                     or "GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE+GROUND_WIDTH_FLICKER;" not in camera_source
                     or "double halfWidth=Math.max(GROUND_MIN_HALF_WIDTH," not in camera_source
