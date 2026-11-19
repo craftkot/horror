@@ -1657,11 +1657,13 @@ public final class RiftController {
     }
 
     /** True only when a loaded-only outline ray reaches the actual physical beacon. */
-    private static boolean ciBeaconSightlineHitsBeacon(ServerLevel level,
+    private static boolean hasLoadedBeaconSightline(ServerLevel level,
             net.minecraft.server.level.ServerPlayer player,BlockPos beacon) {
+        if(level==null || player==null || beacon==null) return false;
         net.minecraft.world.phys.Vec3 eye=player.getEyePosition();
         net.minecraft.world.phys.Vec3 target=net.minecraft.world.phys.Vec3.atCenterOf(beacon);
-        if(!fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ))) {
+        if(eye==null || !Double.isFinite(eye.y)
+            || !fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ))) {
             if(CI_TEST && !ciBeaconSightlineFailureLogged) {
                 ciBeaconSightlineFailureLogged=true;
                 LOGGER.warn("BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_BLOCKER_DIAGNOSTIC reason=unloaded-chunk eye={} target={}",eye,beacon);
@@ -3375,6 +3377,14 @@ public final class RiftController {
             event.getEntity().isSpectator(),
             eyeDistanceSquaredToBlock(event.getEntity().getEyePosition(),pos),
             event.isCanceled(),event.getUseBlock(),event.getUseItem())) return;
+        if(!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        // Reach alone is insufficient: a forged or stale interaction must not activate
+        // a beacon through a wall. Trace only chunks already loaded along the eye ray.
+        if(!hasLoadedBeaconSightline(level,player,pos)) {
+            if(CI_TEST) LOGGER.warn("BLACK_FREQUENCY_TEST BEACON_ACTIVATION_SIGHTLINE_REJECTED loadedChunksOnly=true");
+            return;
+        }
+        if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_ACTIVATION_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true");
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
         if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
         if(!beaconWithinAnchor(pos.getX(),pos.getZ(),s.x,s.z)) return;
@@ -4698,7 +4708,7 @@ public final class RiftController {
                     // the real right-click; teleportTo's earlier packet used the old angle.
                     demoPlayer.connection.teleport(demoPlayer.getX(),demoPlayer.getY(),demoPlayer.getZ(),
                         demoPlayer.getYRot(),demoPlayer.getXRot());
-                    if(!ciBeaconSightlineHitsBeacon(level,demoPlayer,demoPos)) {
+                    if(!hasLoadedBeaconSightline(level,demoPlayer,demoPos)) {
                         LOGGER.warn("BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_BLOCKED loadedChunksOnly=true");
                         return;
                     }
