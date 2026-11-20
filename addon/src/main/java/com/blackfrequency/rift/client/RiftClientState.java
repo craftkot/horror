@@ -1677,13 +1677,40 @@ public final class RiftClientState {
                 && !isGroundSurfaceAvailable(net.minecraft.world.level.block.Blocks.FURNACE.defaultBlockState())
                 && !isGroundSurfaceAvailable(net.minecraft.world.level.block.Blocks.BEACON.defaultBlockState())
                 && isGroundSurfaceAvailable(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
-            if(!(naturalGrass && naturalStone && rejectsStructures && rejectsBlockEntities))
-                throw new IllegalStateException("BLACK FREQUENCY ground mesh terrain/structure filter regression");
+            var fullShape=net.minecraft.world.phys.shapes.Shapes.block();
+            var partialShape=net.minecraft.world.phys.shapes.Shapes.box(0.0D,0.0D,0.0D,1.0D,.5D,1.0D);
+            double fullBlockHeight=groundSupportHeight(fullShape,net.minecraft.world.phys.shapes.Shapes.empty());
+            double partialBlockHeight=groundSupportHeight(partialShape,net.minecraft.world.phys.shapes.Shapes.empty());
+            boolean outlineFallback=Math.abs(groundSupportHeight(net.minecraft.world.phys.shapes.Shapes.empty(),
+                fullShape)-1.0D)<1.0E-9D;
+            boolean emptyShapeRejected=Double.isNaN(groundSupportHeight(
+                net.minecraft.world.phys.shapes.Shapes.empty(),net.minecraft.world.phys.shapes.Shapes.empty()));
+            boolean validSupportHeights=Math.abs(fullBlockHeight-1.0D)<1.0E-9D
+                && Math.abs(partialBlockHeight-.5D)<1.0E-9D && outlineFallback && emptyShapeRejected;
+            if(!(naturalGrass && naturalStone && rejectsStructures && rejectsBlockEntities && validSupportHeights))
+                throw new IllegalStateException("BLACK FREQUENCY ground mesh terrain/structure/support-shape regression");
             supportFilterLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_STRUCTURAL_SUPPORT_FILTER_VERIFIED");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_BLOCK_ENTITY_FILTER_VERIFIED support=true surface=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_SHAPE_GUARD_VERIFIED fullBlock={} partial={} outlineFallback={} emptyRejected={}",
+                fullBlockHeight,partialBlockHeight,outlineFallback,emptyShapeRejected);
+        }
+
+        private static double groundSupportHeight(
+                net.minecraft.world.phys.shapes.VoxelShape collision,
+                net.minecraft.world.phys.shapes.VoxelShape outline) {
+            var selected=collision.isEmpty()?outline:collision;
+            if(selected.isEmpty()) return Double.NaN;
+            double height=selected.max(Direction.Axis.Y);
+            return Double.isFinite(height) && height>0.0D ? height : Double.NaN;
+        }
+
+        private static double groundSupportHeight(BlockState support,Level level,BlockPos pos) {
+            var collision=support.getCollisionShape(level,pos);
+            return groundSupportHeight(collision,collision.isEmpty()?support.getShape(level,pos):collision);
         }
 
         private static boolean isGroundSupport(BlockState state) {
@@ -1776,10 +1803,8 @@ public final class RiftClientState {
                 cursor.set(blockX,candidateY-1,blockZ);
                 BlockState support=level.getBlockState(cursor);
                 if(!isGroundSupport(support) || !support.getFluidState().isEmpty()) continue;
-                var supportCollision=support.getCollisionShape(level,cursor);
-                double supportHeight=supportCollision.isEmpty()
-                    ? support.getShape(level,cursor).max(Direction.Axis.Y)
-                    : supportCollision.max(Direction.Axis.Y);
+                double supportHeight=groundSupportHeight(support,level,cursor);
+                if(!Double.isFinite(supportHeight)) continue;
 
                 cursor.set(blockX,candidateY,blockZ);
                 BlockState surface=level.getBlockState(cursor);
