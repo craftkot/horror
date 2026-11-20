@@ -1072,6 +1072,13 @@ def capture_test_world():
           {"samples": len(lightning_samples), "genericPowCalls": 0},flush=True)
     if "vec3 edge=vec3(.46,.18,.82);" not in shader_source:
         raise RuntimeError("BLACK FREQUENCY sky edge palette regression")
+    zenith_width_chain=(
+        "float zenithSpokePulse=.5+.5*sin(zenithAngle*5.+t*.31+.6*sin(zenithAngle*2.-t*.11));",
+        "float zenithWidth=mix(.005,.014,clamp(.35*crownSurge+.65*zenithSpokePulse,0.,1.));",
+    )
+    if any(token not in shader_source for token in zenith_width_chain):
+        raise RuntimeError("BLACK FREQUENCY zenith spoke width shader profile regression")
+    print("WORLD_CAPTURE: asymmetric zenith spoke width profile source verified",flush=True)
     filament_mask_samples=[
         smoothstep01(.025,.18,0.0),
         smoothstep01(.025,.18,.025),
@@ -3316,6 +3323,9 @@ def capture_test_world():
                 return False
             if "BLACK_FREQUENCY_TEST SKY_RENDER_THRESHOLD_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: client sky-render threshold regression was not executed",flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST SKY_ZENITH_SPOKE_WIDTH_PROFILE_VERIFIED" not in log_after:
+                print("WORLD_CAPTURE_FAIL: asymmetric zenith spoke width profile was not executed",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SKY_SHADER_READY_STATE_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: shader readiness lifecycle was not verified",flush=True)
