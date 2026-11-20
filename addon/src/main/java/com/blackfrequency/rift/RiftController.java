@@ -983,10 +983,17 @@ public final class RiftController {
             boolean centerOutScanPresent=n.contains("centerOutScan");
             boolean centerOutScanValidType=n.contains("centerOutScan",Tag.TAG_BYTE);
             s.centerOutScan=centerOutScanValidType&&n.getBoolean("centerOutScan");
-            boolean malformedFractureScanMode=(surfaceFirstScanPresent&&!surfaceFirstScanValidType)
-                || (centerOutScanPresent&&!centerOutScanValidType);
             boolean centerOutIndexPresent=n.contains("centerOutIndex");
             boolean centerOutIndexValidType=n.contains("centerOutIndex",Tag.TAG_INT);
+            // centerOutScan and centerOutIndex were introduced together. Their presence
+            // identifies the current cursor format; never silently downgrade a partially
+            // truncated current save to row-major or bottom-up traversal.
+            boolean hasCenterOutMetadata=centerOutScanPresent||centerOutIndexPresent;
+            boolean incompleteCenterOutMetadata=hasCenterOutMetadata
+                && (!surfaceFirstScanPresent || !centerOutScanPresent || !centerOutIndexPresent);
+            boolean malformedFractureScanMode=(surfaceFirstScanPresent&&!surfaceFirstScanValidType)
+                || (centerOutScanPresent&&!centerOutScanValidType)
+                || incompleteCenterOutMetadata;
             s.centerOutIndex=centerOutIndexValidType?n.getInt("centerOutIndex"):0;
             if(centerOutIndexPresent && !centerOutIndexValidType) {
                 LOGGER.warn("BLACK FREQUENCY: quarantined malformed center-out fracture cursor type");
@@ -2243,6 +2250,26 @@ public final class RiftController {
         if(legacy.surfaceFirstScan || legacy.centerOutScan || legacy.cursorY!=12 || legacy.isDirty())
             throw new IllegalStateException("CI legacy fracture cursor migration regression");
 
+        // A current center-out save must contain all three companion fields.
+        // Missing one must not silently resume with a different traversal order.
+        CompoundTag missingCenterOutMode=new CompoundTag();
+        missingCenterOutMode.putBoolean("initialized",true);
+        missingCenterOutMode.putBoolean("surfaceFirstScan",true);
+        missingCenterOutMode.putInt("centerOutIndex",7);
+        State quarantinedMissingCenterOutMode=State.load(missingCenterOutMode);
+
+        CompoundTag missingSurfaceFirstMode=new CompoundTag();
+        missingSurfaceFirstMode.putBoolean("initialized",true);
+        missingSurfaceFirstMode.putBoolean("centerOutScan",true);
+        missingSurfaceFirstMode.putInt("centerOutIndex",7);
+        State quarantinedMissingSurfaceFirstMode=State.load(missingSurfaceFirstMode);
+
+        CompoundTag missingCenterOutIndexMode=new CompoundTag();
+        missingCenterOutIndexMode.putBoolean("initialized",true);
+        missingCenterOutIndexMode.putBoolean("surfaceFirstScan",true);
+        missingCenterOutIndexMode.putBoolean("centerOutScan",false);
+        State quarantinedMissingCenterOutIndexMode=State.load(missingCenterOutIndexMode);
+
         CompoundTag malformedSurfaceMode=new CompoundTag();
         malformedSurfaceMode.putBoolean("initialized",true);
         malformedSurfaceMode.putBoolean("centerOutScan",true);
@@ -2274,7 +2301,10 @@ public final class RiftController {
         malformedModeDuringRecovery.put("snapshots",recoveringSnapshots);
         State recoveryWithMalformedMode=State.load(malformedModeDuringRecovery);
 
-        if(!quarantinedSurfaceMode.finished || !quarantinedSurfaceMode.isDirty()
+        if(!quarantinedMissingCenterOutMode.finished || !quarantinedMissingCenterOutMode.isDirty()
+            || !quarantinedMissingSurfaceFirstMode.finished || !quarantinedMissingSurfaceFirstMode.isDirty()
+            || !quarantinedMissingCenterOutIndexMode.finished || !quarantinedMissingCenterOutIndexMode.isDirty()
+            || !quarantinedSurfaceMode.finished || !quarantinedSurfaceMode.isDirty()
             || !normalizedSurfaceMode.contains("surfaceFirstScan",Tag.TAG_BYTE)
             || !normalizedSurfaceMode.contains("centerOutScan",Tag.TAG_BYTE)
             || !reloadedSurfaceMode.finished
@@ -2284,6 +2314,7 @@ public final class RiftController {
             || !recoveryWithMalformedMode.isDirty())
             throw new IllegalStateException("CI malformed fracture scan mode quarantine regression");
         LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_SCAN_MODE_TAG_QUARANTINE_VERIFIED missingLegacyAccepted=true malformedSurfaceFirstQuarantined=true malformedCenterOutQuarantined=true restorationPreserved=true roundTrip=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_SCAN_MODE_MISSING_COMPANION_QUARANTINE_VERIFIED missingCenterOut=true missingSurfaceFirst=true missingCenterOutIndex=true legacyIntermediatePreserved=true");
         if(!validLegacyFractureCursor(-RADIUS,-RADIUS,-64,-64,320,false)
             || !validLegacyFractureCursor(RADIUS,RADIUS,319,-64,320,false)
             || !validLegacyFractureCursor(RADIUS+1,-RADIUS,-64,-64,320,false)
