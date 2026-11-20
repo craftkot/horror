@@ -709,7 +709,7 @@ public final class RiftClientState {
         private static final GroundSample[] GROUND_SAMPLES=createGroundSamples();
 
         // Hash each static sample once so the two exposed lips fracture independently.
-        // One in four samples interrupts each lip; independent salts keep the seam asymmetric.
+        // One in sixteen samples interrupts each lip; independent salts keep the seam asymmetric.
         private static long groundSampleHash(double phase,long salt) {
             long hash=Double.doubleToLongBits(phase)^salt;
             hash ^= hash >>> 33;
@@ -722,7 +722,7 @@ public final class RiftClientState {
 
         private static boolean isGroundEdgeNotched(double phase,long salt) {
             if(!Double.isFinite(phase)) return true;
-            return (groundSampleHash(phase,salt) & 7L)==0L;
+            return (groundSampleHash(phase,salt) & 15L)==0L;
         }
 
         private static boolean isGroundCoreSegmentGap(double phase) {
@@ -877,6 +877,8 @@ public final class RiftClientState {
             int adjacentCoreGapPairs=0;
             int leftEdgeNotches=0;
             int rightEdgeNotches=0;
+            int adjacentLeftEdgeNotchPairs=0;
+            int adjacentRightEdgeNotchPairs=0;
             int asymmetricEdgeSamples=0;
             double minimumCoreWidthScale=Double.POSITIVE_INFINITY;
             double maximumCoreWidthScale=Double.NEGATIVE_INFINITY;
@@ -892,6 +894,8 @@ public final class RiftClientState {
                 double previousCoreWidthScale=Double.NaN;
                 double previousCoreSkew=Double.NaN;
                 boolean previousCoreSegmentGap=false;
+                boolean previousLeftEdgeNotched=false;
+                boolean previousRightEdgeNotched=false;
                 for(int segment=1;segment<=SEGMENTS_PER_ARM;segment++) {
                     GroundSample sample=GROUND_SAMPLES[arm*SEGMENTS_PER_ARM+segment-1];
                     double sourceSample=segment*.5D;
@@ -947,8 +951,16 @@ public final class RiftClientState {
                         if(previousCoreSegmentGap) adjacentCoreGapPairs++;
                     }
                     previousCoreSegmentGap=sample.coreSegmentGap();
-                    if(sample.leftEdgeNotched()) leftEdgeNotches++;
-                    if(sample.rightEdgeNotched()) rightEdgeNotches++;
+                    if(sample.leftEdgeNotched()) {
+                        leftEdgeNotches++;
+                        if(previousLeftEdgeNotched) adjacentLeftEdgeNotchPairs++;
+                    }
+                    if(sample.rightEdgeNotched()) {
+                        rightEdgeNotches++;
+                        if(previousRightEdgeNotched) adjacentRightEdgeNotchPairs++;
+                    }
+                    previousLeftEdgeNotched=sample.leftEdgeNotched();
+                    previousRightEdgeNotched=sample.rightEdgeNotched();
                     if(segment>1) {
                         double adjacentDelta=Math.abs(sample.coreWidthScale()-previousCoreWidthScale);
                         if(!Double.isFinite(adjacentDelta))
@@ -1010,7 +1022,8 @@ public final class RiftClientState {
                 || groundCoreSkew(0.0D,ARM_COUNT)!=0.0D)
                 throw new IllegalStateException("BLACK FREQUENCY ground core skew invalid-input fallback regression");
             if(checked!=96 || !evenSamplesAligned || coreSegmentGaps!=1
-                || adjacentCoreGapPairs!=0 || leftEdgeNotches!=12 || rightEdgeNotches!=8 || asymmetricEdgeSamples!=18
+                || adjacentCoreGapPairs!=0 || leftEdgeNotches!=5 || rightEdgeNotches!=5
+                || adjacentLeftEdgeNotchPairs!=0 || adjacentRightEdgeNotchPairs!=0 || asymmetricEdgeSamples!=8
                 || minimumCoreWidthScale<GROUND_MIN_CORE_WIDTH_SCALE
                 || maximumCoreWidthScale>GROUND_MAX_CORE_WIDTH_SCALE
                 || maximumAdjacentCoreWidthDelta>.075D
@@ -1022,8 +1035,9 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_GROUND_MESH_CORE_SEGMENT_GAP_PROFILE_VERIFIED samples={} gaps={} adjacentGapPairs={} deterministic=true gapRate=1/128",
                 checked,coreSegmentGaps,adjacentCoreGapPairs);
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED samples={} left={} right={} asymmetricSamples={} deterministic=true notchRate=1/8",
-                checked,leftEdgeNotches,rightEdgeNotches,asymmetricEdgeSamples);
+                "BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED samples={} left={} right={} asymmetricSamples={} adjacentLeftPairs={} adjacentRightPairs={} deterministic=true notchRate=1/16",
+                checked,leftEdgeNotches,rightEdgeNotches,asymmetricEdgeSamples,
+                adjacentLeftEdgeNotchPairs,adjacentRightEdgeNotchPairs);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_CORE_WIDTH_PROFILE_VERIFIED samples={} minBound={} maxBound={} maxAdjacentDeltaLimit=0.075 interpolated=true bounded=true harmonics=2 broadAmplitude=0.16 detailAmplitude=0.05 detailFrequency=0.43 armPhase=1.13 invalidFallback=1.0",
                 checked,GROUND_MIN_CORE_WIDTH_SCALE,GROUND_MAX_CORE_WIDTH_SCALE);

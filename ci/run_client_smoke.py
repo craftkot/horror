@@ -2332,7 +2332,8 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: full-section ground fissure gaps were not verified",flush=True)
                 return False
             edge_notch_marker=("BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED "
-                               "samples=96 left=12 right=8 asymmetricSamples=18 deterministic=true notchRate=1/8")
+                               "samples=96 left=5 right=5 asymmetricSamples=8 adjacentLeftPairs=0 adjacentRightPairs=0 "
+                               "deterministic=true notchRate=1/16")
             core_width_marker=("BLACK_FREQUENCY_GROUND_MESH_CORE_WIDTH_PROFILE_VERIFIED "
                                "samples=96 minBound=0.78 maxBound=1.22 maxAdjacentDeltaLimit=0.075 interpolated=true bounded=true "
                                "harmonics=2 broadAmplitude=0.16 detailAmplitude=0.05 detailFrequency=0.43 armPhase=1.13 invalidFallback=1.0")
@@ -2372,7 +2373,7 @@ def capture_test_world():
                     or "sample.coreSegmentGap()!=isGroundCoreSegmentGap(phase)" not in camera_source
                     or "if(sample.coreSegmentGap()) continue;" not in camera_source
                     or "private static boolean isGroundEdgeNotched(double phase,long salt)" not in camera_source
-                    or "return (groundSampleHash(phase,salt) & 7L)==0L;" not in camera_source
+                    or "return (groundSampleHash(phase,salt) & 15L)==0L;" not in camera_source
                     or "return (groundSampleHash(phase,GROUND_CORE_SEGMENT_GAP_SALT) & 127L)==0L;" not in camera_source
                     or "int adjacentCoreGapPairs=0;" not in camera_source
                     or "if(previousCoreSegmentGap) adjacentCoreGapPairs++;" not in camera_source
