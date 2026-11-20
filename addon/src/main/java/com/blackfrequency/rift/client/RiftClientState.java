@@ -2450,8 +2450,14 @@ public final class RiftClientState {
             // While the same anchor remains vertically culled, avoid even the loaded-chunk probe.
             if(shouldSkipGroundMeshBuildWhileVerticallyCulled(
                     worldAnchorX,worldAnchorZ,cameraHorizontalDistanceSquared,camera.y)) {
-                if(VERIFY_GROUND_MESH_PROFILES)
+                if(VERIFY_GROUND_MESH_PROFILES) {
                     verticallyCulledSkippedFrames=nextVerticalCullSkippedFrames(verticallyCulledSkippedFrames);
+                    if(verticallyCulledSkippedFrames==3L) {
+                        com.mojang.logging.LogUtils.getLogger().info(
+                            "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_SKIP_MILESTONE frames=3 anchorX={} anchorZ={} cameraY={}",
+                            worldAnchorX,worldAnchorZ,camera.y);
+                    }
+                }
                 return;
             }
             if(VERIFY_GROUND_MESH_PROFILES)
