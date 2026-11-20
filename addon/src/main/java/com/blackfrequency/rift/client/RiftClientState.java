@@ -679,6 +679,8 @@ public final class RiftClientState {
         private static int verticallyCulledAnchorX=Integer.MIN_VALUE;
         private static int verticallyCulledAnchorZ=Integer.MIN_VALUE;
         private static int verticallyCulledSurfaceY;
+        // Diagnostic-only: each skipped frame avoids one border probe, chunk probe and rebuild check.
+        private static long verticallyCulledSkippedFrames;
         private static boolean supportFilterLogged;
         private static boolean sampleCursorReuseLogged;
         private static boolean sampleOffsetsProfileLogged;
@@ -1514,6 +1516,19 @@ public final class RiftClientState {
             return true;
         }
 
+        private static long nextVerticalCullSkippedFrames(long previousFrames) {
+            return previousFrames==Long.MAX_VALUE ? Long.MAX_VALUE : Math.max(0L,previousFrames)+1L;
+        }
+
+        private static void flushVerticalCullSkipDiagnostics(String reason) {
+            if(verticallyCulledSkippedFrames<=0L) return;
+            long skippedFrames=verticallyCulledSkippedFrames;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_VERTICAL_CULL_SKIP_SUMMARY frames={} worldBorderProbesSkipped={} loadedChunkProbesSkipped={} rebuildChecksSkipped={} endedBy={}",
+                skippedFrames,skippedFrames,skippedFrames,skippedFrames,reason);
+            verticallyCulledSkippedFrames=0L;
+        }
+
         private static void verifyGroundRenderRangeProfile() {
             if(rangeProfileLogged) return;
             boolean center=isWithinGroundRenderRange(0L,0.0D);
@@ -1626,6 +1641,15 @@ public final class RiftClientState {
             if(!(stableOutOfRangeSkip && repeatedOutOfRangeSkip
                 && returnToRangeRebuild && anchorChangeRebuild))
                 throw new IllegalStateException("BLACK FREQUENCY vertical ground mesh cull latch regression");
+            long firstSkippedFrame=nextVerticalCullSkippedFrames(0L);
+            long secondSkippedFrame=nextVerticalCullSkippedFrames(firstSkippedFrame);
+            boolean skipCounterAccumulates=firstSkippedFrame==1L && secondSkippedFrame==2L;
+            boolean skipCounterSaturates=nextVerticalCullSkippedFrames(Long.MAX_VALUE)==Long.MAX_VALUE;
+            boolean negativeCounterRecovers=nextVerticalCullSkippedFrames(-1L)==1L;
+            if(!(skipCounterAccumulates && skipCounterSaturates && negativeCounterRecovers))
+                throw new IllegalStateException("BLACK FREQUENCY vertical ground mesh cull skip counter regression");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_SKIP_COUNTER_VERIFIED increments=true saturates=true negativeRecovered=true");
             rangeProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_3D_RANGE_PROFILE_VERIFIED radius=64 horizontalBoundary=true verticalBoundary=true invalidRejected=true");
@@ -2236,6 +2260,8 @@ public final class RiftClientState {
         }
 
         private static void clearGeometryCacheIfPresent() {
+            if(VERIFY_GROUND_MESH_PROFILES) flushVerticalCullSkipDiagnostics("cache-cleared");
+            else verticallyCulledSkippedFrames=0L;
             verticallyCulled=false;
             verticallyCulledAnchorX=Integer.MIN_VALUE;
             verticallyCulledAnchorZ=Integer.MIN_VALUE;
@@ -2244,6 +2270,8 @@ public final class RiftClientState {
         }
 
         private static void clearCache() {
+            if(VERIFY_GROUND_MESH_PROFILES) flushVerticalCullSkipDiagnostics("cache-reset");
+            else verticallyCulledSkippedFrames=0L;
             clearGeometryCache();
             continuityBuildLogged=false;
             continuityProfileLogged=false;
@@ -2351,7 +2379,13 @@ public final class RiftClientState {
             // The client-state reset clears this latch when the world changes.
             // While the same anchor remains vertically culled, avoid even the loaded-chunk probe.
             if(shouldSkipGroundMeshBuildWhileVerticallyCulled(
-                    worldAnchorX,worldAnchorZ,cameraHorizontalDistanceSquared,camera.y)) return;
+                    worldAnchorX,worldAnchorZ,cameraHorizontalDistanceSquared,camera.y)) {
+                if(VERIFY_GROUND_MESH_PROFILES)
+                    verticallyCulledSkippedFrames=nextVerticalCullSkippedFrames(verticallyCulledSkippedFrames);
+                return;
+            }
+            if(VERIFY_GROUND_MESH_PROFILES)
+                flushVerticalCullSkipDiagnostics("camera-returned-or-anchor-changed");
             // Reuse the render-thread scratch cursor instead of allocating a BlockPos
             // on every frame. buildSegments() resets this cursor before sampling.
             SURFACE_CURSOR.set(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);

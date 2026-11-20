@@ -2465,6 +2465,9 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_LATCH_VERIFIED stable=true returnRebuild=true anchorChangeRebuild=true" not in final_log:
                 print("WORLD_CAPTURE_FAIL: vertically culled ground mesh rebuilt or failed to resume at the expected boundary",flush=True)
                 return False
+            if "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_SKIP_COUNTER_VERIFIED increments=true saturates=true negativeRecovered=true" not in final_log:
+                print("WORLD_CAPTURE_FAIL: vertical cull skipped-frame accounting was not verified",flush=True)
+                return False
             if "BLACK_FREQUENCY_TEST GROUND_MESH_CAMERA_CULL_PROFILE_VERIFIED radius=64 cameraPosition=true playerCameraIndependent=true" not in final_log:
                 print("WORLD_CAPTURE_FAIL: ground mesh culling did not verify camera-relative horizontal bounds",flush=True)
                 return False
@@ -2481,14 +2484,17 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: vertical mesh culling must precede periodic terrain rebuilds",flush=True)
                 return False
             latch_skip=ground_render.find("if(shouldSkipGroundMeshBuildWhileVerticallyCulled(")
+            skip_counter=ground_render.find("verticallyCulledSkippedFrames=nextVerticalCullSkippedFrames(verticallyCulledSkippedFrames)")
+            resume_flush=ground_render.find('flushVerticalCullSkipDiagnostics("camera-returned-or-anchor-changed")')
             cursor_set=ground_render.find("SURFACE_CURSOR.set(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);")
             border_check=ground_render.find("isWithinBounds(SURFACE_CURSOR)")
             loaded_chunk_probe=ground_render.find("!level.hasChunk(worldAnchorX>>4,worldAnchorZ>>4)")
             if ("private static final BlockPos.MutableBlockPos SURFACE_CURSOR=" not in camera_source
-                    or not ground_render or latch_skip<0 or cursor_set<0
-                    or not (latch_skip<cursor_set<border_check<loaded_chunk_probe)
-                    or "new BlockPos(" in ground_render):
-                print("WORLD_CAPTURE_FAIL: vertical cull latch must skip world-border and loaded-chunk probes before terrain sampling",flush=True)
+                    or not ground_render or latch_skip<0 or skip_counter<0 or resume_flush<0 or cursor_set<0
+                    or not (latch_skip<skip_counter<resume_flush<cursor_set<border_check<loaded_chunk_probe)
+                    or "new BlockPos(" in ground_render
+                    or "private static void flushVerticalCullSkipDiagnostics(String reason)" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: vertical cull must count skipped frames and flush the summary before world-border/chunk probes",flush=True)
                 return False
             print("WORLD_CAPTURE: vertically culled ground mesh skips world-border and loaded-chunk probes until resume",flush=True)
             print("WORLD_CAPTURE: ground render anchor guard reuses its mutable cursor; no per-frame BlockPos allocation",flush=True)
