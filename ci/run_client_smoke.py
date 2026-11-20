@@ -2525,7 +2525,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: cached animation phase profile was not verified",flush=True)
                 return False
             render_loop_match=re.search(
-                r"for\\s*\\(\\s*int\\s+segmentIndex\\s*=\\s*firstVisibleSegmentIndex\\s*;\\s*segmentIndex\\s*<\\s*cachedSegments\\.size\\(\\)\\s*;\\s*segmentIndex\\+\\+\\s*\\)",
+                r"for\s*\(\s*int\s+segmentIndex\s*=\s*firstVisibleSegmentIndex\s*;\s*segmentIndex\s*<\s*cachedSegments\.size\(\)\s*;\s*segmentIndex\+\+\s*\)",
                 camera_source)
             if not render_loop_match:
                 print("WORLD_CAPTURE_FAIL: ground render loop no longer starts at the cached first-visible segment",flush=True)
