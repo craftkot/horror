@@ -2172,6 +2172,13 @@ def capture_test_world():
             if support_top_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: support-top sampling did not prove that non-colliding foliage cannot lift the fissure mesh",flush=True)
                 return False
+            support_shape_marker = (
+                "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_SHAPE_GUARD_VERIFIED "
+                "fullBlock=1.0 partial=0.5 outlineFallback=true emptyRejected=true"
+            )
+            if support_shape_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: ground mesh accepted an empty or zero-height support shape",flush=True)
+                return False
             camera_source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
             camera_source=camera_source_path.read_text(encoding="utf-8",errors="replace")
             sample_start=camera_source.find("private static double sampleGroundY(")
