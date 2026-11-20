@@ -680,6 +680,8 @@ public final class RiftClientState {
         private static int verticallyCulledAnchorZ=Integer.MIN_VALUE;
         private static int verticallyCulledSurfaceY;
         private static boolean verticalCullResumePending;
+        // Preserve the actual anchor transition across cache release until the mesh is rebuilt.
+        private static boolean verticalCullResumeAnchorChanged;
         private static boolean verticalCameraRangeSampleLogged;
         // Diagnostic-only: each skipped frame avoids one border probe, chunk probe and rebuild check.
         private static long verticallyCulledSkippedFrames;
@@ -1504,6 +1506,7 @@ public final class RiftClientState {
             verticallyCulledSurfaceY=anchorSurfaceY;
             if(hadCachedMesh) {
                 verticalCullResumePending=true;
+                verticalCullResumeAnchorChanged=false;
                 if(VERIFY_GROUND_MESH_PROFILES) {
                     com.mojang.logging.LogUtils.getLogger().info(
                         "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ENTERED cameraY={} surfaceY={} verticalDelta={} threshold=64 anchorX={} anchorZ={}",
@@ -1537,11 +1540,19 @@ public final class RiftClientState {
 
         // Once an out-of-range mesh is released, do not rebuild it every frame.
         // Resume only when the camera returns to the 3D envelope or the anchor changes.
+        private static boolean isVerticalCullAnchorChanged(
+                int worldAnchorX,int worldAnchorZ,int culledAnchorX,int culledAnchorZ) {
+            return worldAnchorX!=culledAnchorX || worldAnchorZ!=culledAnchorZ;
+        }
+
         private static boolean shouldSkipGroundMeshBuildWhileVerticallyCulled(
                 int worldAnchorX,int worldAnchorZ,long horizontalDistanceSquared,double cameraY) {
             if(!verticallyCulled) return false;
-            if(worldAnchorX!=verticallyCulledAnchorX || worldAnchorZ!=verticallyCulledAnchorZ
+            boolean anchorChanged=isVerticalCullAnchorChanged(
+                worldAnchorX,worldAnchorZ,verticallyCulledAnchorX,verticallyCulledAnchorZ);
+            if(anchorChanged
                 || isWithinGroundRenderRange(horizontalDistanceSquared,cameraY-verticallyCulledSurfaceY)) {
+                if(verticalCullResumePending) verticalCullResumeAnchorChanged=anchorChanged;
                 verticallyCulled=false;
                 verticallyCulledAnchorX=Integer.MIN_VALUE;
                 verticallyCulledAnchorZ=Integer.MIN_VALUE;
@@ -1577,11 +1588,15 @@ public final class RiftClientState {
             boolean anchorChangeRetained=!shouldCullCachedGroundMeshBeforeRebuild(true,true,0L,64.01D);
             boolean emptyMeshRetained=!shouldCullCachedGroundMeshBeforeRebuild(false,false,0L,64.01D);
             boolean invalidRangeCulled=shouldCullCachedGroundMeshBeforeRebuild(false,true,0L,Double.NaN);
+            boolean sameAnchorResume=!isVerticalCullAnchorChanged(1,2,1,2);
+            boolean changedAnchorResume=isVerticalCullAnchorChanged(2,2,1,2);
             if(!(sameAnchorOutsideCull && sameAnchorInsideRetained && anchorChangeRetained
-                && emptyMeshRetained && invalidRangeCulled))
+                && emptyMeshRetained && invalidRangeCulled && sameAnchorResume && changedAnchorResume))
                 throw new IllegalStateException("BLACK FREQUENCY pre-build vertical ground mesh cull regression");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_PREBUILD_VERTICAL_CULL_VERIFIED sameAnchorOutside=true insideRetained=true anchorChangeRetained=true emptyMeshRetained=true invalidRangeCulled=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_RESUME_ANCHOR_PROFILE_VERIFIED sameAnchor=false changedAnchor=true");
             boolean finiteCameraAccepted=isSafeCameraPosition(new Vec3(0.5D,65.0D,0.5D));
             boolean nanCameraRejected=!isSafeCameraPosition(new Vec3(Double.NaN,65.0D,0.5D));
             boolean infiniteCameraRejected=!isSafeCameraPosition(new Vec3(0.5D,65.0D,Double.POSITIVE_INFINITY));
@@ -2302,6 +2317,7 @@ public final class RiftClientState {
             // A discarded mesh cannot later be reported as a successful resume.
             // A live vertical-cull entry sets this flag again after this cleanup.
             verticalCullResumePending=false;
+            verticalCullResumeAnchorChanged=false;
             verticalCameraRangeSampleLogged=false;
             if(cachedLevel!=null || cachedTick!=Long.MIN_VALUE || !cachedSegments.isEmpty()
                 || !SURFACE_Y_BY_COLUMN.isEmpty()) clearGeometryCache();
@@ -2328,6 +2344,7 @@ public final class RiftClientState {
             rangeRejectLogged=false;
             rangeProfileLogged=false;
             verticalCullResumePending=false;
+            verticalCullResumeAnchorChanged=false;
             verticalCameraRangeSampleLogged=false;
             verticallyCulled=false;
             verticallyCulledAnchorX=Integer.MIN_VALUE;
@@ -2351,6 +2368,7 @@ public final class RiftClientState {
             SURFACE_Y_BY_COLUMN.put(columnKey(1,2),64.0D);
             SURFACE_CURSOR.set(1,64,2);
             verticalCullResumePending=true;
+            verticalCullResumeAnchorChanged=true;
             verticalCameraRangeSampleLogged=true;
             clearGeometryCacheIfPresent();
             if(cachedLevel!=null || cachedTick!=Long.MIN_VALUE
@@ -2360,7 +2378,7 @@ public final class RiftClientState {
                 || cachedSampledColumns!=0 || cachedColumnCacheHits!=0
                 || cachedSteepStepBreaks!=0 || !SURFACE_Y_BY_COLUMN.isEmpty()
                 || SURFACE_CURSOR.getX()!=0 || SURFACE_CURSOR.getY()!=0 || SURFACE_CURSOR.getZ()!=0
-                || verticalCullResumePending || verticalCameraRangeSampleLogged)
+                || verticalCullResumePending || verticalCullResumeAnchorChanged || verticalCameraRangeSampleLogged)
                 throw new IllegalStateException("BLACK FREQUENCY inactive ground mesh cache cleanup regression");
             // Exercise the same vertical-range cleanup path used by render(), with
             // a real ClientLevel reference and a populated mesh/sample cache.
@@ -2370,11 +2388,12 @@ public final class RiftClientState {
                 new GroundPoint(2,64,2),1,0,GROUND_SAMPLES[0],1,1,1.0D,1.0D,0.0D,0.0D));
             SURFACE_Y_BY_COLUMN.put(columnKey(1,2),64.0D);
             verticalCullResumePending=true;
+            verticalCullResumeAnchorChanged=true;
             verticalCameraRangeSampleLogged=true;
             boolean verticalRangeCleared=clearGeometryCacheIfOutsideGroundRenderRange(0L,64.01D,1,2,64,false);
             if(!verticalRangeCleared || cachedLevel!=null || cachedTick!=Long.MIN_VALUE
                 || !cachedSegments.isEmpty() || !SURFACE_Y_BY_COLUMN.isEmpty()
-                || verticalCullResumePending || verticalCameraRangeSampleLogged)
+                || verticalCullResumePending || verticalCullResumeAnchorChanged || verticalCameraRangeSampleLogged)
                 throw new IllegalStateException("BLACK FREQUENCY vertical ground mesh cache cleanup regression");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_RANGE_CACHE_RELEASE_VERIFIED levelReference=true");
@@ -2494,11 +2513,13 @@ public final class RiftClientState {
                 cachedAnchorZ=worldAnchorZ;
                 cachedTick=tick;
                 if(verticalCullResumePending) {
+                    boolean resumedForAnchorChange=verticalCullResumeAnchorChanged;
                     verticalCullResumePending=false;
+                    verticalCullResumeAnchorChanged=false;
                     if(VERIFY_GROUND_MESH_PROFILES) {
                         com.mojang.logging.LogUtils.getLogger().info(
                             "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_RESUMED rebuilt=true segments={} arms={} cameraY={} surfaceY={} anchorChanged={}",
-                            cachedSegments.size(),cachedArmCount,camera.y,cachedAnchorSurfaceY,anchorChanged);
+                            cachedSegments.size(),cachedArmCount,camera.y,cachedAnchorSurfaceY,resumedForAnchorChange);
                     }
                 }
                 if(!continuityBuildLogged) {
