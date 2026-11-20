@@ -2179,7 +2179,7 @@ def capture_test_world():
                     raise RuntimeError("BLACK FREQUENCY vertical ground cull probe was already attempted but did not complete")
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                 safe_pad=re.search(
-                    r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\\d+) y=(-?\\d+) z=(-?\\d+) support=solid fallDistance=0\\.0",
+                    r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
                     current)
                 if not safe_pad or "BLACK_FREQUENCY_GROUND_MESH_RENDERED" not in current:
                     return False
@@ -2209,7 +2209,7 @@ def capture_test_world():
                     while time.monotonic()<enter_deadline and p.poll() is None:
                         current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                         entered=re.search(
-                            r"BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ENTERED cameraY=([-+0-9.eE]+) surfaceY=([-+0-9.eE]+) verticalDelta=([-+0-9.eE]+) threshold=64 anchorX=(-?\\d+) anchorZ=(-?\\d+)",
+                            r"BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ENTERED cameraY=([-+0-9.eE]+) surfaceY=([-+0-9.eE]+) verticalDelta=([-+0-9.eE]+) threshold=64 anchorX=(-?\d+) anchorZ=(-?\d+)",
                             current)
                         if entered:
                             break
@@ -2230,10 +2230,10 @@ def capture_test_world():
                     while time.monotonic()<resume_deadline and p.poll() is None:
                         current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                         summary=re.search(
-                            r"BLACK_FREQUENCY_GROUND_MESH_VERTICAL_CULL_SKIP_SUMMARY frames=(\\d+) worldBorderProbesSkipped=(\\d+) loadedChunkProbesSkipped=(\\d+) rebuildChecksSkipped=(\\d+) endedBy=([a-z-]+)",
+                            r"BLACK_FREQUENCY_GROUND_MESH_VERTICAL_CULL_SKIP_SUMMARY frames=(\d+) worldBorderProbesSkipped=(\d+) loadedChunkProbesSkipped=(\d+) rebuildChecksSkipped=(\d+) endedBy=([a-z-]+)",
                             current)
                         resumed=re.search(
-                            r"BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_RESUMED rebuilt=true segments=(\\d+) arms=(\\d+) cameraY=([-+0-9.eE]+) surfaceY=([-+0-9.eE]+) anchorChanged=(true|false)",
+                            r"BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_RESUMED rebuilt=true segments=(\d+) arms=(\d+) cameraY=([-+0-9.eE]+) surfaceY=([-+0-9.eE]+) anchorChanged=(true|false)",
                             current)
                         if summary and resumed:
                             break
@@ -2596,7 +2596,14 @@ def capture_test_world():
                     or "private static void flushVerticalCullSkipDiagnostics(String reason)" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: vertical cull must count skipped frames and flush the summary before world-border/chunk probes",flush=True)
                 return False
+            if ("private static boolean verticalCullResumePending;" not in camera_source
+                    or "GROUND_MESH_VERTICAL_CULL_ENTERED" not in camera_source
+                    or "verticalCullResumePending=true;" not in camera_source
+                    or "GROUND_MESH_VERTICAL_CULL_RESUMED" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: actual vertical cull entry/resume diagnostics are missing from the renderer",flush=True)
+                return False
             print("WORLD_CAPTURE: vertically culled ground mesh skips world-border and loaded-chunk probes until resume",flush=True)
+            print("WORLD_CAPTURE: actual vertical cull entry and rebuild diagnostics are wired into the renderer",flush=True)
             print("WORLD_CAPTURE: ground render anchor guard reuses its mutable cursor; no per-frame BlockPos allocation",flush=True)
             if ("long cameraHorizontalDistanceSquared=horizontalDistanceSquared(" not in camera_source
                     or "cameraBlockX,cameraBlockZ,worldAnchorX,worldAnchorZ);" not in camera_source
