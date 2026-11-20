@@ -1997,6 +1997,10 @@ def capture_test_world():
                 nonlocal shader_reload_attempted,shader_reload_verified
                 if shader_reload_attempted:
                     return shader_reload_verified
+                if os.environ.get("BF_ISOLATED_TEST")=="1" and not vertical_cull_probe_verified:
+                    print("WORLD_CAPTURE_FAIL: resource reload cannot precede the live vertical cull probe",
+                          flush=True)
+                    return False
                 shader_reload_attempted=True
                 before=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                 ready_marker="BLACK_FREQUENCY_SHADER_READY sky_rift"
@@ -2038,6 +2042,14 @@ def capture_test_world():
                         and "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" in current
                         and "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" not in current):
                     return
+                # F3+T can pause the integrated server during resource reload. The
+                # live vertical-cull probe must finish before any sky capture/reload
+                # path can pause the world and strand its teleport commands.
+                if os.environ.get("BF_ISOLATED_TEST")=="1" and not vertical_cull_probe_verified:
+                    if not run_vertical_ground_cull_probe():
+                        return
+                    print("WORLD_CAPTURE: live vertical cull probe completed before sky capture and resource reload",
+                          flush=True)
                 key("F1")
                 # Keep enough vertical pointer travel for the full camera sweep.
                 subprocess.run(["xdotool","mousemove","--sync","640","640"],check=False)
@@ -2221,8 +2233,8 @@ def capture_test_world():
                       (x,y,z),flush=True)
                 restored=False
                 try:
-                    send_chat_command("/gamemode spectator")
-                    send_chat_command(f"/tp {x} {y+80} {z}")
+                    send_chat_command("/gamemode spectator @s")
+                    send_chat_command(f"/tp @s {x} {y+80} {z}")
                     camera_sample=None
                     entered=None
                     probe_logs=""
@@ -2257,8 +2269,8 @@ def capture_test_world():
                     if not math.isfinite(float(entered.group(3))) or float(entered.group(3))<=64.0:
                         raise RuntimeError("BLACK FREQUENCY vertical cull entry reported an invalid camera delta")
                     time.sleep(1.0)
-                    send_chat_command(f"/tp {x} {y} {z}")
-                    send_chat_command("/gamemode survival")
+                    send_chat_command(f"/tp @s {x} {y} {z}")
+                    send_chat_command("/gamemode survival @s")
                     restored=True
 
                     summary=None
@@ -2300,8 +2312,8 @@ def capture_test_world():
                 finally:
                     if not restored:
                         # Keep the disposable player recoverable even if a diagnostic assertion fails.
-                        send_chat_command(f"/tp {x} {y} {z}")
-                        send_chat_command("/gamemode survival")
+                        send_chat_command(f"/tp @s {x} {y} {z}")
+                        send_chat_command("/gamemode survival @s")
 
             for stage in range(32):
                 if p.poll() is not None:
