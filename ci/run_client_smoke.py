@@ -2611,6 +2611,9 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_RANGE_CACHE_RELEASE_VERIFIED levelReference=true" not in final_log:
                 print("WORLD_CAPTURE_FAIL: vertical range rejection did not release the cached ClientLevel",flush=True)
                 return False
+            if "BLACK_FREQUENCY_TEST GROUND_MESH_CULL_LIFECYCLE_RESET_VERIFIED inactive=true verticalRange=true staleResume=false cameraSample=false" not in final_log:
+                print("WORLD_CAPTURE_FAIL: discarded ground mesh retained stale vertical-cull resume telemetry",flush=True)
+                return False
             if "BLACK_FREQUENCY_TEST GROUND_MESH_3D_RANGE_PROFILE_VERIFIED radius=64 horizontalBoundary=true verticalBoundary=true invalidRejected=true" not in final_log:
                 print("WORLD_CAPTURE_FAIL: 3D ground mesh render-range boundaries were not verified",flush=True)
                 return False

@@ -2299,6 +2299,10 @@ public final class RiftClientState {
             verticallyCulled=false;
             verticallyCulledAnchorX=Integer.MIN_VALUE;
             verticallyCulledAnchorZ=Integer.MIN_VALUE;
+            // A discarded mesh cannot later be reported as a successful resume.
+            // A live vertical-cull entry sets this flag again after this cleanup.
+            verticalCullResumePending=false;
+            verticalCameraRangeSampleLogged=false;
             if(cachedLevel!=null || cachedTick!=Long.MIN_VALUE || !cachedSegments.isEmpty()
                 || !SURFACE_Y_BY_COLUMN.isEmpty()) clearGeometryCache();
         }
@@ -2346,6 +2350,8 @@ public final class RiftClientState {
             cachedSteepStepBreaks=1;
             SURFACE_Y_BY_COLUMN.put(columnKey(1,2),64.0D);
             SURFACE_CURSOR.set(1,64,2);
+            verticalCullResumePending=true;
+            verticalCameraRangeSampleLogged=true;
             clearGeometryCacheIfPresent();
             if(cachedLevel!=null || cachedTick!=Long.MIN_VALUE
                 || cachedAnchorX!=Integer.MIN_VALUE || cachedAnchorZ!=Integer.MIN_VALUE
@@ -2353,7 +2359,8 @@ public final class RiftClientState {
                 || !cachedSegments.isEmpty() || cachedArmCount!=0
                 || cachedSampledColumns!=0 || cachedColumnCacheHits!=0
                 || cachedSteepStepBreaks!=0 || !SURFACE_Y_BY_COLUMN.isEmpty()
-                || SURFACE_CURSOR.getX()!=0 || SURFACE_CURSOR.getY()!=0 || SURFACE_CURSOR.getZ()!=0)
+                || SURFACE_CURSOR.getX()!=0 || SURFACE_CURSOR.getY()!=0 || SURFACE_CURSOR.getZ()!=0
+                || verticalCullResumePending || verticalCameraRangeSampleLogged)
                 throw new IllegalStateException("BLACK FREQUENCY inactive ground mesh cache cleanup regression");
             // Exercise the same vertical-range cleanup path used by render(), with
             // a real ClientLevel reference and a populated mesh/sample cache.
@@ -2362,12 +2369,17 @@ public final class RiftClientState {
             cachedSegments=List.of(new GroundSegment(new GroundPoint(1,64,2),
                 new GroundPoint(2,64,2),1,0,GROUND_SAMPLES[0],1,1,1.0D,1.0D,0.0D,0.0D));
             SURFACE_Y_BY_COLUMN.put(columnKey(1,2),64.0D);
+            verticalCullResumePending=true;
+            verticalCameraRangeSampleLogged=true;
             boolean verticalRangeCleared=clearGeometryCacheIfOutsideGroundRenderRange(0L,64.01D,1,2,64,false);
             if(!verticalRangeCleared || cachedLevel!=null || cachedTick!=Long.MIN_VALUE
-                || !cachedSegments.isEmpty() || !SURFACE_Y_BY_COLUMN.isEmpty())
+                || !cachedSegments.isEmpty() || !SURFACE_Y_BY_COLUMN.isEmpty()
+                || verticalCullResumePending || verticalCameraRangeSampleLogged)
                 throw new IllegalStateException("BLACK FREQUENCY vertical ground mesh cache cleanup regression");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_RANGE_CACHE_RELEASE_VERIFIED levelReference=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_CULL_LIFECYCLE_RESET_VERIFIED inactive=true verticalRange=true staleResume=false cameraSample=false");
             verticallyCulled=false;
             verticallyCulledAnchorX=Integer.MIN_VALUE;
             verticallyCulledAnchorZ=Integer.MIN_VALUE;
