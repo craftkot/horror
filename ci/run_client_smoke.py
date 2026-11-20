@@ -2363,7 +2363,8 @@ def capture_test_world():
                     frames,border_skips,chunk_skips,rebuild_skips=(int(summary.group(i)) for i in range(1,5))
                     segments,arms=int(resumed.group(1)),int(resumed.group(2))
                     if (frames<1 or border_skips!=frames or chunk_skips!=frames
-                            or rebuild_skips!=frames or summary.group(5)!="camera-returned-or-anchor-changed"):
+                            or rebuild_skips!=frames or summary.group(5)!="camera-returned-or-anchor-changed"
+                            or resumed.group(5)!="false"):
                         raise RuntimeError("BLACK FREQUENCY vertical cull skip accounting did not match the real skipped frames")
                     if segments<MIN_GROUND_MESH_SEGMENTS or arms<MIN_GROUND_MESH_ARMS:
                         raise RuntimeError("BLACK FREQUENCY ground mesh did not rebuild after the camera returned")
@@ -2687,6 +2688,9 @@ def capture_test_world():
                 return False
             if "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_LATCH_VERIFIED stable=true returnRebuild=true anchorChangeRebuild=true" not in final_log:
                 print("WORLD_CAPTURE_FAIL: vertically culled ground mesh rebuilt or failed to resume at the expected boundary",flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_RESUME_ANCHOR_PROFILE_VERIFIED sameAnchor=false changedAnchor=true" not in final_log:
+                print("WORLD_CAPTURE_FAIL: vertical cull resume misclassified a same-anchor camera return as an anchor change",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_SKIP_COUNTER_VERIFIED increments=true saturates=true negativeRecovered=true" not in final_log:
                 print("WORLD_CAPTURE_FAIL: vertical cull skipped-frame accounting was not verified",flush=True)
