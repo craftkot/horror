@@ -3335,7 +3335,7 @@ def capture_test_world():
                     return False
             print(f"WORLD_CAPTURE: GROUND_MESH_BUILD_TIMING_VERIFIED samples={len(build_timings)} firstBuildSeparated=true profileChecks=true",flush=True)
             visibility_reuse = re.search(
-                r"BLACK_FREQUENCY_TEST GROUND_MESH_VISIBILITY_PREFIX_REUSE_VERIFIED firstVisibleIndex=(\\d+) prefixFadeChecks=(\\d+) cachedFirstSegmentFade=true redundantPrefixRechecksAvoided=(\\d+)",
+                r"BLACK_FREQUENCY_TEST GROUND_MESH_VISIBILITY_PREFIX_REUSE_VERIFIED firstVisibleIndex=(\d+) prefixFadeChecks=(\d+) cachedFirstSegmentFade=true redundantPrefixRechecksAvoided=(\d+)",
                 log_after)
             if (not visibility_reuse or int(visibility_reuse.group(2)) < 2
                     or int(visibility_reuse.group(2)) != int(visibility_reuse.group(3))):

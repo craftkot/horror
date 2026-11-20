@@ -1473,6 +1473,25 @@ public final class RiftClientState {
             return groundDistanceFade(dx*dx+dy*dy+dz*dz);
         }
 
+        // A segment remains drawable while either endpoint overlaps the fade envelope.
+        // Its two vertex alphas are interpolated independently by the GPU.
+        private static double groundSegmentDistanceFade(GroundSegment segment,Vec3 camera) {
+            if(segment==null || camera==null) return 0.0D;
+            return Math.max(groundPointDistanceFade(segment.a(),camera),
+                groundPointDistanceFade(segment.b(),camera));
+        }
+
+        // Retained for the deterministic fade-profile self-check. The render path
+        // now reuses the first visible segment's endpoint values instead of rescanning it.
+        private static boolean hasVisibleGroundSegment(List<GroundSegment> segments,Vec3 camera) {
+            if(segments==null || camera==null) return false;
+            for(GroundSegment segment:segments) {
+                if(segment!=null && !segment.sample().coreSegmentGap()
+                    && groundSegmentDistanceFade(segment,camera)>0.0D) return true;
+            }
+            return false;
+        }
+
         // A vertically distant camera should release the sampled ClientLevel and
         // mesh just like a camera that leaves the horizontal radius.
         private static boolean clearGeometryCacheIfOutsideGroundRenderRange(
