@@ -2250,6 +2250,16 @@ public final class RiftController {
         if(legacy.surfaceFirstScan || legacy.centerOutScan || legacy.cursorY!=12 || legacy.isDirty())
             throw new IllegalStateException("CI legacy fracture cursor migration regression");
 
+        // The intermediate surface-first format predates center-out metadata and remains valid.
+        CompoundTag intermediateTag=new CompoundTag();
+        intermediateTag.putBoolean("initialized",true);
+        intermediateTag.putBoolean("surfaceFirstScan",true);
+        intermediateTag.putInt("cy",12);
+        State intermediate=State.load(intermediateTag);
+        if(!intermediate.surfaceFirstScan || intermediate.centerOutScan
+            || intermediate.cursorY!=12 || intermediate.isDirty())
+            throw new IllegalStateException("CI intermediate surface-first cursor migration regression");
+
         // A current center-out save must contain all three companion fields.
         // Missing one must not silently resume with a different traversal order.
         CompoundTag missingCenterOutMode=new CompoundTag();
