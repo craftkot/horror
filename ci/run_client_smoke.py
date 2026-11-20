@@ -9,6 +9,18 @@ MIN_GROUND_MESH_ARMS=2
 MAX_GROUND_MESH_ARMS=4
 GROUND_MESH_SAMPLES=96
 FISSURE_PARTICLE_SAMPLES=48
+FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE=2.25
+FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE=12.0
+
+def is_fissure_target_horizontal_distance(horizontal_squared):
+    try:
+        value=float(horizontal_squared)
+    except (TypeError,ValueError,OverflowError):
+        return False
+    minimum_squared=FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE**2
+    maximum_squared=FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE**2
+    return math.isfinite(value) and minimum_squared<=value<=maximum_squared
+
 MAX_GROUND_MESH_SEGMENTS=MAX_GROUND_MESH_ARMS*(GROUND_MESH_SAMPLES//MAX_GROUND_MESH_ARMS-1)
 FISSURE_PARTICLE_EMISSION_RE=re.compile(
     r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) accentDust=(\d+) violetDust=(\d+) edgeDust=(\d+) total=(\d+) heightmap=motion-blocking-no-leaves"
@@ -25,6 +37,8 @@ def verify_fissure_target_view_score_profile():
     fixtures=(
         (68.9125,70,7.272919386951269,0.11306757125331757),
         (66.1,70,32.98037496303177,1.1335440888873975),
+        # Exact candidate observed in the failing Sparse client run on 2026-11-20.
+        (67.1,73,58.11826889234223,0.39171582940392113),
     )
     for target_y,player_y,horizontal_squared,expected in fixtures:
         actual=fissure_target_view_score(target_y,player_y,horizontal_squared)
@@ -42,9 +56,24 @@ def verify_fissure_target_view_score_profile():
         raise RuntimeError("BLACK FREQUENCY fissure view-score accepted invalid coordinates")
     controller_source_path=ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftController.java"
     controller_source=controller_source_path.read_text(encoding="utf-8")
-    if ("private static final double FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE = 12.0D;" not in controller_source
+    minimum_range=re.search(
+        r"private static final double FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE = ([0-9.]+)D;",
+        controller_source)
+    maximum_range=re.search(
+        r"private static final double FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE = ([0-9.]+)D;",
+        controller_source)
+    if (not minimum_range or not maximum_range
+            or not math.isclose(float(minimum_range.group(1)),FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE,
+                                rel_tol=0.0,abs_tol=1.0E-9)
+            or not math.isclose(float(maximum_range.group(1)),FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE,
+                                rel_tol=0.0,abs_tol=1.0E-9)
             or "isFissureTargetHorizontalDistance(beaconPadFar*beaconPadFar)" not in controller_source):
         raise RuntimeError("BLACK FREQUENCY beacon-side fissure visibility range source contract regression")
+    sparse_fixture_squared=58.11826889234223
+    if (not is_fissure_target_horizontal_distance(sparse_fixture_squared)
+            or sparse_fixture_squared<=6.0**2
+            or is_fissure_target_horizontal_distance((FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE+1.0E-6)**2)):
+        raise RuntimeError("BLACK FREQUENCY observed Sparse fissure standoff range regression")
     target_method_start=controller_source.index(
         "private static FissureTarget findVisibleFissureTarget(ServerLevel level,State s,\n"
         "            net.minecraft.server.level.ServerPlayer viewer,net.minecraft.world.phys.Vec3 eye)")
@@ -1837,13 +1866,12 @@ def capture_test_world():
                 player_x,player_y,player_z=map(int,safe_pad.groups())
                 target_horizontal_squared=float(target.group(5))
                 target_view_score=float(target.group(6))
-                minimum_target_horizontal_squared=2.25*2.25
-                if (not math.isfinite(target_horizontal_squared)
-                        or target_horizontal_squared<minimum_target_horizontal_squared-1.0E-9
-                        or target_horizontal_squared>36.0+1.0E-9):
+                if not is_fissure_target_horizontal_distance(target_horizontal_squared):
                     terrain_capture_failed=True
-                    print("WORLD_CAPTURE_FAIL: fissure camera target is too close or outside the bounded standoff",
-                          target_horizontal_squared,flush=True)
+                    print("WORLD_CAPTURE_FAIL: fissure camera target is outside the bounded standoff",
+                          target_horizontal_squared,
+                          "allowed",FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE,
+                          "to",FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE,flush=True)
                     return
                 expected_view_score=fissure_target_view_score(
                     float(target.group(2)),player_y,target_horizontal_squared)
@@ -3205,6 +3233,9 @@ def capture_test_world():
                 return False
             if "BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_BEACON_STANDOFF_PROFILE_VERIFIED maxHorizontal=12.0 beaconPadNear=6.5 beaconPadFar=11.75 boundaryRejected=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: beacon-side fissure view range profile was not verified",flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_SPARSE_RANGE_FIXTURE_VERIFIED horizontalSquared=58.11826889234223 acceptedBeyondLegacySixBlockCap=true" not in log_after:
+                print("WORLD_CAPTURE_FAIL: observed Sparse fissure standoff regression fixture was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=balanced-view targetPitch=45 ties=stable invalidRejected=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: balanced fissure camera target policy was not verified",flush=True)

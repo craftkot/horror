@@ -1454,13 +1454,21 @@ public final class RiftController {
             throw new IllegalStateException("CI fissure target selection regression");
         double beaconPadNear=6.5D;
         double beaconPadFar=11.75D;
+        // The Sparse client failure on 2026-11-20 produced this valid 7.62-block
+        // camera target. Keep it above the retired six-block test cap and inside
+        // the same 12-block bound used by the loaded-only server selector.
+        double sparseCameraFixtureSquared=58.11826889234223D;
         if(Math.abs(FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE-12.0D)>1.0E-9D
             || !isFissureTargetHorizontalDistance(beaconPadNear*beaconPadNear)
             || !isFissureTargetHorizontalDistance(beaconPadFar*beaconPadFar)
+            || !isFissureTargetHorizontalDistance(sparseCameraFixtureSquared)
+            || sparseCameraFixtureSquared<=6.0D*6.0D
             || isFissureTargetHorizontalDistance(12.01D*12.01D))
             throw new IllegalStateException("CI beacon-side fissure visibility distance regression");
         LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_BEACON_STANDOFF_PROFILE_VERIFIED maxHorizontal={} beaconPadNear={} beaconPadFar={} boundaryRejected=true",
             FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE,beaconPadNear,beaconPadFar);
+        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_SPARSE_RANGE_FIXTURE_VERIFIED horizontalSquared={} acceptedBeyondLegacySixBlockCap=true",
+            sparseCameraFixtureSquared);
         LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=balanced-view targetPitch=45 ties=stable invalidRejected=true minHorizontal={} maxHorizontal={}",
             FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE,FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE);
         verifyCiBeaconPadProfile();
