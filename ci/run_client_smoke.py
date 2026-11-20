@@ -2990,11 +2990,11 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: no player-visible ground fissure was captured",flush=True)
                     return False
                 print("WORLD_CAPTURE: restoration finished in integrated client",flush=True)
-                # Run F3+T only after world recovery and its fade captures are complete:
-                # the integrated server may pause while Minecraft reloads resources.
-                if not verify_shader_resource_reload():
-                    print("WORLD_CAPTURE_FAIL: shader reload after restoration did not complete",flush=True)
-                    return False
+            # Run F3+T only after the world-specific capture work is complete:
+            # the integrated server may pause while Minecraft reloads resources.
+            if not verify_shader_resource_reload():
+                print("WORLD_CAPTURE_FAIL: shader reload after capture did not complete",flush=True)
+                return False
             log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
             canonical_snapshot_marker=("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_BLOCK_STATE_CANONICAL_ROUNDTRIP_VERIFIED "
                                        "valid=true invalidPropertyValue=true unknownProperty=true unknownBlock=true")
