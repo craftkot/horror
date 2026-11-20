@@ -2327,7 +2327,7 @@ def capture_test_world():
                 return False
             print("WORLD_CAPTURE: ground animation uses six shared time-base trig calls per frame",flush=True)
             core_gap_marker=("BLACK_FREQUENCY_GROUND_MESH_CORE_SEGMENT_GAP_PROFILE_VERIFIED "
-                             "samples=96 gaps=3 adjacentGapPairs=0 deterministic=true gapRate=1/32")
+                             "samples=96 gaps=1 adjacentGapPairs=0 deterministic=true gapRate=1/128")
             if core_gap_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: full-section ground fissure gaps were not verified",flush=True)
                 return False
@@ -2373,7 +2373,7 @@ def capture_test_world():
                     or "if(sample.coreSegmentGap()) continue;" not in camera_source
                     or "private static boolean isGroundEdgeNotched(double phase,long salt)" not in camera_source
                     or "return (groundSampleHash(phase,salt) & 7L)==0L;" not in camera_source
-                    or "return (groundSampleHash(phase,GROUND_CORE_SEGMENT_GAP_SALT) & 31L)==0L;" not in camera_source
+                    or "return (groundSampleHash(phase,GROUND_CORE_SEGMENT_GAP_SALT) & 127L)==0L;" not in camera_source
                     or "int adjacentCoreGapPairs=0;" not in camera_source
                     or "if(previousCoreSegmentGap) adjacentCoreGapPairs++;" not in camera_source
                     or "adjacentCoreGapPairs!=0" not in camera_source

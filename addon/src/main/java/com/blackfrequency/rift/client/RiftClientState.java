@@ -622,7 +622,7 @@ public final class RiftClientState {
         // Fixed hash salts create independent, reproducible chips in the two exposed crack lips.
         private static final long GROUND_LEFT_EDGE_NOTCH_SALT=0x9E3779B97F4A7C15L;
         private static final long GROUND_RIGHT_EDGE_NOTCH_SALT=0xD1B54A32D192ED03L;
-        // One in thirty-two full-section breaks keep the core mostly continuous while preserving occasional fracture gaps.
+        // One in 128 full-section breaks keep the core mostly continuous while preserving rare fracture gaps.
         private static final long GROUND_CORE_SEGMENT_GAP_SALT=0x94D049BB133111EBL;
         // RGB values are invariant across every frame and segment; pack them once at class initialization.
         private static final int GROUND_GLOW_RED_CHANNEL=colorChannel(.20F);
@@ -727,7 +727,7 @@ public final class RiftClientState {
 
         private static boolean isGroundCoreSegmentGap(double phase) {
             if(!Double.isFinite(phase)) return true;
-            return (groundSampleHash(phase,GROUND_CORE_SEGMENT_GAP_SALT) & 31L)==0L;
+            return (groundSampleHash(phase,GROUND_CORE_SEGMENT_GAP_SALT) & 127L)==0L;
         }
 
         private static double groundCoreWidthScale(double phase,int arm) {
@@ -1009,7 +1009,7 @@ public final class RiftClientState {
             if(groundCoreSkew(Double.NaN,0)!=0.0D
                 || groundCoreSkew(0.0D,ARM_COUNT)!=0.0D)
                 throw new IllegalStateException("BLACK FREQUENCY ground core skew invalid-input fallback regression");
-            if(checked!=96 || !evenSamplesAligned || coreSegmentGaps!=3
+            if(checked!=96 || !evenSamplesAligned || coreSegmentGaps!=1
                 || adjacentCoreGapPairs!=0 || leftEdgeNotches!=12 || rightEdgeNotches!=8 || asymmetricEdgeSamples!=18
                 || minimumCoreWidthScale<GROUND_MIN_CORE_WIDTH_SCALE
                 || maximumCoreWidthScale>GROUND_MAX_CORE_WIDTH_SCALE
@@ -1019,7 +1019,7 @@ public final class RiftClientState {
                 || maximumAdjacentCoreSkewDelta>.04D)
                 throw new IllegalStateException("BLACK FREQUENCY ground edge notch profile regression");
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_CORE_SEGMENT_GAP_PROFILE_VERIFIED samples={} gaps={} adjacentGapPairs={} deterministic=true gapRate=1/32",
+                "BLACK_FREQUENCY_GROUND_MESH_CORE_SEGMENT_GAP_PROFILE_VERIFIED samples={} gaps={} adjacentGapPairs={} deterministic=true gapRate=1/128",
                 checked,coreSegmentGaps,adjacentCoreGapPairs);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED samples={} left={} right={} asymmetricSamples={} deterministic=true notchRate=1/8",
