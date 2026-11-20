@@ -45,7 +45,18 @@ def verify_fissure_target_view_score_profile():
     if ("private static final double FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE = 12.0D;" not in controller_source
             or "isFissureTargetHorizontalDistance(beaconPadFar*beaconPadFar)" not in controller_source):
         raise RuntimeError("BLACK FREQUENCY beacon-side fissure visibility range source contract regression")
-    print("WORLD_CAPTURE: balanced fissure target score fixtures, beacon-pad range source, and invalid-input guards verified",flush=True)
+    target_method_start=controller_source.index(
+        "private static FissureTarget findVisibleFissureTarget(ServerLevel level,State s,\n"
+        "            net.minecraft.server.level.ServerPlayer viewer,net.minecraft.world.phys.Vec3 eye)")
+    target_method_end=controller_source.index("\n    // Run after ordinary explosion modifiers",target_method_start)
+    target_method=controller_source[target_method_start:target_method_end]
+    distance_guard=target_method.find("if(!isFissureTargetHorizontalDistance(horizontalSquared)) continue;")
+    chunk_probe=target_method.find("!level.hasChunk(blockX>>4,blockZ>>4)")
+    surface_probe=target_method.find("findFissureGroundY(level,blockX,blockZ,cursor)")
+    if (distance_guard<0 or chunk_probe<0 or surface_probe<0
+            or distance_guard>chunk_probe or distance_guard>surface_probe):
+        raise RuntimeError("BLACK FREQUENCY fissure distance cull must precede loaded-chunk and heightmap reads")
+    print("WORLD_CAPTURE: balanced fissure target fixtures, 12-block beacon range, and early loaded-only distance cull verified",flush=True)
 
 def parse_fissure_particle_emission(log_text):
     match=FISSURE_PARTICLE_EMISSION_RE.search(log_text)

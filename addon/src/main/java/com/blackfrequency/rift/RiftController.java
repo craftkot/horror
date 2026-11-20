@@ -1824,6 +1824,11 @@ public final class RiftController {
                 double bend=Math.sin(segment*.85D+arm*1.1D)*RiftGeometry.FISSURE_BEND_AMPLITUDE;
                 double px=s.x+.5D+Math.cos(angle)*distance-Math.sin(angle)*bend;
                 double pz=s.z+.5D+Math.sin(angle)*distance+Math.cos(angle)*bend;
+                // Cull samples outside the camera standoff before any chunk or heightmap reads.
+                // This is a pure coordinate check and does not request or load a chunk.
+                double vx=px-eye.x,vz=pz-eye.z;
+                double horizontalSquared=vx*vx+vz*vz;
+                if(!isFissureTargetHorizontalDistance(horizontalSquared)) continue;
                 int blockX=(int)Math.floor(px),blockZ=(int)Math.floor(pz);
                 long dx=(long)blockX-s.x,dz=(long)blockZ-s.z;
                 cursor.set(blockX,level.getMinBuildHeight(),blockZ);
@@ -1838,13 +1843,10 @@ public final class RiftController {
                 net.minecraft.world.phys.Vec3 target=new net.minecraft.world.phys.Vec3(
                     px,fissureParticleY(level,blockX,surfaceY,blockZ,cursor),pz);
                 if(!fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ))) continue;
-                double vx=target.x-eye.x,vy=target.y-eye.y,vz=target.z-eye.z;
-                double horizontalSquared=vx*vx+vz*vz;
-                // Keep a modest horizontal standoff so the view does not point
-                // almost straight down at a particle just beside the player.
-                // The loaded-chunk ray trace remains the authority on visibility.
-                if(!isFissureTargetHorizontalDistance(horizontalSquared) || Math.abs(vy)>24.0D)
-                    continue;
+                double vy=target.y-eye.y;
+                // The horizontal range was checked before chunk and heightmap reads above.
+                // Keep the vertical bound here because surface height is only known after sampling.
+                if(Math.abs(vy)>24.0D) continue;
                 var hit=level.clip(new net.minecraft.world.level.ClipContext(eye,target,
                     net.minecraft.world.level.ClipContext.Block.COLLIDER,
                     net.minecraft.world.level.ClipContext.Fluid.NONE,viewer));
