@@ -144,6 +144,53 @@ public final class RiftSkyRenderer {
         return maximum;
     }
 
+    // Mirror the shader's wrapped angular width profile so the spoke envelope can
+    // be checked for visible variation and continuity before the shader is used.
+    private static double zenithSpokeWidth(double angle,double shaderTime,double crownSurge) {
+        double angularPulse=.5D+.5D*Math.sin(angle*5.0D+shaderTime*.31D
+            +.6D*Math.sin(angle*2.0D-shaderTime*.11D));
+        double blend=Math.max(0.0D,Math.min(1.0D,.35D*crownSurge+.65D*angularPulse));
+        return .005D+.009D*blend;
+    }
+
+    private static void verifyZenithSpokeWidthProfile() {
+        double minimum=Double.POSITIVE_INFINITY;
+        double maximum=Double.NEGATIVE_INFINITY;
+        double minimumVariation=Double.POSITIVE_INFINITY;
+        double maximumSeam=0.0D;
+        double maximumWrapDelta=0.0D;
+        double wrappedShaderTime=(float)SKY_TIME_WRAP_TICKS*SKY_TIME_TICK_SCALE;
+        double[] times={0.0D,1234.5D,wrappedShaderTime};
+        for(double shaderTime:times) {
+            double phaseMinimum=Double.POSITIVE_INFINITY;
+            double phaseMaximum=Double.NEGATIVE_INFINITY;
+            for(int sample=0;sample<=256;sample++) {
+                double angle=-Math.PI+2.0D*Math.PI*sample/256.0D;
+                double width=zenithSpokeWidth(angle,shaderTime,.5D);
+                if(!Double.isFinite(width))
+                    throw new IllegalStateException("BLACK FREQUENCY zenith spoke width became non-finite");
+                phaseMinimum=Math.min(phaseMinimum,width);
+                phaseMaximum=Math.max(phaseMaximum,width);
+                maximumWrapDelta=Math.max(maximumWrapDelta,
+                    Math.abs(zenithSpokeWidth(angle,0.0D,.5D)
+                        -zenithSpokeWidth(angle,wrappedShaderTime,.5D)));
+            }
+            minimum=Math.min(minimum,phaseMinimum);
+            maximum=Math.max(maximum,phaseMaximum);
+            minimumVariation=Math.min(minimumVariation,phaseMaximum-phaseMinimum);
+            maximumSeam=Math.max(maximumSeam,
+                Math.abs(zenithSpokeWidth(-Math.PI,shaderTime,.5D)
+                    -zenithSpokeWidth(Math.PI,shaderTime,.5D)));
+        }
+        if(minimum<.005D-1.0E-9D || maximum>.014D+1.0E-9D
+            || minimumVariation<.004D || maximumSeam>1.0E-9D
+            || maximumWrapDelta>2.0E-5D)
+            throw new IllegalStateException("BLACK FREQUENCY zenith spoke width profile regression");
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST SKY_ZENITH_SPOKE_WIDTH_PROFILE_VERIFIED min={} max={} minVariation={} seam={} wrapDelta={}",
+            minimum,maximum,minimumVariation,maximumSeam,maximumWrapDelta);
+    }
+
     private static void verifyRenderThreshold() {
         if(shouldRender(0.0f) || shouldRender(MIN_VISIBLE_STRENGTH)
             || !shouldRender(MIN_VISIBLE_STRENGTH+0.00001f)
@@ -157,6 +204,7 @@ public final class RiftSkyRenderer {
         float invalid=interpolatedGameTime(42L,Float.NaN);
         float clamped=interpolatedGameTime(42L,1.5F);
         double maximumWrapError=maximumShaderWrapPhaseError();
+        verifyZenithSpokeWidthProfile();
         float beforeWrap=interpolatedGameTime(SKY_TIME_WRAP_TICKS-1L,1.0F);
         float afterWrap=interpolatedGameTime(SKY_TIME_WRAP_TICKS,0.0F);
         if(beforeWrap!=SKY_TIME_WRAP_TICKS || afterWrap!=0.0F
