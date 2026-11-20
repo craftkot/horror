@@ -2191,6 +2191,10 @@ def capture_test_world():
                     or "surface.getShape(level,cursor)" in sample_source):
                 print("WORLD_CAPTURE_FAIL: ground mesh still follows non-colliding cover geometry instead of the supporting block top",flush=True)
                 return False
+            if ("private static boolean isGroundHeadClear(BlockState head)" not in camera_source
+                    or "isGroundHeadClear(head)" not in sample_source):
+                print("WORLD_CAPTURE_FAIL: ground mesh does not guard powder-snow headroom",flush=True)
+                return False
             color_profile_marker="BLACK_FREQUENCY_GROUND_MESH_COLOR_CHANNEL_PROFILE_VERIFIED zero=0 half=128 one=255 lowClamp=0 highClamp=255 nonFinite=true"
             if color_profile_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: per-ribbon color conversion profile was not executed",flush=True)
@@ -2985,6 +2989,13 @@ def capture_test_world():
                 log_after)
             if "BLACK_FREQUENCY_GROUND_MESH_STRUCTURAL_SUPPORT_FILTER_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: client ground mesh did not verify structural-surface filtering",flush=True)
+                return False
+            headroom_hazard_marker = (
+                "BLACK_FREQUENCY_GROUND_MESH_HEADROOM_HAZARD_FILTER_VERIFIED "
+                "powderSnow=true water=true lava=true air=true"
+            )
+            if headroom_hazard_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: ground mesh did not reject powder snow occupying fissure headroom",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST GROUND_MESH_SURFACE_SEARCH_RANGE_VERIFIED renderRadius=64 searchBelow=64 searchAbove=8 bounded=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: ground surface sampling does not cover the full vertical render radius",flush=True)

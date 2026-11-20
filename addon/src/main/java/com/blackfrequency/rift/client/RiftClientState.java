@@ -1681,6 +1681,11 @@ public final class RiftClientState {
                 !isGroundSurfaceAvailable(net.minecraft.world.level.block.Blocks.POWDER_SNOW.defaultBlockState())
                 && !isGroundSurfaceAvailable(net.minecraft.world.level.block.Blocks.WATER.defaultBlockState())
                 && !isGroundSurfaceAvailable(net.minecraft.world.level.block.Blocks.LAVA.defaultBlockState());
+            boolean rejectsHazardousHeadroom=
+                !isGroundHeadClear(net.minecraft.world.level.block.Blocks.POWDER_SNOW.defaultBlockState())
+                && isGroundHeadClear(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState())
+                && !isGroundHeadClear(net.minecraft.world.level.block.Blocks.WATER.defaultBlockState())
+                && !isGroundHeadClear(net.minecraft.world.level.block.Blocks.LAVA.defaultBlockState());
             var fullShape=net.minecraft.world.phys.shapes.Shapes.block();
             var partialShape=net.minecraft.world.phys.shapes.Shapes.box(0.0D,0.0D,0.0D,1.0D,.5D,1.0D);
             double fullBlockHeight=groundSupportHeight(fullShape,net.minecraft.world.phys.shapes.Shapes.empty());
@@ -1692,7 +1697,7 @@ public final class RiftClientState {
             boolean validSupportHeights=Math.abs(fullBlockHeight-1.0D)<1.0E-9D
                 && Math.abs(partialBlockHeight-.5D)<1.0E-9D && outlineFallback && emptyShapeRejected;
             if(!(naturalGrass && naturalStone && rejectsStructures && rejectsBlockEntities
-                && rejectsHazardousSurfaces && validSupportHeights))
+                && rejectsHazardousSurfaces && rejectsHazardousHeadroom && validSupportHeights))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh terrain/structure/support-shape regression");
             supportFilterLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
@@ -1701,6 +1706,8 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_GROUND_MESH_BLOCK_ENTITY_FILTER_VERIFIED support=true surface=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SURFACE_HAZARD_FILTER_VERIFIED powderSnow=true water=true lava=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_HEADROOM_HAZARD_FILTER_VERIFIED powderSnow=true water=true lava=true air=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_SHAPE_GUARD_VERIFIED fullBlock={} partial={} outlineFallback={} emptyRejected={}",
                 fullBlockHeight,partialBlockHeight,outlineFallback,emptyShapeRejected);
@@ -1741,6 +1748,13 @@ public final class RiftClientState {
                 && !surface.blocksMotion()
                 && !surface.is(net.minecraft.world.level.block.Blocks.POWDER_SNOW)
                 && surface.getFluidState().isEmpty();
+        }
+
+        // Powder snow is non-colliding, but it still occupies the visual headroom
+        // above a fissure. Do not place the ground ribbon inside that translucent block.
+        private static boolean isGroundHeadClear(BlockState head) {
+            return !head.is(net.minecraft.world.level.block.Blocks.POWDER_SNOW)
+                && head.getFluidState().isEmpty();
         }
 
         // Search from the camera height downward first: a player standing on the
@@ -1826,7 +1840,7 @@ public final class RiftClientState {
 
                 cursor.set(blockX,candidateY+1,blockZ);
                 BlockState head=level.getBlockState(cursor);
-                if(!head.getFluidState().isEmpty()) continue;
+                if(!isGroundHeadClear(head)) continue;
 
                 double surfaceOffset=groundSurfaceOffset(supportHeight);
                 return candidateY-1+surfaceOffset+GROUND_SURFACE_CLEARANCE;
