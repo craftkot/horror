@@ -1573,13 +1573,15 @@ def capture_test_world():
         # Capture the active rift before clicking, then aim back at the server's
         # measured beacon rotation. Restoring the fissure/sky view is not a valid
         # substitute for aiming at the physical block.
+        # Run the live cull probe before F3+T. Resource reload can pause the
+        # integrated server; stale pre-probe log markers must never satisfy this test.
+        if os.environ.get("BF_ISOLATED_TEST")=="1" and not vertical_cull_probe_verified:
+            if not run_vertical_ground_cull_probe():
+                return
         if not sky_capture_attempted:
             capture_sky_before_beacon()
         if not sky_capture_attempted:
             return
-        if os.environ.get("BF_ISOLATED_TEST")=="1" and not vertical_cull_probe_verified:
-            if not run_vertical_ground_cull_probe():
-                return
         fresh_logs=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else logs
         if not aim_camera_at_beacon(fresh_logs):
             return
@@ -2169,8 +2171,6 @@ def capture_test_world():
                     print("WORLD_CAPTURE: SKY_RIFT_HORIZON_ONLY_VERIFIED_BEFORE_BEACON_CLICK",flush=True)
                 else:
                     print("WORLD_CAPTURE_FAIL: neither horizon nor upper-sky frame passed visibility checks; still attempting real interaction",flush=True)
-                if not verify_shader_resource_reload():
-                    sky_shot=False
             def run_vertical_ground_cull_probe():
                 nonlocal vertical_cull_probe_attempted,vertical_cull_probe_verified
                 if vertical_cull_probe_verified:
@@ -2185,6 +2185,20 @@ def capture_test_world():
                     return False
                 x,y,z=(int(value) for value in safe_pad.groups())
                 vertical_cull_probe_attempted=True
+                # Only markers appended after this cursor belong to this probe.
+                # Earlier cull/resume markers may come from camera setup and are not evidence.
+                probe_log_offset=latest.stat().st_size if latest.exists() else 0
+
+                def read_probe_log():
+                    try:
+                        with latest.open("rb") as stream:
+                            current_size=stream.seek(0,os.SEEK_END)
+                            if current_size<probe_log_offset:
+                                return ""
+                            stream.seek(probe_log_offset)
+                            return stream.read().decode("utf-8",errors="replace")
+                    except OSError:
+                        return ""
 
                 def send_chat_command(command):
                     focus_game()
@@ -2205,12 +2219,13 @@ def capture_test_world():
                     send_chat_command("/gamemode spectator @s")
                     send_chat_command(f"/tp @s {x} {y+80} {z}")
                     entered=None
+                    probe_logs=""
                     enter_deadline=time.monotonic()+6.0
                     while time.monotonic()<enter_deadline and p.poll() is None:
-                        current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                        probe_logs=read_probe_log()
                         entered=re.search(
                             r"BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ENTERED cameraY=([-+0-9.eE]+) surfaceY=([-+0-9.eE]+) verticalDelta=([-+0-9.eE]+) threshold=64 anchorX=(-?\d+) anchorZ=(-?\d+)",
-                            current)
+                            probe_logs)
                         if entered:
                             break
                         time.sleep(0.1)
@@ -2228,18 +2243,23 @@ def capture_test_world():
                     resumed=None
                     resume_deadline=time.monotonic()+8.0
                     while time.monotonic()<resume_deadline and p.poll() is None:
-                        current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                        probe_logs=read_probe_log()
                         summary=re.search(
                             r"BLACK_FREQUENCY_GROUND_MESH_VERTICAL_CULL_SKIP_SUMMARY frames=(\d+) worldBorderProbesSkipped=(\d+) loadedChunkProbesSkipped=(\d+) rebuildChecksSkipped=(\d+) endedBy=([a-z-]+)",
-                            current)
+                            probe_logs)
                         resumed=re.search(
                             r"BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_RESUMED rebuilt=true segments=(\d+) arms=(\d+) cameraY=([-+0-9.eE]+) surfaceY=([-+0-9.eE]+) anchorChanged=(true|false)",
-                            current)
+                            probe_logs)
                         if summary and resumed:
                             break
                         time.sleep(0.1)
                     if not summary or not resumed:
-                        raise RuntimeError("BLACK FREQUENCY vertical cull probe did not flush its skip summary and rebuild after returning")
+                        raise RuntimeError("BLACK FREQUENCY vertical cull probe did not emit new skip-summary and rebuild markers after its log cursor")
+                    entered_position=probe_logs.find("BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ENTERED")
+                    summary_position=probe_logs.find("BLACK_FREQUENCY_GROUND_MESH_VERTICAL_CULL_SKIP_SUMMARY")
+                    resumed_position=probe_logs.find("BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_RESUMED")
+                    if not (0<=entered_position<summary_position<resumed_position):
+                        raise RuntimeError("BLACK FREQUENCY vertical cull probe markers were not emitted in enter/skip/resume order")
                     frames,border_skips,chunk_skips,rebuild_skips=(int(summary.group(i)) for i in range(1,5))
                     segments,arms=int(resumed.group(1)),int(resumed.group(2))
                     if (frames<1 or border_skips!=frames or chunk_skips!=frames
@@ -2970,6 +2990,11 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: no player-visible ground fissure was captured",flush=True)
                     return False
                 print("WORLD_CAPTURE: restoration finished in integrated client",flush=True)
+                # Run F3+T only after world recovery and its fade captures are complete:
+                # the integrated server may pause while Minecraft reloads resources.
+                if not verify_shader_resource_reload():
+                    print("WORLD_CAPTURE_FAIL: shader reload after restoration did not complete",flush=True)
+                    return False
             log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
             canonical_snapshot_marker=("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_BLOCK_STATE_CANONICAL_ROUNDTRIP_VERIFIED "
                                        "valid=true invalidPropertyValue=true unknownProperty=true unknownBlock=true")
