@@ -173,10 +173,10 @@ public final class RiftController {
     private static final DustParticleOptions FISSURE_VIOLET_EDGE_DUST =
         new DustParticleOptions(new Vector3f(.42F,.18F,.92F),.60F);
     private static final double FISSURE_SAMPLE_SPACING = RiftGeometry.FISSURE_SAMPLE_SPACING;
-    // Avoid aiming almost straight down at a mote beside the player: a modest
-    // standoff keeps the particle trail and the surface ribbon in the same view.
+    // Avoid aiming almost straight down at a mote beside the player. The wider upper bound
+    // also lets the loaded-only camera preview see fissures from a recovery-beacon pad.
     private static final double FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE = FISSURE_SAMPLE_SPACING*5.0D;
-    private static final double FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE = 6.0D;
+    private static final double FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE = 12.0D;
     // The disposable CI pad is perpendicular to the anchor-to-beacon vector.
     // Two empty near rows let the raised player's eye ray enter the beacon instead of passing above it.
     private static final int CI_BEACON_PAD_FLOOR_Y_OFFSET=0;
@@ -1452,6 +1452,15 @@ public final class RiftController {
             || fissureTargetViewScore(25.0D,Double.NaN)!=Double.POSITIVE_INFINITY
             || fissureTargetViewScore(25.0D,Double.POSITIVE_INFINITY)!=Double.POSITIVE_INFINITY)
             throw new IllegalStateException("CI fissure target selection regression");
+        double beaconPadNear=6.5D;
+        double beaconPadFar=11.75D;
+        if(Math.abs(FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE-12.0D)>1.0E-9D
+            || !isFissureTargetHorizontalDistance(beaconPadNear*beaconPadNear)
+            || !isFissureTargetHorizontalDistance(beaconPadFar*beaconPadFar)
+            || isFissureTargetHorizontalDistance(12.01D*12.01D))
+            throw new IllegalStateException("CI beacon-side fissure visibility distance regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_BEACON_STANDOFF_PROFILE_VERIFIED maxHorizontal={} beaconPadNear={} beaconPadFar={} boundaryRejected=true",
+            FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE,beaconPadNear,beaconPadFar);
         LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=balanced-view targetPitch=45 ties=stable invalidRejected=true minHorizontal={} maxHorizontal={}",
             FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE,FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE);
         verifyCiBeaconPadProfile();

@@ -40,7 +40,12 @@ def verify_fissure_target_view_score_profile():
         except ValueError:
             continue
         raise RuntimeError("BLACK FREQUENCY fissure view-score accepted invalid coordinates")
-    print("WORLD_CAPTURE: balanced fissure target score fixtures and invalid-input guards verified",flush=True)
+    controller_source_path=ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftController.java"
+    controller_source=controller_source_path.read_text(encoding="utf-8")
+    if ("private static final double FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE = 12.0D;" not in controller_source
+            or "isFissureTargetHorizontalDistance(beaconPadFar*beaconPadFar)" not in controller_source):
+        raise RuntimeError("BLACK FREQUENCY beacon-side fissure visibility range source contract regression")
+    print("WORLD_CAPTURE: balanced fissure target score fixtures, beacon-pad range source, and invalid-input guards verified",flush=True)
 
 def parse_fissure_particle_emission(log_text):
     match=FISSURE_PARTICLE_EMISSION_RE.search(log_text)
@@ -3186,6 +3191,9 @@ def capture_test_world():
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_DUST_PULSE_PROFILE_VERIFIED min=0.65 low=0.75 base=0.85 high=0.95 max=1.05 variants=5" not in log_after:
                 print("WORLD_CAPTURE_FAIL: cached fissure dust pulse profile was not verified",flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_BEACON_STANDOFF_PROFILE_VERIFIED maxHorizontal=12.0 beaconPadNear=6.5 beaconPadFar=11.75 boundaryRejected=true" not in log_after:
+                print("WORLD_CAPTURE_FAIL: beacon-side fissure view range profile was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=balanced-view targetPitch=45 ties=stable invalidRejected=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: balanced fissure camera target policy was not verified",flush=True)
