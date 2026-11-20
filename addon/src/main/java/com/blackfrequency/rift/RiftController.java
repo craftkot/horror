@@ -1012,9 +1012,12 @@ public final class RiftController {
             }
             if(s.centerOutScan && (!centerOutIndexValidType
                 || s.centerOutIndex<0 || s.centerOutIndex>CENTER_OUT_COLUMN_COUNT)) {
-                if(s.initialized && !s.restoring && !s.restored && !s.finished) {
+                if(s.initialized && !s.restoring && !s.restored) {
                     LOGGER.warn("BLACK FREQUENCY: invalid center-out cursor {}; stopping further terrain edits",
                         s.centerOutIndex);
+                    // Preserve the terminal sentinel even if malformed companion metadata
+                    // already marked this state finished. A normalized save must never turn
+                    // an invalid active cursor back into a resumable index zero.
                     s.centerOutIndex=CENTER_OUT_COLUMN_COUNT;
                     s.finished=true;
                     s.setDirty();
@@ -2362,12 +2365,26 @@ public final class RiftController {
         CompoundTag corruptCenterOut=new CompoundTag();
         corruptCenterOut.putBoolean("initialized",true);
         corruptCenterOut.putBoolean("started",true);
+        corruptCenterOut.putBoolean("surfaceFirstScan",true);
         corruptCenterOut.putBoolean("centerOutScan",true);
         corruptCenterOut.putInt("centerOutIndex",Integer.MAX_VALUE);
         State quarantined=State.load(corruptCenterOut);
         if(!quarantined.finished || quarantined.centerOutIndex!=CENTER_OUT_COLUMN_COUNT)
             throw new IllegalStateException("CI corrupt center-out cursor was not quarantined");
+
+        // Also cover a truncated modern save whose invalid cursor is discovered after
+        // missing companion metadata has already marked the state finished.
+        CompoundTag corruptCenterOutWithMissingCompanion=new CompoundTag();
+        corruptCenterOutWithMissingCompanion.putBoolean("initialized",true);
+        corruptCenterOutWithMissingCompanion.putBoolean("started",true);
+        corruptCenterOutWithMissingCompanion.putBoolean("centerOutScan",true);
+        corruptCenterOutWithMissingCompanion.putInt("centerOutIndex",Integer.MAX_VALUE);
+        State quarantinedWithMissingCompanion=State.load(corruptCenterOutWithMissingCompanion);
+        if(!quarantinedWithMissingCompanion.finished
+            || quarantinedWithMissingCompanion.centerOutIndex!=CENTER_OUT_COLUMN_COUNT)
+            throw new IllegalStateException("CI terminal center-out sentinel was lost after metadata quarantine");
         LOGGER.info("BLACK_FREQUENCY_TEST CORRUPT_CENTER_OUT_CURSOR_QUARANTINED");
+        LOGGER.info("BLACK_FREQUENCY_TEST CORRUPT_CENTER_OUT_CURSOR_TERMINAL_SENTINEL_VERIFIED isolated=true combinedMissingCompanion=true");
         verifyCenterOutColumnOrder();
         LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_SCAN_ORDER_MIGRATION_VERIFIED");
         verifySurfaceFractureCue();
