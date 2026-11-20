@@ -2171,6 +2171,11 @@ def capture_test_world():
                     print("WORLD_CAPTURE: SKY_RIFT_HORIZON_ONLY_VERIFIED_BEFORE_BEACON_CLICK",flush=True)
                 else:
                     print("WORLD_CAPTURE_FAIL: neither horizon nor upper-sky frame passed visibility checks; still attempting real interaction",flush=True)
+                # The live cull probe has already run before this capture; keep the
+                # shader reload here while the rift is still active so a post-reload draw
+                # can be observed before the physical beacon starts recovery.
+                if not verify_shader_resource_reload():
+                    sky_shot=False
             def run_vertical_ground_cull_probe():
                 nonlocal vertical_cull_probe_attempted,vertical_cull_probe_verified
                 if vertical_cull_probe_verified:
@@ -2990,11 +2995,6 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: no player-visible ground fissure was captured",flush=True)
                     return False
                 print("WORLD_CAPTURE: restoration finished in integrated client",flush=True)
-            # Run F3+T only after the world-specific capture work is complete:
-            # the integrated server may pause while Minecraft reloads resources.
-            if not verify_shader_resource_reload():
-                print("WORLD_CAPTURE_FAIL: shader reload after capture did not complete",flush=True)
-                return False
             log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
             canonical_snapshot_marker=("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_BLOCK_STATE_CANONICAL_ROUNDTRIP_VERIFIED "
                                        "valid=true invalidPropertyValue=true unknownProperty=true unknownBlock=true")
