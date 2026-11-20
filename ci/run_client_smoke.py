@@ -3334,6 +3334,13 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: ground mesh timing counters exceeded bounded geometry limits",flush=True)
                     return False
             print(f"WORLD_CAPTURE: GROUND_MESH_BUILD_TIMING_VERIFIED samples={len(build_timings)} firstBuildSeparated=true profileChecks=true",flush=True)
+            visibility_reuse = re.search(
+                r"BLACK_FREQUENCY_TEST GROUND_MESH_VISIBILITY_PREFIX_REUSE_VERIFIED firstVisibleIndex=(\\d+) prefixFadeChecks=(\\d+) cachedFirstSegmentFade=true redundantPrefixRechecksAvoided=(\\d+)",
+                log_after)
+            if (not visibility_reuse or int(visibility_reuse.group(2)) < 2
+                    or int(visibility_reuse.group(2)) != int(visibility_reuse.group(3))):
+                print("WORLD_CAPTURE_FAIL: ground mesh did not reuse the first visible segment's endpoint fades",flush=True)
+                return False
             if "BLACK_FREQUENCY_GROUND_MESH_BLOCK_ENTITY_FILTER_VERIFIED support=true surface=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: client ground mesh did not reject block-entity fixtures",flush=True)
                 return False

@@ -649,6 +649,7 @@ public final class RiftClientState {
         private static boolean continuityBuildLogged;
         private static int cachedSteepStepBreaks;
         private static boolean firstRenderLogged;
+        private static boolean visibilityPrefixReuseLogged;
         private static boolean pendingRenderLogged;
         private static boolean renderEventLogged;
         private static boolean emptyMeshLogged;
@@ -1470,25 +1471,6 @@ public final class RiftClientState {
             double dy=point.y()-camera.y;
             double dz=point.z()-camera.z;
             return groundDistanceFade(dx*dx+dy*dy+dz*dz);
-        }
-
-        // A segment remains drawable while either endpoint overlaps the fade envelope.
-        // Its two vertex alphas are interpolated independently by the GPU.
-        private static double groundSegmentDistanceFade(GroundSegment segment,Vec3 camera) {
-            if(segment==null || camera==null) return 0.0D;
-            return Math.max(groundPointDistanceFade(segment.a(),camera),
-                groundPointDistanceFade(segment.b(),camera));
-        }
-
-        // Avoid beginning an empty BufferBuilder when the anchor is in range but
-        // every remaining fissure segment is outside the camera's local fade envelope.
-        private static boolean hasVisibleGroundSegment(List<GroundSegment> segments,Vec3 camera) {
-            if(segments==null || camera==null) return false;
-            for(GroundSegment segment:segments) {
-                if(segment!=null && !segment.sample().coreSegmentGap()
-                    && groundSegmentDistanceFade(segment,camera)>0.0D) return true;
-            }
-            return false;
         }
 
         // A vertically distant camera should release the sampled ClientLevel and
@@ -2330,6 +2312,7 @@ public final class RiftClientState {
             continuityBuildLogged=false;
             continuityProfileLogged=false;
             firstRenderLogged=false;
+            visibilityPrefixReuseLogged=false;
             pendingRenderLogged=false;
             renderEventLogged=false;
             emptyMeshLogged=false;
@@ -2552,7 +2535,32 @@ public final class RiftClientState {
                 return;
             }
 
-            if(!hasVisibleGroundSegment(cachedSegments,camera)) return;
+            // Find the first drawable segment once. Reuse its endpoint fades and
+            // start the draw loop there, so the invisible prefix is not evaluated twice.
+            int firstVisibleSegmentIndex=-1;
+            double firstVisibleFadeA=0.0D;
+            double firstVisibleFadeB=0.0D;
+            int prefixFadeChecks=0;
+            for(int i=0;i<cachedSegments.size();i++) {
+                GroundSegment segment=cachedSegments.get(i);
+                if(segment==null || segment.sample().coreSegmentGap()) continue;
+                double fadeA=groundPointDistanceFade(segment.a(),camera);
+                double fadeB=groundPointDistanceFade(segment.b(),camera);
+                prefixFadeChecks+=2;
+                if(fadeA>0.0D || fadeB>0.0D) {
+                    firstVisibleSegmentIndex=i;
+                    firstVisibleFadeA=fadeA;
+                    firstVisibleFadeB=fadeB;
+                    break;
+                }
+            }
+            if(firstVisibleSegmentIndex<0) return;
+            if(VERIFY_GROUND_MESH_PROFILES && !visibilityPrefixReuseLogged) {
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_TEST GROUND_MESH_VISIBILITY_PREFIX_REUSE_VERIFIED firstVisibleIndex={} prefixFadeChecks={} cachedFirstSegmentFade=true redundantPrefixRechecksAvoided={}",
+                    firstVisibleSegmentIndex,prefixFadeChecks,prefixFadeChecks);
+                visibilityPrefixReuseLogged=true;
+            }
             Matrix4f matrix=event.getPoseStack().last().pose();
             BufferBuilder builder=Tesselator.getInstance().getBuilder();
             RenderSystem.enableBlend();
@@ -2574,13 +2582,20 @@ public final class RiftClientState {
                 double flickerSin=Math.sin(flickerTime),flickerCos=Math.cos(flickerTime);
                 double pulseTime=time*.19D;
                 double pulseSin=Math.sin(pulseTime),pulseCos=Math.cos(pulseTime);
-                for(GroundSegment segment:cachedSegments) {
+                for(int segmentIndex=firstVisibleSegmentIndex;segmentIndex<cachedSegments.size();segmentIndex++) {
+                    GroundSegment segment=cachedSegments.get(segmentIndex);
                     GroundSample sample=segment.sample();
                     // Break the whole cross-section occasionally; keeping only a dark ribbon
                     // through every gap makes the fissure read like a cable on the terrain.
                     if(sample.coreSegmentGap()) continue;
-                    double segmentFadeA=groundPointDistanceFade(segment.a(),camera);
-                    double segmentFadeB=groundPointDistanceFade(segment.b(),camera);
+                    double segmentFadeA,segmentFadeB;
+                    if(segmentIndex==firstVisibleSegmentIndex) {
+                        segmentFadeA=firstVisibleFadeA;
+                        segmentFadeB=firstVisibleFadeB;
+                    } else {
+                        segmentFadeA=groundPointDistanceFade(segment.a(),camera);
+                        segmentFadeB=groundPointDistanceFade(segment.b(),camera);
+                    }
                     if(segmentFadeA<=0.0D && segmentFadeB<=0.0D) continue;
                     float segmentStrengthA=boundedStrength*(float)segmentFadeA;
                     float segmentStrengthB=boundedStrength*(float)segmentFadeB;
