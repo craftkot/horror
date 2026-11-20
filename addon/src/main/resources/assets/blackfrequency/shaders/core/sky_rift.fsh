@@ -133,6 +133,7 @@ void main(){
  float zenithAngle=zenithRadius<.0001?0.:atan(n.z,n.x);
  float zenithSpokes=abs(sin(zenithAngle*6.
                    +.22*sin(zenithAngle*3.-t*.18)
+                   +.08*sin(zenithAngle*11.-t*.27)
                    +.12*sin(zenithRadius*42.-t*.7)));
  float zenithDistance=zenithSpokes*zenithRadius;
  float zenithWindow=(1.-smoothstep(.27,.46,zenithRadius))*smoothstep(.72,.9,n.y);
