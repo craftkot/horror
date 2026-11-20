@@ -964,7 +964,57 @@ def capture_test_world():
                 return last
         return last if last is not None else read_client_camera_rotation()
 
-    def aim_camera_at_beacon(log_text=None):
+    def camera_rotation_command(target_yaw,target_pitch):
+        if (not math.isfinite(target_yaw) or not math.isfinite(target_pitch)
+                or target_pitch < -90.0 or target_pitch > 90.0):
+            raise ValueError("Invalid physical beacon camera rotation")
+        # Cheats are enabled only in the disposable isolated CI world. Relative
+        # coordinates preserve the player's safe-pad position; only view rotation changes.
+        return f"/tp @s ~ ~ ~ {target_yaw:.6f} {target_pitch:.6f}"
+
+    def set_camera_orientation_in_disposable_world(target_yaw,target_pitch):
+        if os.environ.get("BF_ISOLATED_TEST")!="1":
+            return None
+        current=read_client_camera_rotation()
+        if (current is not None
+                and abs(wrapped_angle_delta(current[0],target_yaw))<=1.0
+                and abs(current[1]-target_pitch)<=1.0):
+            return current
+        log_offset=latest.stat().st_size if latest.exists() else 0
+        focus_game()
+        key("t")
+        time.sleep(0.12)
+        command=camera_rotation_command(target_yaw,target_pitch)
+        typed=subprocess.run(
+            ["xdotool","type","--clearmodifiers","--delay","1",command],check=False)
+        if typed.returncode!=0:
+            print("WORLD_CAPTURE_FAIL: could not type exact disposable-world camera rotation",
+                  flush=True)
+            return None
+        key("Return")
+        deadline=time.monotonic()+3.0
+        while time.monotonic()<deadline and p.poll() is None:
+            try:
+                with latest.open("rb") as stream:
+                    size=stream.seek(0,os.SEEK_END)
+                    stream.seek(0 if size<log_offset else log_offset)
+                    fresh=stream.read().decode("utf-8",errors="replace")
+            except OSError:
+                fresh=""
+            measured=read_client_camera_rotation(fresh)
+            if (measured is not None
+                    and abs(wrapped_angle_delta(measured[0],target_yaw))<=1.0
+                    and abs(measured[1]-target_pitch)<=1.0):
+                print("WORLD_CAPTURE: disposable-world beacon camera rotation verified",
+                      round(measured[0],3),round(measured[1],3),flush=True)
+                return measured
+            time.sleep(0.05)
+        measured=read_client_camera_rotation()
+        print("WORLD_CAPTURE_FAIL: exact disposable-world camera rotation was not rendered",
+              measured,"expected",(target_yaw,target_pitch),flush=True)
+        return None
+
+    def aim_camera_at_beacon(log_text=None,allow_disposable_teleport=False):
         target=read_beacon_aim(log_text)
         if target is None:
             print("WORLD_CAPTURE: beacon aim telemetry is not ready; deferring click",flush=True)
@@ -976,6 +1026,11 @@ def capture_test_world():
         if (abs(wrapped_angle_delta(current[0],target[0]))>3.0
                 or abs(current[1]-target[1])>3.0):
             current=restore_camera_orientation(target[0],target[1])
+        if (current is None
+                or abs(wrapped_angle_delta(current[0],target[0]))>3.0
+                or abs(current[1]-target[1])>3.0):
+            if allow_disposable_teleport:
+                current=set_camera_orientation_in_disposable_world(target[0],target[1])
         if (current is None
                 or abs(wrapped_angle_delta(current[0],target[0]))>3.0
                 or abs(current[1]-target[1])>3.0):
@@ -1015,6 +1070,16 @@ def capture_test_world():
     if overshoot_correction>=0 or abs(corrected_pitch-44.65)>degrees_per_pixel:
         raise RuntimeError("BLACK FREQUENCY camera pitch overshoot correction regression")
     print("WORLD_CAPTURE: closed-loop camera pitch overshoot correction verified",flush=True)
+    exact_rotation_sample=camera_rotation_command(89.999985,35.247574)
+    if exact_rotation_sample!="/tp @s ~ ~ ~ 89.999985 35.247574":
+        raise RuntimeError("BLACK FREQUENCY disposable camera rotation command regression")
+    try:
+        camera_rotation_command(0.0,float("nan"))
+    except ValueError:
+        pass
+    else:
+        raise RuntimeError("BLACK FREQUENCY non-finite disposable camera rotation was accepted")
+    print("WORLD_CAPTURE: exact disposable-world camera rotation command and finite guards verified",flush=True)
     print("WORLD_CAPTURE: client camera telemetry, beacon aim parser and correction directions verified",flush=True)
     def is_rift_violet_pixel(r,g,b):
         # Reject pale lavender UI/death-screen skies; the rift must be saturated violet.
@@ -1637,7 +1702,7 @@ def capture_test_world():
                 or "BLACK_FREQUENCY_TEST REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED" in log_text):
             print("WORLD_CAPTURE_FAIL: beacon was consumed before the real left-click test",flush=True)
             return False
-        if not aim_camera_at_beacon(log_text):
+        if not aim_camera_at_beacon(log_text,allow_disposable_teleport=True):
             return False
         overlay_deadline=time.monotonic()+3.0
         overlay_absent=False
