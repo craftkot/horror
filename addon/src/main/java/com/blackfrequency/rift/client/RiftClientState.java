@@ -2348,6 +2348,10 @@ public final class RiftClientState {
                 clearGeometryCacheIfPresent();
                 return;
             }
+            // The client-state reset clears this latch when the world changes.
+            // While the same anchor remains vertically culled, avoid even the loaded-chunk probe.
+            if(shouldSkipGroundMeshBuildWhileVerticallyCulled(
+                    worldAnchorX,worldAnchorZ,cameraHorizontalDistanceSquared,camera.y)) return;
             // Reuse the render-thread scratch cursor instead of allocating a BlockPos
             // on every frame. buildSegments() resets this cursor before sampling.
             SURFACE_CURSOR.set(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);
@@ -2356,8 +2360,6 @@ public final class RiftClientState {
                 clearCache();
                 return;
             }
-            if(shouldSkipGroundMeshBuildWhileVerticallyCulled(
-                    worldAnchorX,worldAnchorZ,cameraHorizontalDistanceSquared,camera.y)) return;
             long tick=level.getGameTime();
             boolean anchorChanged=level!=cachedLevel || worldAnchorX!=cachedAnchorX || worldAnchorZ!=cachedAnchorZ;
             double cachedVerticalDelta=camera.y-cachedAnchorSurfaceY;

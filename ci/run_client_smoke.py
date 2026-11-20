@@ -2480,13 +2480,17 @@ def capture_test_world():
             if prebuild_cull<0 or rebuild_check<0 or prebuild_cull>rebuild_check:
                 print("WORLD_CAPTURE_FAIL: vertical mesh culling must precede periodic terrain rebuilds",flush=True)
                 return False
+            latch_skip=ground_render.find("if(shouldSkipGroundMeshBuildWhileVerticallyCulled(")
             cursor_set=ground_render.find("SURFACE_CURSOR.set(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);")
             border_check=ground_render.find("isWithinBounds(SURFACE_CURSOR)")
+            loaded_chunk_probe=ground_render.find("!level.hasChunk(worldAnchorX>>4,worldAnchorZ>>4)")
             if ("private static final BlockPos.MutableBlockPos SURFACE_CURSOR=" not in camera_source
-                    or not ground_render or cursor_set<0 or border_check<cursor_set
+                    or not ground_render or latch_skip<0 or cursor_set<0
+                    or not (latch_skip<cursor_set<border_check<loaded_chunk_probe)
                     or "new BlockPos(" in ground_render):
-                print("WORLD_CAPTURE_FAIL: ground render anchor guard must reuse its render-thread cursor without per-frame BlockPos allocation",flush=True)
+                print("WORLD_CAPTURE_FAIL: vertical cull latch must skip world-border and loaded-chunk probes before terrain sampling",flush=True)
                 return False
+            print("WORLD_CAPTURE: vertically culled ground mesh skips world-border and loaded-chunk probes until resume",flush=True)
             print("WORLD_CAPTURE: ground render anchor guard reuses its mutable cursor; no per-frame BlockPos allocation",flush=True)
             if ("long cameraHorizontalDistanceSquared=horizontalDistanceSquared(" not in camera_source
                     or "cameraBlockX,cameraBlockZ,worldAnchorX,worldAnchorZ);" not in camera_source
