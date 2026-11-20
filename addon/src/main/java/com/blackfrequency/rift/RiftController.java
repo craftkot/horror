@@ -979,11 +979,18 @@ public final class RiftController {
             s.finaleTicks=readBoundedCounter(n,"finaleTicks",Integer.MAX_VALUE,s);
             s.surfaceFirstScan=n.contains("surfaceFirstScan",Tag.TAG_BYTE)&&n.getBoolean("surfaceFirstScan");
             s.centerOutScan=n.contains("centerOutScan",Tag.TAG_BYTE)&&n.getBoolean("centerOutScan");
-            s.centerOutIndex=n.getInt("centerOutIndex");
+            boolean centerOutIndexPresent=n.contains("centerOutIndex");
+            boolean centerOutIndexValidType=n.contains("centerOutIndex",Tag.TAG_INT);
+            s.centerOutIndex=centerOutIndexValidType?n.getInt("centerOutIndex"):0;
+            if(centerOutIndexPresent && !centerOutIndexValidType) {
+                LOGGER.warn("BLACK FREQUENCY: quarantined malformed center-out fracture cursor type");
+                s.setDirty();
+            }
             s.started=n.getBoolean("started");s.finished=n.getBoolean("finished");
             s.initialized=n.getBoolean("initialized");
             s.restoring=n.getBoolean("restoring");s.restored=n.getBoolean("restored");
-            if(s.centerOutScan && (s.centerOutIndex<0 || s.centerOutIndex>CENTER_OUT_COLUMN_COUNT)) {
+            if(s.centerOutScan && ((centerOutIndexPresent && !centerOutIndexValidType)
+                || s.centerOutIndex<0 || s.centerOutIndex>CENTER_OUT_COLUMN_COUNT)) {
                 if(s.initialized && !s.restoring && !s.restored && !s.finished) {
                     LOGGER.warn("BLACK FREQUENCY: invalid center-out cursor {}; stopping further terrain edits",
                         s.centerOutIndex);
@@ -992,11 +999,24 @@ public final class RiftController {
                     s.setDirty();
                 } else {
                     s.centerOutIndex=0;
+                    s.setDirty();
                 }
             }
-            s.restoreIndex=n.getInt("restoreIndex");
+            boolean restoreIndexPresent=n.contains("restoreIndex");
+            boolean restoreIndexValidType=n.contains("restoreIndex",Tag.TAG_INT);
+            s.restoreIndex=restoreIndexValidType?n.getInt("restoreIndex"):0;
+            if(restoreIndexPresent && !restoreIndexValidType) {
+                LOGGER.warn("BLACK FREQUENCY: quarantined malformed recovery restoreIndex type");
+                s.setDirty();
+            }
             // Older worlds have no scan cursor: resume at the last pending snapshot.
-            s.restoreScan=n.contains("restoreScan",Tag.TAG_INT)?n.getInt("restoreScan"):s.restoreIndex;
+            boolean restoreScanPresent=n.contains("restoreScan");
+            boolean restoreScanValidType=n.contains("restoreScan",Tag.TAG_INT);
+            s.restoreScan=restoreScanValidType?n.getInt("restoreScan"):s.restoreIndex;
+            if(restoreScanPresent && !restoreScanValidType) {
+                LOGGER.warn("BLACK FREQUENCY: quarantined malformed recovery restoreScan type");
+                s.setDirty();
+            }
             s.restoreTicks=readBoundedCounter(n,"restoreTicks",Integer.MAX_VALUE,s);
             s.restoredBlocks=readBoundedCounter(n,"restoredBlocks",MAX_EDITS,s);
             s.skippedOccupied=readBoundedCounter(n,"skippedOccupied",MAX_EDITS,s);
@@ -1092,13 +1112,25 @@ public final class RiftController {
             if(s.restoring) {
                 int last=s.snapshots.size()-1;
                 boolean restoreCursorRepaired=false;
-                if(s.restoreIndex < -1 || s.restoreIndex > last) {
+                if(!restoreIndexValidType) {
+                    // A missing/mistyped cursor during active recovery must not default to zero:
+                    // resume from the last validated snapshot. Replaying a snapshot is safer than
+                    // skipping the remaining terrain edits and falsely reporting full restoration.
+                    if(!restoreIndexPresent)
+                        LOGGER.warn("BLACK FREQUENCY: missing recovery restoreIndex; resuming from last snapshot");
+                    s.restoreIndex=last;
+                    s.restoreScan=last;
+                    restoreCursorRepaired=true;
+                } else if(s.restoreIndex < -1 || s.restoreIndex > last) {
                     LOGGER.warn("BLACK FREQUENCY: invalid restoreIndex={} for {} snapshots; clamping",
                         s.restoreIndex,s.snapshots.size());
                     s.restoreIndex=last;
                     restoreCursorRepaired=true;
                 }
-                if(s.restoreScan < -1 || s.restoreScan > s.restoreIndex) {
+                if(restoreIndexValidType && restoreScanPresent && !restoreScanValidType) {
+                    s.restoreScan=s.restoreIndex;
+                    restoreCursorRepaired=true;
+                } else if(restoreIndexValidType && (s.restoreScan < -1 || s.restoreScan > s.restoreIndex)) {
                     LOGGER.warn("BLACK FREQUENCY: invalid restoreScan={}; resetting to restoreIndex={}",
                         s.restoreScan,s.restoreIndex);
                     s.restoreScan=s.restoreIndex;
@@ -2820,15 +2852,57 @@ public final class RiftController {
         validCursor.putInt("restoreScan",-1);
         State untouched=State.load(validCursor);
 
+        ListTag cursorSnapshots=new ListTag();
+        for(int i=0;i<2;i++) {
+            CompoundTag entry=new CompoundTag();
+            entry.putLong("pos",new BlockPos(i,64,0).asLong());
+            entry.put("state",NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
+            cursorSnapshots.add(entry);
+        }
+        CompoundTag wrongIndexType=new CompoundTag();
+        wrongIndexType.putBoolean("restoring",true);
+        wrongIndexType.putString("restoreIndex","not-an-int");
+        wrongIndexType.putInt("restoreScan",0);
+        wrongIndexType.put("snapshots",cursorSnapshots.copy());
+        State repairedWrongIndexType=State.load(wrongIndexType);
+        CompoundTag normalizedWrongIndexType=repairedWrongIndexType.save(new CompoundTag());
+        State reloadedWrongIndexType=State.load(normalizedWrongIndexType);
+
+        CompoundTag wrongScanType=new CompoundTag();
+        wrongScanType.putBoolean("restoring",true);
+        wrongScanType.putInt("restoreIndex",1);
+        wrongScanType.putString("restoreScan","not-an-int");
+        wrongScanType.put("snapshots",cursorSnapshots.copy());
+        State repairedWrongScanType=State.load(wrongScanType);
+        CompoundTag normalizedWrongScanType=repairedWrongScanType.save(new CompoundTag());
+
+        CompoundTag wrongCenterOutType=new CompoundTag();
+        wrongCenterOutType.putBoolean("initialized",true);
+        wrongCenterOutType.putBoolean("centerOutScan",true);
+        wrongCenterOutType.putString("centerOutIndex","not-an-int");
+        State quarantinedWrongCenterOutType=State.load(wrongCenterOutType);
+        CompoundTag normalizedWrongCenterOutType=quarantinedWrongCenterOutType.save(new CompoundTag());
+
         if(repairedIndex.restoreIndex!=-1 || repairedIndex.restoreScan!=-1
             || !repairedIndex.isDirty()
             || reloadedIndex.restoreIndex!=-1 || reloadedIndex.restoreScan!=-1
             || repairedScan.restoreIndex!=-1 || repairedScan.restoreScan!=-1
             || !repairedScan.isDirty()
             || untouched.restoreIndex!=-1 || untouched.restoreScan!=-1
-            || untouched.isDirty())
+            || untouched.isDirty()
+            || repairedWrongIndexType.restoreIndex!=1 || repairedWrongIndexType.restoreScan!=1
+            || !repairedWrongIndexType.isDirty()
+            || reloadedWrongIndexType.restoreIndex!=1 || reloadedWrongIndexType.restoreScan!=1
+            || !normalizedWrongIndexType.contains("restoreIndex",Tag.TAG_INT)
+            || repairedWrongScanType.restoreIndex!=1 || repairedWrongScanType.restoreScan!=1
+            || !repairedWrongScanType.isDirty()
+            || !normalizedWrongScanType.contains("restoreScan",Tag.TAG_INT)
+            || quarantinedWrongCenterOutType.centerOutIndex!=CENTER_OUT_COLUMN_COUNT
+            || !quarantinedWrongCenterOutType.finished || !quarantinedWrongCenterOutType.isDirty()
+            || normalizedWrongCenterOutType.getInt("centerOutIndex")!=CENTER_OUT_COLUMN_COUNT
+            || !normalizedWrongCenterOutType.getBoolean("finished"))
             throw new IllegalStateException("CI recovery cursor repair persistence regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_CURSOR_REPAIR_PERSISTENCE_VERIFIED indexClamped=true scanClamped=true dirty=true roundTrip=true validUnchanged=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_CURSOR_REPAIR_PERSISTENCE_VERIFIED indexClamped=true scanClamped=true dirty=true roundTrip=true validUnchanged=true malformedIndexType=true malformedScanType=true malformedCenterOutType=true");
     }
 
     private static void verifyInvalidSnapshotWarningRateLimit() {
