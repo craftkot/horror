@@ -2333,7 +2333,23 @@ def capture_test_world():
                         raise RuntimeError("BLACK FREQUENCY camera crossed the vertical range but the renderer did not enter the cull path")
                     if not math.isfinite(float(entered.group(3))) or float(entered.group(3))<=64.0:
                         raise RuntimeError("BLACK FREQUENCY vertical cull entry reported an invalid camera delta")
-                    time.sleep(1.0)
+                    skip_milestone=None
+                    milestone_deadline=time.monotonic()+3.0
+                    while time.monotonic()<milestone_deadline and p.poll() is None:
+                        probe_logs=read_probe_log()
+                        skip_milestone=re.search(
+                            r"BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_SKIP_MILESTONE frames=3 anchorX=(-?\\d+) anchorZ=(-?\\d+) cameraY=([-+0-9.eE]+)",
+                            probe_logs)
+                        if skip_milestone:
+                            break
+                        time.sleep(0.05)
+                    if not skip_milestone:
+                        raise RuntimeError("BLACK FREQUENCY vertical cull probe did not reach three live skipped render passes")
+                    if (int(skip_milestone.group(1))!=int(entered.group(4))
+                            or int(skip_milestone.group(2))!=int(entered.group(5))
+                            or not math.isfinite(float(skip_milestone.group(3)))
+                            or float(skip_milestone.group(3))<=64.0):
+                        raise RuntimeError("BLACK FREQUENCY vertical cull skip milestone did not match the entered camera/anchor")
                     send_chat_command(f"/tp @s {x} {y} {z}")
                     send_chat_command("/gamemode survival @s")
                     restored=True
@@ -2358,11 +2374,12 @@ def capture_test_world():
                     entered_position=probe_logs.find("BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ENTERED")
                     summary_position=probe_logs.find("BLACK_FREQUENCY_GROUND_MESH_VERTICAL_CULL_SKIP_SUMMARY")
                     resumed_position=probe_logs.find("BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_RESUMED")
-                    if not (0<=sample_position<entered_position<summary_position<resumed_position):
-                        raise RuntimeError("BLACK FREQUENCY vertical cull probe markers were not emitted in enter/skip/resume order")
+                    milestone_position=probe_logs.find("BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_SKIP_MILESTONE")
+                    if not (0<=sample_position<entered_position<milestone_position<summary_position<resumed_position):
+                        raise RuntimeError("BLACK FREQUENCY vertical cull probe markers were not emitted in sample/enter/milestone/skip/resume order")
                     frames,border_skips,chunk_skips,rebuild_skips=(int(summary.group(i)) for i in range(1,5))
                     segments,arms=int(resumed.group(1)),int(resumed.group(2))
-                    if (frames<1 or border_skips!=frames or chunk_skips!=frames
+                    if (frames<3 or border_skips!=frames or chunk_skips!=frames
                             or rebuild_skips!=frames or summary.group(5)!="camera-returned-or-anchor-changed"
                             or resumed.group(5)!="false"):
                         raise RuntimeError("BLACK FREQUENCY vertical cull skip accounting did not match the real skipped frames")
