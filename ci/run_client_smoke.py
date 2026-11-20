@@ -2794,6 +2794,11 @@ def capture_test_world():
             if counter_persistence_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: a later corrupt snapshot container was not persisted after the one-shot warning",flush=True)
                 return False
+            counter_normalization_marker=("BLACK_FREQUENCY_TEST CORRUPT_STATE_COUNTERS_PERSISTED "
+                                          "negative=true excessive=true wrongType=true legacyMissingAllowed=true")
+            if counter_normalization_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: malformed saved counters were clamped in memory but not persisted",flush=True)
+                return False
             if os.environ.get("BF_TEST_NATURAL_BEACON")=="1":
                 if not mine_beacon_after_restoration(log_after):
                     return False

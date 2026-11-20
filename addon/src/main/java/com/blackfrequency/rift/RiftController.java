@@ -948,13 +948,35 @@ public final class RiftController {
         // Reuse the small per-tick retry set during recovery instead of allocating
         // a new HashSet on every server tick. It is transient and never persisted.
         final java.util.Set<Long> restoreFailedWrites = new java.util.HashSet<>();
+        private static long readBoundedElapsed(CompoundTag n,State state) {
+            boolean present=n.contains("elapsed");
+            boolean validType=n.contains("elapsed",Tag.TAG_LONG);
+            long raw=n.getLong("elapsed");
+            long bounded=boundedElapsed(raw);
+            if(present && (!validType || raw!=bounded)) {
+                state.setDirty();
+                LOGGER.warn("BLACK FREQUENCY: normalized malformed saved elapsed counter");
+            }
+            return bounded;
+        }
+        private static int readBoundedCounter(CompoundTag n,String key,int maximum,State state) {
+            boolean present=n.contains(key);
+            boolean validType=n.contains(key,Tag.TAG_INT);
+            int raw=n.getInt(key);
+            int bounded=boundedCounter(raw,maximum);
+            if(present && (!validType || raw!=bounded)) {
+                state.setDirty();
+                LOGGER.warn("BLACK FREQUENCY: normalized malformed saved counter {}",key);
+            }
+            return bounded;
+        }
         static State load(CompoundTag n) {
             State s = new State();
-            s.elapsed=boundedElapsed(n.getLong("elapsed"));
+            s.elapsed=readBoundedElapsed(n,s);
             s.x=n.getInt("x");s.z=n.getInt("z");
             s.cursorX=n.getInt("cx");s.cursorZ=n.getInt("cz");s.cursorY=n.getInt("cy");
-            s.edits=boundedCounter(n.getInt("edits"),MAX_EDITS);
-            s.finaleTicks=boundedCounter(n.getInt("finaleTicks"),Integer.MAX_VALUE);
+            s.edits=readBoundedCounter(n,"edits",MAX_EDITS,s);
+            s.finaleTicks=readBoundedCounter(n,"finaleTicks",Integer.MAX_VALUE,s);
             s.surfaceFirstScan=n.contains("surfaceFirstScan",Tag.TAG_BYTE)&&n.getBoolean("surfaceFirstScan");
             s.centerOutScan=n.contains("centerOutScan",Tag.TAG_BYTE)&&n.getBoolean("centerOutScan");
             s.centerOutIndex=n.getInt("centerOutIndex");
@@ -975,10 +997,10 @@ public final class RiftController {
             s.restoreIndex=n.getInt("restoreIndex");
             // Older worlds have no scan cursor: resume at the last pending snapshot.
             s.restoreScan=n.contains("restoreScan",Tag.TAG_INT)?n.getInt("restoreScan"):s.restoreIndex;
-            s.restoreTicks=boundedCounter(n.getInt("restoreTicks"),Integer.MAX_VALUE);
-            s.restoredBlocks=boundedCounter(n.getInt("restoredBlocks"),MAX_EDITS);
-            s.skippedOccupied=boundedCounter(n.getInt("skippedOccupied"),MAX_EDITS);
-            s.skippedInvalid=boundedCounter(n.getInt("skippedInvalid"),MAX_EDITS);
+            s.restoreTicks=readBoundedCounter(n,"restoreTicks",Integer.MAX_VALUE,s);
+            s.restoredBlocks=readBoundedCounter(n,"restoredBlocks",MAX_EDITS,s);
+            s.skippedOccupied=readBoundedCounter(n,"skippedOccupied",MAX_EDITS,s);
+            s.skippedInvalid=readBoundedCounter(n,"skippedInvalid",MAX_EDITS,s);
             s.invalidSnapshotWarningLogged=n.contains("invalidSnapshotWarningLogged",Tag.TAG_BYTE)
                 && n.getBoolean("invalidSnapshotWarningLogged");
             boolean beaconPositionPresent=n.contains("beaconPos");
@@ -2405,10 +2427,19 @@ public final class RiftController {
         negativeCounters.putInt("skippedOccupied",Integer.MIN_VALUE);
         negativeCounters.putInt("skippedInvalid",Integer.MIN_VALUE);
         State sanitized=State.load(negativeCounters);
+        CompoundTag normalizedNegative=sanitized.save(new CompoundTag());
         if(sanitized.elapsed!=0L || sanitized.edits!=0 || sanitized.finaleTicks!=0
             || sanitized.restoreTicks!=0 || sanitized.restoredBlocks!=0
-            || sanitized.skippedOccupied!=0 || sanitized.skippedInvalid!=0)
-            throw new IllegalStateException("CI negative saved counters were not sanitized");
+            || sanitized.skippedOccupied!=0 || sanitized.skippedInvalid!=0
+            || !sanitized.isDirty()
+            || normalizedNegative.getLong("elapsed")!=0L
+            || normalizedNegative.getInt("edits")!=0
+            || normalizedNegative.getInt("finaleTicks")!=0
+            || normalizedNegative.getInt("restoreTicks")!=0
+            || normalizedNegative.getInt("restoredBlocks")!=0
+            || normalizedNegative.getInt("skippedOccupied")!=0
+            || normalizedNegative.getInt("skippedInvalid")!=0)
+            throw new IllegalStateException("CI negative saved counters were not sanitized and persisted");
         CompoundTag excessiveCounters=new CompoundTag();
         excessiveCounters.putLong("elapsed",Long.MAX_VALUE);
         excessiveCounters.putInt("edits",Integer.MAX_VALUE);
@@ -2418,14 +2449,30 @@ public final class RiftController {
         excessiveCounters.putInt("skippedOccupied",Integer.MAX_VALUE);
         excessiveCounters.putInt("skippedInvalid",Integer.MAX_VALUE);
         State capped=State.load(excessiveCounters);
+        CompoundTag normalizedExcessive=capped.save(new CompoundTag());
+        CompoundTag wrongTypedCounters=new CompoundTag();
+        wrongTypedCounters.putString("edits","not-an-int");
+        State wrongTyped=State.load(wrongTypedCounters);
+        CompoundTag normalizedWrongType=wrongTyped.save(new CompoundTag());
+        State legacyMissingCounters=State.load(new CompoundTag());
         if(capped.elapsed!=DAY*10L || capped.edits!=MAX_EDITS
             || capped.finaleTicks!=Integer.MAX_VALUE || capped.restoreTicks!=Integer.MAX_VALUE
             || capped.restoredBlocks!=MAX_EDITS || capped.skippedOccupied!=MAX_EDITS
-            || capped.skippedInvalid!=MAX_EDITS
+            || capped.skippedInvalid!=MAX_EDITS || !capped.isDirty()
+            || normalizedExcessive.getLong("elapsed")!=DAY*10L
+            || normalizedExcessive.getInt("edits")!=MAX_EDITS
+            || normalizedExcessive.getInt("restoredBlocks")!=MAX_EDITS
+            || normalizedExcessive.getInt("skippedOccupied")!=MAX_EDITS
+            || normalizedExcessive.getInt("skippedInvalid")!=MAX_EDITS
+            || !wrongTyped.isDirty()
+            || !normalizedWrongType.contains("edits",Tag.TAG_INT)
+            || normalizedWrongType.getInt("edits")!=0
+            || legacyMissingCounters.isDirty()
             || nextNonNegativeTick(-1)!=0 || nextNonNegativeTick(0)!=1
             || nextNonNegativeTick(Integer.MAX_VALUE)!=Integer.MAX_VALUE)
-            throw new IllegalStateException("CI excessive saved counters were not bounded");
+            throw new IllegalStateException("CI excessive/wrong-type saved counters were not bounded and persisted");
         LOGGER.info("BLACK_FREQUENCY_TEST CORRUPT_STATE_COUNTERS_SANITIZED");
+        LOGGER.info("BLACK_FREQUENCY_TEST CORRUPT_STATE_COUNTERS_PERSISTED negative=true excessive=true wrongType=true legacyMissingAllowed=true");
 
         // Entry count is not a byte bound: discard unexpected nested data and oversized properties.
         CompoundTag nestedPayload=new CompoundTag();
