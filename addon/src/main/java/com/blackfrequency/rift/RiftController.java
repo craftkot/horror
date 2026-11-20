@@ -977,8 +977,14 @@ public final class RiftController {
             s.cursorX=n.getInt("cx");s.cursorZ=n.getInt("cz");s.cursorY=n.getInt("cy");
             s.edits=readBoundedCounter(n,"edits",MAX_EDITS,s);
             s.finaleTicks=readBoundedCounter(n,"finaleTicks",Integer.MAX_VALUE,s);
-            s.surfaceFirstScan=n.contains("surfaceFirstScan",Tag.TAG_BYTE)&&n.getBoolean("surfaceFirstScan");
-            s.centerOutScan=n.contains("centerOutScan",Tag.TAG_BYTE)&&n.getBoolean("centerOutScan");
+            boolean surfaceFirstScanPresent=n.contains("surfaceFirstScan");
+            boolean surfaceFirstScanValidType=n.contains("surfaceFirstScan",Tag.TAG_BYTE);
+            s.surfaceFirstScan=surfaceFirstScanValidType&&n.getBoolean("surfaceFirstScan");
+            boolean centerOutScanPresent=n.contains("centerOutScan");
+            boolean centerOutScanValidType=n.contains("centerOutScan",Tag.TAG_BYTE);
+            s.centerOutScan=centerOutScanValidType&&n.getBoolean("centerOutScan");
+            boolean malformedFractureScanMode=(surfaceFirstScanPresent&&!surfaceFirstScanValidType)
+                || (centerOutScanPresent&&!centerOutScanValidType);
             boolean centerOutIndexPresent=n.contains("centerOutIndex");
             boolean centerOutIndexValidType=n.contains("centerOutIndex",Tag.TAG_INT);
             s.centerOutIndex=centerOutIndexValidType?n.getInt("centerOutIndex"):0;
@@ -989,6 +995,14 @@ public final class RiftController {
             s.started=n.getBoolean("started");s.finished=n.getBoolean("finished");
             s.initialized=n.getBoolean("initialized");
             s.restoring=n.getBoolean("restoring");s.restored=n.getBoolean("restored");
+            if(malformedFractureScanMode) {
+                LOGGER.warn("BLACK FREQUENCY: quarantined malformed fracture scan mode flags");
+                // Do not guess a scan order from a mistyped flag: a fallback could resume
+                // destructive edits with the wrong vertical or horizontal traversal.
+                if(s.initialized && !s.restoring && !s.restored && !s.finished)
+                    s.finished=true;
+                s.setDirty();
+            }
             if(s.centerOutScan && (!centerOutIndexValidType
                 || s.centerOutIndex<0 || s.centerOutIndex>CENTER_OUT_COLUMN_COUNT)) {
                 if(s.initialized && !s.restoring && !s.restored && !s.finished) {
@@ -2226,8 +2240,50 @@ public final class RiftController {
         legacyTag.putBoolean("initialized",true);
         legacyTag.putInt("cy",12);
         State legacy=State.load(legacyTag);
-        if(legacy.surfaceFirstScan || legacy.centerOutScan || legacy.cursorY!=12)
+        if(legacy.surfaceFirstScan || legacy.centerOutScan || legacy.cursorY!=12 || legacy.isDirty())
             throw new IllegalStateException("CI legacy fracture cursor migration regression");
+
+        CompoundTag malformedSurfaceMode=new CompoundTag();
+        malformedSurfaceMode.putBoolean("initialized",true);
+        malformedSurfaceMode.putBoolean("centerOutScan",true);
+        malformedSurfaceMode.putInt("centerOutIndex",7);
+        malformedSurfaceMode.putString("surfaceFirstScan","true");
+        State quarantinedSurfaceMode=State.load(malformedSurfaceMode);
+        CompoundTag normalizedSurfaceMode=quarantinedSurfaceMode.save(new CompoundTag());
+        State reloadedSurfaceMode=State.load(normalizedSurfaceMode);
+
+        CompoundTag malformedCenterOutMode=new CompoundTag();
+        malformedCenterOutMode.putBoolean("initialized",true);
+        malformedCenterOutMode.putBoolean("surfaceFirstScan",true);
+        malformedCenterOutMode.putString("centerOutScan","true");
+        State quarantinedCenterOutMode=State.load(malformedCenterOutMode);
+        CompoundTag normalizedCenterOutMode=quarantinedCenterOutMode.save(new CompoundTag());
+
+        ListTag recoveringSnapshots=new ListTag();
+        CompoundTag recoveringSnapshot=new CompoundTag();
+        recoveringSnapshot.putLong("pos",new BlockPos(0,64,0).asLong());
+        recoveringSnapshot.put("state",NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
+        recoveringSnapshots.add(recoveringSnapshot);
+        CompoundTag malformedModeDuringRecovery=new CompoundTag();
+        malformedModeDuringRecovery.putBoolean("initialized",true);
+        malformedModeDuringRecovery.putBoolean("restoring",true);
+        malformedModeDuringRecovery.putString("surfaceFirstScan","true");
+        malformedModeDuringRecovery.putInt("edits",1);
+        malformedModeDuringRecovery.putInt("restoreIndex",0);
+        malformedModeDuringRecovery.putInt("restoreScan",0);
+        malformedModeDuringRecovery.put("snapshots",recoveringSnapshots);
+        State recoveryWithMalformedMode=State.load(malformedModeDuringRecovery);
+
+        if(!quarantinedSurfaceMode.finished || !quarantinedSurfaceMode.isDirty()
+            || !normalizedSurfaceMode.contains("surfaceFirstScan",Tag.TAG_BYTE)
+            || !normalizedSurfaceMode.contains("centerOutScan",Tag.TAG_BYTE)
+            || !reloadedSurfaceMode.finished
+            || !quarantinedCenterOutMode.finished || !quarantinedCenterOutMode.isDirty()
+            || !normalizedCenterOutMode.contains("centerOutScan",Tag.TAG_BYTE)
+            || recoveryWithMalformedMode.finished || !recoveryWithMalformedMode.restoring
+            || !recoveryWithMalformedMode.isDirty())
+            throw new IllegalStateException("CI malformed fracture scan mode quarantine regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_SCAN_MODE_TAG_QUARANTINE_VERIFIED missingLegacyAccepted=true malformedSurfaceFirstQuarantined=true malformedCenterOutQuarantined=true restorationPreserved=true roundTrip=true");
         if(!validLegacyFractureCursor(-RADIUS,-RADIUS,-64,-64,320,false)
             || !validLegacyFractureCursor(RADIUS,RADIUS,319,-64,320,false)
             || !validLegacyFractureCursor(RADIUS+1,-RADIUS,-64,-64,320,false)
