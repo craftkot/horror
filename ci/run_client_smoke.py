@@ -1537,6 +1537,8 @@ def capture_test_world():
     beacon_ready_at=None
     last_beacon_attempt=0
     beacon_aim_verified=False
+    vertical_cull_probe_attempted=False
+    vertical_cull_probe_verified=False
     def try_beacon_click(logs):
         nonlocal beacon_attempts,beacon_ready_at,last_beacon_attempt,beacon_aim_verified
         if os.environ.get("BF_TEST_PLAYER_BEACON")!="1":
@@ -1573,6 +1575,11 @@ def capture_test_world():
         # substitute for aiming at the physical block.
         if not sky_capture_attempted:
             capture_sky_before_beacon()
+        if not sky_capture_attempted:
+            return
+        if os.environ.get("BF_ISOLATED_TEST")=="1" and not vertical_cull_probe_verified:
+            if not run_vertical_ground_cull_probe():
+                return
         fresh_logs=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else logs
         if not aim_camera_at_beacon(fresh_logs):
             return
@@ -1739,6 +1746,10 @@ def capture_test_world():
         print("WORLD_CAPTURE: deterministic Java 1.20.1 plains seed entered",seed,flush=True)
         click(270,35)  # Return to Game tab
         time.sleep(0.5)
+        click(640,430)  # Allow Cheats: Off -> On, only in this disposable CI world
+        time.sleep(0.5)
+        snap("02d-world-cheats-enabled.png")
+        print("WORLD_CAPTURE: disposable world cheats enabled for the vertical cull probe",flush=True)
         click(400,665)
     else:
         click(400,665)
@@ -2160,6 +2171,95 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: neither horizon nor upper-sky frame passed visibility checks; still attempting real interaction",flush=True)
                 if not verify_shader_resource_reload():
                     sky_shot=False
+            def run_vertical_ground_cull_probe():
+                nonlocal vertical_cull_probe_attempted,vertical_cull_probe_verified
+                if vertical_cull_probe_verified:
+                    return True
+                if vertical_cull_probe_attempted:
+                    raise RuntimeError("BLACK FREQUENCY vertical ground cull probe was already attempted but did not complete")
+                current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                safe_pad=re.search(
+                    r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\\d+) y=(-?\\d+) z=(-?\\d+) support=solid fallDistance=0\\.0",
+                    current)
+                if not safe_pad or "BLACK_FREQUENCY_GROUND_MESH_RENDERED" not in current:
+                    return False
+                x,y,z=(int(value) for value in safe_pad.groups())
+                vertical_cull_probe_attempted=True
+
+                def send_chat_command(command):
+                    focus_game()
+                    key("t")
+                    time.sleep(0.12)
+                    result=subprocess.run(
+                        ["xdotool","type","--clearmodifiers","--delay","1",command],
+                        check=False)
+                    key("Return")
+                    time.sleep(0.35)
+                    if result.returncode!=0:
+                        raise RuntimeError("BLACK FREQUENCY vertical cull probe could not type a Minecraft command")
+
+                print("WORLD_CAPTURE: starting real vertical camera cull probe from the verified safe pad",
+                      (x,y,z),flush=True)
+                restored=False
+                try:
+                    send_chat_command("/gamemode spectator @s")
+                    send_chat_command(f"/tp @s {x} {y+80} {z}")
+                    entered=None
+                    enter_deadline=time.monotonic()+6.0
+                    while time.monotonic()<enter_deadline and p.poll() is None:
+                        current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                        entered=re.search(
+                            r"BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ENTERED cameraY=([-+0-9.eE]+) surfaceY=([-+0-9.eE]+) verticalDelta=([-+0-9.eE]+) threshold=64 anchorX=(-?\\d+) anchorZ=(-?\\d+)",
+                            current)
+                        if entered:
+                            break
+                        time.sleep(0.1)
+                    if not entered:
+                        raise RuntimeError("BLACK FREQUENCY vertical cull probe never entered the actual out-of-range render path")
+                    vertical_delta=float(entered.group(3))
+                    if not math.isfinite(vertical_delta) or vertical_delta<=64.0:
+                        raise RuntimeError(f"BLACK FREQUENCY vertical cull probe entered at an invalid delta: {vertical_delta}")
+                    time.sleep(0.65)
+                    send_chat_command(f"/tp @s {x} {y} {z}")
+                    send_chat_command("/gamemode survival @s")
+                    restored=True
+
+                    summary=None
+                    resumed=None
+                    resume_deadline=time.monotonic()+8.0
+                    while time.monotonic()<resume_deadline and p.poll() is None:
+                        current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                        summary=re.search(
+                            r"BLACK_FREQUENCY_GROUND_MESH_VERTICAL_CULL_SKIP_SUMMARY frames=(\\d+) worldBorderProbesSkipped=(\\d+) loadedChunkProbesSkipped=(\\d+) rebuildChecksSkipped=(\\d+) endedBy=([a-z-]+)",
+                            current)
+                        resumed=re.search(
+                            r"BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_RESUMED rebuilt=true segments=(\\d+) arms=(\\d+) cameraY=([-+0-9.eE]+) surfaceY=([-+0-9.eE]+) anchorChanged=(true|false)",
+                            current)
+                        if summary and resumed:
+                            break
+                        time.sleep(0.1)
+                    if not summary or not resumed:
+                        raise RuntimeError("BLACK FREQUENCY vertical cull probe did not flush its skip summary and rebuild after returning")
+                    frames,border_skips,chunk_skips,rebuild_skips=(int(summary.group(i)) for i in range(1,5))
+                    segments,arms=int(resumed.group(1)),int(resumed.group(2))
+                    if (frames<1 or border_skips!=frames or chunk_skips!=frames
+                            or rebuild_skips!=frames or summary.group(5)!="camera-returned-or-anchor-changed"):
+                        raise RuntimeError("BLACK FREQUENCY vertical cull skip accounting did not match the real skipped frames")
+                    if segments<MIN_GROUND_MESH_SEGMENTS or arms<MIN_GROUND_MESH_ARMS:
+                        raise RuntimeError("BLACK FREQUENCY ground mesh did not rebuild after the camera returned")
+                    vertical_cull_probe_verified=True
+                    print("WORLD_CAPTURE: actual vertical cull probe verified",
+                          f"verticalDelta={vertical_delta:.2f}",f"frames={frames}",
+                          f"borderSkipped={border_skips}",f"chunkSkipped={chunk_skips}",
+                          f"rebuildChecksSkipped={rebuild_skips}",
+                          f"resumedSegments={segments}",f"resumedArms={arms}",flush=True)
+                    return True
+                finally:
+                    if not restored:
+                        # Keep the disposable player recoverable even if a diagnostic assertion fails.
+                        send_chat_command(f"/tp @s {x} {y} {z}")
+                        send_chat_command("/gamemode survival @s")
+
             for stage in range(32):
                 if p.poll() is not None:
                     break

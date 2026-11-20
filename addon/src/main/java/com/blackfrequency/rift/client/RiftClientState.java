@@ -679,6 +679,7 @@ public final class RiftClientState {
         private static int verticallyCulledAnchorX=Integer.MIN_VALUE;
         private static int verticallyCulledAnchorZ=Integer.MIN_VALUE;
         private static int verticallyCulledSurfaceY;
+        private static boolean verticalCullResumePending;
         // Diagnostic-only: each skipped frame avoids one border probe, chunk probe and rebuild check.
         private static long verticallyCulledSkippedFrames;
         private static boolean supportFilterLogged;
@@ -1493,11 +1494,20 @@ public final class RiftClientState {
                 long horizontalDistanceSquared,double verticalDelta,int worldAnchorX,int worldAnchorZ,
                 int anchorSurfaceY) {
             if(isWithinGroundRenderRange(horizontalDistanceSquared,verticalDelta)) return false;
+            boolean hadCachedMesh=cachedLevel!=null && !cachedSegments.isEmpty();
             clearGeometryCacheIfPresent();
             verticallyCulled=true;
             verticallyCulledAnchorX=worldAnchorX;
             verticallyCulledAnchorZ=worldAnchorZ;
             verticallyCulledSurfaceY=anchorSurfaceY;
+            if(hadCachedMesh) {
+                verticalCullResumePending=true;
+                if(VERIFY_GROUND_MESH_PROFILES) {
+                    com.mojang.logging.LogUtils.getLogger().info(
+                        "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ENTERED cameraY={} surfaceY={} verticalDelta={} threshold=64 anchorX={} anchorZ={}",
+                        anchorSurfaceY+verticalDelta,anchorSurfaceY,verticalDelta,worldAnchorX,worldAnchorZ);
+                }
+            }
             return true;
         }
 
@@ -2289,6 +2299,7 @@ public final class RiftClientState {
             animationProfileLogged=false;
             rangeRejectLogged=false;
             rangeProfileLogged=false;
+            verticalCullResumePending=false;
             verticallyCulled=false;
             verticallyCulledAnchorX=Integer.MIN_VALUE;
             verticallyCulledAnchorZ=Integer.MIN_VALUE;
@@ -2444,6 +2455,14 @@ public final class RiftClientState {
                 cachedAnchorX=worldAnchorX;
                 cachedAnchorZ=worldAnchorZ;
                 cachedTick=tick;
+                if(verticalCullResumePending) {
+                    verticalCullResumePending=false;
+                    if(VERIFY_GROUND_MESH_PROFILES) {
+                        com.mojang.logging.LogUtils.getLogger().info(
+                            "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_RESUMED rebuilt=true segments={} arms={} cameraY={} surfaceY={} anchorChanged={}",
+                            cachedSegments.size(),cachedArmCount,camera.y,cachedAnchorSurfaceY,anchorChanged);
+                    }
+                }
                 if(!continuityBuildLogged) {
                     continuityBuildLogged=true;
                     com.mojang.logging.LogUtils.getLogger().info(
