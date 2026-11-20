@@ -2225,12 +2225,12 @@ def capture_test_world():
             glow_alpha_match=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_GLOW_ALPHA_VERIFIED multiplier=([0-9.]+) fullStrengthPulseMin=([0-9.]+) fullStrengthPulseMax=([0-9.]+) minAlpha=([0-9.]+) maxAlpha=([0-9.]+)",
                 final_log)
-            expected_glow_alpha=(.66,.56,1.0,.3696,.66)
+            expected_glow_alpha=(.72,.56,1.0,.4032,.72)
             if (not glow_alpha_match
                     or any(not math.isclose(float(glow_alpha_match.group(i)),expected_glow_alpha[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-6)
                            for i in range(1,6))
-                    or "GROUND_GLOW_ALPHA=.66F;" not in camera_source
+                    or "GROUND_GLOW_ALPHA=.72F;" not in camera_source
                     or "int glowAlphaChannelA=colorChannel(alphaA*GROUND_GLOW_ALPHA);" not in camera_source
                     or "int glowAlphaChannelB=colorChannel(alphaB*GROUND_GLOW_ALPHA);" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: per-endpoint violet ground halo alpha profile is missing or outside its tested bounds",flush=True)
