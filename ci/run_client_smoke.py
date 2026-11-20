@@ -2524,10 +2524,18 @@ def capture_test_world():
             if animation_phase_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: cached animation phase profile was not verified",flush=True)
                 return False
-            render_loop_start=camera_source.find("for(GroundSegment segment:cachedSegments)")
+            render_loop_match=re.search(
+                r"for\\s*\\(\\s*int\\s+segmentIndex\\s*=\\s*firstVisibleSegmentIndex\\s*;\\s*segmentIndex\\s*<\\s*cachedSegments\\.size\\(\\)\\s*;\\s*segmentIndex\\+\\+\\s*\\)",
+                camera_source)
+            if not render_loop_match:
+                print("WORLD_CAPTURE_FAIL: ground render loop no longer starts at the cached first-visible segment",flush=True)
+                return False
+            render_loop_start=render_loop_match.start()
             render_loop_end=camera_source.find("BufferUploader.drawWithShader(builder.end());",render_loop_start)
-            render_loop_source=(camera_source[render_loop_start:render_loop_end]
-                                if render_loop_start>=0 and render_loop_end>render_loop_start else "")
+            if render_loop_end<=render_loop_start:
+                print("WORLD_CAPTURE_FAIL: ground render loop end marker is missing",flush=True)
+                return False
+            render_loop_source=camera_source[render_loop_start:render_loop_end]
             render_preamble_start=camera_source.find("double time=(double)tick+boundedRenderPartialTick")
             render_preamble=(camera_source[render_preamble_start:render_loop_start]
                              if render_preamble_start>=0 and render_loop_start>render_preamble_start else "")
@@ -2538,13 +2546,17 @@ def capture_test_world():
                     or "Math.sin(phase*1.9D),Math.cos(phase*1.9D)" not in camera_source
                     or render_preamble.count("Math.sin(")!=3
                     or render_preamble.count("Math.cos(")!=3
-                    or "segment.sample()" not in render_loop_source
+                    or "GroundSegment segment=cachedSegments.get(segmentIndex);" not in render_loop_source
+                    or "GroundSample sample=segment.sample();" not in render_loop_source
+                    or "if(segmentIndex==firstVisibleSegmentIndex)" not in render_loop_source
+                    or "segmentFadeA=firstVisibleFadeA;" not in render_loop_source
+                    or "segmentFadeB=firstVisibleFadeB;" not in render_loop_source
                     or "sample.phaseSin()" not in render_loop_source
                     or "sample.phaseCos()" not in render_loop_source
                     or "sample.flickerPhaseSin()" not in render_loop_source
                     or "sample.flickerPhaseCos()" not in render_loop_source
                     or "Math.sin(" in render_loop_source or "Math.cos(" in render_loop_source):
-                print("WORLD_CAPTURE_FAIL: ground animation still performs trigonometry per segment",flush=True)
+                print("WORLD_CAPTURE_FAIL: ground animation cache is not reused by the indexed render loop",flush=True)
                 return False
             print("WORLD_CAPTURE: ground animation uses six shared time-base trig calls per frame",flush=True)
             core_gap_marker=("BLACK_FREQUENCY_GROUND_MESH_CORE_SEGMENT_GAP_PROFILE_VERIFIED "
