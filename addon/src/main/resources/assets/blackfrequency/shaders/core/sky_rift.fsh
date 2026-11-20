@@ -137,7 +137,9 @@ void main(){
                    +.12*sin(zenithRadius*42.-t*.7)));
  float zenithDistance=zenithSpokes*zenithRadius;
  float zenithWindow=(1.-smoothstep(.27,.46,zenithRadius))*smoothstep(.72,.9,n.y);
- float zenithWidth=mix(.006,.012,crownSurge);
+ // Vary spoke width by a wrapped angular envelope so the crown does not look machined.
+ float zenithSpokePulse=.5+.5*sin(zenithAngle*5.+t*.31+.6*sin(zenithAngle*2.-t*.11));
+ float zenithWidth=mix(.005,.014,clamp(.35*crownSurge+.65*zenithSpokePulse,0.,1.));
  float zenithCore=zenithWindow*(1.-smoothstep(zenithWidth,zenithWidth+.014,zenithDistance));
  float zenithGlow=zenithWindow*exp(-zenithDistance*24.);
  float zenithCorona=zenithWindow*exp(-zenithRadius*5.5);
