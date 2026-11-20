@@ -56,14 +56,18 @@ def verify_fissure_target_view_score_profile():
         raise RuntimeError("BLACK FREQUENCY fissure view-score accepted invalid coordinates")
     controller_source_path=ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftController.java"
     controller_source=controller_source_path.read_text(encoding="utf-8")
-    minimum_range=re.search(
-        r"private static final double FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE = ([0-9.]+)D;",
-        controller_source)
+    geometry_source_path=ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftGeometry.java"
+    geometry_source=geometry_source_path.read_text(encoding="utf-8")
+    spacing_match=re.search(
+        r"public static final double FISSURE_SAMPLE_SPACING=([0-9.]+)D;",
+        geometry_source)
     maximum_range=re.search(
         r"private static final double FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE = ([0-9.]+)D;",
         controller_source)
-    if (not minimum_range or not maximum_range
-            or not math.isclose(float(minimum_range.group(1)),FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE,
+    minimum_range_expression=(
+        "private static final double FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE = FISSURE_SAMPLE_SPACING*5.0D;")
+    if (minimum_range_expression not in controller_source or not spacing_match or not maximum_range
+            or not math.isclose(float(spacing_match.group(1))*5.0,FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE,
                                 rel_tol=0.0,abs_tol=1.0E-9)
             or not math.isclose(float(maximum_range.group(1)),FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE,
                                 rel_tol=0.0,abs_tol=1.0E-9)
