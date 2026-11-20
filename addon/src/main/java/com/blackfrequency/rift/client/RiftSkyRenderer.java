@@ -146,7 +146,9 @@ public final class RiftSkyRenderer {
 
     // Mirror the shader's wrapped angular width profile so the spoke envelope can
     // be checked for visible variation and continuity before the shader is used.
-    private static double zenithSpokeWidth(double angle,double shaderTime,double crownSurge) {
+    private static double zenithSpokeWidth(double angle,double shaderTime) {
+        double crownSurge=.5D+.5D*Math.sin(shaderTime*.51D
+            +2.1D*Math.sin(angle*4.0D-shaderTime*.11D));
         double angularPulse=.5D+.5D*Math.sin(angle*5.0D+shaderTime*.31D
             +.6D*Math.sin(angle*2.0D-shaderTime*.11D));
         double blend=Math.max(0.0D,Math.min(1.0D,.35D*crownSurge+.65D*angularPulse));
@@ -166,21 +168,21 @@ public final class RiftSkyRenderer {
             double phaseMaximum=Double.NEGATIVE_INFINITY;
             for(int sample=0;sample<=256;sample++) {
                 double angle=-Math.PI+2.0D*Math.PI*sample/256.0D;
-                double width=zenithSpokeWidth(angle,shaderTime,.5D);
+                double width=zenithSpokeWidth(angle,shaderTime);
                 if(!Double.isFinite(width))
                     throw new IllegalStateException("BLACK FREQUENCY zenith spoke width became non-finite");
                 phaseMinimum=Math.min(phaseMinimum,width);
                 phaseMaximum=Math.max(phaseMaximum,width);
                 maximumWrapDelta=Math.max(maximumWrapDelta,
-                    Math.abs(zenithSpokeWidth(angle,0.0D,.5D)
-                        -zenithSpokeWidth(angle,wrappedShaderTime,.5D)));
+                    Math.abs(zenithSpokeWidth(angle,0.0D)
+                        -zenithSpokeWidth(angle,wrappedShaderTime)));
             }
             minimum=Math.min(minimum,phaseMinimum);
             maximum=Math.max(maximum,phaseMaximum);
             minimumVariation=Math.min(minimumVariation,phaseMaximum-phaseMinimum);
             maximumSeam=Math.max(maximumSeam,
-                Math.abs(zenithSpokeWidth(-Math.PI,shaderTime,.5D)
-                    -zenithSpokeWidth(Math.PI,shaderTime,.5D)));
+                Math.abs(zenithSpokeWidth(-Math.PI,shaderTime)
+                    -zenithSpokeWidth(Math.PI,shaderTime)));
         }
         if(minimum<.005D-1.0E-9D || maximum>.014D+1.0E-9D
             || minimumVariation<.004D || maximumSeam>1.0E-9D
