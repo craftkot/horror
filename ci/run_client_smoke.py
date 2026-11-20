@@ -2221,8 +2221,8 @@ def capture_test_world():
                       (x,y,z),flush=True)
                 restored=False
                 try:
-                    send_chat_command("gamemode spectator")
-                    send_chat_command(f"tp {x} {y+80} {z}")
+                    send_chat_command("/gamemode spectator")
+                    send_chat_command(f"/tp {x} {y+80} {z}")
                     camera_sample=None
                     entered=None
                     probe_logs=""
@@ -2257,8 +2257,8 @@ def capture_test_world():
                     if not math.isfinite(float(entered.group(3))) or float(entered.group(3))<=64.0:
                         raise RuntimeError("BLACK FREQUENCY vertical cull entry reported an invalid camera delta")
                     time.sleep(1.0)
-                    send_chat_command(f"tp {x} {y} {z}")
-                    send_chat_command("gamemode survival")
+                    send_chat_command(f"/tp {x} {y} {z}")
+                    send_chat_command("/gamemode survival")
                     restored=True
 
                     summary=None
@@ -2300,8 +2300,8 @@ def capture_test_world():
                 finally:
                     if not restored:
                         # Keep the disposable player recoverable even if a diagnostic assertion fails.
-                        send_chat_command(f"tp {x} {y} {z}")
-                        send_chat_command("gamemode survival")
+                        send_chat_command(f"/tp {x} {y} {z}")
+                        send_chat_command("/gamemode survival")
 
             for stage in range(32):
                 if p.poll() is not None:
