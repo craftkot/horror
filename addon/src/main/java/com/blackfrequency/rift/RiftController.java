@@ -989,7 +989,7 @@ public final class RiftController {
             s.started=n.getBoolean("started");s.finished=n.getBoolean("finished");
             s.initialized=n.getBoolean("initialized");
             s.restoring=n.getBoolean("restoring");s.restored=n.getBoolean("restored");
-            if(s.centerOutScan && ((centerOutIndexPresent && !centerOutIndexValidType)
+            if(s.centerOutScan && (!centerOutIndexValidType
                 || s.centerOutIndex<0 || s.centerOutIndex>CENTER_OUT_COLUMN_COUNT)) {
                 if(s.initialized && !s.restoring && !s.restored && !s.finished) {
                     LOGGER.warn("BLACK FREQUENCY: invalid center-out cursor {}; stopping further terrain edits",
@@ -2883,6 +2883,11 @@ public final class RiftController {
         State quarantinedWrongCenterOutType=State.load(wrongCenterOutType);
         CompoundTag normalizedWrongCenterOutType=quarantinedWrongCenterOutType.save(new CompoundTag());
 
+        CompoundTag missingCenterOutIndex=new CompoundTag();
+        missingCenterOutIndex.putBoolean("initialized",true);
+        missingCenterOutIndex.putBoolean("centerOutScan",true);
+        State quarantinedMissingCenterOutIndex=State.load(missingCenterOutIndex);
+
         if(repairedIndex.restoreIndex!=-1 || repairedIndex.restoreScan!=-1
             || !repairedIndex.isDirty()
             || reloadedIndex.restoreIndex!=-1 || reloadedIndex.restoreScan!=-1
@@ -2900,9 +2905,11 @@ public final class RiftController {
             || quarantinedWrongCenterOutType.centerOutIndex!=CENTER_OUT_COLUMN_COUNT
             || !quarantinedWrongCenterOutType.finished || !quarantinedWrongCenterOutType.isDirty()
             || normalizedWrongCenterOutType.getInt("centerOutIndex")!=CENTER_OUT_COLUMN_COUNT
-            || !normalizedWrongCenterOutType.getBoolean("finished"))
+            || !normalizedWrongCenterOutType.getBoolean("finished")
+            || quarantinedMissingCenterOutIndex.centerOutIndex!=CENTER_OUT_COLUMN_COUNT
+            || !quarantinedMissingCenterOutIndex.finished || !quarantinedMissingCenterOutIndex.isDirty())
             throw new IllegalStateException("CI recovery cursor repair persistence regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_CURSOR_REPAIR_PERSISTENCE_VERIFIED indexClamped=true scanClamped=true dirty=true roundTrip=true validUnchanged=true malformedIndexType=true malformedScanType=true malformedCenterOutType=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_CURSOR_REPAIR_PERSISTENCE_VERIFIED indexClamped=true scanClamped=true dirty=true roundTrip=true validUnchanged=true malformedIndexType=true malformedScanType=true malformedCenterOutType=true missingCenterOutIndex=true");
     }
 
     private static void verifyInvalidSnapshotWarningRateLimit() {
