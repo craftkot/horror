@@ -1434,6 +1434,15 @@ public final class RiftClientState {
                 && horizontalDistanceSquared+verticalDelta*verticalDelta<=(double)renderRadiusSquared;
         }
 
+        // If an unchanged cached mesh has left the 3D camera envelope, release it
+        // before the periodic rebuild check. Otherwise a due rebuild can resample
+        // terrain only to discard the new mesh a few lines later.
+        private static boolean shouldCullCachedGroundMeshBeforeRebuild(boolean anchorChanged,boolean hasSegments,
+                long horizontalDistanceSquared,double verticalDelta) {
+            return !anchorChanged && hasSegments
+                && !isWithinGroundRenderRange(horizontalDistanceSquared,verticalDelta);
+        }
+
         // Fade the cosmetic ground mesh over the last 16 blocks of its existing
         // 64-block 3D render envelope. Squared distance avoids a per-frame sqrt.
         private static double groundDistanceFade(double distanceSquared) {
@@ -1514,6 +1523,16 @@ public final class RiftClientState {
             boolean horizontalOutside=!isWithinGroundRenderRange(64L*64L+1L,0.0D);
             boolean nanRejected=!isWithinGroundRenderRange(0L,Double.NaN);
             boolean infinityRejected=!isWithinGroundRenderRange(0L,Double.POSITIVE_INFINITY);
+            boolean sameAnchorOutsideCull=shouldCullCachedGroundMeshBeforeRebuild(false,true,0L,64.01D);
+            boolean sameAnchorInsideRetained=!shouldCullCachedGroundMeshBeforeRebuild(false,true,0L,64.0D);
+            boolean anchorChangeRetained=!shouldCullCachedGroundMeshBeforeRebuild(true,true,0L,64.01D);
+            boolean emptyMeshRetained=!shouldCullCachedGroundMeshBeforeRebuild(false,false,0L,64.01D);
+            boolean invalidRangeCulled=shouldCullCachedGroundMeshBeforeRebuild(false,true,0L,Double.NaN);
+            if(!(sameAnchorOutsideCull && sameAnchorInsideRetained && anchorChangeRetained
+                && emptyMeshRetained && invalidRangeCulled))
+                throw new IllegalStateException("BLACK FREQUENCY pre-build vertical ground mesh cull regression");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_PREBUILD_VERTICAL_CULL_VERIFIED sameAnchorOutside=true insideRetained=true anchorChangeRetained=true emptyMeshRetained=true invalidRangeCulled=true");
             boolean finiteCameraAccepted=isSafeCameraPosition(new Vec3(0.5D,65.0D,0.5D));
             boolean nanCameraRejected=!isSafeCameraPosition(new Vec3(Double.NaN,65.0D,0.5D));
             boolean infiniteCameraRejected=!isSafeCameraPosition(new Vec3(0.5D,65.0D,Double.POSITIVE_INFINITY));
@@ -2341,6 +2360,13 @@ public final class RiftClientState {
                     worldAnchorX,worldAnchorZ,cameraHorizontalDistanceSquared,camera.y)) return;
             long tick=level.getGameTime();
             boolean anchorChanged=level!=cachedLevel || worldAnchorX!=cachedAnchorX || worldAnchorZ!=cachedAnchorZ;
+            double cachedVerticalDelta=camera.y-cachedAnchorSurfaceY;
+            if(shouldCullCachedGroundMeshBeforeRebuild(anchorChanged,!cachedSegments.isEmpty(),
+                    cameraHorizontalDistanceSquared,cachedVerticalDelta)) {
+                clearGeometryCacheIfOutsideGroundRenderRange(cameraHorizontalDistanceSquared,cachedVerticalDelta,
+                    worldAnchorX,worldAnchorZ,cachedAnchorSurfaceY);
+                return;
+            }
             int surfaceReferenceY=cameraBlockY;
             int previousReferenceY=cachedReferenceY;
             boolean verticalWindowChanged=previousReferenceY!=Integer.MIN_VALUE

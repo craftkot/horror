@@ -2459,6 +2459,9 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST GROUND_MESH_3D_RANGE_PROFILE_VERIFIED radius=64 horizontalBoundary=true verticalBoundary=true invalidRejected=true" not in final_log:
                 print("WORLD_CAPTURE_FAIL: 3D ground mesh render-range boundaries were not verified",flush=True)
                 return False
+            if "BLACK_FREQUENCY_TEST GROUND_MESH_PREBUILD_VERTICAL_CULL_VERIFIED sameAnchorOutside=true insideRetained=true anchorChangeRetained=true emptyMeshRetained=true invalidRangeCulled=true" not in final_log:
+                print("WORLD_CAPTURE_FAIL: cached ground mesh pre-build vertical culling was not verified",flush=True)
+                return False
             if "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_LATCH_VERIFIED stable=true returnRebuild=true anchorChangeRebuild=true" not in final_log:
                 print("WORLD_CAPTURE_FAIL: vertically culled ground mesh rebuilt or failed to resume at the expected boundary",flush=True)
                 return False
@@ -2472,6 +2475,11 @@ def capture_test_world():
             ground_render_end=camera_source.find("\n    }\n",ground_render_start+1)
             ground_render=(camera_source[ground_render_start:ground_render_end]
                            if ground_render_start>=0 and ground_render_end>ground_render_start else "")
+            prebuild_cull=ground_render.find("shouldCullCachedGroundMeshBeforeRebuild(anchorChanged,!cachedSegments.isEmpty()")
+            rebuild_check=ground_render.find("if(shouldRebuild(")
+            if prebuild_cull<0 or rebuild_check<0 or prebuild_cull>rebuild_check:
+                print("WORLD_CAPTURE_FAIL: vertical mesh culling must precede periodic terrain rebuilds",flush=True)
+                return False
             cursor_set=ground_render.find("SURFACE_CURSOR.set(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);")
             border_check=ground_render.find("isWithinBounds(SURFACE_CURSOR)")
             if ("private static final BlockPos.MutableBlockPos SURFACE_CURSOR=" not in camera_source
