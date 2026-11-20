@@ -680,6 +680,7 @@ public final class RiftClientState {
         private static int verticallyCulledAnchorZ=Integer.MIN_VALUE;
         private static int verticallyCulledSurfaceY;
         private static boolean verticalCullResumePending;
+        private static boolean verticalCameraRangeSampleLogged;
         // Diagnostic-only: each skipped frame avoids one border probe, chunk probe and rebuild check.
         private static long verticallyCulledSkippedFrames;
         private static boolean supportFilterLogged;
@@ -1492,10 +1493,11 @@ public final class RiftClientState {
         // mesh just like a camera that leaves the horizontal radius.
         private static boolean clearGeometryCacheIfOutsideGroundRenderRange(
                 long horizontalDistanceSquared,double verticalDelta,int worldAnchorX,int worldAnchorZ,
-                int anchorSurfaceY) {
+                int anchorSurfaceY,boolean trackLiveCameraCull) {
             if(isWithinGroundRenderRange(horizontalDistanceSquared,verticalDelta)) return false;
             boolean hadCachedMesh=cachedLevel!=null && !cachedSegments.isEmpty();
             clearGeometryCacheIfPresent();
+            if(!trackLiveCameraCull) return true;
             verticallyCulled=true;
             verticallyCulledAnchorX=worldAnchorX;
             verticallyCulledAnchorZ=worldAnchorZ;
@@ -1509,6 +1511,28 @@ public final class RiftClientState {
                 }
             }
             return true;
+        }
+
+        // This is emitted only from a real render pass with a retained mesh. Profile fixtures
+        // must not masquerade as player-camera movement in the integration log.
+        private static void logVerticalCameraRangeSample(
+                Vec3 camera,net.minecraft.client.multiplayer.ClientLevel level,
+                int worldAnchorX,int worldAnchorZ,long horizontalDistanceSquared) {
+            if(!VERIFY_GROUND_MESH_PROFILES || cachedLevel!=level || cachedSegments.isEmpty()) {
+                verticalCameraRangeSampleLogged=false;
+                return;
+            }
+            double verticalDelta=camera.y-cachedAnchorSurfaceY;
+            if(Math.abs(verticalDelta)<=64.0D) {
+                verticalCameraRangeSampleLogged=false;
+                return;
+            }
+            if(verticalCameraRangeSampleLogged) return;
+            boolean anchorChanged=worldAnchorX!=cachedAnchorX || worldAnchorZ!=cachedAnchorZ;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_CAMERA_VERTICAL_RANGE_SAMPLE cameraY={} surfaceY={} verticalDelta={} horizontalDistanceSquared={} anchorChanged={} cachedSegments={} levelMatches=true",
+                camera.y,cachedAnchorSurfaceY,verticalDelta,horizontalDistanceSquared,anchorChanged,cachedSegments.size());
+            verticalCameraRangeSampleLogged=true;
         }
 
         // Once an out-of-range mesh is released, do not rebuild it every frame.
@@ -2300,6 +2324,7 @@ public final class RiftClientState {
             rangeRejectLogged=false;
             rangeProfileLogged=false;
             verticalCullResumePending=false;
+            verticalCameraRangeSampleLogged=false;
             verticallyCulled=false;
             verticallyCulledAnchorX=Integer.MIN_VALUE;
             verticallyCulledAnchorZ=Integer.MIN_VALUE;
@@ -2337,7 +2362,7 @@ public final class RiftClientState {
             cachedSegments=List.of(new GroundSegment(new GroundPoint(1,64,2),
                 new GroundPoint(2,64,2),1,0,GROUND_SAMPLES[0],1,1,1.0D,1.0D,0.0D,0.0D));
             SURFACE_Y_BY_COLUMN.put(columnKey(1,2),64.0D);
-            boolean verticalRangeCleared=clearGeometryCacheIfOutsideGroundRenderRange(0L,64.01D,1,2,64);
+            boolean verticalRangeCleared=clearGeometryCacheIfOutsideGroundRenderRange(0L,64.01D,1,2,64,false);
             if(!verticalRangeCleared || cachedLevel!=null || cachedTick!=Long.MIN_VALUE
                 || !cachedSegments.isEmpty() || !SURFACE_Y_BY_COLUMN.isEmpty())
                 throw new IllegalStateException("BLACK FREQUENCY vertical ground mesh cache cleanup regression");
@@ -2383,6 +2408,7 @@ public final class RiftClientState {
             int cameraBlockZ=(int)Math.floor(camera.z);
             long cameraHorizontalDistanceSquared=horizontalDistanceSquared(
                 cameraBlockX,cameraBlockZ,worldAnchorX,worldAnchorZ);
+            logVerticalCameraRangeSample(camera,level,worldAnchorX,worldAnchorZ,cameraHorizontalDistanceSquared);
             if(cameraHorizontalDistanceSquared>64L*64L) {
                 clearGeometryCacheIfPresent();
                 return;
@@ -2411,7 +2437,7 @@ public final class RiftClientState {
             if(shouldCullCachedGroundMeshBeforeRebuild(anchorChanged,!cachedSegments.isEmpty(),
                     cameraHorizontalDistanceSquared,cachedVerticalDelta)) {
                 clearGeometryCacheIfOutsideGroundRenderRange(cameraHorizontalDistanceSquared,cachedVerticalDelta,
-                    worldAnchorX,worldAnchorZ,cachedAnchorSurfaceY);
+                    worldAnchorX,worldAnchorZ,cachedAnchorSurfaceY,true);
                 return;
             }
             int surfaceReferenceY=cameraBlockY;
@@ -2483,7 +2509,7 @@ public final class RiftClientState {
             double cameraDistanceSquared=cameraHorizontalDistanceSquared+dy*dy;
             int sampledSurfaceY=cachedAnchorSurfaceY;
             if(clearGeometryCacheIfOutsideGroundRenderRange(
-                    cameraHorizontalDistanceSquared,dy,worldAnchorX,worldAnchorZ,sampledSurfaceY)) {
+                    cameraHorizontalDistanceSquared,dy,worldAnchorX,worldAnchorZ,sampledSurfaceY,true)) {
                 if(!rangeRejectLogged) {
                     rangeRejectLogged=true;
                     com.mojang.logging.LogUtils.getLogger().info(

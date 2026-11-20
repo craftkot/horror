@@ -2221,27 +2221,44 @@ def capture_test_world():
                       (x,y,z),flush=True)
                 restored=False
                 try:
-                    send_chat_command("/gamemode spectator @s")
-                    send_chat_command(f"/tp @s {x} {y+80} {z}")
+                    send_chat_command("gamemode spectator")
+                    send_chat_command(f"tp {x} {y+80} {z}")
+                    camera_sample=None
                     entered=None
                     probe_logs=""
-                    enter_deadline=time.monotonic()+6.0
+                    enter_deadline=time.monotonic()+8.0
                     while time.monotonic()<enter_deadline and p.poll() is None:
                         probe_logs=read_probe_log()
+                        camera_sample=re.search(
+                            r"BLACK_FREQUENCY_TEST GROUND_MESH_CAMERA_VERTICAL_RANGE_SAMPLE cameraY=([-+0-9.eE]+) surfaceY=([-+0-9.eE]+) verticalDelta=([-+0-9.eE]+) horizontalDistanceSquared=(\d+) anchorChanged=(true|false) cachedSegments=(\d+) levelMatches=(true|false)",
+                            probe_logs)
                         entered=re.search(
                             r"BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ENTERED cameraY=([-+0-9.eE]+) surfaceY=([-+0-9.eE]+) verticalDelta=([-+0-9.eE]+) threshold=64 anchorX=(-?\d+) anchorZ=(-?\d+)",
                             probe_logs)
-                        if entered:
+                        if camera_sample and entered:
                             break
                         time.sleep(0.1)
+                    if not camera_sample:
+                        raise RuntimeError("BLACK FREQUENCY vertical cull probe teleport did not produce live camera-height telemetry")
+                    vertical_delta=float(camera_sample.group(3))
+                    horizontal_distance_squared=int(camera_sample.group(4))
+                    anchor_changed=camera_sample.group(5)=="true"
+                    cached_segments=int(camera_sample.group(6))
+                    level_matches=camera_sample.group(7)=="true"
+                    if (not math.isfinite(vertical_delta) or vertical_delta<=64.0
+                            or horizontal_distance_squared>64*64 or anchor_changed
+                            or cached_segments<1 or not level_matches):
+                        raise RuntimeError(
+                            "BLACK FREQUENCY vertical cull probe reached an invalid camera state: "
+                            f"verticalDelta={vertical_delta} horizontalDistanceSquared={horizontal_distance_squared} "
+                            f"anchorChanged={anchor_changed} cachedSegments={cached_segments} levelMatches={level_matches}")
                     if not entered:
-                        raise RuntimeError("BLACK FREQUENCY vertical cull probe never entered the actual out-of-range render path")
-                    vertical_delta=float(entered.group(3))
-                    if not math.isfinite(vertical_delta) or vertical_delta<=64.0:
-                        raise RuntimeError(f"BLACK FREQUENCY vertical cull probe entered at an invalid delta: {vertical_delta}")
-                    time.sleep(0.65)
-                    send_chat_command(f"/tp @s {x} {y} {z}")
-                    send_chat_command("/gamemode survival @s")
+                        raise RuntimeError("BLACK FREQUENCY camera crossed the vertical range but the renderer did not enter the cull path")
+                    if not math.isfinite(float(entered.group(3))) or float(entered.group(3))<=64.0:
+                        raise RuntimeError("BLACK FREQUENCY vertical cull entry reported an invalid camera delta")
+                    time.sleep(1.0)
+                    send_chat_command(f"tp {x} {y} {z}")
+                    send_chat_command("gamemode survival")
                     restored=True
 
                     summary=None
@@ -2260,10 +2277,11 @@ def capture_test_world():
                         time.sleep(0.1)
                     if not summary or not resumed:
                         raise RuntimeError("BLACK FREQUENCY vertical cull probe did not emit new skip-summary and rebuild markers after its log cursor")
+                    sample_position=probe_logs.find("BLACK_FREQUENCY_TEST GROUND_MESH_CAMERA_VERTICAL_RANGE_SAMPLE")
                     entered_position=probe_logs.find("BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ENTERED")
                     summary_position=probe_logs.find("BLACK_FREQUENCY_GROUND_MESH_VERTICAL_CULL_SKIP_SUMMARY")
                     resumed_position=probe_logs.find("BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_RESUMED")
-                    if not (0<=entered_position<summary_position<resumed_position):
+                    if not (0<=sample_position<entered_position<summary_position<resumed_position):
                         raise RuntimeError("BLACK FREQUENCY vertical cull probe markers were not emitted in enter/skip/resume order")
                     frames,border_skips,chunk_skips,rebuild_skips=(int(summary.group(i)) for i in range(1,5))
                     segments,arms=int(resumed.group(1)),int(resumed.group(2))
@@ -2282,8 +2300,8 @@ def capture_test_world():
                 finally:
                     if not restored:
                         # Keep the disposable player recoverable even if a diagnostic assertion fails.
-                        send_chat_command(f"/tp @s {x} {y} {z}")
-                        send_chat_command("/gamemode survival @s")
+                        send_chat_command(f"tp {x} {y} {z}")
+                        send_chat_command("gamemode survival")
 
             for stage in range(32):
                 if p.poll() is not None:
