@@ -2338,7 +2338,7 @@ def capture_test_world():
                     while time.monotonic()<milestone_deadline and p.poll() is None:
                         probe_logs=read_probe_log()
                         skip_milestone=re.search(
-                            r"BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_SKIP_MILESTONE frames=3 anchorX=(-?\\d+) anchorZ=(-?\\d+) cameraY=([-+0-9.eE]+)",
+                            r"BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_SKIP_MILESTONE frames=3 anchorX=(-?\d+) anchorZ=(-?\d+) cameraY=([-+0-9.eE]+)",
                             probe_logs)
                         if skip_milestone:
                             break
