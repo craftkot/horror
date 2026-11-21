@@ -2830,12 +2830,25 @@ def capture_test_world():
                     or "cliffBreakTaper(Double.NEGATIVE_INFINITY)==0.0D" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: visible cliff-end taper or non-finite input guards were not verified",flush=True)
                 return False
+            edge_width_profiles = {
+                "GROUND_EDGE_HALF_WIDTH=.026D;": {
+                    "embedded": (.225,.37,.0507195,.10657,.1764974,.199996,.0234986,.006,.015,.017,.023),
+                },
+                "GROUND_EDGE_HALF_WIDTH=.032D;": {
+                    "embedded": (.225,.37,.0507195,.10057,.1764974,.193996,.0174986,.006,.015,.017,.023),
+                },
+            }
+            edge_width_profile = next(
+                (profile for declaration, profile in edge_width_profiles.items()
+                 if declaration in camera_source),
+                None,
+            )
             if ("GROUND_GLOW_WIDTH_SCALE=5.0D;" not in camera_source
                     or "GROUND_CORE_WIDTH_SCALE=1.70D;" not in camera_source
                     or "GROUND_EDGE_OFFSET_SCALE=3.0D;" not in camera_source
                     or "GROUND_EDGE_OFFSET_SKEW_SCALE=.12D;" not in camera_source
                     or "GROUND_CORE_SKEW_AMPLITUDE=.15D;" not in camera_source
-                    or "GROUND_EDGE_HALF_WIDTH=.026D;" not in camera_source
+                    or edge_width_profile is None
                     or "GROUND_MIN_CORE_EDGE_GAP=.0075D;" not in camera_source
                     or "minimumCoreEdgeGap<GROUND_MIN_CORE_EDGE_GAP" not in camera_source
                     or "BLACK_FREQUENCY_GROUND_MESH_CORE_EDGE_GAP_VERIFIED min={} required={} valid=true" not in camera_source):
@@ -2877,7 +2890,7 @@ def capture_test_world():
             embedded_crack_profile=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_EMBEDDED_CRACK_PROFILE_VERIFIED minGlowHalfWidth=([-+0-9.eE]+) maxGlowHalfWidth=([-+0-9.eE]+) minCoreHalfWidth=([-+0-9.eE]+) minEdgeInnerHalfWidth=([-+0-9.eE]+) maxCoreHalfWidth=([-+0-9.eE]+) maxEdgeInnerHalfWidth=([-+0-9.eE]+) minCoreEdgeGap=([-+0-9.eE]+) coreClearance=([-+0-9.eE]+) glowClearance=([-+0-9.eE]+) filamentClearance=([-+0-9.eE]+) edgeClearance=([-+0-9.eE]+) surfaceAligned=true",
                 final_log)
-            expected_embedded=(.225,.37,.0507195,.10657,.1764974,.199996,.0234986,.006,.015,.017,.023)
+            expected_embedded=edge_width_profile["embedded"]
             if (not embedded_crack_profile
                     or any(not math.isclose(float(embedded_crack_profile.group(i)),expected_embedded[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
@@ -2921,8 +2934,11 @@ def capture_test_world():
                            for i in range(1,6))
                     or "private static double groundPointDistanceFade(GroundPoint point,Vec3 camera)" not in camera_source
                     or "private static double groundSegmentDistanceFade(GroundSegment segment,Vec3 camera)" not in camera_source
-                    or "double segmentFadeA=groundPointDistanceFade(segment.a(),camera);" not in camera_source
-                    or "double segmentFadeB=groundPointDistanceFade(segment.b(),camera);" not in camera_source
+                    or "double segmentFadeA,segmentFadeB;" not in camera_source
+                     or "segmentFadeA=firstVisibleFadeA;" not in camera_source
+                     or "segmentFadeB=firstVisibleFadeB;" not in camera_source
+                     or "segmentFadeA=groundPointDistanceFade(segment.a(),camera);" not in camera_source
+                    or "segmentFadeB=groundPointDistanceFade(segment.b(),camera);" not in camera_source
                     or "float segmentStrengthA=boundedStrength*(float)segmentFadeA;" not in camera_source
                     or "float segmentStrengthB=boundedStrength*(float)segmentFadeB;" not in camera_source
                     or "int glowAlphaChannelA=colorChannel(alphaA*GROUND_GLOW_ALPHA);" not in camera_source
@@ -2950,7 +2966,7 @@ def capture_test_world():
             if ("private static final float GROUND_EDGE_RED=.50F;" not in camera_source
                     or "private static final float GROUND_EDGE_GREEN=.14F;" not in camera_source
                     or "private static final float GROUND_EDGE_BLUE=.90F;" not in camera_source
-                    or "GROUND_EDGE_HALF_WIDTH=.026D;" not in camera_source
+                    or edge_width_profile is None
                     or "private static void edgeRibbon(" not in camera_source
                     or "GROUND_EDGE_HALF_WIDTH)*segment.taperA()" not in camera_source
                     or "GROUND_EDGE_LIFT" not in camera_source
