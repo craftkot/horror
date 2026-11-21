@@ -316,6 +316,10 @@ public final class RiftController {
     private static final int MAX_SNAPSHOT_PROPERTY_COUNT = 64;
     private static final int MAX_SNAPSHOT_PROPERTY_KEY_LENGTH = 128;
     private static final int MAX_SNAPSHOT_PROPERTY_VALUE_LENGTH = 128;
+    // A 700-byte per-entry ceiling lets the full 95,000-entry queue fit below the
+    // 64 MiB aggregate budget, even when every retained entry is at the limit.
+    // Oversized modded states are left untouched rather than risking recovery-budget poisoning.
+    private static final long MAX_SNAPSHOT_ENTRY_ESTIMATE_BYTES=700L;
     // Bound the total snapshot payload retained from one damaged SavedData record.
     // This is a conservative estimate; the NBT parser has already materialized its input.
     private static final long MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES=64L*1024L*1024L;
@@ -413,7 +417,9 @@ public final class RiftController {
 
     /** Return zero for a snapshot that is not safe to retain or serialize. */
     private static long boundedSnapshotPayloadEstimate(CompoundTag entry) {
-        return isBoundedSnapshotPayload(entry) ? estimatedSnapshotPayloadBytes(entry) : 0L;
+        if(!isBoundedSnapshotPayload(entry)) return 0L;
+        long estimate=estimatedSnapshotPayloadBytes(entry);
+        return estimate>0L && estimate<=MAX_SNAPSHOT_ENTRY_ESTIMATE_BYTES ? estimate : 0L;
     }
 
     private static boolean withinSnapshotRetentionBudget(long retainedBytes,long candidateBytes) {
@@ -2940,53 +2946,34 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_RETENTION_BUDGET_VERIFIED capBytes={} maxStoneSnapshots={} estimatedBytes={} boundary=true overflowSafe=true",
             MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES,MAX_EDITS,maximumStoneSnapshotEstimate);
 
-        // Individually valid payloads can still exceed a safe aggregate budget.
-        // Keep the anchor-nearest entries and quarantine only the tail.
-        CompoundTag largeProperties=new CompoundTag();
-        String largePropertyValue="v".repeat(MAX_SNAPSHOT_PROPERTY_VALUE_LENGTH);
-        for(int property=0;property<MAX_SNAPSHOT_PROPERTY_COUNT;property++) {
-            String suffix=Integer.toString(property);
-            String key="p"+suffix+"x".repeat(MAX_SNAPSHOT_PROPERTY_KEY_LENGTH-1-suffix.length());
-            largeProperties.putString(key,largePropertyValue);
-        }
-        CompoundTag largeState=NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState());
-        largeState.put("Properties",largeProperties);
-        CompoundTag largeEntry=new CompoundTag();
-        largeEntry.putLong("pos",new BlockPos(0,64,0).asLong());
-        largeEntry.put("state",largeState.copy());
-        long largeEntryEstimate=estimatedSnapshotPayloadBytes(largeEntry);
-        int aggregateSnapshotCount=(int)(MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES/largeEntryEstimate)+1;
-        if(largeEntryEstimate<=0L || aggregateSnapshotCount<=1 || aggregateSnapshotCount>MAX_EDITS)
-            throw new IllegalStateException("CI aggregate snapshot fixture is outside the intended budget range");
-        ListTag aggregateSnapshots=new ListTag();
-        for(int i=0;i<aggregateSnapshotCount;i++) {
-            CompoundTag entry=new CompoundTag();
-            entry.putLong("pos",new BlockPos(i,64,0).asLong());
-            entry.put("state",largeState.copy());
-            aggregateSnapshots.add(entry);
-        }
-        CompoundTag aggregateSave=new CompoundTag();
-        aggregateSave.putBoolean("restoring",true);
-        aggregateSave.putInt("restoreIndex",aggregateSnapshotCount-1);
-        aggregateSave.putInt("restoreScan",aggregateSnapshotCount-1);
-        aggregateSave.put("snapshots",aggregateSnapshots);
-        State aggregateQuarantined=State.load(aggregateSave);
-        ListTag aggregateRewritten=aggregateQuarantined.save(new CompoundTag()).getList("snapshots",Tag.TAG_COMPOUND);
-        int aggregateEmptyPayloads=0;
-        for(int i=0;i<aggregateRewritten.size();i++)
-            if(aggregateRewritten.getCompound(i).getAllKeys().isEmpty()) aggregateEmptyPayloads++;
-        long aggregateRetainedEstimate=largeEntryEstimate*(aggregateSnapshotCount-1L);
-        if(aggregateQuarantined.snapshots.size()!=aggregateSnapshotCount
-            || aggregateQuarantined.restoreIndex!=aggregateSnapshotCount-1
-            || aggregateQuarantined.restoreScan!=aggregateSnapshotCount-1
-            || aggregateEmptyPayloads!=1
-            || aggregateRewritten.getCompound(0).getAllKeys().isEmpty()
-            || !aggregateRewritten.getCompound(aggregateSnapshotCount-1).getAllKeys().isEmpty()
-            || aggregateRetainedEstimate>MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES
-            || aggregateRetainedEstimate+largeEntryEstimate<=MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES)
-            throw new IllegalStateException("CI aggregate recovery snapshot payload budget was not enforced");
-        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_AGGREGATE_BUDGET_QUARANTINED retained={} quarantined=1 estimateBytes={} capBytes={}",
-            aggregateSnapshotCount-1,aggregateRetainedEstimate,MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES);
+        // A syntactically bounded but oversized property compound must not consume
+        // a disproportionate share of the recovery budget before registry decoding.
+        CompoundTag boundedEntryState=NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState());
+        CompoundTag boundedProperties=new CompoundTag();
+        boundedProperties.putString("k".repeat(60),"v".repeat(67));
+        boundedEntryState.put("Properties",boundedProperties);
+        CompoundTag boundedEntry=new CompoundTag();
+        boundedEntry.putLong("pos",new BlockPos(0,64,0).asLong());
+        boundedEntry.put("state",boundedEntryState);
+        long boundedEntryEstimate=estimatedSnapshotPayloadBytes(boundedEntry);
+        CompoundTag oversizedEntryState=NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState());
+        CompoundTag oversizedEntryProperties=new CompoundTag();
+        oversizedEntryProperties.putString("k".repeat(60),"v".repeat(68));
+        oversizedEntryState.put("Properties",oversizedEntryProperties);
+        CompoundTag oversizedEntry=new CompoundTag();
+        oversizedEntry.putLong("pos",new BlockPos(1,64,0).asLong());
+        oversizedEntry.put("state",oversizedEntryState);
+        long worstCaseRetainedBytes=(long)MAX_EDITS*MAX_SNAPSHOT_ENTRY_ESTIMATE_BYTES;
+        if(boundedEntryEstimate!=698L
+            || boundedSnapshotPayloadEstimate(boundedEntry)!=boundedEntryEstimate
+            || estimatedSnapshotPayloadBytes(oversizedEntry)!=701L
+            || boundedSnapshotPayloadEstimate(oversizedEntry)!=0L
+            || worstCaseRetainedBytes>MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES
+            || maximumStoneSnapshotEstimate>worstCaseRetainedBytes)
+            throw new IllegalStateException("CI per-entry recovery snapshot size bound regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_ENTRY_SIZE_BOUND_VERIFIED acceptedBytes={} rejectedBytes=701 maxEntryBytes={} maxEdits={} worstCaseBytes={} capBytes={}",
+            boundedEntryEstimate,MAX_SNAPSHOT_ENTRY_ESTIMATE_BYTES,MAX_EDITS,
+            worstCaseRetainedBytes,MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES);
 
         // A corrupt NBT list must not grow the recovery queue beyond the same
         // 95,000-entry ceiling enforced by terrain destruction.
@@ -3010,7 +2997,9 @@ public final class RiftController {
             || boundedSnapshots.restoreScan!=MAX_EDITS-1
             || boundedSnapshots.snapshots.get(0).getLong("pos")!=new BlockPos(0,64,0).asLong()
             || boundedSnapshots.snapshots.get(MAX_EDITS-1).getLong("pos")
-                !=new BlockPos(MAX_EDITS-1,64,0).asLong())
+                !=new BlockPos(MAX_EDITS-1,64,0).asLong()
+            || boundedSnapshots.retainedSnapshotEstimateBytes!=maximumStoneSnapshotEstimate
+            || boundedSnapshots.retainedSnapshotEstimateBytes>MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES)
             throw new IllegalStateException("CI oversized recovery snapshot list was not bounded safely");
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_LIST_BOUNDED count={} cap={}",
             boundedSnapshots.snapshots.size(),MAX_EDITS);
