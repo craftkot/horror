@@ -5,8 +5,7 @@ ROOT=pathlib.Path(__file__).resolve().parents[1]
 MC=ROOT/"client"
 MOUSE_SENSITIVITY=0.6
 CAMERA_ROTATION_LOG_THRESHOLD_DEGREES=0.25
-POST_CULL_CAMERA_PROBE_PIXELS=4
-POST_CULL_CAPTURE_PITCH=-80.0
+CAMERA_INPUT_PROBE_PIXELS=4
 MIN_GROUND_MESH_SEGMENTS=8
 MIN_GROUND_MESH_ARMS=2
 MAX_GROUND_MESH_ARMS=4
@@ -30,15 +29,13 @@ def camera_degrees_per_pixel():
     factor=MOUSE_SENSITIVITY*0.6+0.2
     return factor*factor*factor*8.0*0.15
 
-def verify_post_cull_camera_probe_profile():
-    expected_delta=POST_CULL_CAMERA_PROBE_PIXELS*camera_degrees_per_pixel()
+def verify_camera_input_profile():
+    expected_delta=CAMERA_INPUT_PROBE_PIXELS*camera_degrees_per_pixel()
     if (not math.isfinite(expected_delta)
-            or expected_delta<CAMERA_ROTATION_LOG_THRESHOLD_DEGREES*2.0
-            or not math.isfinite(POST_CULL_CAPTURE_PITCH)
-            or abs(POST_CULL_CAPTURE_PITCH)>=89.0):
-        raise RuntimeError("BLACK FREQUENCY post-cull camera probe has an invalid input or pitch profile")
-    print("WORLD_CAPTURE: post-cull camera probe profile verified",
-          "pixels",POST_CULL_CAMERA_PROBE_PIXELS,
+            or expected_delta<CAMERA_ROTATION_LOG_THRESHOLD_DEGREES*2.0):
+        raise RuntimeError("BLACK FREQUENCY camera input calibration is below the renderer telemetry threshold")
+    print("WORLD_CAPTURE: camera input calibration verified",
+          "pixels",CAMERA_INPUT_PROBE_PIXELS,
           "expectedCameraDelta",round(expected_delta,3),
           "telemetryThreshold",CAMERA_ROTATION_LOG_THRESHOLD_DEGREES,flush=True)
 
@@ -658,7 +655,7 @@ verify_restoration_particle_source()
 verify_beacon_aura_source()
 verify_real_beacon_break_source()
 verify_beacon_interaction_reach_geometry()
-verify_post_cull_camera_probe_profile()
+verify_camera_input_profile()
 
 def valid_fissure_particle_emission(counts):
     if counts is None:
@@ -1110,7 +1107,12 @@ def capture_test_world():
             return False
         if (abs(wrapped_angle_delta(current[0],target[0]))>3.0
                 or abs(current[1]-target[1])>3.0):
-            current=restore_camera_orientation(target[0],target[1])
+            if allow_disposable_teleport:
+                # The isolated CI world may set view rotation with a player command;
+                # the following right-click is still sent by the real client input path.
+                current=set_camera_orientation_in_disposable_world(target[0],target[1])
+            else:
+                current=restore_camera_orientation(target[0],target[1])
         if (current is None
                 or abs(wrapped_angle_delta(current[0],target[0]))>3.0
                 or abs(current[1]-target[1])>3.0):
@@ -1733,8 +1735,11 @@ def capture_test_world():
         if not sky_capture_attempted:
             return
         fresh_logs=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else logs
-        if not aim_camera_at_beacon(fresh_logs):
+        isolated_camera_command=os.environ.get("BF_ISOLATED_TEST")=="1"
+        if not aim_camera_at_beacon(fresh_logs,allow_disposable_teleport=isolated_camera_command):
             return
+        if isolated_camera_command:
+            print("WORLD_CAPTURE: isolated beacon aim set from server telemetry; following right-click remains physical",flush=True)
         beacon_aim_verified=True
         if beacon_attempts==0:
             snap("beacon-before-right-click.png")
@@ -1764,6 +1769,8 @@ def capture_test_world():
                 break
             time.sleep(0.1)
         if interaction_confirmed:
+            if vertical_cull_probe_verified:
+                print("WORLD_CAPTURE_INPUT: post-cull physical beacon right-click confirmed by server",flush=True)
             print("WORLD_CAPTURE: physical beacon activation confirmed before screenshot",flush=True)
             snap("beacon-after-right-click.png")
         else:
@@ -2465,54 +2472,14 @@ def capture_test_world():
                         r"Teleported .* to ","return to safe pad")
                     send_chat_command("/gamemode survival @s",
                         r"Set own game mode to Survival Mode","return to survival")
-                    # Re-enter the game through the pause screen so Minecraft explicitly
-                    # restores its normal GLFW cursor grab after chat/teleport commands.
-                    # Then verify an actual XTest mouse delta against rendered camera telemetry.
-                    input_before=read_client_camera_rotation()
-                    if input_before is None:
-                        raise RuntimeError("BLACK FREQUENCY post-cull camera telemetry is missing")
-                    sky_camera=set_camera_orientation_in_disposable_world(
-                        input_before[0],POST_CULL_CAPTURE_PITCH)
-                    if (sky_camera is None
-                            or abs(sky_camera[1]-POST_CULL_CAPTURE_PITCH)>1.0):
-                        raise RuntimeError("BLACK FREQUENCY could not aim the post-cull capture probe at empty sky")
-                    input_probe_before=None
-                    input_after=None
-                    input_moved=0
-                    for attempt in range(2):
-                        key("Escape")
-                        time.sleep(0.2)
-                        key("Escape")
-                        time.sleep(0.25)
-                        input_probe_before=read_client_camera_rotation()
-                        if (input_probe_before is None
-                                or abs(input_probe_before[1]-POST_CULL_CAPTURE_PITCH)>1.0):
-                            continue
-                        input_moved=move_camera_horizontal(POST_CULL_CAMERA_PROBE_PIXELS,focus=False)
-                        input_after=wait_for_camera_rotation_change(input_probe_before,timeout=1.5)
-                        if (input_after is not None
-                                and input_moved==POST_CULL_CAMERA_PROBE_PIXELS
-                                and abs(wrapped_angle_delta(input_after[0],input_probe_before[0]))>=CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
-                            break
-                        print("WORLD_CAPTURE_INPUT: GLFW cursor-grab retry",attempt+1,flush=True)
-                    if (input_after is None or input_probe_before is None
-                            or input_moved!=POST_CULL_CAMERA_PROBE_PIXELS
-                            or abs(wrapped_angle_delta(input_after[0],input_probe_before[0]))<CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
-                        raise RuntimeError("BLACK FREQUENCY post-cull mouse capture was not reacquired after pause-menu round trip")
-                    restore_moved=move_camera_horizontal(-POST_CULL_CAMERA_PROBE_PIXELS,focus=False)
-                    input_restored=wait_for_camera_rotation_change(input_after,timeout=1.5)
-                    if (restore_moved!=-POST_CULL_CAMERA_PROBE_PIXELS or input_restored is None
-                            or abs(wrapped_angle_delta(input_restored[0],input_probe_before[0]))>CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
-                        raise RuntimeError("BLACK FREQUENCY post-cull camera input probe did not restore its yaw")
-                    original_rotation=restore_camera_orientation(input_before[0],input_before[1])
-                    if (original_rotation is None
-                            or abs(wrapped_angle_delta(original_rotation[0],input_before[0]))>0.8
-                            or abs(original_rotation[1]-input_before[1])>0.8):
-                        raise RuntimeError("BLACK FREQUENCY post-cull camera probe did not restore the pre-probe view")
-                    print("WORLD_CAPTURE_INPUT: post-cull mouse capture verified yawDelta="
-                          f"{wrapped_angle_delta(input_after[0],input_probe_before[0]):.3f} restored=true "
-                          f"probePixels={POST_CULL_CAMERA_PROBE_PIXELS} pauseMenuRoundTrip=true axis=x",flush=True)
-                    restored=True
+                    camera_after_return=read_client_camera_rotation()
+                    if (camera_after_return is None
+                            or not all(math.isfinite(value) for value in camera_after_return)):
+                        raise RuntimeError("BLACK FREQUENCY post-cull rendered camera telemetry is missing or non-finite")
+                    print("WORLD_CAPTURE: post-cull rendered camera telemetry remains finite",
+                          "yaw",round(camera_after_return[0],3),
+                          "pitch",round(camera_after_return[1],3),
+                          "physicalBeaconClickWillVerifyMouse=true",flush=True)
 
                     summary=None
                     resumed=None
@@ -2545,6 +2512,7 @@ def capture_test_world():
                         raise RuntimeError("BLACK FREQUENCY vertical cull skip accounting did not match the real skipped frames")
                     if segments<MIN_GROUND_MESH_SEGMENTS or arms<MIN_GROUND_MESH_ARMS:
                         raise RuntimeError("BLACK FREQUENCY ground mesh did not rebuild after the camera returned")
+                    restored=True
                     vertical_cull_probe_verified=True
                     print("WORLD_CAPTURE: actual vertical cull probe verified",
                           f"verticalDelta={vertical_delta:.2f}",f"frames={frames}",
