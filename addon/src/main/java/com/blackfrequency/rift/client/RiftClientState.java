@@ -1846,9 +1846,11 @@ public final class RiftClientState {
             double maximumSnowOffset=Double.NEGATIVE_INFINITY;
             double previousSnowOffset=Double.NEGATIVE_INFINITY;
             boolean snowSurfaceOffsets=true;
+            boolean snowSurfaceAccepted=true;
             for(int layers=1;layers<=8;layers++) {
                 var snow=net.minecraft.world.level.block.Blocks.SNOW.defaultBlockState()
                     .setValue(net.minecraft.world.level.block.SnowLayerBlock.LAYERS,layers);
+                snowSurfaceAccepted &= isGroundSurfaceAvailable(snow);
                 double shapeHeight=snow.getShape(level,BlockPos.ZERO).max(Direction.Axis.Y);
                 double expectedHeight=layers/8.0D;
                 double supportHeight=layers==4 ? .5D : 1.0D;
@@ -1863,13 +1865,15 @@ public final class RiftClientState {
             }
             double invalidSnowFallback=groundSurfaceOffset(.5D,Double.NaN);
             double overheightSnowClamp=groundSurfaceOffset(.5D,1.5D);
+            boolean fullSnowBlockRejected=!isGroundSurfaceAvailable(
+                net.minecraft.world.level.block.Blocks.SNOW_BLOCK.defaultBlockState());
             snowSurfaceOffsets &= Math.abs(minimumSnowOffset-1.125D)<1.0E-9D
                 && Math.abs(maximumSnowOffset-2.0D)<1.0E-9D
                 && Math.abs(invalidSnowFallback-.5D)<1.0E-9D
                 && Math.abs(overheightSnowClamp-2.0D)<1.0E-9D;
             if(!(naturalGrass && naturalStone && rejectsStructures && rejectsBlockEntities
                 && rejectsHazardousSurfaces && rejectsHazardousHeadroom && validSupportHeights
-                && snowSurfaceOffsets))
+                && snowSurfaceOffsets && snowSurfaceAccepted && fullSnowBlockRejected))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh terrain/structure/support-shape regression");
             supportFilterLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
@@ -1884,8 +1888,9 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_SHAPE_GUARD_VERIFIED fullBlock={} partial={} outlineFallback={} emptyRejected={}",
                 fullBlockHeight,partialBlockHeight,outlineFallback,emptyShapeRejected);
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_SNOW_LAYER_SURFACE_HEIGHT_VERIFIED layers=1..8 minOffset={} maxOffset={} invalidFallback={} overheightClamp={} monotonic=true shapeDerived=true",
-                minimumSnowOffset,maximumSnowOffset,invalidSnowFallback,overheightSnowClamp);
+                "BLACK_FREQUENCY_GROUND_MESH_SNOW_LAYER_SURFACE_HEIGHT_VERIFIED layers=1..8 minOffset={} maxOffset={} invalidFallback={} overheightClamp={} monotonic=true shapeDerived=true surfaceAccepted={} fullSnowBlockRejected={}",
+                minimumSnowOffset,maximumSnowOffset,invalidSnowFallback,overheightSnowClamp,
+                snowSurfaceAccepted,fullSnowBlockRejected);
         }
 
         private static double groundSupportHeight(
@@ -1919,8 +1924,9 @@ public final class RiftClientState {
         }
 
         private static boolean isGroundSurfaceAvailable(BlockState surface) {
+            boolean snowLayer=surface.is(net.minecraft.world.level.block.Blocks.SNOW);
             return !surface.hasBlockEntity()
-                && !surface.blocksMotion()
+                && (!surface.blocksMotion() || snowLayer)
                 && !surface.is(net.minecraft.world.level.block.Blocks.POWDER_SNOW)
                 && surface.getFluidState().isEmpty();
         }

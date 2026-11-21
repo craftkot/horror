@@ -236,6 +236,11 @@ def verify_restoration_particle_source():
     if not field_body or any(term in field_body for term in ("time*.008D","time*.009D","time*.021D","time*.031D")):
         raise RuntimeError("BLACK FREQUENCY gravity field must reuse all cached time offsets")
     client_source=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"client"/"RiftClientState.java").read_text(encoding="utf-8")
+    if ("boolean snowLayer=surface.is(net.minecraft.world.level.block.Blocks.SNOW);" not in client_source
+            or "(!surface.blocksMotion() || snowLayer)" not in client_source
+            or "snowSurfaceAccepted &= isGroundSurfaceAvailable(snow);" not in client_source
+            or "fullSnowBlockRejected" not in client_source):
+        raise RuntimeError("BLACK FREQUENCY snow layers must pass the surface filter without admitting full snow blocks")
     fissure_start=source.find("private static FissureEmission emitSurfaceFissure(")
     fissure_end=source.find("\n    private static",fissure_start+1)
     fissure_emitter=source[fissure_start:fissure_end] if fissure_start>=0 and fissure_end>fissure_start else ""
@@ -2570,7 +2575,8 @@ def capture_test_world():
             snow_surface_marker = (
                 "BLACK_FREQUENCY_GROUND_MESH_SNOW_LAYER_SURFACE_HEIGHT_VERIFIED "
                 "layers=1..8 minOffset=1.125 maxOffset=2.0 invalidFallback=0.5 "
-                "overheightClamp=2.0 monotonic=true shapeDerived=true"
+                "overheightClamp=2.0 monotonic=true shapeDerived=true "
+                "surfaceAccepted=true fullSnowBlockRejected=true"
             )
             if snow_surface_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: snow-layer ground surface height was not derived from the actual snow shape",flush=True)
