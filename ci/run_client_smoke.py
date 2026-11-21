@@ -2392,6 +2392,27 @@ def capture_test_world():
                         raise RuntimeError("BLACK FREQUENCY vertical cull skip milestone did not match the entered camera/anchor")
                     send_chat_command(f"/tp @s {x} {y} {z}")
                     send_chat_command("/gamemode survival @s")
+                    # The chat-driven spectator round-trip can leave GLFW's cursor
+                    # ungrabbed even after Enter closes chat. Normalize the screen
+                    # state before the real camera sweep; never send a world action.
+                    focus_game()
+                    key("t")
+                    time.sleep(0.12)
+                    key("Escape")
+                    time.sleep(0.2)
+                    focus_game()
+                    input_before=read_client_camera_rotation()
+                    input_moved=move_camera(1)
+                    input_after=wait_for_camera_rotation(timeout=0.8)
+                    if (input_before is None or input_after is None or input_moved!=1
+                            or abs(input_after[1]-input_before[1])<0.01):
+                        raise RuntimeError("BLACK FREQUENCY post-cull mouse capture was not reacquired")
+                    move_camera(-1)
+                    input_restored=wait_for_camera_rotation(input_before[1],tolerance=0.8,timeout=1.0)
+                    if input_restored is None or abs(input_restored[1]-input_before[1])>0.8:
+                        raise RuntimeError("BLACK FREQUENCY post-cull camera input probe did not restore its pitch")
+                    print("WORLD_CAPTURE_INPUT: post-cull mouse capture verified pitchDelta="
+                          f"{input_after[1]-input_before[1]:.3f} restored=true",flush=True)
                     restored=True
 
                     summary=None
