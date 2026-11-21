@@ -2603,11 +2603,20 @@ def capture_test_world():
             snow_surface_marker = (
                 "BLACK_FREQUENCY_GROUND_MESH_SNOW_LAYER_SURFACE_HEIGHT_VERIFIED "
                 "layers=1..8 minOffset=1.125 maxOffset=2.0 invalidFallback=0.5 "
-                "overheightClamp=2.0 monotonic=true shapeDerived=true "
+                "overheightClamp=1.5 monotonic=true shapeDerived=true "
                 "surfaceAccepted=true fullSnowBlockRejected=true"
             )
             if snow_surface_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: snow-layer ground surface height was not derived from the actual snow shape",flush=True)
+                return False
+            partial_support_snow_marker = (
+                "BLACK_FREQUENCY_GROUND_MESH_PARTIAL_SUPPORT_SNOW_OFFSET_VERIFIED "
+                "supportHeight=0.5 snowHeight=0.5 offset=1.0 separateFromLayerSweep=true"
+            )
+            if (partial_support_snow_marker not in final_log
+                    or "double partialSupportSnowOffset=groundSurfaceOffset(.5D,.5D);" not in camera_source
+                    or "Math.abs(partialSupportSnowOffset-1.0D)" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: partial-block support height was not independently verified under snow",flush=True)
                 return False
             support_shape_marker = (
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_SHAPE_GUARD_VERIFIED "
