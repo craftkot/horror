@@ -2668,7 +2668,7 @@ def capture_test_world():
                 prefix_source=(camera_source[prefix_start:prefix_end]
                                if prefix_start>=0 and prefix_end>prefix_start else "")
                 render_loop_match=re.search(
-                    r"for\\s*\\(\\s*int\\s+segmentIndex\\s*=\\s*firstVisibleSegmentIndex\\s*;\\s*segmentIndex\\s*<\\s*cachedSegments\\.size\\(\\)\\s*;\\s*segmentIndex\\+\\+\\s*\\)\\s*\\{",
+                    r"for\s*\(\s*int\s+segmentIndex\s*=\s*firstVisibleSegmentIndex\s*;\s*segmentIndex\s*<\s*cachedSegments\.size\(\)\s*;\s*segmentIndex\+\+\s*\)\s*\{",
                     camera_source)
                 render_start=render_loop_match.start() if render_loop_match else -1
                 render_end=camera_source.find("BufferUploader.drawWithShader(builder.end());",render_start)
@@ -2701,7 +2701,7 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: ground ribbon must cache 12 static RGB channels and compute two endpoint alphas for each of four layers",flush=True)
                     return False
                 reuse_profile=re.search(
-                    r"BLACK_FREQUENCY_TEST GROUND_MESH_VISIBILITY_PREFIX_REUSE_VERIFIED firstVisibleIndex=(\\d+) prefixFadeChecks=(\\d+) cachedFirstSegmentFade=true redundantPrefixRechecksAvoided=(\\d+)",
+                    r"BLACK_FREQUENCY_TEST GROUND_MESH_VISIBILITY_PREFIX_REUSE_VERIFIED firstVisibleIndex=(\d+) prefixFadeChecks=(\d+) cachedFirstSegmentFade=true redundantPrefixRechecksAvoided=(\d+)",
                     final_log)
                 if (not reuse_profile
                         or int(reuse_profile.group(2))<2
