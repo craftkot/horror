@@ -3407,9 +3407,9 @@ def capture_test_world():
             if os.environ.get("BF_TEST_RESTORATION")=="1" and snapshot_retention_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: aggregate recovery snapshot retention budget was not verified",flush=True)
                 return False
-            snapshot_aggregate_marker="BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_AGGREGATE_BUDGET_QUARANTINED "
-            if os.environ.get("BF_TEST_RESTORATION")=="1" and snapshot_aggregate_marker not in log_after:
-                print("WORLD_CAPTURE_FAIL: aggregate recovery snapshot payloads were not quarantined",flush=True)
+            snapshot_entry_size_marker="BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_ENTRY_SIZE_BOUND_VERIFIED "
+            if os.environ.get("BF_TEST_RESTORATION")=="1" and snapshot_entry_size_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: per-entry recovery snapshot size bound was not verified",flush=True)
                 return False
             scan_marker="BLACK_FREQUENCY_TEST RESTORE_PLAYER_SCAN_PROFILE_VERIFIED intervalTicks=4 menuClose=shared viewerScan=shared loadedOnly=true"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and scan_marker not in log_after:
