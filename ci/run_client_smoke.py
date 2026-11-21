@@ -2998,11 +2998,11 @@ def capture_test_world():
                       flush=True)
                 return False
             cliff_taper_match=re.search(
-                r"BLACK_FREQUENCY_GROUND_MESH_CLIFF_TAPER_PROFILE_VERIFIED taper=([-+0-9.eE]+) previousTaper=0.25 wider=true invalidInputsZero=true",
+                r"BLACK_FREQUENCY_GROUND_MESH_CLIFF_TAPER_PROFILE_VERIFIED taper=([-+0-9.eE]+) previousTaper=0.25 sharper=true invalidInputsZero=true",
                 final_log)
             if (not cliff_taper_match
-                    or not math.isclose(float(cliff_taper_match.group(1)),.22,rel_tol=0.0,abs_tol=1.0e-9)
-                    or "CLIFF_BREAK_TAPER=.22D;" not in camera_source
+                    or not math.isclose(float(cliff_taper_match.group(1)),.06,rel_tol=0.0,abs_tol=1.0e-9)
+                    or "CLIFF_BREAK_TAPER=.06D;" not in camera_source
                     or "cliffBreakTaper(Double.POSITIVE_INFINITY)==0.0D" not in camera_source
                     or "cliffBreakTaper(Double.NEGATIVE_INFINITY)==0.0D" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: visible cliff-end taper or non-finite input guards were not verified",flush=True)
