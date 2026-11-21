@@ -310,8 +310,12 @@ def verify_restoration_particle_source():
             or "new BlockPos(" in particle_height
             or "cursor.set(x,surfaceY,z)" not in particle_height):
         raise RuntimeError("BLACK FREQUENCY server fissure sampling must reuse one mutable block-position cursor")
-    if ("private static final DustParticleOptions FISSURE_VIOLET_EDGE_DUST" not in source
-            or "level.sendParticles(FISSURE_VIOLET_EDGE_DUST," not in fissure_emitter
+    if ("private static final DustParticleOptions FISSURE_VIOLET_EDGE_DUST_SMALL" not in source
+            or "private static final DustParticleOptions FISSURE_VIOLET_EDGE_DUST_LARGE" not in source
+            or "private static DustParticleOptions fissureEdgeDustForWave(double wave)" not in source
+            or "edgeWave=wave;" not in fissure_emitter
+            or "level.sendParticles(fissureEdgeDustForWave(edgeWave)," not in fissure_emitter
+            or "level.sendParticles(FISSURE_VIOLET_EDGE_DUST," in fissure_emitter
             or "private static final DustParticleOptions SURFACE_FISSURE_ACCENT_DUST" not in source
             or "level.sendParticles(SURFACE_FISSURE_ACCENT_DUST," not in fissure_emitter
             or "level.sendParticles(FISSURE_VIOLET_ACCENT_DUST," in fissure_emitter
@@ -3600,6 +3604,9 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_VERIFIED red=0.42 green=0.18 blue=0.92 scale=0.7" not in log_after:
                 print("WORLD_CAPTURE_FAIL: compact violet fissure edge Dust profile was not verified",flush=True)
                 return False
+            if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_PULSE_PROFILE_VERIFIED min=0.64 base=0.7 max=0.74 variants=3 bounded=true phaseDriven=true cached=true" not in log_after:
+                print("WORLD_CAPTURE_FAIL: phase-driven cached edge Dust pulse profile was not verified",flush=True)
+                return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_LAYOUT_VERIFIED count=4 color=violet perArm=1 outerTip=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: four compact violet edge Dust motes were not verified",flush=True)
                 return False
@@ -3611,16 +3618,19 @@ def capture_test_world():
                       fissure,flush=True)
                 return False
             edge_dust=re.search(
-                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_EMITTED count=([0-9]+) material=dust scale=0.7 fallbackArms=([0-9]+)",
+                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_EMITTED count=([0-9]+) material=dust minScale=0.64 baseScale=0.7 maxScale=0.74 minCount=([0-9]+) baseCount=([0-9]+) maxCount=([0-9]+) fallbackArms=([0-9]+)",
                 log_after)
             if (not edge_dust or int(edge_dust.group(1))!=4
                     or int(edge_dust.group(1))!=fissure[3]
-                    or not 0<=int(edge_dust.group(2))<=4):
+                    or sum(int(edge_dust.group(index)) for index in (2,3,4))!=int(edge_dust.group(1))
+                    or not 0<=int(edge_dust.group(5))<=4):
                 print("WORLD_CAPTURE_FAIL: one compact edge Dust mote per valid fissure arm was not emitted",
                       flush=True)
                 return False
             print("WORLD_CAPTURE: deep-violet base Dust and bright-violet accent Dust verified",fissure[0],flush=True)
-            print("WORLD_CAPTURE: compact violet fissure edge Dust verified",edge_dust.group(1),flush=True)
+            print("WORLD_CAPTURE: phase-driven violet fissure edge Dust verified",
+                  {"count":edge_dust.group(1),"small":edge_dust.group(2),
+                   "base":edge_dust.group(3),"large":edge_dust.group(4)},flush=True)
             if not fracture_seen:
                 print("WORLD_CAPTURE_FAIL: ground fracture never removed a block",flush=True)
                 return False
