@@ -426,7 +426,8 @@ def verify_restoration_particle_source():
             or "boundedSnapshotPayloadEstimate(entry)" not in snapshot_load
             or "withinSnapshotRetentionBudget(s.retainedSnapshotEstimateBytes,candidateEstimate)" not in snapshot_load
             or "RECOVERY_SNAPSHOT_RETENTION_BUDGET_VERIFIED" not in source
-            or "RECOVERY_SNAPSHOT_AGGREGATE_BUDGET_QUARANTINED" not in source
+            or "MAX_SNAPSHOT_ENTRY_ESTIMATE_BYTES=700L" not in source
+            or "RECOVERY_SNAPSHOT_ENTRY_SIZE_BOUND_VERIFIED" not in source
             or "withinSnapshotRetentionBudget(s.retainedSnapshotEstimateBytes,candidateSnapshotEstimate)" not in runtime_snapshot
             or "s.retainedSnapshotEstimateBytes+=candidateSnapshotEstimate" not in runtime_snapshot
             or "RECOVERY_SNAPSHOT_RUNTIME_BUDGET_GUARD_VERIFIED" not in source):
