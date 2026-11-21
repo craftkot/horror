@@ -2621,8 +2621,8 @@ def capture_test_world():
             if ("boolean coreSegmentGap,\n                boolean leftEdgeNotched,boolean rightEdgeNotched" not in camera_source
                     or "private static boolean isGroundCoreSegmentGap(double phase)" not in camera_source
                     or "sample.coreSegmentGap()!=isGroundCoreSegmentGap(phase)" not in camera_source
-                    re.search(
-                         r"if\\(sample\\.coreSegmentGap\\(\\)\\)\\s*\\{\\s*previousFadePoint=null;\\s*previousFadeB=0\\.0D;\\s*continue;\\s*\\}",
+                    or re.search(
+                         r"if\(sample\.coreSegmentGap\(\)\)\s*\{\s*previousFadePoint=null;\s*previousFadeB=0\.0D;\s*continue;\s*\}",
                          camera_source) is None
                     or "private static boolean isGroundEdgeNotched(double phase,long salt)" not in camera_source
                     or "return (groundSampleHash(phase,salt) & 15L)==0L;" not in camera_source
