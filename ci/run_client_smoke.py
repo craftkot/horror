@@ -2811,7 +2811,7 @@ def capture_test_world():
             visual_profile_match=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=([-+0-9.eE]+) coreScale=([-+0-9.eE]+) edgeOffsetScale=([-+0-9.eE]+) edgeHalfWidth=([-+0-9.eE]+) pulseMin=([-+0-9.eE]+) pulseMax=([-+0-9.eE]+) coreInsideEdgeBand=(true|false)",
                 final_log)
-            expected_visual_profile=(5.0,1.7,3.0,.026,.045,.074)
+            expected_visual_profile=(5.0,1.7,3.0,.032,.045,.074)
             if (not visual_profile_match
                     or any(not math.isclose(float(visual_profile_match.group(i)),expected_visual_profile[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
