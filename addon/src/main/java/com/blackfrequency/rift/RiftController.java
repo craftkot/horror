@@ -1373,6 +1373,8 @@ public final class RiftController {
             && state.getFluidState().isEmpty();
     }
 
+    // A returned height already has a validated support block at y-1.
+    // Callers check that the chunk is loaded before entering, so do not repeat the support read.
     private static int findFissureGroundY(ServerLevel level,int x,int z,BlockPos.MutableBlockPos cursor) {
         if(!level.hasChunk(x>>4,z>>4)) return Integer.MIN_VALUE;
         int y=level.getHeight(
@@ -1454,8 +1456,6 @@ public final class RiftController {
                     || !level.hasChunk(blockX>>4,blockZ>>4)) continue;
                 int surfaceY=findFissureGroundY(level,blockX,blockZ,cursor);
                 if(surfaceY==Integer.MIN_VALUE || surfaceY>=level.getMaxBuildHeight()) continue;
-                cursor.set(blockX,surfaceY-1,blockZ);
-                if(!isFissureGroundSupport(level.getBlockState(cursor))) continue;
                 double particleY=fissureParticleY(level,blockX,surfaceY,blockZ,cursor);
                 double wave=fissurePulseWave(phase,sample);
                 double pulse=wave*.05D;
@@ -1948,8 +1948,6 @@ public final class RiftController {
                     || !level.hasChunk(blockX>>4,blockZ>>4)) continue;
                 int surfaceY=findFissureGroundY(level,blockX,blockZ,cursor);
                 if(surfaceY==Integer.MIN_VALUE || surfaceY>=level.getMaxBuildHeight()) continue;
-                cursor.set(blockX,surfaceY-1,blockZ);
-                if(!isFissureGroundSupport(level.getBlockState(cursor))) continue;
                 cursor.set(blockX,surfaceY,blockZ);
                 net.minecraft.world.phys.Vec3 target=new net.minecraft.world.phys.Vec3(
                     px,fissureParticleY(level,blockX,surfaceY,blockZ,cursor),pz);

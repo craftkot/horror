@@ -231,6 +231,13 @@ def verify_restoration_particle_source():
     target_start=source.find("private static FissureTarget findVisibleFissureTarget(")
     target_end=source.find("\n    // Run after ordinary explosion modifiers",target_start+1)
     target_body=source[target_start:target_end] if target_start>=0 and target_end>target_start else ""
+    if ("if(isFissureGroundSupport(level.getBlockState(cursor))) return y;" not in ground_sampler
+            or "cursor.set(blockX,surfaceY-1,blockZ);" in fissure_emitter
+            or "isFissureGroundSupport(level.getBlockState(cursor))" in fissure_emitter
+            or "cursor.set(blockX,surfaceY-1,blockZ);" in target_body
+            or "isFissureGroundSupport(level.getBlockState(cursor))" in target_body):
+        raise RuntimeError("BLACK FREQUENCY fissure callers must reuse the sampler's validated support result")
+    print("WORLD_CAPTURE: fissure support validated once; redundant block-state reads eliminated",flush=True)
     pad_start=source.find('if(playerInteractionTest && Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest"))')
     pad_end=source.find("} else if(playerInteractionTest)",pad_start+1)
     pad_body=source[pad_start:pad_end] if pad_start>=0 and pad_end>pad_start else ""
