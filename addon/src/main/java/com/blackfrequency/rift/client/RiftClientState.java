@@ -607,7 +607,8 @@ public final class RiftClientState {
         private static final double GROUND_WIDTH_FLICKER=.005D;
         private static final double GROUND_MAX_HALF_WIDTH=
             GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE+GROUND_WIDTH_FLICKER;
-        private static final double GROUND_EDGE_HALF_WIDTH=.026D;
+        // Slightly wider violet lips keep the dark seam legible in grass-heavy terrain.
+        private static final double GROUND_EDGE_HALF_WIDTH=.032D;
         private static final double GROUND_MIN_CORE_EDGE_GAP=.0075D;
         // Keep the dark core near the support top while retaining a measurable depth-buffer gap.
         private static final double GROUND_SURFACE_CLEARANCE=.015D;
@@ -1123,7 +1124,7 @@ public final class RiftClientState {
                     || Math.abs(GROUND_EDGE_OFFSET_SKEW_SCALE-.12D)>1.0E-9D
                     || !Double.isFinite(maximumEdgeOffsetDelta) || maximumEdgeOffsetDelta>.004D
                     || Math.abs(GROUND_CORE_SKEW_AMPLITUDE-.15D)>1.0E-9D
-                    || Math.abs(GROUND_EDGE_HALF_WIDTH-.026D)>1.0E-9D
+                    || Math.abs(GROUND_EDGE_HALF_WIDTH-.032D)>1.0E-9D
                     || Math.abs(maximumHalfWidth-.074D)>1.0E-9D
                     || !Float.isFinite(GROUND_EDGE_RED) || !Float.isFinite(GROUND_EDGE_GREEN)
                     || !Float.isFinite(GROUND_EDGE_BLUE)
