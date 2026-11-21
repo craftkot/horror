@@ -4994,7 +4994,7 @@ public final class RiftController {
                     if(s.finaleTicks%20==0) {
                         FissureEmission emission=emitSurfaceFissure(level,s,phase);
                         if(CI_TEST && emission.samples()>0 && !s.ciSurfaceFissureLogged) {
-                            LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples={} accentDust={} violetDust={} edgeDust={} total={} heightmap=motion-blocking-no-leaves ground=terrain-support-filtered averageY={}",
+                            LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples={} accentDust={} violetDust={} edgeDust={} total={} heightmap=motion-blocking ground=terrain-support-filtered averageY={}",
                                 emission.samples(),emission.accentDustMotes(),emission.violetDustMotes(),
                                 emission.edgeDustMotes(),emission.totalParticles(),emission.averageSurfaceY());
                             LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_EMITTED count={} material=dust minScale={} baseScale={} maxScale={} minCount={} baseCount={} maxCount={} fallbackArms={}",

@@ -23,7 +23,7 @@ def is_fissure_target_horizontal_distance(horizontal_squared):
 
 MAX_GROUND_MESH_SEGMENTS=MAX_GROUND_MESH_ARMS*(GROUND_MESH_SAMPLES//MAX_GROUND_MESH_ARMS-1)
 FISSURE_PARTICLE_EMISSION_RE=re.compile(
-    r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) accentDust=(\d+) violetDust=(\d+) edgeDust=(\d+) total=(\d+) heightmap=motion-blocking-no-leaves"
+    r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) accentDust=(\d+) violetDust=(\d+) edgeDust=(\d+) total=(\d+) heightmap=motion-blocking(?=\s|$)"
 )
 
 def fissure_target_view_score(target_y, player_y, horizontal_distance_squared):
@@ -257,6 +257,8 @@ def verify_restoration_particle_source():
             or "level.getHeight(FISSURE_SURFACE_HEIGHTMAP,x,z);" not in ground_sampler
             or "MOTION_BLOCKING_NO_LEAVES" in ground_sampler
             or "heightmapIncludesLeaves=true" not in source
+            or "heightmap=motion-blocking ground=terrain-support-filtered" not in source
+            or "heightmap=motion-blocking-no-leaves" in source
             or "if(isFissureCanopyOccluder(surface)) continue;" not in ground_sampler):
         raise RuntimeError("BLACK FREQUENCY canopy traversal must skip only vertical trunks/leaves within the bounded surface scan")
     print("WORLD_CAPTURE: leaf-inclusive heightmap feeds bounded canopy traversal while preserving roof occlusion",flush=True)
@@ -641,7 +643,7 @@ def valid_fissure_particle_emission(counts):
 _fissure_fixture=(
     "BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED "
     "samples=48 accentDust=8 violetDust=40 edgeDust=4 total=52 "
-    "heightmap=motion-blocking-no-leaves"
+    "heightmap=motion-blocking"
 )
 if (parse_fissure_particle_emission(_fissure_fixture)!=(48,8,40,4,52)
         or not valid_fissure_particle_emission((48,8,40,4,52))
@@ -649,7 +651,9 @@ if (parse_fissure_particle_emission(_fissure_fixture)!=(48,8,40,4,52)
         or valid_fissure_particle_emission((48,8,40,5,53))
         or parse_fissure_particle_emission(_fissure_fixture.replace("violetDust","reversePortal")) is not None
         or parse_fissure_particle_emission(_fissure_fixture.replace("accentDust","dragonBreath")) is not None
-        or parse_fissure_particle_emission(_fissure_fixture.replace("edgeDust","sh"+"ards")) is not None):
+        or parse_fissure_particle_emission(_fissure_fixture.replace("edgeDust","sh"+"ards")) is not None
+        or parse_fissure_particle_emission(_fissure_fixture.replace(
+            "heightmap=motion-blocking","heightmap=motion-blocking-no-leaves")) is not None):
     raise RuntimeError("BLACK FREQUENCY fissure particle log/budget parser regression")
 print("WORLD_CAPTURE: fissure particle log schema and budget verified",flush=True)
 MC.mkdir(parents=True,exist_ok=True)
@@ -3422,7 +3426,7 @@ def capture_test_world():
             canopy_marker=(
                 "BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_TRAVERSAL_VERIFIED "
                 "verticalLogs=true leaves=true horizontalLogsRejected=true "
-                "roofBlocksRejected=true nonSolidPlantsRetained=true depthBound=32"
+                "roofBlocksRejected=true nonSolidPlantsRetained=true heightmapIncludesLeaves=true depthBound=32"
             )
             if canopy_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: server fissure scan did not verify safe traversal beneath tree canopy",flush=True)
