@@ -991,6 +991,8 @@ public final class RiftController {
         // Reuse one transient packed-position decoder for the bounded snapshot scan.
         // The mutable cursor never escapes restore() and is intentionally not saved to NBT.
         final BlockPos.MutableBlockPos restoreCursor = new BlockPos.MutableBlockPos();
+        // Reuse one cursor for the once-per-column world-border preflight during fracture scanning.
+        final BlockPos.MutableBlockPos fractureBorderCursor = new BlockPos.MutableBlockPos();
         // Reuse the small per-tick retry set during recovery instead of allocating
         // a new HashSet on every server tick. It is transient and never persisted.
         final java.util.Set<Long> restoreFailedWrites = new java.util.HashSet<>();
@@ -1397,6 +1399,10 @@ public final class RiftController {
                     ==net.minecraft.core.Direction.Axis.Y);
     }
 
+    private static boolean isNewFractureColumn(boolean surfaceFirstScan,int cursorY,int minBuildHeight) {
+        return surfaceFirstScan ? cursorY==Integer.MIN_VALUE : cursorY==minBuildHeight;
+    }
+
     private static void verifyFissureCanopyTraversal() {
         net.minecraft.world.level.border.WorldBorder probeBorder=
             new net.minecraft.world.level.border.WorldBorder();
@@ -1406,14 +1412,20 @@ public final class RiftController {
         boolean borderInside=isFissureColumnInsideWorldBorder(probeBorder,0,0,-64,borderCursor);
         boolean borderOutsideRejected=!isFissureColumnInsideWorldBorder(probeBorder,32,0,-64,borderCursor);
         boolean nullCursorRejected=!isFissureColumnInsideWorldBorder(probeBorder,0,0,-64,null);
+        boolean surfaceFirstColumnStart=isNewFractureColumn(true,Integer.MIN_VALUE,-64)
+            && !isNewFractureColumn(true,-63,-64);
+        boolean legacyColumnStart=isNewFractureColumn(false,-64,-64)
+            && !isNewFractureColumn(false,-63,-64);
         FissureGroundSample rejectedSample=new FissureGroundSample();
         rejectedSample.surfaceY=65;
         rejectedSample.particleY=65.10D;
         boolean nullLevelRejected=!findFissureGroundSample(null,0,0,null,rejectedSample)
             && rejectedSample.isEmpty();
-        if(!(borderInside && borderOutsideRejected && nullCursorRejected && nullLevelRejected))
+        if(!(borderInside && borderOutsideRejected && nullCursorRejected && nullLevelRejected
+            && surfaceFirstColumnStart && legacyColumnStart))
             throw new IllegalStateException("CI fissure world-border sampling guard regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_WORLD_BORDER_GUARD_VERIFIED inside=true outsideRejected=true nullRejected=true resultCleared=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_COLUMN_BORDER_EARLY_REJECTION_VERIFIED surfaceFirstStart=true legacyStart=true");
         BlockState verticalLog=net.minecraft.world.level.block.Blocks.OAK_LOG.defaultBlockState();
         BlockState horizontalLog=verticalLog.setValue(
             net.minecraft.world.level.block.RotatedPillarBlock.AXIS,net.minecraft.core.Direction.Axis.X);
@@ -5546,6 +5558,17 @@ public final class RiftController {
                 continue;
             }
             int wx=(int)worldX,wz=(int)worldZ;
+            // Reject an out-of-border column once, before the loaded-chunk probe and
+            // heightmap scan. The per-block border guard below remains the final
+            // safety check if the border changes while a column is being processed.
+            boolean newColumn=isNewFractureColumn(s.surfaceFirstScan,s.cursorY,level.getMinBuildHeight());
+            if(newColumn && !isFissureColumnInsideWorldBorder(level.getWorldBorder(),wx,wz,
+                    level.getMinBuildHeight(),s.fractureBorderCursor)) {
+                s.cursorY=s.surfaceFirstScan?Integer.MIN_VALUE:level.getMinBuildHeight();
+                advanceFractureColumn(s);
+                checks++;
+                continue;
+            }
             if(!level.hasChunk(wx>>4,wz>>4)) {
                 // Never force-load chunks for destruction. Skip this column and keep advancing.
                 s.cursorY=s.surfaceFirstScan?Integer.MIN_VALUE:level.getMinBuildHeight();
