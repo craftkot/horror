@@ -314,7 +314,8 @@ def verify_restoration_particle_source():
             or "private static final DustParticleOptions FISSURE_VIOLET_EDGE_DUST_LARGE" not in source
             or "private static DustParticleOptions fissureEdgeDustForWave(double wave)" not in source
             or "edgeWave=wave;" not in fissure_emitter
-            or "level.sendParticles(fissureEdgeDustForWave(edgeWave)," not in fissure_emitter
+            or "DustParticleOptions edgeDust=fissureEdgeDustForWave(edgeWave);" not in fissure_emitter
+            or "level.sendParticles(edgeDust," not in fissure_emitter
             or "level.sendParticles(FISSURE_VIOLET_EDGE_DUST," in fissure_emitter
             or "private static final DustParticleOptions SURFACE_FISSURE_ACCENT_DUST" not in source
             or "level.sendParticles(SURFACE_FISSURE_ACCENT_DUST," not in fissure_emitter
