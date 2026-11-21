@@ -2971,19 +2971,21 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: ground fissure animation does not clamp the renderer partial tick",flush=True)
                 return False
             taper_match=re.search(
-                r"BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED start=([0-9.eE+-]+) first=([0-9.eE+-]+) second=([0-9.eE+-]+) middle=([0-9.eE+-]+) secondLast=([0-9.eE+-]+) last=([0-9.eE+-]+) end=([0-9.eE+-]+) symmetric=(true|false) invalidClamped=(true|false)",
+                r"BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED start=([0-9.eE+-]+) first=([0-9.eE+-]+) second=([0-9.eE+-]+) middle=([0-9.eE+-]+) secondLast=([0-9.eE+-]+) last=([0-9.eE+-]+) end=([0-9.eE+-]+) asymmetric=(true|false) invalidClamped=(true|false)",
                 final_log)
-            expected_taper=(.5,.5+1.0/27.0,17.0/27.0,1.0,17.0/27.0,.5+1.0/27.0,.5)
+            expected_taper=(.5,.5+1.0/27.0,17.0/27.0,1.0,
+                            .06+.94*(7.0/27.0),.06+.94*(2.0/27.0),.06)
             if (not taper_match
                     or any(not math.isclose(float(taper_match.group(i)),expected_taper[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
                            for i in range(1,8))
                     or taper_match.group(8)!="true" or taper_match.group(9)!="true"
-                    or "double tail=Math.min(1.0,(SEGMENTS_PER_ARM-boundedSample)/(double)GROUND_ENDPOINT_TAPER_SAMPLES);" not in camera_source
-                    or "double progress=Math.min(ramp,tail);" not in camera_source
-                    or "double eased=progress*progress*(3.0D-2.0D*progress);" not in camera_source
-                    or "BLACK_FREQUENCY_GROUND_MESH_TAPER_EASING_VERIFIED curve=smoothstep zeroSlopeAtEnds=true sameSpan=true" not in final_log):
-                print("WORLD_CAPTURE_FAIL: ground fissure endpoint taper is not symmetric or bounded",flush=True)
+                    or "double startProgress=Math.min(1.0,boundedSample/(double)GROUND_ENDPOINT_TAPER_SAMPLES);" not in camera_source
+                    or "double endProgress=Math.min(1.0,(SEGMENTS_PER_ARM-boundedSample)/(double)GROUND_ENDPOINT_TAPER_SAMPLES);" not in camera_source
+                    or "double startWidth=.5D+.5D*startEased;" not in camera_source
+                    or "double endWidth=CLIFF_BREAK_TAPER+(1.0D-CLIFF_BREAK_TAPER)*endEased;" not in camera_source
+                    or "BLACK_FREQUENCY_GROUND_MESH_TAPER_EASING_VERIFIED startCurve=smoothstep outerCurve=smoothstep zeroSlopeAtEnds=true sameSpan=true beaconStartFloor=0.5 outerTipFloor=0.06" not in final_log):
+                print("WORLD_CAPTURE_FAIL: ground fissure must retain its beacon-side width while tapering outer tips smoothly",flush=True)
                 return False
             visual_profile_match=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=([-+0-9.eE]+) coreScale=([-+0-9.eE]+) edgeOffsetScale=([-+0-9.eE]+) edgeHalfWidth=([-+0-9.eE]+) pulseMin=([-+0-9.eE]+) pulseMax=([-+0-9.eE]+) coreInsideEdgeBand=(true|false)",

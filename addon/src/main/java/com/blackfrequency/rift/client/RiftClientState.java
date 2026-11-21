@@ -842,19 +842,17 @@ public final class RiftClientState {
 
         private GroundRenderer() {}
 
-        // Fade both ends of each arm over six mesh samples, preserving the old 1.35-block taper.
-        // The connected ribbons become narrow tips instead of ending as uniform rectangular strips.
+        // Keep a broad start at the beacon, but taper each outer arm to a narrow point.
+        // Independent six-sample smoothstep ramps avoid the blunt half-width cap at the far end.
         private static double endpointTaper(int sample) {
-            // Clamp both ends to the sampled arm so malformed indices cannot
-            // create a negative or oversized ribbon width.
             int boundedSample=Math.max(0,Math.min(SEGMENTS_PER_ARM,sample));
-            double ramp=Math.min(1.0,boundedSample/(double)GROUND_ENDPOINT_TAPER_SAMPLES);
-            // Preserve the old 1.35-block taper length after doubling mesh sample density.
-            double tail=Math.min(1.0,(SEGMENTS_PER_ARM-boundedSample)/(double)GROUND_ENDPOINT_TAPER_SAMPLES);
-            double progress=Math.min(ramp,tail);
-            // Smoothstep gives each arm a zero-slope start/end without changing its taper span.
-            double eased=progress*progress*(3.0D-2.0D*progress);
-            return .5D+.5D*eased;
+            double startProgress=Math.min(1.0,boundedSample/(double)GROUND_ENDPOINT_TAPER_SAMPLES);
+            double endProgress=Math.min(1.0,(SEGMENTS_PER_ARM-boundedSample)/(double)GROUND_ENDPOINT_TAPER_SAMPLES);
+            double startEased=startProgress*startProgress*(3.0D-2.0D*startProgress);
+            double endEased=endProgress*endProgress*(3.0D-2.0D*endProgress);
+            double startWidth=.5D+.5D*startEased;
+            double endWidth=CLIFF_BREAK_TAPER+(1.0D-CLIFF_BREAK_TAPER)*endEased;
+            return Math.min(startWidth,endWidth);
         }
 
         private static void verifyGroundMeshSamplingProfile() {
@@ -1078,25 +1076,33 @@ public final class RiftClientState {
                 double secondLast=endpointTaper(SEGMENTS_PER_ARM-2);
                 double last=endpointTaper(SEGMENTS_PER_ARM-1);
                 double end=endpointTaper(SEGMENTS_PER_ARM);
-                boolean symmetric=Math.abs(start-end)<1.0E-9D
-                    && Math.abs(first-last)<1.0E-9D
-                    && Math.abs(second-secondLast)<1.0E-9D;
-                boolean rising=start<first && first<second && second<middle;
-                boolean falling=middle>secondLast && secondLast>last && last>end;
+                double expectedSecondLast=CLIFF_BREAK_TAPER
+                    +(1.0D-CLIFF_BREAK_TAPER)*(7.0D/27.0D);
+                double expectedLast=CLIFF_BREAK_TAPER
+                    +(1.0D-CLIFF_BREAK_TAPER)*(2.0D/27.0D);
+                boolean beaconSideRises=start<first && first<second && second<middle;
+                boolean outerTipFalls=middle>secondLast && secondLast>last && last>end;
+                boolean asymmetric=start>end && first>last;
                 boolean invalidClamped=endpointTaper(-1)==start
                     && endpointTaper(SEGMENTS_PER_ARM+1)==end;
-                boolean smoothstep=Math.abs(first-(.5D+1.0D/27.0D))<1.0E-9D
+                boolean startSmoothstep=Math.abs(first-(.5D+1.0D/27.0D))<1.0E-9D
                     && Math.abs(second-(17.0D/27.0D))<1.0E-9D
                     && first<7.0D/12.0D && second<2.0D/3.0D;
-                if(!(symmetric && rising && falling && invalidClamped && smoothstep
-                    && Math.abs(middle-1.0D)<1.0E-9D))
+                boolean outerSmoothstep=Math.abs(secondLast-expectedSecondLast)<1.0E-9D
+                    && Math.abs(last-expectedLast)<1.0E-9D;
+                boolean boundedFloors=Math.abs(start-.5D)<1.0E-9D
+                    && Math.abs(middle-1.0D)<1.0E-9D
+                    && Math.abs(end-CLIFF_BREAK_TAPER)<1.0E-9D;
+                if(!(beaconSideRises && outerTipFalls && asymmetric && invalidClamped
+                    && startSmoothstep && outerSmoothstep && boundedFloors))
                     throw new IllegalStateException("BLACK FREQUENCY ground mesh taper regression");
                 taperProfileLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED start={} first={} second={} middle={} secondLast={} last={} end={} symmetric={} invalidClamped={}",
-                    start,first,second,middle,secondLast,last,end,symmetric,invalidClamped);
+                    "BLACK_FREQUENCY_GROUND_MESH_TAPER_VERIFIED start={} first={} second={} middle={} secondLast={} last={} end={} asymmetric={} invalidClamped={}",
+                    start,first,second,middle,secondLast,last,end,asymmetric,invalidClamped);
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_GROUND_MESH_TAPER_EASING_VERIFIED curve=smoothstep zeroSlopeAtEnds=true sameSpan=true");
+                    "BLACK_FREQUENCY_GROUND_MESH_TAPER_EASING_VERIFIED startCurve=smoothstep outerCurve=smoothstep zeroSlopeAtEnds=true sameSpan=true beaconStartFloor=0.5 outerTipFloor={}",
+                    CLIFF_BREAK_TAPER);
             }
             if(!visualProfileLogged) {
                 double minimumHalfWidth=GROUND_MIN_HALF_WIDTH;
