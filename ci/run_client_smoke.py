@@ -2441,24 +2441,24 @@ def capture_test_world():
                     if (input_probe_before is None
                             or abs(input_probe_before[1]+90.0)>1.0):
                         raise RuntimeError("BLACK FREQUENCY empty-sky cursor capture changed the camera unexpectedly")
-                    input_moved=move_camera(POST_CULL_CAMERA_PROBE_PIXELS)
+                    input_moved=move_camera_horizontal(POST_CULL_CAMERA_PROBE_PIXELS)
                     input_after=wait_for_camera_rotation_change(input_probe_before,timeout=1.0)
                     if (input_after is None or input_moved!=POST_CULL_CAMERA_PROBE_PIXELS
-                            or abs(input_after[1]-input_probe_before[1])<CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
+                            or abs(wrapped_angle_delta(input_after[0],input_probe_before[0]))<CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
                         raise RuntimeError("BLACK FREQUENCY post-cull mouse capture was not reacquired")
-                    restore_moved=move_camera(-POST_CULL_CAMERA_PROBE_PIXELS)
+                    restore_moved=move_camera_horizontal(-POST_CULL_CAMERA_PROBE_PIXELS)
                     input_restored=wait_for_camera_rotation_change(input_after,timeout=1.0)
                     if (restore_moved!=-POST_CULL_CAMERA_PROBE_PIXELS or input_restored is None
-                            or abs(input_restored[1]-input_probe_before[1])>CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
+                            or abs(wrapped_angle_delta(input_restored[0],input_probe_before[0]))>CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
                         raise RuntimeError("BLACK FREQUENCY post-cull camera input probe did not restore its pitch")
                     original_rotation=restore_camera_orientation(input_before[0],input_before[1])
                     if (original_rotation is None
                             or abs(wrapped_angle_delta(original_rotation[0],input_before[0]))>0.8
                             or abs(original_rotation[1]-input_before[1])>0.8):
                         raise RuntimeError("BLACK FREQUENCY post-cull camera probe did not restore the pre-probe view")
-                    print("WORLD_CAPTURE_INPUT: post-cull mouse capture verified pitchDelta="
-                          f"{input_after[1]-input_probe_before[1]:.3f} restored=true "
-                          f"probePixels={POST_CULL_CAMERA_PROBE_PIXELS} emptySkyClick=true",flush=True)
+                    print("WORLD_CAPTURE_INPUT: post-cull mouse capture verified yawDelta="
+                          f"{wrapped_angle_delta(input_after[0],input_probe_before[0]):.3f} restored=true "
+                          f"probePixels={POST_CULL_CAMERA_PROBE_PIXELS} emptySkyClick=true axis=x",flush=True)
                     restored=True
 
                     summary=None
