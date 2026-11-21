@@ -1159,21 +1159,9 @@ public final class RiftClientState {
                     GROUND_EDGE_RED,GROUND_EDGE_GREEN,GROUND_EDGE_BLUE);
             }
             if(!supportSurfaceProfileLogged) {
-                double fullBlock=groundSurfaceOffset(1.0D);
-                double bottomSlab=groundSurfaceOffset(.5D);
+                double fullBlock=groundSurfaceOffset(1.0D,Double.NaN);
+                double bottomSlab=groundSurfaceOffset(.5D,Double.NaN);
                 double invalidSupport=groundSurfaceOffset(Double.NaN,Double.NaN);
-            var oneLayerSnow=net.minecraft.world.level.block.Blocks.SNOW.defaultBlockState()
-                .setValue(net.minecraft.world.level.block.SnowLayerBlock.LAYERS,1);
-            var fourLayerSnow=net.minecraft.world.level.block.Blocks.SNOW.defaultBlockState()
-                .setValue(net.minecraft.world.level.block.SnowLayerBlock.LAYERS,4);
-            double oneLayerSnowHeight=oneLayerSnow.getShape(level,BlockPos.ZERO).max(Direction.Axis.Y);
-            double fourLayerSnowHeight=fourLayerSnow.getShape(level,BlockPos.ZERO).max(Direction.Axis.Y);
-            double oneLayerSnowOffset=groundSurfaceOffset(1.0D,oneLayerSnowHeight);
-            double fourLayerSnowOffset=groundSurfaceOffset(.5D,fourLayerSnowHeight);
-            double invalidSnowFallback=groundSurfaceOffset(.5D,Double.NaN);
-            boolean snowSurfaceOffsets=Math.abs(oneLayerSnowOffset-1.125D)<1.0E-9D
-                && Math.abs(fourLayerSnowOffset-1.5D)<1.0E-9D
-                && Math.abs(invalidSnowFallback-.5D)<1.0E-9D;
                 if(Math.abs(fullBlock-1.0D)>1.0E-9D
                     || Math.abs(bottomSlab-.5D)>1.0E-9D
                     || Math.abs(invalidSupport-1.0D)>1.0E-9D)
@@ -1854,6 +1842,18 @@ public final class RiftClientState {
                 net.minecraft.world.phys.shapes.Shapes.empty(),net.minecraft.world.phys.shapes.Shapes.empty()));
             boolean validSupportHeights=Math.abs(fullBlockHeight-1.0D)<1.0E-9D
                 && Math.abs(partialBlockHeight-.5D)<1.0E-9D && outlineFallback && emptyShapeRejected;
+            var oneLayerSnow=net.minecraft.world.level.block.Blocks.SNOW.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.SnowLayerBlock.LAYERS,1);
+            var fourLayerSnow=net.minecraft.world.level.block.Blocks.SNOW.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.SnowLayerBlock.LAYERS,4);
+            double oneLayerSnowHeight=oneLayerSnow.getShape(level,BlockPos.ZERO).max(Direction.Axis.Y);
+            double fourLayerSnowHeight=fourLayerSnow.getShape(level,BlockPos.ZERO).max(Direction.Axis.Y);
+            double oneLayerSnowOffset=groundSurfaceOffset(1.0D,oneLayerSnowHeight);
+            double fourLayerSnowOffset=groundSurfaceOffset(.5D,fourLayerSnowHeight);
+            double invalidSnowFallback=groundSurfaceOffset(.5D,Double.NaN);
+            boolean snowSurfaceOffsets=Math.abs(oneLayerSnowOffset-1.125D)<1.0E-9D
+                && Math.abs(fourLayerSnowOffset-1.5D)<1.0E-9D
+                && Math.abs(invalidSnowFallback-.5D)<1.0E-9D;
             if(!(naturalGrass && naturalStone && rejectsStructures && rejectsBlockEntities
                 && rejectsHazardousSurfaces && rejectsHazardousHeadroom && validSupportHeights
                 && snowSurfaceOffsets))
