@@ -4427,7 +4427,11 @@ public final class RiftController {
     private static BlockState readCanonicalSnapshotBlockState(ServerLevel level,CompoundTag stateTag) {
         try {
             BlockState decoded=NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK),stateTag);
-            return !decoded.isAir() && NbtUtils.writeBlockState(decoded).equals(stateTag)
+            // Recovery snapshots contain only BlockState NBT, never block-entity data.
+            // Restoring a chest/furnace/beacon from state alone would silently create
+            // an empty or incomplete block entity and can discard the original contents.
+            return !decoded.isAir() && !decoded.hasBlockEntity()
+                && NbtUtils.writeBlockState(decoded).equals(stateTag)
                 ? decoded : Blocks.AIR.defaultBlockState();
         } catch(RuntimeException invalidSnapshot) {
             return Blocks.AIR.defaultBlockState();
@@ -4445,12 +4449,20 @@ public final class RiftController {
         unknownProperty.getCompound("Properties").putString("blackfrequency_unknown","x");
         CompoundTag unknownBlock=validState.copy();
         unknownBlock.putString("Name","blackfrequency:missing_recovery_test_block");
+        CompoundTag chestState=NbtUtils.writeBlockState(Blocks.CHEST.defaultBlockState());
+        CompoundTag furnaceState=NbtUtils.writeBlockState(Blocks.FURNACE.defaultBlockState());
+        CompoundTag beaconState=NbtUtils.writeBlockState(Blocks.BEACON.defaultBlockState());
+        boolean blockEntitiesRejected=readCanonicalSnapshotBlockState(level,chestState).isAir()
+            && readCanonicalSnapshotBlockState(level,furnaceState).isAir()
+            && readCanonicalSnapshotBlockState(level,beaconState).isAir();
         if(decoded.isAir() || !NbtUtils.writeBlockState(decoded).equals(validState)
             || !readCanonicalSnapshotBlockState(level,invalidValue).isAir()
             || !readCanonicalSnapshotBlockState(level,unknownProperty).isAir()
-            || !readCanonicalSnapshotBlockState(level,unknownBlock).isAir())
+            || !readCanonicalSnapshotBlockState(level,unknownBlock).isAir()
+            || !blockEntitiesRejected)
             throw new IllegalStateException("CI recovery snapshot canonical block-state round-trip regression");
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_BLOCK_STATE_CANONICAL_ROUNDTRIP_VERIFIED valid=true invalidPropertyValue=true unknownProperty=true unknownBlock=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_BLOCK_ENTITY_STATE_REJECTED chest=true furnace=true beacon=true");
     }
 
     private static void restore(ServerLevel level,State s) {
