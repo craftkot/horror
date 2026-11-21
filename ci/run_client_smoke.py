@@ -2507,7 +2507,8 @@ def capture_test_world():
                 return False
             snow_surface_marker = (
                 "BLACK_FREQUENCY_GROUND_MESH_SNOW_LAYER_SURFACE_HEIGHT_VERIFIED "
-                "oneLayer=1.125 fourLayers=1.5 invalidFallback=0.5 shapeDerived=true"
+                "layers=1..8 minOffset=1.125 maxOffset=2.0 invalidFallback=0.5 "
+                "overheightClamp=2.0 monotonic=true shapeDerived=true"
             )
             if snow_surface_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: snow-layer ground surface height was not derived from the actual snow shape",flush=True)
@@ -2525,11 +2526,24 @@ def capture_test_world():
             sample_end=camera_source.find("private static long columnKey(",sample_start+1)
             sample_source=(camera_source[sample_start:sample_end]
                            if sample_start>=0 and sample_end>sample_start else "")
-            if ("private static double groundSurfaceOffset(double supportHeight)" not in camera_source
-                    or "groundSurfaceOffset(supportHeight)" not in sample_source
+            snow_shape_probe = (
+                "double snowLayerHeight=surface.is(net.minecraft.world.level.block.Blocks.SNOW)"
+                " ? surface.getShape(level,cursor).max(Direction.Axis.Y) : Double.NaN;"
+            )
+            snow_shape_index=sample_source.find(snow_shape_probe)
+            headroom_index=sample_source.find("cursor.set(blockX,candidateY+1,blockZ);")
+            snow_offset_index=sample_source.find("groundSurfaceOffset(supportHeight,snowLayerHeight)")
+            if ("private static double groundSurfaceOffset(double supportHeight,double snowLayerHeight)" not in camera_source
+                    or snow_shape_index<0
+                    or headroom_index<0
+                    or snow_offset_index<0
+                    or snow_shape_index>headroom_index
+                    or headroom_index>snow_offset_index
                     or "coverShape" in sample_source
-                    or "surface.getShape(level,cursor)" in sample_source):
-                print("WORLD_CAPTURE_FAIL: ground mesh still follows non-colliding cover geometry instead of the supporting block top",flush=True)
+                    or "Double.isFinite(snowLayerHeight)" not in camera_source
+                    or "Math.min(1.0D,snowLayerHeight)" not in camera_source
+                    or "return boundedShapeHeight(supportHeight,1.0D);" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: ground mesh surface-height contract does not preserve foliage occlusion while lifting above snow layers",flush=True)
                 return False
             if ("private static boolean isGroundHeadClear(BlockState head)" not in camera_source
                     or "isGroundHeadClear(head)" not in sample_source):
