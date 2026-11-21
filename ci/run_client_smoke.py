@@ -4,6 +4,8 @@ import minecraft_launcher_lib
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 MC=ROOT/"client"
 MOUSE_SENSITIVITY=0.6
+CAMERA_ROTATION_LOG_THRESHOLD_DEGREES=0.25
+POST_CULL_CAMERA_PROBE_PIXELS=4
 MIN_GROUND_MESH_SEGMENTS=8
 MIN_GROUND_MESH_ARMS=2
 MAX_GROUND_MESH_ARMS=4
@@ -22,6 +24,21 @@ def is_fissure_target_horizontal_distance(horizontal_squared):
     return math.isfinite(value) and minimum_squared<=value<=maximum_squared
 
 MAX_GROUND_MESH_SEGMENTS=MAX_GROUND_MESH_ARMS*(GROUND_MESH_SAMPLES//MAX_GROUND_MESH_ARMS-1)
+
+def camera_degrees_per_pixel():
+    factor=MOUSE_SENSITIVITY*0.6+0.2
+    return factor*factor*factor*8.0*0.15
+
+def verify_post_cull_camera_probe_profile():
+    expected_delta=POST_CULL_CAMERA_PROBE_PIXELS*camera_degrees_per_pixel()
+    if (not math.isfinite(expected_delta)
+            or expected_delta<CAMERA_ROTATION_LOG_THRESHOLD_DEGREES*2.0):
+        raise RuntimeError("BLACK FREQUENCY post-cull camera probe is below the renderer telemetry threshold")
+    print("WORLD_CAPTURE: post-cull camera probe profile verified",
+          "pixels",POST_CULL_CAMERA_PROBE_PIXELS,
+          "expectedPitchDelta",round(expected_delta,3),
+          "telemetryThreshold",CAMERA_ROTATION_LOG_THRESHOLD_DEGREES,flush=True)
+
 FISSURE_PARTICLE_EMISSION_RE=re.compile(
     r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) accentDust=(\d+) violetDust=(\d+) edgeDust=(\d+) total=(\d+) heightmap=motion-blocking(?=\s|$)"
 )
@@ -627,6 +644,7 @@ verify_restoration_particle_source()
 verify_beacon_aura_source()
 verify_real_beacon_break_source()
 verify_beacon_interaction_reach_geometry()
+verify_post_cull_camera_probe_profile()
 
 def valid_fissure_particle_emission(counts):
     if counts is None:
@@ -903,17 +921,12 @@ def capture_test_world():
         print("WORLD_CAPTURE_INPUT: camera yaw mouse delta",delta_x,"moved",moved,flush=True)
         return moved
     def camera_delta_for_pitch(current_pitch,target_pitch):
-        # Minecraft 1.20.1 applies (sensitivity*0.6+0.2)^3*8*0.15 degrees per pixel.
-        factor=MOUSE_SENSITIVITY*0.6+0.2
-        degrees_per_pixel=factor*factor*factor*8.0*0.15
-        return round((target_pitch-current_pitch)/degrees_per_pixel)
+        return round((target_pitch-current_pitch)/camera_degrees_per_pixel())
     def camera_delta_for_yaw(current_yaw,target_yaw):
         # Positive X mouse motion increases Minecraft yaw; use the shortest
         # signed correction across the -180/180 boundary.
-        factor=MOUSE_SENSITIVITY*0.6+0.2
-        degrees_per_pixel=factor*factor*factor*8.0*0.15
         delta=(target_yaw-current_yaw+180.0)%360.0-180.0
-        return round(delta/degrees_per_pixel)
+        return round(delta/camera_degrees_per_pixel())
 
     def wrapped_angle_delta(current,target):
         return (current-target+180.0)%360.0-180.0
@@ -955,6 +968,20 @@ def capture_test_world():
                     return current
             time.sleep(0.05)
         return last
+
+    def wait_for_camera_rotation_change(previous,timeout=1.5):
+        if previous is None:
+            return None
+        deadline=time.monotonic()+timeout
+        while time.monotonic()<deadline:
+            current=read_client_camera_rotation()
+            if current is not None:
+                yaw_delta=abs(wrapped_angle_delta(current[0],previous[0]))
+                pitch_delta=abs(current[1]-previous[1])
+                if max(yaw_delta,pitch_delta)>=CAMERA_ROTATION_LOG_THRESHOLD_DEGREES:
+                    return current
+            time.sleep(0.05)
+        return None
 
     def wait_for_camera_orientation(target_yaw,target_pitch,tolerance=3.0,timeout=2.0):
         deadline=time.monotonic()+timeout
@@ -2402,17 +2429,20 @@ def capture_test_world():
                     time.sleep(0.2)
                     focus_game()
                     input_before=read_client_camera_rotation()
-                    input_moved=move_camera(1)
-                    input_after=wait_for_camera_rotation(timeout=0.8)
-                    if (input_before is None or input_after is None or input_moved!=1
-                            or abs(input_after[1]-input_before[1])<0.01):
+                    input_moved=move_camera(POST_CULL_CAMERA_PROBE_PIXELS)
+                    input_after=wait_for_camera_rotation_change(input_before,timeout=1.0)
+                    if (input_before is None or input_after is None
+                            or input_moved!=POST_CULL_CAMERA_PROBE_PIXELS
+                            or abs(input_after[1]-input_before[1])<CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
                         raise RuntimeError("BLACK FREQUENCY post-cull mouse capture was not reacquired")
-                    move_camera(-1)
-                    input_restored=wait_for_camera_rotation(input_before[1],tolerance=0.8,timeout=1.0)
-                    if input_restored is None or abs(input_restored[1]-input_before[1])>0.8:
+                    restore_moved=move_camera(-POST_CULL_CAMERA_PROBE_PIXELS)
+                    input_restored=wait_for_camera_rotation_change(input_after,timeout=1.0)
+                    if (restore_moved!=-POST_CULL_CAMERA_PROBE_PIXELS or input_restored is None
+                            or abs(input_restored[1]-input_before[1])>CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
                         raise RuntimeError("BLACK FREQUENCY post-cull camera input probe did not restore its pitch")
                     print("WORLD_CAPTURE_INPUT: post-cull mouse capture verified pitchDelta="
-                          f"{input_after[1]-input_before[1]:.3f} restored=true",flush=True)
+                          f"{input_after[1]-input_before[1]:.3f} restored=true "
+                          f"probePixels={POST_CULL_CAMERA_PROBE_PIXELS}",flush=True)
                     restored=True
 
                     summary=None
