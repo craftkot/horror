@@ -582,9 +582,9 @@ public final class RiftClientState {
         private static final double MAX_GROUND_SEGMENT_GRADE=2.5D;
         // Keep cliff-side ribbon tips visible without bridging terrain discontinuities.
         private static final double CLIFF_BREAK_TAPER=.22D;
-        // Broaden the recessed core and halo so the fissure reads as a ground rupture at normal camera distance.
+        // Keep the soft halo broad while giving the dark seam more weight than its violet lips.
         private static final double GROUND_GLOW_WIDTH_SCALE=5.75D;
-        private static final double GROUND_CORE_WIDTH_SCALE=1.70D;
+        private static final double GROUND_CORE_WIDTH_SCALE=1.85D;
         // The recessed core pinches and widens along the seam; endpoint widths are interpolated per segment.
         private static final double GROUND_MIN_CORE_WIDTH_SCALE=.78D;
         private static final double GROUND_MAX_CORE_WIDTH_SCALE=1.22D;
@@ -608,7 +608,7 @@ public final class RiftClientState {
         private static final double GROUND_MAX_HALF_WIDTH=
             GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE+GROUND_WIDTH_FLICKER;
         // Slightly wider violet lips keep the dark seam legible in grass-heavy terrain.
-        private static final double GROUND_EDGE_HALF_WIDTH=.032D;
+        private static final double GROUND_EDGE_HALF_WIDTH=.026D;
         private static final double GROUND_MIN_CORE_EDGE_GAP=.0075D;
         // Keep the dark core near the support top while retaining a measurable depth-buffer gap.
         private static final double GROUND_SURFACE_CLEARANCE=.015D;
@@ -1121,12 +1121,12 @@ public final class RiftClientState {
                 double minimumCoreEdgeGap=Math.min(leftCoreEdgeGap,rightCoreEdgeGap);
                 double maximumEdgeOffsetDelta=maximumHalfWidth*GROUND_EDGE_OFFSET_SCALE*edgeOffsetSkew;
                 if(Math.abs(GROUND_GLOW_WIDTH_SCALE-5.75D)>1.0E-9D
-                    || Math.abs(GROUND_CORE_WIDTH_SCALE-1.70D)>1.0E-9D
+                    || Math.abs(GROUND_CORE_WIDTH_SCALE-1.85D)>1.0E-9D
                     || Math.abs(GROUND_EDGE_OFFSET_SCALE-3.0D)>1.0E-9D
                     || Math.abs(GROUND_EDGE_OFFSET_SKEW_SCALE-.12D)>1.0E-9D
                     || !Double.isFinite(maximumEdgeOffsetDelta) || maximumEdgeOffsetDelta>.004D
                     || Math.abs(GROUND_CORE_SKEW_AMPLITUDE-.15D)>1.0E-9D
-                    || Math.abs(GROUND_EDGE_HALF_WIDTH-.032D)>1.0E-9D
+                    || Math.abs(GROUND_EDGE_HALF_WIDTH-.026D)>1.0E-9D
                     || Math.abs(maximumHalfWidth-.074D)>1.0E-9D
                     || !Float.isFinite(GROUND_EDGE_RED) || !Float.isFinite(GROUND_EDGE_GREEN)
                     || !Float.isFinite(GROUND_EDGE_BLUE)
