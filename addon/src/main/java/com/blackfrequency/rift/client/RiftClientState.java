@@ -652,6 +652,7 @@ public final class RiftClientState {
         private static boolean firstRenderLogged;
         private static boolean visibilityPrefixReuseLogged;
         private static boolean endpointFadeReuseLogged;
+        private static boolean endpointFadeReuseProfileLogged;
         private static boolean pendingRenderLogged;
         private static boolean renderEventLogged;
         private static boolean emptyMeshLogged;
