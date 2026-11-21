@@ -968,6 +968,9 @@ public final class RiftController {
         boolean ciNaturalBeaconRemoved, ciNaturalBeaconReplaced;
         boolean ciSparseRecoveryEligibilityLogged;
         boolean ciSurfaceFissureLogged;
+        // One-shot CI fixture proving the real loaded-world canopy sampler, never persisted.
+        boolean ciCanopyWorldFixtureVerified;
+        int ciCanopyFixtureSearchAttempts;
         boolean ciIdleBeaconVioletDustLogged;
         final List<CompoundTag> snapshots = new ArrayList<>();
         // Derived from validated snapshots on load and maintained on every runtime edit.
@@ -1406,7 +1409,115 @@ public final class RiftController {
         if(!(verticalTrunk && leaves && horizontalBeamRejected && builtRoofRejected
             && nonSolidPlantRetained && leafAwareHeightmap && FISSURE_SURFACE_SEARCH_DEPTH==32))
             throw new IllegalStateException("CI fissure canopy traversal/structure occlusion regression");
+    }
+
+    /**
+     * Exercise the production sampler against a real, already-loaded ServerLevel column.
+     * The fixture is confined to eight blocks from the rift anchor and restored in the
+     * same tick. It never requests a chunk and is enabled only in disposable CI worlds.
+     */
+    private static boolean verifyFissureCanopyTraversalInWorld(ServerLevel level,State s) {
+        BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();
+        int fixtureX=Integer.MIN_VALUE,fixtureZ=Integer.MIN_VALUE,baseY=Integer.MIN_VALUE;
+        for(int radius=2;radius<=8 && fixtureX==Integer.MIN_VALUE;radius++) {
+            for(int dx=-radius;dx<=radius && fixtureX==Integer.MIN_VALUE;dx++) {
+                for(int dz=-radius;dz<=radius;dz++) {
+                    if(Math.max(Math.abs(dx),Math.abs(dz))!=radius || dx*dx+dz*dz>64) continue;
+                    int x=s.x+dx,z=s.z+dz;
+                    if(!level.hasChunk(x>>4,z>>4)) continue;
+                    int y=level.getHeight(FISSURE_SURFACE_HEIGHTMAP,x,z);
+                    if(y<level.getMinBuildHeight()+1 || y+4>=level.getMaxBuildHeight()) continue;
+                    cursor.set(x,y-1,z);
+                    if(!level.getWorldBorder().isWithinBounds(cursor)
+                        || !isFissureGroundSupport(level.getBlockState(cursor))) continue;
+                    boolean clearColumn=true;
+                    for(int offset=0;offset<=4;offset++) {
+                        cursor.set(x,y+offset,z);
+                        BlockState existing=level.getBlockState(cursor);
+                        if(!existing.isAir() || existing.hasBlockEntity()) {
+                            clearColumn=false;
+                            break;
+                        }
+                    }
+                    if(clearColumn) {
+                        fixtureX=x;fixtureZ=z;baseY=y;
+                        break;
+                    }
+                }
+            }
+        }
+        if(fixtureX==Integer.MIN_VALUE) {
+            if(++s.ciCanopyFixtureSearchAttempts>=30)
+                throw new IllegalStateException("CI could not find a safe loaded canopy fixture column within eight blocks");
+            return false;
+        }
+
+        BlockState[] original=new BlockState[5];
+        for(int offset=0;offset<original.length;offset++) {
+            cursor.set(fixtureX,baseY+offset,fixtureZ);
+            original[offset]=level.getBlockState(cursor);
+        }
+        boolean canopyAccepted=false,horizontalLogRejected=false,roofRejected=false;
+        try {
+            BlockState verticalLog=Blocks.OAK_LOG.defaultBlockState().setValue(
+                net.minecraft.world.level.block.RotatedPillarBlock.AXIS,net.minecraft.core.Direction.Axis.Y);
+            for(int offset=1;offset<=3;offset++) {
+                cursor.set(fixtureX,baseY+offset,fixtureZ);
+                if(!level.setBlock(cursor,verticalLog,2))
+                    throw new IllegalStateException("CI could not place temporary vertical trunk");
+            }
+            BlockState leaves=Blocks.OAK_LEAVES.defaultBlockState();
+            if(leaves.hasProperty(net.minecraft.world.level.block.LeavesBlock.PERSISTENT))
+                leaves=leaves.setValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT,true);
+            cursor.set(fixtureX,baseY+4,fixtureZ);
+            if(!level.setBlock(cursor,leaves,2))
+                throw new IllegalStateException("CI could not place temporary canopy leaves");
+
+            int canopyTop=level.getHeight(FISSURE_SURFACE_HEIGHTMAP,fixtureX,fixtureZ);
+            FissureGroundSample sample=new FissureGroundSample();
+            boolean found=findFissureGroundSample(level,fixtureX,fixtureZ,cursor,sample);
+            canopyAccepted=canopyTop==baseY+5 && found && sample.surfaceY==baseY
+                && Math.abs(sample.particleY-(baseY+.10D))<1.0E-9D;
+            if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,cursor))
+                throw new IllegalStateException("CI failed to restore temporary canopy fixture");
+
+            BlockState horizontalLog=verticalLog.setValue(
+                net.minecraft.world.level.block.RotatedPillarBlock.AXIS,net.minecraft.core.Direction.Axis.X);
+            cursor.set(fixtureX,baseY+2,fixtureZ);
+            if(!level.setBlock(cursor,horizontalLog,2))
+                throw new IllegalStateException("CI could not place temporary horizontal beam");
+            horizontalLogRejected=!findFissureGroundSample(level,fixtureX,fixtureZ,cursor,sample);
+            if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,cursor))
+                throw new IllegalStateException("CI failed to restore temporary beam fixture");
+
+            cursor.set(fixtureX,baseY+2,fixtureZ);
+            if(!level.setBlock(cursor,Blocks.OAK_PLANKS.defaultBlockState(),2))
+                throw new IllegalStateException("CI could not place temporary roof fixture");
+            roofRejected=!findFissureGroundSample(level,fixtureX,fixtureZ,cursor,sample);
+            if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,cursor))
+                throw new IllegalStateException("CI failed to restore temporary roof fixture");
+        } finally {
+            if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,cursor))
+                throw new IllegalStateException("CI canopy fixture cleanup failed");
+        }
+
+        if(!(canopyAccepted && horizontalLogRejected && roofRejected))
+            throw new IllegalStateException("CI real-world canopy scan/structure occlusion regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_TRAVERSAL_VERIFIED verticalLogs=true leaves=true horizontalLogsRejected=true roofBlocksRejected=true nonSolidPlantsRetained=true heightmapIncludesLeaves=true depthBound=32");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_WORLD_CANOPY_SAMPLE_VERIFIED heightmapTopOffset=5 canopyBlocks=4 surfaceFound=true horizontalLogRejected=true roofRejected=true loadedOnly=true searchRadius=8 restored=true");
+        return true;
+    }
+
+    private static boolean restoreFissureCanopyFixtureColumn(ServerLevel level,int x,int baseY,int z,
+            BlockState[] original,BlockPos.MutableBlockPos cursor) {
+        for(int offset=0;offset<original.length;offset++) {
+            cursor.set(x,baseY+offset,z);
+            if(!level.getBlockState(cursor).equals(original[offset])
+                && !level.setBlock(cursor,original[offset],2)) return false;
+            if(!level.getBlockState(cursor).equals(original[offset])) return false;
+        }
+        return level.hasChunk(x>>4,z>>4)
+            && level.getHeight(FISSURE_SURFACE_HEIGHTMAP,x,z)==baseY;
     }
 
     // One scratch result is reused for every sampled column. The surface BlockState
@@ -4879,6 +4990,8 @@ public final class RiftController {
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_SCAN_ORDER surface-first center-out");
             s.setDirty();
         }
+        if(CI_TEST && !s.ciCanopyWorldFixtureVerified && level.getGameTime()%20L==0L)
+            s.ciCanopyWorldFixtureVerified=verifyFissureCanopyTraversalInWorld(level,s);
         if(quarantineInvalidLegacyFractureCursor(s,level.getMinBuildHeight(),level.getMaxBuildHeight())
             && CI_TEST)
             LOGGER.info("BLACK_FREQUENCY_TEST LEGACY_FRACTURE_CURSOR_QUARANTINED");
