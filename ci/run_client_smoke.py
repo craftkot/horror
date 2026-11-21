@@ -2526,11 +2526,13 @@ def capture_test_world():
             sample_end=camera_source.find("private static long columnKey(",sample_start+1)
             sample_source=(camera_source[sample_start:sample_end]
                            if sample_start>=0 and sample_end>sample_start else "")
-            snow_shape_probe = (
-                "double snowLayerHeight=surface.is(net.minecraft.world.level.block.Blocks.SNOW)"
-                " ? surface.getShape(level,cursor).max(Direction.Axis.Y) : Double.NaN;"
+            snow_shape_probe = re.compile(
+                r"double snowLayerHeight=surface\\.is\\(net\\.minecraft\\.world\\.level\\.block\\.Blocks\\.SNOW\\)"
+                r"\\s*\\?\\s*surface\\.getShape\\(level,cursor\\)\\.max\\(Direction\\.Axis\\.Y\\)"
+                r"\\s*:\\s*Double\\.NaN;"
             )
-            snow_shape_index=sample_source.find(snow_shape_probe)
+            snow_shape_match=snow_shape_probe.search(sample_source)
+            snow_shape_index=snow_shape_match.start() if snow_shape_match else -1
             headroom_index=sample_source.find("cursor.set(blockX,candidateY+1,blockZ);")
             snow_offset_index=sample_source.find("groundSurfaceOffset(supportHeight,snowLayerHeight)")
             if ("private static double groundSurfaceOffset(double supportHeight,double snowLayerHeight)" not in camera_source
