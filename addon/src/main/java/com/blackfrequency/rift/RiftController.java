@@ -1373,6 +1373,37 @@ public final class RiftController {
             && state.getFluidState().isEmpty();
     }
 
+    private static final int FISSURE_SURFACE_SEARCH_DEPTH=32;
+
+    // Only vertical trunks and leaves may be traversed as canopy. Horizontal logs
+    // and solid construction remain occluders, preventing particles through roofs.
+    private static boolean isFissureCanopyOccluder(BlockState state) {
+        return state.is(net.minecraft.tags.BlockTags.LEAVES)
+            || (state.is(net.minecraft.tags.BlockTags.LOGS)
+                && state.hasProperty(net.minecraft.world.level.block.RotatedPillarBlock.AXIS)
+                && state.getValue(net.minecraft.world.level.block.RotatedPillarBlock.AXIS)
+                    ==net.minecraft.core.Direction.Axis.Y);
+    }
+
+    private static void verifyFissureCanopyTraversal() {
+        BlockState verticalLog=net.minecraft.world.level.block.Blocks.OAK_LOG.defaultBlockState();
+        BlockState horizontalLog=verticalLog.setValue(
+            net.minecraft.world.level.block.RotatedPillarBlock.AXIS,net.minecraft.core.Direction.Axis.X);
+        boolean verticalTrunk=isFissureCanopyOccluder(verticalLog);
+        boolean leaves=isFissureCanopyOccluder(
+            net.minecraft.world.level.block.Blocks.OAK_LEAVES.defaultBlockState());
+        boolean horizontalBeamRejected=!isFissureCanopyOccluder(horizontalLog);
+        boolean builtRoofRejected=!isFissureCanopyOccluder(
+            net.minecraft.world.level.block.Blocks.OAK_PLANKS.defaultBlockState())
+            && !isFissureCanopyOccluder(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+        boolean nonSolidPlantRetained=isFissureSurfaceAvailable(
+            net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState());
+        if(!(verticalTrunk && leaves && horizontalBeamRejected && builtRoofRejected
+            && nonSolidPlantRetained && FISSURE_SURFACE_SEARCH_DEPTH==32))
+            throw new IllegalStateException("CI fissure canopy traversal/structure occlusion regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_TRAVERSAL_VERIFIED verticalLogs=true leaves=true horizontalLogsRejected=true roofBlocksRejected=true nonSolidPlantsRetained=true depthBound=32");
+    }
+
     // One scratch result is reused for every sampled column. The surface BlockState
     // is read once, then its outline height is captured before the mutable cursor moves
     // to the support block. Particle placement never re-reads the same surface cell.
@@ -1387,10 +1418,15 @@ public final class RiftController {
         int y=level.getHeight(
             net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,x,z);
         int min=level.getMinBuildHeight();
-        for(int depth=0;depth<32 && y>min+1;depth++,y--) {
+        for(int depth=0;depth<FISSURE_SURFACE_SEARCH_DEPTH && y>min+1;depth++,y--) {
             cursor.set(x,y,z);
             BlockState surface=level.getBlockState(cursor);
-            if(!isFissureSurfaceAvailable(surface)) return false;
+            if(!isFissureSurfaceAvailable(surface)) {
+                // Vertical trunks and leaves are canopy, not a reason to abandon the ground scan.
+                // Horizontal logs and built roofs remain opaque so cracks never pass through structures.
+                if(isFissureCanopyOccluder(surface)) continue;
+                return false;
+            }
             double shapeHeight=surface.isAir() ? 0.0D
                 : surface.getShape(level,cursor).max(net.minecraft.core.Direction.Axis.Y);
             cursor.set(x,y-1,z);
@@ -1434,6 +1470,7 @@ public final class RiftController {
             throw new IllegalStateException("CI fissure surface particle height/sample reuse regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_PARTICLE_HEIGHT_VERIFIED");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SAMPLE_STATE_REUSE_VERIFIED surfaceReads=1 particleRereads=0 scratchReusable=true");
+        verifyFissureCanopyTraversal();
     }
 
     /**

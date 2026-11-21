@@ -244,9 +244,17 @@ def verify_restoration_particle_source():
         raise RuntimeError("BLACK FREQUENCY fissure samples must reuse one validated surface BlockState for height and particle placement")
     if ("SURFACE_FISSURE_SAMPLE_STATE_REUSE_VERIFIED" not in source
             or "scratchReusable=true" not in source
-            or "surfaceReads=1 particleRereads=0" not in source):
-        raise RuntimeError("BLACK FREQUENCY surface sample scratch/reuse profile is incomplete")
-    print("WORLD_CAPTURE: validated surface state reused for particle height; duplicate block-state read eliminated",flush=True)
+            or "surfaceReads=1 particleRereads=0" not in source
+            or "private static final int FISSURE_SURFACE_SEARCH_DEPTH=32;" not in source
+            or "private static boolean isFissureCanopyOccluder(BlockState state)" not in source
+            or "state.is(net.minecraft.tags.BlockTags.LEAVES)" not in source
+            or "state.is(net.minecraft.tags.BlockTags.LOGS)" not in source
+            or "state.getValue(net.minecraft.world.level.block.RotatedPillarBlock.AXIS)" not in source
+            or "==net.minecraft.core.Direction.Axis.Y" not in source
+            or "depth<FISSURE_SURFACE_SEARCH_DEPTH" not in ground_sampler
+            or "if(isFissureCanopyOccluder(surface)) continue;" not in ground_sampler):
+        raise RuntimeError("BLACK FREQUENCY canopy traversal must skip only vertical trunks/leaves within the bounded surface scan")
+    print("WORLD_CAPTURE: fissure scan traverses vertical tree canopy while preserving roof occlusion and depth bound",flush=True)
     pad_start=source.find('if(playerInteractionTest && Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest"))')
     pad_end=source.find("} else if(playerInteractionTest)",pad_start+1)
     pad_body=source[pad_start:pad_end] if pad_start>=0 and pad_end>pad_start else ""
@@ -3405,6 +3413,14 @@ def capture_test_world():
             )
             if sample_reuse_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: fissure particle height did not reuse the validated surface state",flush=True)
+                return False
+            canopy_marker=(
+                "BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_TRAVERSAL_VERIFIED "
+                "verticalLogs=true leaves=true horizontalLogsRejected=true "
+                "roofBlocksRejected=true nonSolidPlantsRetained=true depthBound=32"
+            )
+            if canopy_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: server fissure scan did not verify safe traversal beneath tree canopy",flush=True)
                 return False
             ground_mesh=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) arms=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+) sampledColumns=(\d+) cacheHits=(\d+)",
