@@ -1225,6 +1225,17 @@ public final class RiftClientState {
                 || Math.abs(GROUND_FILAMENT_LIFT-.002D)>1.0E-9D
                 || Math.abs(GROUND_EDGE_LIFT-.008D)>1.0E-9D)
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh surface relief regression");
+            double fullBlockSnowOffset=groundSurfaceOffset(1.0D,.125D);
+            double partialSupportSnowOffset=groundSurfaceOffset(.9375D,.125D);
+            double invalidSnowFallback=groundSurfaceOffset(.9375D,Double.NaN);
+            double boundedSnowOffset=groundSurfaceOffset(1.5D,1.25D);
+            if(Math.abs(fullBlockSnowOffset-1.125D)>1.0E-9D
+                || Math.abs(partialSupportSnowOffset-1.0625D)>1.0E-9D
+                || Math.abs(invalidSnowFallback-.9375D)>1.0E-9D
+                || Math.abs(boundedSnowOffset-2.0D)>1.0E-9D)
+                throw new IllegalStateException("BLACK FREQUENCY snow-layer ground surface offset regression");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_SNOW_SURFACE_OFFSET_VERIFIED fullBlock=1.125 partialSupport=1.0625 supportIncluded=true invalidSnowFallback=true bounded=true");
             reliefProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SURFACE_RELIEF_VERIFIED coreRecess={} filamentLift={} edgeLift={} coreClearance={} glowClearance={} filamentClearance={} edgeClearance={} ordered=true",
@@ -1250,10 +1261,11 @@ public final class RiftClientState {
         // foliage remains in front and occludes it through depth testing; lifting the
         // whole ribbon to plant-canopy height made the crack look like a raised cable.
         private static double groundSurfaceOffset(double supportHeight,double snowLayerHeight) {
-            // Snow layers are real surface overlays; foliage is intentionally left to depth testing.
+            // Snow layers sit on the support's actual collision top, which may be below a full block.
+            double supportOffset=boundedShapeHeight(supportHeight,1.0D);
             if(Double.isFinite(snowLayerHeight) && snowLayerHeight>0.0D)
-                return 1.0D+Math.min(1.0D,snowLayerHeight);
-            return boundedShapeHeight(supportHeight,1.0D);
+                return supportOffset+Math.min(1.0D,snowLayerHeight);
+            return supportOffset;
         }
 
         // Adjacent samples are connected only when both the height delta and the

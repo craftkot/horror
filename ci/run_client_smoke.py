@@ -3046,6 +3046,17 @@ def capture_test_world():
             if "BLACK_FREQUENCY_GROUND_MESH_RECESSED_CORE_PROFILE_VERIFIED minClearance=0.005 supportTop=true depthTest=true" not in final_log:
                 print("WORLD_CAPTURE_FAIL: near-surface fissure core clearance was not verified",flush=True)
                 return False
+            snow_offset_marker=(
+                "BLACK_FREQUENCY_GROUND_MESH_SNOW_SURFACE_OFFSET_VERIFIED "
+                "fullBlock=1.125 partialSupport=1.0625 supportIncluded=true invalidSnowFallback=true bounded=true"
+            )
+            if snow_offset_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: snow-layer fissure height did not follow the support collision top",flush=True)
+                return False
+            if ("double supportOffset=boundedShapeHeight(supportHeight,1.0D);" not in camera_source
+                    or "return supportOffset+Math.min(1.0D,snowLayerHeight);" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: snow-layer offset ignores the support collision height",flush=True)
+                return False
             if ("GROUND_SURFACE_CLEARANCE=.015D;" not in camera_source
                     or "GROUND_MIN_CORE_CLEARANCE=.005D;" not in camera_source
                     or "coreClearance<GROUND_MIN_CORE_CLEARANCE" not in camera_source
