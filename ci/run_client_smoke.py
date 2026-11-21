@@ -6,6 +6,7 @@ MC=ROOT/"client"
 MOUSE_SENSITIVITY=0.6
 CAMERA_ROTATION_LOG_THRESHOLD_DEGREES=0.25
 POST_CULL_CAMERA_PROBE_PIXELS=4
+POST_CULL_CAPTURE_PITCH=-80.0
 MIN_GROUND_MESH_SEGMENTS=8
 MIN_GROUND_MESH_ARMS=2
 MAX_GROUND_MESH_ARMS=4
@@ -32,8 +33,10 @@ def camera_degrees_per_pixel():
 def verify_post_cull_camera_probe_profile():
     expected_delta=POST_CULL_CAMERA_PROBE_PIXELS*camera_degrees_per_pixel()
     if (not math.isfinite(expected_delta)
-            or expected_delta<CAMERA_ROTATION_LOG_THRESHOLD_DEGREES*2.0):
-        raise RuntimeError("BLACK FREQUENCY post-cull camera probe is below the renderer telemetry threshold")
+            or expected_delta<CAMERA_ROTATION_LOG_THRESHOLD_DEGREES*2.0
+            or not math.isfinite(POST_CULL_CAPTURE_PITCH)
+            or abs(POST_CULL_CAPTURE_PITCH)>=89.0):
+        raise RuntimeError("BLACK FREQUENCY post-cull camera probe has an invalid input or pitch profile")
     print("WORLD_CAPTURE: post-cull camera probe profile verified",
           "pixels",POST_CULL_CAMERA_PROBE_PIXELS,
           "expectedCameraDelta",round(expected_delta,3),
@@ -253,7 +256,10 @@ def verify_restoration_particle_source():
     target_start=source.find("private static FissureTarget findVisibleFissureTarget(")
     target_end=source.find("\n    // Run after ordinary explosion modifiers",target_start+1)
     target_body=source[target_start:target_end] if target_start>=0 and target_end>target_start else ""
+    border_guard=ground_sampler.find("isFissureColumnInsideWorldBorder(level.getWorldBorder(),x,z,level.getMinBuildHeight(),cursor)")
+    chunk_guard=ground_sampler.find("!level.hasChunk(x>>4,z>>4)")
     if ("if(isFissureGroundSupport(level.getBlockState(cursor))) {" not in ground_sampler
+            or border_guard<0 or chunk_guard<0 or border_guard>chunk_guard
             or "BlockState surface=level.getBlockState(cursor);" not in ground_sampler
             or "double shapeHeight=surface.isAir() ? 0.0D" not in ground_sampler
             or "result.particleY=fissureSurfaceParticleY(y,shapeHeight);" not in ground_sampler
@@ -281,9 +287,11 @@ def verify_restoration_particle_source():
             or "heightmapIncludesLeaves=true" not in source
             or "heightmap=motion-blocking ground=terrain-support-filtered" not in source
             or "heightmap=motion-blocking-no-leaves" in source
-            or "if(isFissureCanopyOccluder(surface)) continue;" not in ground_sampler):
-        raise RuntimeError("BLACK FREQUENCY canopy traversal must skip only vertical trunks/leaves within the bounded surface scan")
+            or "if(isFissureCanopyOccluder(surface)) continue;" not in ground_sampler
+            or "SURFACE_FISSURE_WORLD_BORDER_GUARD_VERIFIED inside=true outsideRejected=true nullRejected=true" not in source):
+        raise RuntimeError("BLACK FREQUENCY canopy traversal must skip only vertical trunks/leaves within the bounded surface scan and reject out-of-border columns before chunk reads")
     print("WORLD_CAPTURE: leaf-inclusive heightmap feeds bounded canopy traversal while preserving roof occlusion",flush=True)
+    print("WORLD_CAPTURE: fissure surface sampling rejects out-of-border columns before loaded-chunk reads",flush=True)
     pad_start=source.find('if(playerInteractionTest && Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest"))')
     pad_end=source.find("} else if(playerInteractionTest)",pad_start+1)
     pad_body=source[pad_start:pad_end] if pad_start>=0 and pad_end>pad_start else ""
@@ -860,9 +868,10 @@ def capture_test_world():
         if game_window:
             subprocess.run(["xdotool","windowactivate","--sync",game_window],
                            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
-    def key(k):
-        focus_game()
-        subprocess.run(["xdotool","key","--clearmodifiers",k],check=False)
+    def key(k,focus=True):
+        if focus:
+            focus_game()
+        return subprocess.run(["xdotool","key","--clearmodifiers",k],check=False)
     def click(x,y,focus=True):
         # Hold/release explicitly: some GLFW clients ignore xdotool's fast click.
         if focus:
@@ -1057,7 +1066,7 @@ def capture_test_world():
             return current
         log_offset=latest.stat().st_size if latest.exists() else 0
         focus_game()
-        key("t")
+        key("t",focus=False)
         time.sleep(0.12)
         command=camera_rotation_command(target_yaw,target_pitch)
         typed=subprocess.run(
@@ -1066,7 +1075,7 @@ def capture_test_world():
             print("WORLD_CAPTURE_FAIL: could not type exact disposable-world camera rotation",
                   flush=True)
             return None
-        key("Return")
+        key("Return",focus=False)
         deadline=time.monotonic()+3.0
         while time.monotonic()<deadline and p.poll() is None:
             try:
@@ -2357,24 +2366,50 @@ def capture_test_world():
                     except OSError:
                         return ""
 
-                def send_chat_command(command):
-                    focus_game()
-                    key("t")
-                    time.sleep(0.12)
-                    result=subprocess.run(
-                        ["xdotool","type","--clearmodifiers","--delay","1",command],
-                        check=False)
-                    key("Return")
-                    time.sleep(0.35)
-                    if result.returncode!=0:
-                        raise RuntimeError("BLACK FREQUENCY vertical cull probe could not type a Minecraft command")
+                def send_chat_command(command,confirmation,description,timeout=8.0):
+                    # Chat input can be delayed while the integrated server is busy.
+                    # Do not send the next command until the server's own response is in latest.log.
+                    for attempt in range(2):
+                        log_offset=latest.stat().st_size if latest.exists() else 0
+                        focus_game()
+                        opened=key("t",focus=False)
+                        time.sleep(0.18)
+                        typed=subprocess.run(
+                            ["xdotool","type","--clearmodifiers","--delay","1",command],
+                            check=False)
+                        submitted=key("Return",focus=False)
+                        if opened.returncode!=0 or typed.returncode!=0 or submitted.returncode!=0:
+                            raise RuntimeError("BLACK FREQUENCY vertical cull probe could not submit a Minecraft command")
+                        deadline=time.monotonic()+timeout
+                        while time.monotonic()<deadline and p.poll() is None:
+                            try:
+                                with latest.open("rb") as stream:
+                                    size=stream.seek(0,os.SEEK_END)
+                                    if size<log_offset:
+                                        fresh=""
+                                    else:
+                                        stream.seek(log_offset)
+                                        fresh=stream.read().decode("utf-8",errors="replace")
+                            except OSError:
+                                fresh=""
+                            if re.search(confirmation,fresh):
+                                print("WORLD_CAPTURE: server acknowledged command",
+                                      description,"attempt",attempt+1,flush=True)
+                                return True
+                            time.sleep(0.1)
+                        if attempt==0 and p.poll() is None:
+                            print("WORLD_CAPTURE: command acknowledgement delayed; retrying",
+                                  description,flush=True)
+                    raise RuntimeError("BLACK FREQUENCY vertical cull probe did not receive server acknowledgement for "+description)
 
                 print("WORLD_CAPTURE: starting real vertical camera cull probe from the verified safe pad",
                       (x,y,z),flush=True)
                 restored=False
                 try:
-                    send_chat_command("/gamemode spectator @s")
-                    send_chat_command(f"/tp @s {x} {y+80} {z}")
+                    send_chat_command("/gamemode spectator @s",
+                        r"Set own game mode to Spectator Mode","spectator mode")
+                    send_chat_command(f"/tp @s {x} {y+80} {z}",
+                        r"Teleported [^\\n]+ to ","vertical camera teleport")
                     camera_sample=None
                     entered=None
                     probe_logs=""
@@ -2425,33 +2460,46 @@ def capture_test_world():
                             or not math.isfinite(float(skip_milestone.group(3)))
                             or float(skip_milestone.group(3))<=64.0):
                         raise RuntimeError("BLACK FREQUENCY vertical cull skip milestone did not match the entered camera/anchor")
-                    send_chat_command(f"/tp @s {x} {y} {z}")
-                    send_chat_command("/gamemode survival @s")
-                    # A chat round-trip alone does not reliably reacquire GLFW's cursor.
-                    # In this disposable world, aim straight up first, then click empty sky:
-                    # if the cursor is ungrabbed this captures it; if already grabbed the
-                    # click cannot hit a block or entity. Verify both the motion and reversal.
+                    send_chat_command(f"/tp @s {x} {y} {z}",
+                        r"Teleported [^\\n]+ to ","return to safe pad")
+                    send_chat_command("/gamemode survival @s",
+                        r"Set own game mode to Survival Mode","return to survival")
+                    # Re-enter the game through the pause screen so Minecraft explicitly
+                    # restores its normal GLFW cursor grab after chat/teleport commands.
+                    # Then verify an actual XTest mouse delta against rendered camera telemetry.
                     input_before=read_client_camera_rotation()
                     if input_before is None:
                         raise RuntimeError("BLACK FREQUENCY post-cull camera telemetry is missing")
-                    sky_camera=set_camera_orientation_in_disposable_world(input_before[0],-90.0)
-                    if sky_camera is None or abs(sky_camera[1]+90.0)>1.0:
+                    sky_camera=set_camera_orientation_in_disposable_world(
+                        input_before[0],POST_CULL_CAPTURE_PITCH)
+                    if (sky_camera is None
+                            or abs(sky_camera[1]-POST_CULL_CAPTURE_PITCH)>1.0):
                         raise RuntimeError("BLACK FREQUENCY could not aim the post-cull capture probe at empty sky")
-                    focus_game()
-                    click(640,360,focus=False)
-                    print("WORLD_CAPTURE_INPUT: preserving GLFW capture after empty-sky click",flush=True)
-                    time.sleep(0.2)
-                    input_probe_before=read_client_camera_rotation()
-                    if (input_probe_before is None
-                            or abs(input_probe_before[1]+90.0)>1.0):
-                        raise RuntimeError("BLACK FREQUENCY empty-sky cursor capture changed the camera unexpectedly")
-                    input_moved=move_camera_horizontal(POST_CULL_CAMERA_PROBE_PIXELS,focus=False)
-                    input_after=wait_for_camera_rotation_change(input_probe_before,timeout=1.0)
-                    if (input_after is None or input_moved!=POST_CULL_CAMERA_PROBE_PIXELS
+                    input_probe_before=None
+                    input_after=None
+                    input_moved=0
+                    for attempt in range(2):
+                        key("Escape")
+                        time.sleep(0.2)
+                        key("Escape")
+                        time.sleep(0.25)
+                        input_probe_before=read_client_camera_rotation()
+                        if (input_probe_before is None
+                                or abs(input_probe_before[1]-POST_CULL_CAPTURE_PITCH)>1.0):
+                            continue
+                        input_moved=move_camera_horizontal(POST_CULL_CAMERA_PROBE_PIXELS,focus=False)
+                        input_after=wait_for_camera_rotation_change(input_probe_before,timeout=1.5)
+                        if (input_after is not None
+                                and input_moved==POST_CULL_CAMERA_PROBE_PIXELS
+                                and abs(wrapped_angle_delta(input_after[0],input_probe_before[0]))>=CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
+                            break
+                        print("WORLD_CAPTURE_INPUT: GLFW cursor-grab retry",attempt+1,flush=True)
+                    if (input_after is None or input_probe_before is None
+                            or input_moved!=POST_CULL_CAMERA_PROBE_PIXELS
                             or abs(wrapped_angle_delta(input_after[0],input_probe_before[0]))<CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
-                        raise RuntimeError("BLACK FREQUENCY post-cull mouse capture was not reacquired")
+                        raise RuntimeError("BLACK FREQUENCY post-cull mouse capture was not reacquired after pause-menu round trip")
                     restore_moved=move_camera_horizontal(-POST_CULL_CAMERA_PROBE_PIXELS,focus=False)
-                    input_restored=wait_for_camera_rotation_change(input_after,timeout=1.0)
+                    input_restored=wait_for_camera_rotation_change(input_after,timeout=1.5)
                     if (restore_moved!=-POST_CULL_CAMERA_PROBE_PIXELS or input_restored is None
                             or abs(wrapped_angle_delta(input_restored[0],input_probe_before[0]))>CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
                         raise RuntimeError("BLACK FREQUENCY post-cull camera input probe did not restore its yaw")
@@ -2462,7 +2510,7 @@ def capture_test_world():
                         raise RuntimeError("BLACK FREQUENCY post-cull camera probe did not restore the pre-probe view")
                     print("WORLD_CAPTURE_INPUT: post-cull mouse capture verified yawDelta="
                           f"{wrapped_angle_delta(input_after[0],input_probe_before[0]):.3f} restored=true "
-                          f"probePixels={POST_CULL_CAMERA_PROBE_PIXELS} emptySkyClick=true axis=x",flush=True)
+                          f"probePixels={POST_CULL_CAMERA_PROBE_PIXELS} pauseMenuRoundTrip=true axis=x",flush=True)
                     restored=True
 
                     summary=None
@@ -2504,10 +2552,16 @@ def capture_test_world():
                           f"resumedSegments={segments}",f"resumedArms={arms}",flush=True)
                     return True
                 finally:
-                    if not restored:
+                    if not restored and p.poll() is None:
                         # Keep the disposable player recoverable even if a diagnostic assertion fails.
-                        send_chat_command(f"/tp @s {x} {y} {z}")
-                        send_chat_command("/gamemode survival @s")
+                        try:
+                            send_chat_command(f"/tp @s {x} {y} {z}",
+                                r"Teleported [^\\n]+ to ","failure recovery teleport")
+                            send_chat_command("/gamemode survival @s",
+                                r"Set own game mode to Survival Mode","failure recovery survival")
+                        except Exception as recovery_error:
+                            print("WORLD_CAPTURE_WARN: could not complete disposable-player recovery",
+                                  repr(recovery_error),flush=True)
 
             for stage in range(32):
                 if p.poll() is not None:

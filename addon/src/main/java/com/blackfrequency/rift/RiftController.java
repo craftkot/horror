@@ -1392,6 +1392,17 @@ public final class RiftController {
     }
 
     private static void verifyFissureCanopyTraversal() {
+        net.minecraft.world.level.border.WorldBorder probeBorder=
+            new net.minecraft.world.level.border.WorldBorder();
+        probeBorder.setCenter(0.0D,0.0D);
+        probeBorder.setSize(16.0D);
+        BlockPos.MutableBlockPos borderCursor=new BlockPos.MutableBlockPos();
+        boolean borderInside=isFissureColumnInsideWorldBorder(probeBorder,0,0,-64,borderCursor);
+        boolean borderOutsideRejected=!isFissureColumnInsideWorldBorder(probeBorder,32,0,-64,borderCursor);
+        boolean nullCursorRejected=!isFissureColumnInsideWorldBorder(probeBorder,0,0,-64,null);
+        if(!(borderInside && borderOutsideRejected && nullCursorRejected))
+            throw new IllegalStateException("CI fissure world-border sampling guard regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_WORLD_BORDER_GUARD_VERIFIED inside=true outsideRejected=true nullRejected=true");
         BlockState verticalLog=net.minecraft.world.level.block.Blocks.OAK_LOG.defaultBlockState();
         BlockState horizontalLog=verticalLog.setValue(
             net.minecraft.world.level.block.RotatedPillarBlock.AXIS,net.minecraft.core.Direction.Axis.X);
@@ -1545,11 +1556,20 @@ public final class RiftController {
         }
     }
 
+    private static boolean isFissureColumnInsideWorldBorder(
+            net.minecraft.world.level.border.WorldBorder border,int x,int z,int minBuildHeight,
+            BlockPos.MutableBlockPos cursor) {
+        if(border==null || cursor==null) return false;
+        cursor.set(x,minBuildHeight,z);
+        return border.isWithinBounds(cursor);
+    }
+
     private static boolean findFissureGroundSample(ServerLevel level,int x,int z,
             BlockPos.MutableBlockPos cursor,FissureGroundSample result) {
-        if(result==null) return false;
+        if(level==null || result==null || cursor==null) return false;
         result.clear();
-        if(!level.hasChunk(x>>4,z>>4)) return false;
+        if(!isFissureColumnInsideWorldBorder(level.getWorldBorder(),x,z,level.getMinBuildHeight(),cursor)
+            || !level.hasChunk(x>>4,z>>4)) return false;
         int y=level.getHeight(FISSURE_SURFACE_HEIGHTMAP,x,z);
         int min=level.getMinBuildHeight();
         for(int depth=0;depth<FISSURE_SURFACE_SEARCH_DEPTH && y>min+1;depth++,y--) {
