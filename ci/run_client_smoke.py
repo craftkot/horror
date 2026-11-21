@@ -85,7 +85,7 @@ def verify_fissure_target_view_score_profile():
     target_method=controller_source[target_method_start:target_method_end]
     distance_guard=target_method.find("if(!isFissureTargetHorizontalDistance(horizontalSquared)) continue;")
     chunk_probe=target_method.find("!level.hasChunk(blockX>>4,blockZ>>4)")
-    surface_probe=target_method.find("findFissureGroundY(level,blockX,blockZ,cursor)")
+    surface_probe=target_method.find("findFissureGroundSample(level,blockX,blockZ,cursor,groundSample)")
     if (distance_guard<0 or chunk_probe<0 or surface_probe<0
             or distance_guard>chunk_probe or distance_guard>surface_probe):
         raise RuntimeError("BLACK FREQUENCY fissure distance cull must precede loaded-chunk and heightmap reads")
@@ -222,22 +222,31 @@ def verify_restoration_particle_source():
     fissure_start=source.find("private static FissureEmission emitSurfaceFissure(")
     fissure_end=source.find("\n    private static",fissure_start+1)
     fissure_emitter=source[fissure_start:fissure_end] if fissure_start>=0 and fissure_end>fissure_start else ""
-    ground_sampler_start=source.find("private static int findFissureGroundY(")
+    ground_sampler_start=source.find("private static boolean findFissureGroundSample(")
     ground_sampler_end=source.find("\n    /**",ground_sampler_start+1)
     ground_sampler=source[ground_sampler_start:ground_sampler_end] if ground_sampler_start>=0 and ground_sampler_end>ground_sampler_start else ""
-    particle_height_start=source.find("private static double fissureParticleY(")
+    particle_height_start=source.find("private static double fissureSurfaceParticleY(")
     particle_height_end=source.find("\n    private static void verifyFissureSurfaceParticleHeight",particle_height_start)
     particle_height=source[particle_height_start:particle_height_end] if particle_height_start>=0 and particle_height_end>particle_height_start else ""
     target_start=source.find("private static FissureTarget findVisibleFissureTarget(")
     target_end=source.find("\n    // Run after ordinary explosion modifiers",target_start+1)
     target_body=source[target_start:target_end] if target_start>=0 and target_end>target_start else ""
-    if ("if(isFissureGroundSupport(level.getBlockState(cursor))) return y;" not in ground_sampler
-            or "cursor.set(blockX,surfaceY-1,blockZ);" in fissure_emitter
-            or "isFissureGroundSupport(level.getBlockState(cursor))" in fissure_emitter
-            or "cursor.set(blockX,surfaceY-1,blockZ);" in target_body
-            or "isFissureGroundSupport(level.getBlockState(cursor))" in target_body):
-        raise RuntimeError("BLACK FREQUENCY fissure callers must reuse the sampler's validated support result")
-    print("WORLD_CAPTURE: fissure support validated once; redundant block-state reads eliminated",flush=True)
+    if ("if(isFissureGroundSupport(level.getBlockState(cursor))) {" not in ground_sampler
+            or "BlockState surface=level.getBlockState(cursor);" not in ground_sampler
+            or "double shapeHeight=surface.isAir() ? 0.0D" not in ground_sampler
+            or "result.particleY=fissureSurfaceParticleY(y,shapeHeight);" not in ground_sampler
+            or "findFissureGroundSample(level,blockX,blockZ,cursor,groundSample)" not in fissure_emitter
+            or "double particleY=groundSample.particleY;" not in fissure_emitter
+            or "findFissureGroundSample(level,blockX,blockZ,cursor,groundSample)" not in target_body
+            or "groundSample.particleY" not in target_body
+            or "level.getBlockState(cursor)" in fissure_emitter
+            or "level.getBlockState(cursor)" in target_body):
+        raise RuntimeError("BLACK FREQUENCY fissure samples must reuse one validated surface BlockState for height and particle placement")
+    if ("SURFACE_FISSURE_SAMPLE_STATE_REUSE_VERIFIED" not in source
+            or "scratchReusable=true" not in source
+            or "surfaceReads=1 particleRereads=0" not in source):
+        raise RuntimeError("BLACK FREQUENCY surface sample scratch/reuse profile is incomplete")
+    print("WORLD_CAPTURE: validated surface state reused for particle height; duplicate block-state read eliminated",flush=True)
     pad_start=source.find('if(playerInteractionTest && Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest"))')
     pad_end=source.find("} else if(playerInteractionTest)",pad_start+1)
     pad_body=source[pad_start:pad_end] if pad_start>=0 and pad_end>pad_start else ""
@@ -298,24 +307,26 @@ def verify_restoration_particle_source():
             or "PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED" not in pad_body):
         raise RuntimeError("BLACK FREQUENCY elevated perpendicular beacon pad must stay loaded, bounded, visible and within interaction reach")
     if ("BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();" not in target_body
-            or "findFissureGroundY(level,blockX,blockZ,cursor)" not in target_body
-            or "fissureParticleY(level,blockX,surfaceY,blockZ,cursor)" not in target_body
+            or "FissureGroundSample groundSample=new FissureGroundSample();" not in target_body
+            or "findFissureGroundSample(level,blockX,blockZ,cursor,groundSample)" not in target_body
+            or "groundSample.particleY" not in target_body
             or "fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ))" not in target_body
             or "LoadedChunkLookup" not in source
             or "Math.floor(startX)" not in source
             or "BEACON_RAY_CHUNK_TRAVERSAL_VERIFIED" not in source
             or "new BlockPos(" in target_body
-            or "findFissureGroundY(level,s.x,s.z)" in source):
+            or "private static int findFissureGroundY(" in source):
         raise RuntimeError("BLACK FREQUENCY visible fissure target must reuse its loaded-only sample cursor")
     if ("BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();" not in fissure_emitter
-            or "findFissureGroundY(level,blockX,blockZ,cursor)" not in fissure_emitter
-            or "fissureParticleY(level,blockX,surfaceY,blockZ,cursor)" not in fissure_emitter
+            or "FissureGroundSample groundSample=new FissureGroundSample();" not in fissure_emitter
+            or "findFissureGroundSample(level,blockX,blockZ,cursor,groundSample)" not in fissure_emitter
+            or "double particleY=groundSample.particleY;" not in fissure_emitter
             or "new BlockPos(" in fissure_emitter
             or "new BlockPos(" in ground_sampler
             or "cursor.set(x,y,z)" not in ground_sampler
             or "cursor.set(x,y-1,z)" not in ground_sampler
             or "new BlockPos(" in particle_height
-            or "cursor.set(x,surfaceY,z)" not in particle_height):
+            or "cursor.set(x,surfaceY,z)" in particle_height):
         raise RuntimeError("BLACK FREQUENCY server fissure sampling must reuse one mutable block-position cursor")
     if ("private static final DustParticleOptions FISSURE_VIOLET_EDGE_DUST_SMALL" not in source
             or "private static final DustParticleOptions FISSURE_VIOLET_EDGE_DUST_LARGE" not in source
@@ -3388,6 +3399,13 @@ def capture_test_world():
                     return False
                 print("WORLD_CAPTURE: POST_RESTORE_BEACON_BREAK_GUARD_VERIFIED realPlayerInput=true noDrop=true",flush=True)
             fissure=parse_fissure_particle_emission(log_after)
+            sample_reuse_marker=(
+                "BLACK_FREQUENCY_TEST SURFACE_FISSURE_SAMPLE_STATE_REUSE_VERIFIED "
+                "surfaceReads=1 particleRereads=0 scratchReusable=true"
+            )
+            if sample_reuse_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: fissure particle height did not reuse the validated surface state",flush=True)
+                return False
             ground_mesh=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) arms=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+) sampledColumns=(\d+) cacheHits=(\d+)",
                 log_after)

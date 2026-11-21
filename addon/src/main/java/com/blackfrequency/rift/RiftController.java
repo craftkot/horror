@@ -1373,21 +1373,34 @@ public final class RiftController {
             && state.getFluidState().isEmpty();
     }
 
-    // A returned height already has a validated support block at y-1.
-    // Callers check that the chunk is loaded before entering, so do not repeat the support read.
-    private static int findFissureGroundY(ServerLevel level,int x,int z,BlockPos.MutableBlockPos cursor) {
-        if(!level.hasChunk(x>>4,z>>4)) return Integer.MIN_VALUE;
+    // One scratch result is reused for every sampled column. The surface BlockState
+    // is read once, then its outline height is captured before the mutable cursor moves
+    // to the support block. Particle placement never re-reads the same surface cell.
+    private static final class FissureGroundSample {
+        private int surfaceY;
+        private double particleY;
+    }
+
+    private static boolean findFissureGroundSample(ServerLevel level,int x,int z,
+            BlockPos.MutableBlockPos cursor,FissureGroundSample result) {
+        if(result==null || !level.hasChunk(x>>4,z>>4)) return false;
         int y=level.getHeight(
             net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,x,z);
         int min=level.getMinBuildHeight();
         for(int depth=0;depth<32 && y>min+1;depth++,y--) {
             cursor.set(x,y,z);
             BlockState surface=level.getBlockState(cursor);
-            if(!isFissureSurfaceAvailable(surface)) return Integer.MIN_VALUE;
+            if(!isFissureSurfaceAvailable(surface)) return false;
+            double shapeHeight=surface.isAir() ? 0.0D
+                : surface.getShape(level,cursor).max(net.minecraft.core.Direction.Axis.Y);
             cursor.set(x,y-1,z);
-            if(isFissureGroundSupport(level.getBlockState(cursor))) return y;
+            if(isFissureGroundSupport(level.getBlockState(cursor))) {
+                result.surfaceY=y;
+                result.particleY=fissureSurfaceParticleY(y,shapeHeight);
+                return true;
+            }
         }
-        return Integer.MIN_VALUE;
+        return false;
     }
 
     /**
@@ -1402,24 +1415,25 @@ public final class RiftController {
         return surfaceY+boundedHeight+0.10D;
     }
 
-    private static double fissureParticleY(ServerLevel level,int x,int surfaceY,int z,
-            BlockPos.MutableBlockPos cursor) {
-        cursor.set(x,surfaceY,z);
-        BlockState state=level.getBlockState(cursor);
-        double shapeHeight=state.isAir() ? 0.0D
-            : state.getShape(level,cursor).max(net.minecraft.core.Direction.Axis.Y);
-        return fissureSurfaceParticleY(surfaceY,shapeHeight);
-    }
-
     private static void verifyFissureSurfaceParticleHeight() {
-        if(Math.abs(fissureSurfaceParticleY(65,0.0D)-65.10D)>1.0E-9D
-            || Math.abs(fissureSurfaceParticleY(65,0.125D)-65.225D)>1.0E-9D
+        FissureGroundSample scratch=new FissureGroundSample();
+        scratch.surfaceY=65;
+        scratch.particleY=fissureSurfaceParticleY(65,0.125D);
+        boolean partialShapeRetained=scratch.surfaceY==65
+            && Math.abs(scratch.particleY-65.225D)<1.0E-9D;
+        scratch.surfaceY=66;
+        scratch.particleY=fissureSurfaceParticleY(66,1.0D);
+        boolean scratchReusable=scratch.surfaceY==66
+            && Math.abs(scratch.particleY-67.10D)<1.0E-9D;
+        if(!partialShapeRetained || !scratchReusable
+            || Math.abs(fissureSurfaceParticleY(65,0.0D)-65.10D)>1.0E-9D
             || Math.abs(fissureSurfaceParticleY(65,1.0D)-66.10D)>1.0E-9D
             || Math.abs(fissureSurfaceParticleY(65,Double.NaN)-65.10D)>1.0E-9D
             || Math.abs(fissureSurfaceParticleY(65,Double.POSITIVE_INFINITY)-65.10D)>1.0E-9D
             || Math.abs(fissureSurfaceParticleY(65,2.0D)-66.10D)>1.0E-9D)
-            throw new IllegalStateException("CI fissure surface particle height regression");
+            throw new IllegalStateException("CI fissure surface particle height/sample reuse regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_PARTICLE_HEIGHT_VERIFIED");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SAMPLE_STATE_REUSE_VERIFIED surfaceReads=1 particleRereads=0 scratchReusable=true");
     }
 
     /**
@@ -1429,6 +1443,7 @@ public final class RiftController {
     private static FissureEmission emitSurfaceFissure(ServerLevel level,State s,double phase) {
         // One mutable cursor serves every sample; block-state lookups consume it immediately.
         BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();
+        FissureGroundSample groundSample=new FissureGroundSample();
         int samples=0;
         int accentDustMotes=0;
         int violetDustMotes=0;
@@ -1454,9 +1469,9 @@ public final class RiftController {
                 if(dx*dx+dz*dz>(long)RADIUS*RADIUS
                     || !level.getWorldBorder().isWithinBounds(cursor)
                     || !level.hasChunk(blockX>>4,blockZ>>4)) continue;
-                int surfaceY=findFissureGroundY(level,blockX,blockZ,cursor);
-                if(surfaceY==Integer.MIN_VALUE || surfaceY>=level.getMaxBuildHeight()) continue;
-                double particleY=fissureParticleY(level,blockX,surfaceY,blockZ,cursor);
+                if(!findFissureGroundSample(level,blockX,blockZ,cursor,groundSample)
+                    || groundSample.surfaceY>=level.getMaxBuildHeight()) continue;
+                double particleY=groundSample.particleY;
                 double wave=fissurePulseWave(phase,sample);
                 double pulse=wave*.05D;
                 DustParticleOptions dust=fissureDustForWave(wave);
@@ -1927,6 +1942,7 @@ public final class RiftController {
             net.minecraft.server.level.ServerPlayer viewer,net.minecraft.world.phys.Vec3 eye) {
         if(viewer==null || !viewer.isAlive() || viewer.isRemoved() || eye==null) return null;
         BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();
+        FissureGroundSample groundSample=new FissureGroundSample();
         FissureTarget best=null;
         for(int arm=0;arm<FISSURE_ARM_COUNT;arm++) {
             double angle=arm*Math.PI/2.0D;
@@ -1946,11 +1962,10 @@ public final class RiftController {
                 if(dx*dx+dz*dz>(long)RADIUS*RADIUS
                     || !level.getWorldBorder().isWithinBounds(cursor)
                     || !level.hasChunk(blockX>>4,blockZ>>4)) continue;
-                int surfaceY=findFissureGroundY(level,blockX,blockZ,cursor);
-                if(surfaceY==Integer.MIN_VALUE || surfaceY>=level.getMaxBuildHeight()) continue;
-                cursor.set(blockX,surfaceY,blockZ);
+                if(!findFissureGroundSample(level,blockX,blockZ,cursor,groundSample)
+                    || groundSample.surfaceY>=level.getMaxBuildHeight()) continue;
                 net.minecraft.world.phys.Vec3 target=new net.minecraft.world.phys.Vec3(
-                    px,fissureParticleY(level,blockX,surfaceY,blockZ,cursor),pz);
+                    px,groundSample.particleY,pz);
                 if(!fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ))) continue;
                 double vy=target.y-eye.y;
                 // The horizontal range was checked before chunk and heightmap reads above.
@@ -4917,9 +4932,9 @@ public final class RiftController {
         if (!s.restoring && s.finaleTicks > 85 && s.finaleTicks % 10 == 0
             && level.hasChunk(s.x >> 4, s.z >> 4)) {
             BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();
-            int surfaceY=findFissureGroundY(level,s.x,s.z,cursor);
-            if(surfaceY!=Integer.MIN_VALUE) {
-                double plumeY=surfaceY+1.0;
+            FissureGroundSample groundSample=new FissureGroundSample();
+            if(findFissureGroundSample(level,s.x,s.z,cursor,groundSample)) {
+                double plumeY=groundSample.surfaceY+1.0;
                 boolean witnessed = false;
                 for (var viewer : level.players()) {
                     if (!viewer.isAlive() || viewer.isRemoved() || viewer.isSpectator()) continue;
