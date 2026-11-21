@@ -2419,30 +2419,41 @@ def capture_test_world():
                         raise RuntimeError("BLACK FREQUENCY vertical cull skip milestone did not match the entered camera/anchor")
                     send_chat_command(f"/tp @s {x} {y} {z}")
                     send_chat_command("/gamemode survival @s")
-                    # The chat-driven spectator round-trip can leave GLFW's cursor
-                    # ungrabbed even after Enter closes chat. Normalize the screen
-                    # state before the real camera sweep; never send a world action.
-                    focus_game()
-                    key("t")
-                    time.sleep(0.12)
-                    key("Escape")
-                    time.sleep(0.2)
-                    focus_game()
+                    # A chat round-trip alone does not reliably reacquire GLFW's cursor.
+                    # In this disposable world, aim straight up first, then click empty sky:
+                    # if the cursor is ungrabbed this captures it; if already grabbed the
+                    # click cannot hit a block or entity. Verify both the motion and reversal.
                     input_before=read_client_camera_rotation()
+                    if input_before is None:
+                        raise RuntimeError("BLACK FREQUENCY post-cull camera telemetry is missing")
+                    sky_camera=set_camera_orientation_in_disposable_world(input_before[0],-90.0)
+                    if sky_camera is None or abs(sky_camera[1]+90.0)>1.0:
+                        raise RuntimeError("BLACK FREQUENCY could not aim the post-cull capture probe at empty sky")
+                    focus_game()
+                    click(640,360)
+                    time.sleep(0.2)
+                    input_probe_before=read_client_camera_rotation()
+                    if (input_probe_before is None
+                            or abs(input_probe_before[1]+90.0)>1.0):
+                        raise RuntimeError("BLACK FREQUENCY empty-sky cursor capture changed the camera unexpectedly")
                     input_moved=move_camera(POST_CULL_CAMERA_PROBE_PIXELS)
-                    input_after=wait_for_camera_rotation_change(input_before,timeout=1.0)
-                    if (input_before is None or input_after is None
-                            or input_moved!=POST_CULL_CAMERA_PROBE_PIXELS
-                            or abs(input_after[1]-input_before[1])<CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
+                    input_after=wait_for_camera_rotation_change(input_probe_before,timeout=1.0)
+                    if (input_after is None or input_moved!=POST_CULL_CAMERA_PROBE_PIXELS
+                            or abs(input_after[1]-input_probe_before[1])<CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
                         raise RuntimeError("BLACK FREQUENCY post-cull mouse capture was not reacquired")
                     restore_moved=move_camera(-POST_CULL_CAMERA_PROBE_PIXELS)
                     input_restored=wait_for_camera_rotation_change(input_after,timeout=1.0)
                     if (restore_moved!=-POST_CULL_CAMERA_PROBE_PIXELS or input_restored is None
-                            or abs(input_restored[1]-input_before[1])>CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
+                            or abs(input_restored[1]-input_probe_before[1])>CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
                         raise RuntimeError("BLACK FREQUENCY post-cull camera input probe did not restore its pitch")
+                    original_rotation=restore_camera_orientation(input_before[0],input_before[1])
+                    if (original_rotation is None
+                            or abs(wrapped_angle_delta(original_rotation[0],input_before[0]))>0.8
+                            or abs(original_rotation[1]-input_before[1])>0.8):
+                        raise RuntimeError("BLACK FREQUENCY post-cull camera probe did not restore the pre-probe view")
                     print("WORLD_CAPTURE_INPUT: post-cull mouse capture verified pitchDelta="
-                          f"{input_after[1]-input_before[1]:.3f} restored=true "
-                          f"probePixels={POST_CULL_CAMERA_PROBE_PIXELS}",flush=True)
+                          f"{input_after[1]-input_probe_before[1]:.3f} restored=true "
+                          f"probePixels={POST_CULL_CAMERA_PROBE_PIXELS} emptySkyClick=true",flush=True)
                     restored=True
 
                     summary=None
