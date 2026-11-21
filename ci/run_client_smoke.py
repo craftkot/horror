@@ -2505,6 +2505,13 @@ def capture_test_world():
             if support_top_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: support-top sampling did not prove that non-colliding foliage cannot lift the fissure mesh",flush=True)
                 return False
+            snow_surface_marker = (
+                "BLACK_FREQUENCY_GROUND_MESH_SNOW_LAYER_SURFACE_HEIGHT_VERIFIED "
+                "oneLayer=1.125 fourLayers=1.5 invalidFallback=0.5 shapeDerived=true"
+            )
+            if snow_surface_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: snow-layer ground surface height was not derived from the actual snow shape",flush=True)
+                return False
             support_shape_marker = (
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_SHAPE_GUARD_VERIFIED "
                 "fullBlock=1.0 partial=0.5 outlineFallback=true emptyRejected=true"

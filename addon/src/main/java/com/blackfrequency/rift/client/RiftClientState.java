@@ -1161,7 +1161,19 @@ public final class RiftClientState {
             if(!supportSurfaceProfileLogged) {
                 double fullBlock=groundSurfaceOffset(1.0D);
                 double bottomSlab=groundSurfaceOffset(.5D);
-                double invalidSupport=groundSurfaceOffset(Double.NaN);
+                double invalidSupport=groundSurfaceOffset(Double.NaN,Double.NaN);
+            var oneLayerSnow=net.minecraft.world.level.block.Blocks.SNOW.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.SnowLayerBlock.LAYERS,1);
+            var fourLayerSnow=net.minecraft.world.level.block.Blocks.SNOW.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.SnowLayerBlock.LAYERS,4);
+            double oneLayerSnowHeight=oneLayerSnow.getShape(level,BlockPos.ZERO).max(Direction.Axis.Y);
+            double fourLayerSnowHeight=fourLayerSnow.getShape(level,BlockPos.ZERO).max(Direction.Axis.Y);
+            double oneLayerSnowOffset=groundSurfaceOffset(1.0D,oneLayerSnowHeight);
+            double fourLayerSnowOffset=groundSurfaceOffset(.5D,fourLayerSnowHeight);
+            double invalidSnowFallback=groundSurfaceOffset(.5D,Double.NaN);
+            boolean snowSurfaceOffsets=Math.abs(oneLayerSnowOffset-1.125D)<1.0E-9D
+                && Math.abs(fourLayerSnowOffset-1.5D)<1.0E-9D
+                && Math.abs(invalidSnowFallback-.5D)<1.0E-9D;
                 if(Math.abs(fullBlock-1.0D)>1.0E-9D
                     || Math.abs(bottomSlab-.5D)>1.0E-9D
                     || Math.abs(invalidSupport-1.0D)>1.0E-9D)
@@ -1243,7 +1255,10 @@ public final class RiftClientState {
         // Anchor the fissure to the supporting block's collision top. Non-colliding
         // foliage remains in front and occludes it through depth testing; lifting the
         // whole ribbon to plant-canopy height made the crack look like a raised cable.
-        private static double groundSurfaceOffset(double supportHeight) {
+        private static double groundSurfaceOffset(double supportHeight,double snowLayerHeight) {
+            // Snow layers are real surface overlays; foliage is intentionally left to depth testing.
+            if(Double.isFinite(snowLayerHeight) && snowLayerHeight>0.0D)
+                return 1.0D+Math.min(1.0D,snowLayerHeight);
             return boundedShapeHeight(supportHeight,1.0D);
         }
 
@@ -1800,7 +1815,7 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_GROUND_MESH_PARTIAL_TICK_GUARD_VERIFIED finiteClamped=true nonFiniteFallback=zero");
         }
 
-        private static void verifyGroundSupportProfile() {
+        private static void verifyGroundSupportProfile(net.minecraft.world.level.Level level) {
             if(supportFilterLogged) return;
             boolean naturalGrass=isGroundSupport(net.minecraft.world.level.block.Blocks.GRASS_BLOCK.defaultBlockState());
             boolean naturalStone=isGroundSupport(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
@@ -1840,7 +1855,8 @@ public final class RiftClientState {
             boolean validSupportHeights=Math.abs(fullBlockHeight-1.0D)<1.0E-9D
                 && Math.abs(partialBlockHeight-.5D)<1.0E-9D && outlineFallback && emptyShapeRejected;
             if(!(naturalGrass && naturalStone && rejectsStructures && rejectsBlockEntities
-                && rejectsHazardousSurfaces && rejectsHazardousHeadroom && validSupportHeights))
+                && rejectsHazardousSurfaces && rejectsHazardousHeadroom && validSupportHeights
+                && snowSurfaceOffsets))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh terrain/structure/support-shape regression");
             supportFilterLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
@@ -1854,6 +1870,9 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_SHAPE_GUARD_VERIFIED fullBlock={} partial={} outlineFallback={} emptyRejected={}",
                 fullBlockHeight,partialBlockHeight,outlineFallback,emptyShapeRejected);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_SNOW_LAYER_SURFACE_HEIGHT_VERIFIED oneLayer={} fourLayers={} invalidFallback={} shapeDerived=true",
+                oneLayerSnowOffset,fourLayerSnowOffset,invalidSnowFallback);
         }
 
         private static double groundSupportHeight(
@@ -1955,7 +1974,7 @@ public final class RiftClientState {
             if(!level.getWorldBorder().isWithinBounds(cursor)
                 || !level.hasChunk(blockX>>4,blockZ>>4)) return Double.NaN;
 
-            // A no-leaves heightmap can still select the top of a tall tree trunk.
+            // A heightmap can sit at the top of a tall tree trunk.
             // Search a bounded window around the nearby player's actual height instead:
             // this finds the ground below canopies without scanning an entire column.
             int maxSurfaceY=Math.min(referenceY+GROUND_SURFACE_SEARCH_ABOVE,level.getMaxBuildHeight()-2);
@@ -1980,12 +1999,15 @@ public final class RiftClientState {
                 if(!isGroundSurfaceAvailable(surface)) continue;
                 // Non-colliding foliage is intentionally not sampled as a height offset.
                 // The already-rendered foliage occludes this ground-level mesh naturally.
+                // Snow layers are different: they cover the ground and the ribbon must clear their actual top.
+                double snowLayerHeight=surface.is(net.minecraft.world.level.block.Blocks.SNOW)
+                    ? surface.getShape(level,cursor).max(Direction.Axis.Y) : Double.NaN;
 
                 cursor.set(blockX,candidateY+1,blockZ);
                 BlockState head=level.getBlockState(cursor);
                 if(!isGroundHeadClear(head)) continue;
 
-                double surfaceOffset=groundSurfaceOffset(supportHeight);
+                double surfaceOffset=groundSurfaceOffset(supportHeight,snowLayerHeight);
                 return candidateY-1+surfaceOffset+GROUND_SURFACE_CLEARANCE;
             }
             return Double.NaN;
@@ -2040,7 +2062,7 @@ public final class RiftClientState {
                 verifyGroundAnimationProfile();
                 verifyPackedColorProfile();
                 verifyRibbonColorCacheProfile();
-                verifyGroundSupportProfile();
+                verifyGroundSupportProfile(level);
                 verifySurfaceCacheReuse();
             }
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
