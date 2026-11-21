@@ -169,9 +169,9 @@ public final class RiftController {
         new DustParticleOptions(new Vector3f(.30F,.14F,.88F),.85F);
     // Edge accents use the furthest valid terrain sample on each arm; a blocked outer cell
     // must not erase the arm's accent or trigger an unloaded-chunk lookup.
-    // A small cached Dust accent replaces the oversized crying-obsidian block particle.
+    // A compact, slightly larger cached Dust accent stays readable against grass without adding particles.
     private static final DustParticleOptions FISSURE_VIOLET_EDGE_DUST =
-        new DustParticleOptions(new Vector3f(.42F,.18F,.92F),.60F);
+        new DustParticleOptions(new Vector3f(.42F,.18F,.92F),.70F);
     private static final double FISSURE_SAMPLE_SPACING = RiftGeometry.FISSURE_SAMPLE_SPACING;
     // Avoid aiming almost straight down at a mote beside the player. The wider upper bound
     // also lets the loaded-only camera preview see fissures from a recovery-beacon pad.
@@ -2172,7 +2172,7 @@ public final class RiftController {
         Vector3f edgeColor=FISSURE_VIOLET_EDGE_DUST.getColor();
         float edgeScale=FISSURE_VIOLET_EDGE_DUST.getScale();
         if(!hasDustColor(FISSURE_VIOLET_EDGE_DUST,.42F,.18F,.92F)
-            || !Float.isFinite(edgeScale) || Math.abs(edgeScale-.60F)>1.0E-6F
+            || !Float.isFinite(edgeScale) || Math.abs(edgeScale-.70F)>1.0E-6F
             || edgeScale>=.75F)
             throw new IllegalStateException("CI compact fissure edge Dust color/scale regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_VERIFIED red={} green={} blue={} scale={}",
