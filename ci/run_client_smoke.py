@@ -252,9 +252,14 @@ def verify_restoration_particle_source():
             or "state.getValue(net.minecraft.world.level.block.RotatedPillarBlock.AXIS)" not in source
             or "==net.minecraft.core.Direction.Axis.Y" not in source
             or "depth<FISSURE_SURFACE_SEARCH_DEPTH" not in ground_sampler
+            or "private static final net.minecraft.world.level.levelgen.Heightmap.Types FISSURE_SURFACE_HEIGHTMAP=" not in source
+            or "net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING;" not in source
+            or "level.getHeight(FISSURE_SURFACE_HEIGHTMAP,x,z);" not in ground_sampler
+            or "MOTION_BLOCKING_NO_LEAVES" in ground_sampler
+            or "heightmapIncludesLeaves=true" not in source
             or "if(isFissureCanopyOccluder(surface)) continue;" not in ground_sampler):
         raise RuntimeError("BLACK FREQUENCY canopy traversal must skip only vertical trunks/leaves within the bounded surface scan")
-    print("WORLD_CAPTURE: fissure scan traverses vertical tree canopy while preserving roof occlusion and depth bound",flush=True)
+    print("WORLD_CAPTURE: leaf-inclusive heightmap feeds bounded canopy traversal while preserving roof occlusion",flush=True)
     pad_start=source.find('if(playerInteractionTest && Boolean.getBoolean("blackfrequency.ciNaturalBeaconTest"))')
     pad_end=source.find("} else if(playerInteractionTest)",pad_start+1)
     pad_body=source[pad_start:pad_end] if pad_start>=0 and pad_end>pad_start else ""

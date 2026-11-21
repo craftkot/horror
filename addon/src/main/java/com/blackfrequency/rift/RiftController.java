@@ -1347,7 +1347,7 @@ public final class RiftController {
         return segment>0 && segment<=FISSURE_SEGMENTS_PER_ARM && segment>previousSegment;
     }
 
-    // A no-leaves heightmap can still stop on a tree trunk or a village roof.
+    // A motion-blocking heightmap includes leaves and can stop on a tree trunk or village roof.
     // Block entities are fixtures, not terrain: never place the fissure ribbon
     // on top of a chest, furnace, beacon or another stateful block.
     private static boolean isFissureGroundSupport(BlockState state) {
@@ -1374,6 +1374,9 @@ public final class RiftController {
     }
 
     private static final int FISSURE_SURFACE_SEARCH_DEPTH=32;
+    // Include leaves in the initial heightmap so the bounded scan can actually traverse canopy.
+    private static final net.minecraft.world.level.levelgen.Heightmap.Types FISSURE_SURFACE_HEIGHTMAP=
+        net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING;
 
     // Only vertical trunks and leaves may be traversed as canopy. Horizontal logs
     // and solid construction remain occluders, preventing particles through roofs.
@@ -1398,10 +1401,12 @@ public final class RiftController {
             && !isFissureCanopyOccluder(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
         boolean nonSolidPlantRetained=isFissureSurfaceAvailable(
             net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState());
+        boolean leafAwareHeightmap=FISSURE_SURFACE_HEIGHTMAP
+            ==net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING;
         if(!(verticalTrunk && leaves && horizontalBeamRejected && builtRoofRejected
-            && nonSolidPlantRetained && FISSURE_SURFACE_SEARCH_DEPTH==32))
+            && nonSolidPlantRetained && leafAwareHeightmap && FISSURE_SURFACE_SEARCH_DEPTH==32))
             throw new IllegalStateException("CI fissure canopy traversal/structure occlusion regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_TRAVERSAL_VERIFIED verticalLogs=true leaves=true horizontalLogsRejected=true roofBlocksRejected=true nonSolidPlantsRetained=true depthBound=32");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_TRAVERSAL_VERIFIED verticalLogs=true leaves=true horizontalLogsRejected=true roofBlocksRejected=true nonSolidPlantsRetained=true heightmapIncludesLeaves=true depthBound=32");
     }
 
     // One scratch result is reused for every sampled column. The surface BlockState
@@ -1415,8 +1420,7 @@ public final class RiftController {
     private static boolean findFissureGroundSample(ServerLevel level,int x,int z,
             BlockPos.MutableBlockPos cursor,FissureGroundSample result) {
         if(result==null || !level.hasChunk(x>>4,z>>4)) return false;
-        int y=level.getHeight(
-            net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,x,z);
+        int y=level.getHeight(FISSURE_SURFACE_HEIGHTMAP,x,z);
         int min=level.getMinBuildHeight();
         for(int depth=0;depth<FISSURE_SURFACE_SEARCH_DEPTH && y>min+1;depth++,y--) {
             cursor.set(x,y,z);
