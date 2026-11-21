@@ -1125,6 +1125,27 @@ public final class RiftController {
             boolean malformedSnapshotList=!isWellFormedSnapshotListTag(rawSnapshots);
             ListTag saved=rawSnapshots instanceof ListTag list && !malformedSnapshotList
                 ? list : new ListTag();
+            if(s.restored) {
+                // A completed recovery is terminal. Replaying stale snapshots after a later
+                // restart could overwrite player edits made after stabilization.
+                int staleSnapshotCount=rawSnapshots instanceof ListTag list ? list.size() : 0;
+                boolean terminalStateRepaired=s.restoring || !s.finished || staleSnapshotCount>0
+                    || malformedSnapshotList || s.restoreIndex!=-1 || s.restoreScan!=-1;
+                if(terminalStateRepaired) {
+                    s.restoring=false;
+                    s.finished=true;
+                    s.restoreIndex=-1;
+                    s.restoreScan=-1;
+                    s.snapshots.clear();
+                    s.retainedSnapshotEstimateBytes=0L;
+                    s.setDirty();
+                    LOGGER.warn("BLACK FREQUENCY: quarantined {} stale recovery snapshot entries from completed restoration",
+                        staleSnapshotCount);
+                }
+                // Do not parse, retain or count stale payloads once restoration is terminal.
+                saved=new ListTag();
+                malformedSnapshotList=false;
+            }
             if(malformedSnapshotList) {
                 // A wrong outer tag type or non-compound list cannot contain trusted snapshots.
                 // If terrain was already damaged, record the lost container as an incomplete
@@ -3285,6 +3306,56 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_CURSOR_REPAIR_PERSISTENCE_VERIFIED indexClamped=true scanClamped=true dirty=true roundTrip=true validUnchanged=true malformedIndexType=true malformedScanType=true malformedCenterOutType=true missingCenterOutIndex=true");
     }
 
+    private static void verifyCompletedRecoveryStateQuarantine() {
+        ListTag staleSnapshots=new ListTag();
+        CompoundTag staleEntry=new CompoundTag();
+        staleEntry.putLong("pos",new BlockPos(4,64,5).asLong());
+        staleEntry.put("state",NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
+        staleSnapshots.add(staleEntry);
+
+        CompoundTag conflictingFlags=new CompoundTag();
+        conflictingFlags.putBoolean("restoring",true);
+        conflictingFlags.putBoolean("restored",true);
+        conflictingFlags.putBoolean("finished",false);
+        conflictingFlags.putInt("restoreIndex",0);
+        conflictingFlags.putInt("restoreScan",0);
+        conflictingFlags.put("snapshots",staleSnapshots.copy());
+        State normalized=State.load(conflictingFlags);
+        CompoundTag normalizedTag=normalized.save(new CompoundTag());
+        State reloaded=State.load(normalizedTag);
+
+        CompoundTag completedWithStaleSnapshots=new CompoundTag();
+        completedWithStaleSnapshots.putBoolean("restored",true);
+        completedWithStaleSnapshots.putBoolean("finished",true);
+        completedWithStaleSnapshots.putInt("restoreIndex",0);
+        completedWithStaleSnapshots.putInt("restoreScan",0);
+        completedWithStaleSnapshots.put("snapshots",staleSnapshots.copy());
+        State staleTerminal=State.load(completedWithStaleSnapshots);
+
+        CompoundTag completedWithMalformedContainer=new CompoundTag();
+        completedWithMalformedContainer.putBoolean("restored",true);
+        completedWithMalformedContainer.putBoolean("finished",true);
+        completedWithMalformedContainer.putString("snapshots","not-a-list");
+        State malformedTerminal=State.load(completedWithMalformedContainer);
+
+        boolean normalizedTerminal=normalized.restored && !normalized.restoring && normalized.finished
+            && normalized.snapshots.isEmpty() && normalized.restoreIndex==-1 && normalized.restoreScan==-1
+            && normalized.isDirty();
+        boolean roundTripTerminal=reloaded.restored && !reloaded.restoring && reloaded.finished
+            && reloaded.snapshots.isEmpty() && reloaded.restoreIndex==-1 && reloaded.restoreScan==-1
+            && !reloaded.isDirty();
+        boolean stalePayloadQuarantined=staleTerminal.restored && !staleTerminal.restoring
+            && staleTerminal.finished && staleTerminal.snapshots.isEmpty()
+            && staleTerminal.restoreIndex==-1 && staleTerminal.restoreScan==-1 && staleTerminal.isDirty();
+        boolean malformedContainerQuarantined=malformedTerminal.restored && !malformedTerminal.restoring
+            && malformedTerminal.finished && malformedTerminal.snapshots.isEmpty()
+            && malformedTerminal.skippedInvalid==0 && malformedTerminal.isDirty();
+        if(!(normalizedTerminal && roundTripTerminal && stalePayloadQuarantined
+            && malformedContainerQuarantined))
+            throw new IllegalStateException("CI completed recovery stale-snapshot quarantine regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST COMPLETED_RECOVERY_STALE_SNAPSHOT_QUARANTINE_VERIFIED conflictingFlags=true staleSnapshots=true malformedContainer=true terminalPreserved=true dirty=true roundTrip=true");
+    }
+
     private static void verifyInvalidSnapshotWarningRateLimit() {
         State state=new State();
         int warnings=0;
@@ -3920,6 +3991,7 @@ public final class RiftController {
         verifyRecoveryBeaconVisualAnchorBounds();
         verifyNaturalBeaconIdPersistence();
         verifyRestoreCursorRepairPersistence();
+        verifyCompletedRecoveryStateQuarantine();
         verifyInvalidSnapshotWarningRateLimit();
         verifyRecoveryAudienceBounds();
         verifySurfaceFractureParticleAudienceBounds();
