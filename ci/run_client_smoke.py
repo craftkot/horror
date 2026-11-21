@@ -3431,6 +3431,15 @@ def capture_test_world():
             if canopy_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: server fissure scan did not verify safe traversal beneath tree canopy",flush=True)
                 return False
+            world_canopy_marker=(
+                "BLACK_FREQUENCY_TEST SURFACE_FISSURE_WORLD_CANOPY_SAMPLE_VERIFIED "
+                "heightmapTopOffset=5 canopyBlocks=4 surfaceFound=true horizontalLogRejected=true "
+                "roofRejected=true loadedOnly=true searchRadius=8 restored=true "
+                "rejectedResultCleared=true unloadedChunkRejected=true"
+            )
+            if world_canopy_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: rejected fissure samples retained stale output or touched an unloaded chunk",flush=True)
+                return False
             ground_mesh=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) arms=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+) sampledColumns=(\d+) cacheHits=(\d+)",
                 log_after)

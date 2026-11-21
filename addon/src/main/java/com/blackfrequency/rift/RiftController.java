@@ -1457,7 +1457,7 @@ public final class RiftController {
             cursor.set(fixtureX,baseY+offset,fixtureZ);
             original[offset]=level.getBlockState(cursor);
         }
-        boolean canopyAccepted=false,horizontalLogRejected=false,roofRejected=false;
+        boolean canopyAccepted=false,horizontalLogRejected=false,roofRejected=false,unloadedChunkRejected=false;
         try {
             BlockState verticalLog=Blocks.OAK_LOG.defaultBlockState().setValue(
                 net.minecraft.world.level.block.RotatedPillarBlock.AXIS,net.minecraft.core.Direction.Axis.Y);
@@ -1486,25 +1486,33 @@ public final class RiftController {
             cursor.set(fixtureX,baseY+2,fixtureZ);
             if(!level.setBlock(cursor,horizontalLog,2))
                 throw new IllegalStateException("CI could not place temporary horizontal beam");
-            horizontalLogRejected=!findFissureGroundSample(level,fixtureX,fixtureZ,cursor,sample);
+            horizontalLogRejected=!findFissureGroundSample(level,fixtureX,fixtureZ,cursor,sample)
+                && sample.isEmpty();
             if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,cursor))
                 throw new IllegalStateException("CI failed to restore temporary beam fixture");
 
             cursor.set(fixtureX,baseY+2,fixtureZ);
             if(!level.setBlock(cursor,Blocks.OAK_PLANKS.defaultBlockState(),2))
                 throw new IllegalStateException("CI could not place temporary roof fixture");
-            roofRejected=!findFissureGroundSample(level,fixtureX,fixtureZ,cursor,sample);
+            roofRejected=!findFissureGroundSample(level,fixtureX,fixtureZ,cursor,sample)
+                && sample.isEmpty();
             if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,cursor))
                 throw new IllegalStateException("CI failed to restore temporary roof fixture");
+
+            // A rejected lookup must not leave the previous successful column in the reusable result.
+            sample.surfaceY=baseY;
+            sample.particleY=baseY+.10D;
+            unloadedChunkRejected=!findFissureGroundSample(
+                level,Integer.MAX_VALUE,Integer.MAX_VALUE,cursor,sample) && sample.isEmpty();
         } finally {
             if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,cursor))
                 throw new IllegalStateException("CI canopy fixture cleanup failed");
         }
 
-        if(!(canopyAccepted && horizontalLogRejected && roofRejected))
+        if(!(canopyAccepted && horizontalLogRejected && roofRejected && unloadedChunkRejected))
             throw new IllegalStateException("CI real-world canopy scan/structure occlusion regression");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_TRAVERSAL_VERIFIED verticalLogs=true leaves=true horizontalLogsRejected=true roofBlocksRejected=true nonSolidPlantsRetained=true heightmapIncludesLeaves=true depthBound=32");
-        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_WORLD_CANOPY_SAMPLE_VERIFIED heightmapTopOffset=5 canopyBlocks=4 surfaceFound=true horizontalLogRejected=true roofRejected=true loadedOnly=true searchRadius=8 restored=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_WORLD_CANOPY_SAMPLE_VERIFIED heightmapTopOffset=5 canopyBlocks=4 surfaceFound=true horizontalLogRejected=true roofRejected=true loadedOnly=true searchRadius=8 restored=true rejectedResultCleared=true unloadedChunkRejected=true");
         return true;
     }
 
@@ -1524,13 +1532,24 @@ public final class RiftController {
     // is read once, then its outline height is captured before the mutable cursor moves
     // to the support block. Particle placement never re-reads the same surface cell.
     private static final class FissureGroundSample {
-        private int surfaceY;
-        private double particleY;
+        private int surfaceY=Integer.MIN_VALUE;
+        private double particleY=Double.NaN;
+
+        private void clear() {
+            surfaceY=Integer.MIN_VALUE;
+            particleY=Double.NaN;
+        }
+
+        private boolean isEmpty() {
+            return surfaceY==Integer.MIN_VALUE && Double.isNaN(particleY);
+        }
     }
 
     private static boolean findFissureGroundSample(ServerLevel level,int x,int z,
             BlockPos.MutableBlockPos cursor,FissureGroundSample result) {
-        if(result==null || !level.hasChunk(x>>4,z>>4)) return false;
+        if(result==null) return false;
+        result.clear();
+        if(!level.hasChunk(x>>4,z>>4)) return false;
         int y=level.getHeight(FISSURE_SURFACE_HEIGHTMAP,x,z);
         int min=level.getMinBuildHeight();
         for(int depth=0;depth<FISSURE_SURFACE_SEARCH_DEPTH && y>min+1;depth++,y--) {
