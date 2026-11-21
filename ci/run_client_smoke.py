@@ -2952,10 +2952,15 @@ def capture_test_world():
                     or "float boundedStrength=(float)Math.min(1.0F,strength);" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: per-endpoint ground fissure fade is not verified across every ribbon layer",flush=True)
                 return False
+            empty_guard_index=camera_source.find("if(firstVisibleSegmentIndex<0) return;",prefix_start)
+            ground_buffer_index=camera_source.find(
+                "BufferBuilder builder=Tesselator.getInstance().getBuilder();",prefix_start)
             if ("BLACK_FREQUENCY_TEST GROUND_MESH_EMPTY_BUFFER_GUARD_VERIFIED nearVisible=true crossingVisible=true farHidden=true invalidCameraHidden=true" not in final_log
                     or "private static boolean hasVisibleGroundSegment(List<GroundSegment> segments,Vec3 camera)" not in camera_source
-                    or "if(!hasVisibleGroundSegment(cachedSegments,camera)) return;" not in camera_source):
-                print("WORLD_CAPTURE_FAIL: empty ground-mesh buffer guard was not executed before render setup",flush=True)
+                    or empty_guard_index<0
+                    or ground_buffer_index<0
+                    or empty_guard_index>ground_buffer_index):
+                print("WORLD_CAPTURE_FAIL: empty ground-mesh guard must return before BufferBuilder allocation",flush=True)
                 return False
             edge_rail_pattern = re.compile(
                 r"edgeRibbon\(builder,matrix,camera,segment,halfWidth,(true|false),\s*"
