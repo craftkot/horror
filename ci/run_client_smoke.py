@@ -2841,7 +2841,7 @@ def capture_test_world():
             visual_profile_match=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=([-+0-9.eE]+) coreScale=([-+0-9.eE]+) edgeOffsetScale=([-+0-9.eE]+) edgeHalfWidth=([-+0-9.eE]+) pulseMin=([-+0-9.eE]+) pulseMax=([-+0-9.eE]+) coreInsideEdgeBand=(true|false)",
                 final_log)
-            expected_visual_profile=(5.0,1.7,3.0,.032,.045,.074)
+            expected_visual_profile=(5.75,1.7,3.0,.032,.045,.074)
             if (not visual_profile_match
                     or any(not math.isclose(float(visual_profile_match.group(i)),expected_visual_profile[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
@@ -2862,10 +2862,10 @@ def capture_test_world():
                 return False
             edge_width_profiles = {
                 "GROUND_EDGE_HALF_WIDTH=.026D;": {
-                    "embedded": (.225,.37,.0507195,.10657,.1764974,.199996,.0234986,.006,.015,.017,.023),
+                    "embedded": (.25875,.4255,.0507195,.10657,.1764974,.199996,.0234986,.006,.015,.017,.023),
                 },
                 "GROUND_EDGE_HALF_WIDTH=.032D;": {
-                    "embedded": (.225,.37,.0507195,.10057,.1764974,.193996,.0174986,.006,.015,.017,.023),
+                    "embedded": (.25875,.4255,.0507195,.10057,.1764974,.193996,.0174986,.006,.015,.017,.023),
                 },
             }
             edge_width_profile = next(
@@ -2873,7 +2873,7 @@ def capture_test_world():
                  if declaration in camera_source),
                 None,
             )
-            if ("GROUND_GLOW_WIDTH_SCALE=5.0D;" not in camera_source
+            if ("GROUND_GLOW_WIDTH_SCALE=5.75D;" not in camera_source
                     or "GROUND_CORE_WIDTH_SCALE=1.70D;" not in camera_source
                     or "GROUND_EDGE_OFFSET_SCALE=3.0D;" not in camera_source
                     or "GROUND_EDGE_OFFSET_SKEW_SCALE=.12D;" not in camera_source

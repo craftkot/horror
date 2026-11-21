@@ -583,7 +583,7 @@ public final class RiftClientState {
         // Keep cliff-side ribbon tips visible without bridging terrain discontinuities.
         private static final double CLIFF_BREAK_TAPER=.22D;
         // Broaden the recessed core and halo so the fissure reads as a ground rupture at normal camera distance.
-        private static final double GROUND_GLOW_WIDTH_SCALE=5.0D;
+        private static final double GROUND_GLOW_WIDTH_SCALE=5.75D;
         private static final double GROUND_CORE_WIDTH_SCALE=1.70D;
         // The recessed core pinches and widens along the seam; endpoint widths are interpolated per segment.
         private static final double GROUND_MIN_CORE_WIDTH_SCALE=.78D;
@@ -1120,7 +1120,7 @@ public final class RiftClientState {
                     -GROUND_EDGE_HALF_WIDTH;
                 double minimumCoreEdgeGap=Math.min(leftCoreEdgeGap,rightCoreEdgeGap);
                 double maximumEdgeOffsetDelta=maximumHalfWidth*GROUND_EDGE_OFFSET_SCALE*edgeOffsetSkew;
-                if(Math.abs(GROUND_GLOW_WIDTH_SCALE-5.0D)>1.0E-9D
+                if(Math.abs(GROUND_GLOW_WIDTH_SCALE-5.75D)>1.0E-9D
                     || Math.abs(GROUND_CORE_WIDTH_SCALE-1.70D)>1.0E-9D
                     || Math.abs(GROUND_EDGE_OFFSET_SCALE-3.0D)>1.0E-9D
                     || Math.abs(GROUND_EDGE_OFFSET_SKEW_SCALE-.12D)>1.0E-9D
