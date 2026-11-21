@@ -3312,11 +3312,18 @@ public final class RiftController {
         staleEntry.putLong("pos",new BlockPos(4,64,5).asLong());
         staleEntry.put("state",NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
         staleSnapshots.add(staleEntry);
+        // A terminal save may also contain malformed payloads. They must be discarded
+        // before per-entry validation so old corruption cannot affect a stabilized world.
+        CompoundTag malformedStaleEntry=new CompoundTag();
+        malformedStaleEntry.putString("pos","not-a-long");
+        malformedStaleEntry.putString("state","not-a-compound");
+        staleSnapshots.add(malformedStaleEntry);
 
         CompoundTag conflictingFlags=new CompoundTag();
         conflictingFlags.putBoolean("restoring",true);
         conflictingFlags.putBoolean("restored",true);
         conflictingFlags.putBoolean("finished",false);
+        conflictingFlags.putInt("edits",2);
         conflictingFlags.putInt("restoreIndex",0);
         conflictingFlags.putInt("restoreScan",0);
         conflictingFlags.put("snapshots",staleSnapshots.copy());
@@ -3327,6 +3334,7 @@ public final class RiftController {
         CompoundTag completedWithStaleSnapshots=new CompoundTag();
         completedWithStaleSnapshots.putBoolean("restored",true);
         completedWithStaleSnapshots.putBoolean("finished",true);
+        completedWithStaleSnapshots.putInt("edits",2);
         completedWithStaleSnapshots.putInt("restoreIndex",0);
         completedWithStaleSnapshots.putInt("restoreScan",0);
         completedWithStaleSnapshots.put("snapshots",staleSnapshots.copy());
@@ -3340,16 +3348,21 @@ public final class RiftController {
 
         boolean normalizedTerminal=normalized.restored && !normalized.restoring && normalized.finished
             && normalized.snapshots.isEmpty() && normalized.restoreIndex==-1 && normalized.restoreScan==-1
-            && normalized.isDirty();
+            && normalized.edits==2 && normalized.skippedInvalid==0
+            && normalized.retainedSnapshotEstimateBytes==0L && normalized.isDirty();
         boolean roundTripTerminal=reloaded.restored && !reloaded.restoring && reloaded.finished
             && reloaded.snapshots.isEmpty() && reloaded.restoreIndex==-1 && reloaded.restoreScan==-1
-            && !reloaded.isDirty();
+            && reloaded.edits==2 && reloaded.skippedInvalid==0
+            && reloaded.retainedSnapshotEstimateBytes==0L && !reloaded.isDirty();
         boolean stalePayloadQuarantined=staleTerminal.restored && !staleTerminal.restoring
             && staleTerminal.finished && staleTerminal.snapshots.isEmpty()
-            && staleTerminal.restoreIndex==-1 && staleTerminal.restoreScan==-1 && staleTerminal.isDirty();
+            && staleTerminal.restoreIndex==-1 && staleTerminal.restoreScan==-1
+            && staleTerminal.edits==2 && staleTerminal.skippedInvalid==0
+            && staleTerminal.retainedSnapshotEstimateBytes==0L && staleTerminal.isDirty();
         boolean malformedContainerQuarantined=malformedTerminal.restored && !malformedTerminal.restoring
             && malformedTerminal.finished && malformedTerminal.snapshots.isEmpty()
-            && malformedTerminal.skippedInvalid==0 && malformedTerminal.isDirty();
+            && malformedTerminal.skippedInvalid==0 && malformedTerminal.retainedSnapshotEstimateBytes==0L
+            && malformedTerminal.isDirty();
         if(!(normalizedTerminal && roundTripTerminal && stalePayloadQuarantined
             && malformedContainerQuarantined))
             throw new IllegalStateException("CI completed recovery stale-snapshot quarantine regression");
