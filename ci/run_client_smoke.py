@@ -36,7 +36,7 @@ def verify_post_cull_camera_probe_profile():
         raise RuntimeError("BLACK FREQUENCY post-cull camera probe is below the renderer telemetry threshold")
     print("WORLD_CAPTURE: post-cull camera probe profile verified",
           "pixels",POST_CULL_CAMERA_PROBE_PIXELS,
-          "expectedPitchDelta",round(expected_delta,3),
+          "expectedCameraDelta",round(expected_delta,3),
           "telemetryThreshold",CAMERA_ROTATION_LOG_THRESHOLD_DEGREES,flush=True)
 
 FISSURE_PARTICLE_EMISSION_RE=re.compile(
@@ -863,9 +863,10 @@ def capture_test_world():
     def key(k):
         focus_game()
         subprocess.run(["xdotool","key","--clearmodifiers",k],check=False)
-    def click(x,y):
+    def click(x,y,focus=True):
         # Hold/release explicitly: some GLFW clients ignore xdotool's fast click.
-        focus_game()
+        if focus:
+            focus_game()
         subprocess.run(["xdotool","mousemove","--sync",str(x),str(y)],check=False)
         time.sleep(0.25)
         subprocess.run(["xdotool","mousedown","1"],check=False)
@@ -909,8 +910,10 @@ def capture_test_world():
             time.sleep(0.08)
         print("WORLD_CAPTURE_INPUT: camera pitch mouse delta",delta_y,"moved",moved,flush=True)
         return moved
-    def move_camera_horizontal(delta_x):
-        focus_game()
+    def move_camera_horizontal(delta_x,focus=True):
+        # Do not reactivate the X11 window after an empty-sky click has grabbed GLFW's cursor.
+        if focus:
+            focus_game()
         # Keep yaw motion separate from pitch so both can be restored exactly.
         direction=1 if delta_x>0 else -1
         remaining=abs(delta_x)
@@ -2435,22 +2438,23 @@ def capture_test_world():
                     if sky_camera is None or abs(sky_camera[1]+90.0)>1.0:
                         raise RuntimeError("BLACK FREQUENCY could not aim the post-cull capture probe at empty sky")
                     focus_game()
-                    click(640,360)
+                    click(640,360,focus=False)
+                    print("WORLD_CAPTURE_INPUT: preserving GLFW capture after empty-sky click",flush=True)
                     time.sleep(0.2)
                     input_probe_before=read_client_camera_rotation()
                     if (input_probe_before is None
                             or abs(input_probe_before[1]+90.0)>1.0):
                         raise RuntimeError("BLACK FREQUENCY empty-sky cursor capture changed the camera unexpectedly")
-                    input_moved=move_camera_horizontal(POST_CULL_CAMERA_PROBE_PIXELS)
+                    input_moved=move_camera_horizontal(POST_CULL_CAMERA_PROBE_PIXELS,focus=False)
                     input_after=wait_for_camera_rotation_change(input_probe_before,timeout=1.0)
                     if (input_after is None or input_moved!=POST_CULL_CAMERA_PROBE_PIXELS
                             or abs(wrapped_angle_delta(input_after[0],input_probe_before[0]))<CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
                         raise RuntimeError("BLACK FREQUENCY post-cull mouse capture was not reacquired")
-                    restore_moved=move_camera_horizontal(-POST_CULL_CAMERA_PROBE_PIXELS)
+                    restore_moved=move_camera_horizontal(-POST_CULL_CAMERA_PROBE_PIXELS,focus=False)
                     input_restored=wait_for_camera_rotation_change(input_after,timeout=1.0)
                     if (restore_moved!=-POST_CULL_CAMERA_PROBE_PIXELS or input_restored is None
                             or abs(wrapped_angle_delta(input_restored[0],input_probe_before[0]))>CAMERA_ROTATION_LOG_THRESHOLD_DEGREES):
-                        raise RuntimeError("BLACK FREQUENCY post-cull camera input probe did not restore its pitch")
+                        raise RuntimeError("BLACK FREQUENCY post-cull camera input probe did not restore its yaw")
                     original_rotation=restore_camera_orientation(input_before[0],input_before[1])
                     if (original_rotation is None
                             or abs(wrapped_angle_delta(original_rotation[0],input_before[0]))>0.8
