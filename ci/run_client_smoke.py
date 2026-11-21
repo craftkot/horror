@@ -2663,7 +2663,14 @@ def capture_test_world():
                     r"GROUND_GLOW_RED_CHANNEL,GROUND_GLOW_GREEN_CHANNEL,GROUND_GLOW_BLUE_CHANNEL,\s*glowAlphaChannelA,glowAlphaChannelB",
                     r"GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,\s*filamentAlphaChannelA,filamentAlphaChannelB",
                     r"GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,\s*edgeAlphaChannelA,edgeAlphaChannelB")
-                render_start=camera_source.find("for(GroundSegment segment:cachedSegments)")
+                prefix_start=camera_source.find("int firstVisibleSegmentIndex=-1;")
+                prefix_end=camera_source.find("Matrix4f matrix=event.getPoseStack().last().pose();",prefix_start)
+                prefix_source=(camera_source[prefix_start:prefix_end]
+                               if prefix_start>=0 and prefix_end>prefix_start else "")
+                render_loop_match=re.search(
+                    r"for\\s*\\(\\s*int\\s+segmentIndex\\s*=\\s*firstVisibleSegmentIndex\\s*;\\s*segmentIndex\\s*<\\s*cachedSegments\\.size\\(\\)\\s*;\\s*segmentIndex\\+\\+\\s*\\)\\s*\\{",
+                    camera_source)
+                render_start=render_loop_match.start() if render_loop_match else -1
                 render_end=camera_source.find("BufferUploader.drawWithShader(builder.end());",render_start)
                 render_source=(camera_source[render_start:render_end]
                                if render_start>=0 and render_end>render_start else "")
@@ -2674,7 +2681,14 @@ def capture_test_world():
                         or ribbon_source.count("redChannel,greenChannel,blueChannel,alphaChannelA")!=2
                         or ribbon_source.count("redChannel,greenChannel,blueChannel,alphaChannelB")!=2
                         or any(field not in camera_source for field in expected_static_channels)
+                        or not prefix_source
+                        or "firstVisibleSegmentIndex=i;" not in prefix_source
+                        or "firstVisibleFadeA=fadeA;" not in prefix_source
+                        or "firstVisibleFadeB=fadeB;" not in prefix_source
                         or any(render_source.count(call)!=1 for call in dynamic_alpha_calls)
+                        or "if(segmentIndex==firstVisibleSegmentIndex)" not in render_source
+                        or "segmentFadeA=firstVisibleFadeA;" not in render_source
+                        or "segmentFadeB=firstVisibleFadeB;" not in render_source
                         or render_source.count("colorChannel(")!=8
                         or "coreRibbon(builder,matrix,camera,segment,halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS," not in render_source
                         or any(re.search(pattern,render_source) is None for pattern in ribbon_call_patterns)
@@ -2686,7 +2700,15 @@ def capture_test_world():
                         or "verifyRibbonColorCacheProfile();" not in build_source):
                     print("WORLD_CAPTURE_FAIL: ground ribbon must cache 12 static RGB channels and compute two endpoint alphas for each of four layers",flush=True)
                     return False
-                print("WORLD_CAPTURE: ground ribbon reuses 12 static RGB channels and computes eight endpoint alpha channels per segment",flush=True)
+                reuse_profile=re.search(
+                    r"BLACK_FREQUENCY_TEST GROUND_MESH_VISIBILITY_PREFIX_REUSE_VERIFIED firstVisibleIndex=(\\d+) prefixFadeChecks=(\\d+) cachedFirstSegmentFade=true redundantPrefixRechecksAvoided=(\\d+)",
+                    final_log)
+                if (not reuse_profile
+                        or int(reuse_profile.group(2))<2
+                        or int(reuse_profile.group(2))!=int(reuse_profile.group(3))):
+                    print("WORLD_CAPTURE_FAIL: runtime ground mesh did not prove first-visible endpoint fade reuse",flush=True)
+                    return False
+                print("WORLD_CAPTURE: ground ribbon reuses 12 static RGB channels, eight endpoint alpha channels, and cached first-visible fades",flush=True)
             else:
                 channel_calls=("int redChannel=colorChannel(red);",
                                "int greenChannel=colorChannel(green);",
