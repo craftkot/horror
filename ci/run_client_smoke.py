@@ -2708,6 +2708,22 @@ def capture_test_world():
                         or int(reuse_profile.group(2))!=int(reuse_profile.group(3))):
                     print("WORLD_CAPTURE_FAIL: runtime ground mesh did not prove first-visible endpoint fade reuse",flush=True)
                     return False
+                endpoint_fade_profile=(
+                    "BLACK_FREQUENCY_TEST GROUND_MESH_ENDPOINT_FADE_REUSE_PROFILE_VERIFIED "
+                    "sharedPointIdentity=true distinctPointFallback=true invalidFadeRejected=true")
+                endpoint_fade_runtime=re.search(
+                    r"BLACK_FREQUENCY_TEST GROUND_MESH_ENDPOINT_FADE_REUSE_VERIFIED reusedStarts=(\d+) recomputedStarts=(\d+) gapResetPolicy=true",
+                    final_log)
+                if (endpoint_fade_profile not in final_log
+                        or not endpoint_fade_runtime
+                        or int(endpoint_fade_runtime.group(1))<=0
+                        or int(endpoint_fade_runtime.group(2))<=0
+                        or "canReuseGroundPointFade(segment.a(),previousFadePoint,previousFadeB)" not in render_source
+                        or "previousFadePoint=null;" not in render_source
+                        or "verifyGroundEndpointFadeReuseProfile();" not in build_source):
+                    print("WORLD_CAPTURE_FAIL: adjacent ground endpoint fades were not safely reused across connected segments",flush=True)
+                    return False
+                print("WORLD_CAPTURE: adjacent ground segments reuse shared endpoint fades; disconnected starts recompute",flush=True)
                 print("WORLD_CAPTURE: ground ribbon reuses 12 static RGB channels, eight endpoint alpha channels, and cached first-visible fades",flush=True)
             else:
                 channel_calls=("int redChannel=colorChannel(red);",

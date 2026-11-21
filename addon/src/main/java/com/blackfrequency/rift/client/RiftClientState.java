@@ -651,6 +651,7 @@ public final class RiftClientState {
         private static int cachedSteepStepBreaks;
         private static boolean firstRenderLogged;
         private static boolean visibilityPrefixReuseLogged;
+        private static boolean endpointFadeReuseLogged;
         private static boolean pendingRenderLogged;
         private static boolean renderEventLogged;
         private static boolean emptyMeshLogged;
@@ -1474,6 +1475,39 @@ public final class RiftClientState {
             return groundDistanceFade(dx*dx+dy*dy+dz*dz);
         }
 
+        // Adjacent mesh segments share the same GroundPoint instance at their join.
+        // Reuse the previous segment's B fade instead of recalculating the same 3D distance.
+        private static boolean canReuseGroundPointFade(
+                GroundPoint point,GroundPoint previousPoint,double previousFade) {
+            return point!=null && point==previousPoint && Double.isFinite(previousFade)
+                && previousFade>=0.0D && previousFade<=1.0D;
+        }
+
+        private static void verifyGroundEndpointFadeReuseProfile() {
+            if(endpointFadeReuseProfileLogged) return;
+            Vec3 camera=new Vec3(0.0D,64.0D,0.0D);
+            GroundPoint start=new GroundPoint(54.0D,64.0D,0.0D);
+            GroundPoint shared=new GroundPoint(56.0D,64.0D,0.0D);
+            GroundPoint end=new GroundPoint(58.0D,64.0D,0.0D);
+            GroundPoint equalButDistinct=new GroundPoint(56.0D,64.0D,0.0D);
+            GroundSegment first=new GroundSegment(start,shared,0.0D,1.0D,GROUND_SAMPLES[0],
+                1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
+            GroundSegment second=new GroundSegment(shared,end,0.0D,1.0D,GROUND_SAMPLES[1],
+                1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
+            double previousFade=groundPointDistanceFade(first.b(),camera);
+            boolean sharedIdentity=first.b()==second.a()
+                && canReuseGroundPointFade(second.a(),first.b(),previousFade);
+            boolean distinctFallback=!canReuseGroundPointFade(equalButDistinct,first.b(),previousFade);
+            boolean invalidFadeRejected=!canReuseGroundPointFade(shared,first.b(),Double.NaN)
+                && !canReuseGroundPointFade(shared,first.b(),-0.01D)
+                && !canReuseGroundPointFade(shared,first.b(),1.01D);
+            if(!sharedIdentity || !distinctFallback || !invalidFadeRejected)
+                throw new IllegalStateException("BLACK FREQUENCY adjacent ground endpoint fade reuse regression");
+            endpointFadeReuseProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_ENDPOINT_FADE_REUSE_PROFILE_VERIFIED sharedPointIdentity=true distinctPointFallback=true invalidFadeRejected=true");
+        }
+
         // A segment remains drawable while either endpoint overlaps the fade envelope.
         // Its two vertex alphas are interpolated independently by the GPU.
         private static double groundSegmentDistanceFade(GroundSegment segment,Vec3 camera) {
@@ -2001,6 +2035,7 @@ public final class RiftClientState {
                 verifyGroundContinuityProfile();
                 verifyGroundRebuildProfile();
                 verifyGroundRenderRangeProfile();
+                verifyGroundEndpointFadeReuseProfile();
                 verifyGroundAnimationProfile();
                 verifyPackedColorProfile();
                 verifyRibbonColorCacheProfile();
@@ -2608,20 +2643,34 @@ public final class RiftClientState {
                 double flickerSin=Math.sin(flickerTime),flickerCos=Math.cos(flickerTime);
                 double pulseTime=time*.19D;
                 double pulseSin=Math.sin(pulseTime),pulseCos=Math.cos(pulseTime);
+                GroundPoint previousFadePoint=null;
+                double previousFadeB=0.0D;
+                int reusedEndpointFadeStarts=0;
+                int recomputedEndpointFadeStarts=0;
                 for(int segmentIndex=firstVisibleSegmentIndex;segmentIndex<cachedSegments.size();segmentIndex++) {
                     GroundSegment segment=cachedSegments.get(segmentIndex);
                     GroundSample sample=segment.sample();
-                    // Break the whole cross-section occasionally; keeping only a dark ribbon
-                    // through every gap makes the fissure read like a cable on the terrain.
-                    if(sample.coreSegmentGap()) continue;
+                    // A core gap breaks endpoint continuity; the next segment must calculate its own start fade.
+                    if(sample.coreSegmentGap()) {
+                        previousFadePoint=null;
+                        previousFadeB=0.0D;
+                        continue;
+                    }
                     double segmentFadeA,segmentFadeB;
                     if(segmentIndex==firstVisibleSegmentIndex) {
                         segmentFadeA=firstVisibleFadeA;
                         segmentFadeB=firstVisibleFadeB;
+                    } else if(canReuseGroundPointFade(segment.a(),previousFadePoint,previousFadeB)) {
+                        segmentFadeA=previousFadeB;
+                        if(VERIFY_GROUND_MESH_PROFILES) reusedEndpointFadeStarts++;
+                        segmentFadeB=groundPointDistanceFade(segment.b(),camera);
                     } else {
                         segmentFadeA=groundPointDistanceFade(segment.a(),camera);
+                        if(VERIFY_GROUND_MESH_PROFILES) recomputedEndpointFadeStarts++;
                         segmentFadeB=groundPointDistanceFade(segment.b(),camera);
                     }
+                    previousFadePoint=segment.b();
+                    previousFadeB=segmentFadeB;
                     if(segmentFadeA<=0.0D && segmentFadeB<=0.0D) continue;
                     float segmentStrengthA=boundedStrength*(float)segmentFadeA;
                     float segmentStrengthB=boundedStrength*(float)segmentFadeB;
@@ -2666,6 +2715,12 @@ public final class RiftClientState {
                         edgeRibbon(builder,matrix,camera,segment,halfWidth,false,
                             GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,
                             edgeAlphaChannelA,edgeAlphaChannelB);
+                }
+                if(VERIFY_GROUND_MESH_PROFILES && !endpointFadeReuseLogged) {
+                    com.mojang.logging.LogUtils.getLogger().info(
+                        "BLACK_FREQUENCY_TEST GROUND_MESH_ENDPOINT_FADE_REUSE_VERIFIED reusedStarts={} recomputedStarts={} gapResetPolicy=true",
+                        reusedEndpointFadeStarts,recomputedEndpointFadeStarts);
+                    endpointFadeReuseLogged=true;
                 }
                 BufferUploader.drawWithShader(builder.end());
             } finally {
