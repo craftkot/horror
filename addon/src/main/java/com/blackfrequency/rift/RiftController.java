@@ -1400,9 +1400,14 @@ public final class RiftController {
         boolean borderInside=isFissureColumnInsideWorldBorder(probeBorder,0,0,-64,borderCursor);
         boolean borderOutsideRejected=!isFissureColumnInsideWorldBorder(probeBorder,32,0,-64,borderCursor);
         boolean nullCursorRejected=!isFissureColumnInsideWorldBorder(probeBorder,0,0,-64,null);
-        if(!(borderInside && borderOutsideRejected && nullCursorRejected))
+        FissureGroundSample rejectedSample=new FissureGroundSample();
+        rejectedSample.surfaceY=65;
+        rejectedSample.particleY=65.10D;
+        boolean nullLevelRejected=!findFissureGroundSample(null,0,0,null,rejectedSample)
+            && rejectedSample.isEmpty();
+        if(!(borderInside && borderOutsideRejected && nullCursorRejected && nullLevelRejected))
             throw new IllegalStateException("CI fissure world-border sampling guard regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_WORLD_BORDER_GUARD_VERIFIED inside=true outsideRejected=true nullRejected=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_WORLD_BORDER_GUARD_VERIFIED inside=true outsideRejected=true nullRejected=true resultCleared=true");
         BlockState verticalLog=net.minecraft.world.level.block.Blocks.OAK_LOG.defaultBlockState();
         BlockState horizontalLog=verticalLog.setValue(
             net.minecraft.world.level.block.RotatedPillarBlock.AXIS,net.minecraft.core.Direction.Axis.X);
@@ -1566,8 +1571,9 @@ public final class RiftController {
 
     private static boolean findFissureGroundSample(ServerLevel level,int x,int z,
             BlockPos.MutableBlockPos cursor,FissureGroundSample result) {
-        if(level==null || result==null || cursor==null) return false;
+        if(result==null) return false;
         result.clear();
+        if(level==null || cursor==null) return false;
         if(!isFissureColumnInsideWorldBorder(level.getWorldBorder(),x,z,level.getMinBuildHeight(),cursor)
             || !level.hasChunk(x>>4,z>>4)) return false;
         int y=level.getHeight(FISSURE_SURFACE_HEIGHTMAP,x,z);

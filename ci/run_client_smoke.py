@@ -258,7 +258,8 @@ def verify_restoration_particle_source():
     target_body=source[target_start:target_end] if target_start>=0 and target_end>target_start else ""
     border_guard=ground_sampler.find("isFissureColumnInsideWorldBorder(level.getWorldBorder(),x,z,level.getMinBuildHeight(),cursor)")
     chunk_guard=ground_sampler.find("!level.hasChunk(x>>4,z>>4)")
-    if ("if(isFissureGroundSupport(level.getBlockState(cursor))) {" not in ground_sampler
+    if ("if(result==null) return false;\n        result.clear();\n        if(level==null || cursor==null) return false;" not in ground_sampler
+            or "if(isFissureGroundSupport(level.getBlockState(cursor))) {" not in ground_sampler
             or border_guard<0 or chunk_guard<0 or border_guard>chunk_guard
             or "BlockState surface=level.getBlockState(cursor);" not in ground_sampler
             or "double shapeHeight=surface.isAir() ? 0.0D" not in ground_sampler
@@ -288,7 +289,7 @@ def verify_restoration_particle_source():
             or "heightmap=motion-blocking ground=terrain-support-filtered" not in source
             or "heightmap=motion-blocking-no-leaves" in source
             or "if(isFissureCanopyOccluder(surface)) continue;" not in ground_sampler
-            or "SURFACE_FISSURE_WORLD_BORDER_GUARD_VERIFIED inside=true outsideRejected=true nullRejected=true" not in source):
+            or "SURFACE_FISSURE_WORLD_BORDER_GUARD_VERIFIED inside=true outsideRejected=true nullRejected=true resultCleared=true" not in source):
         raise RuntimeError("BLACK FREQUENCY canopy traversal must skip only vertical trunks/leaves within the bounded surface scan and reject out-of-border columns before chunk reads")
     print("WORLD_CAPTURE: leaf-inclusive heightmap feeds bounded canopy traversal while preserving roof occlusion",flush=True)
     print("WORLD_CAPTURE: fissure surface sampling rejects out-of-border columns before loaded-chunk reads",flush=True)
@@ -2409,7 +2410,7 @@ def capture_test_world():
                     send_chat_command("/gamemode spectator @s",
                         r"Set own game mode to Spectator Mode","spectator mode")
                     send_chat_command(f"/tp @s {x} {y+80} {z}",
-                        r"Teleported [^\\n]+ to ","vertical camera teleport")
+                        r"Teleported .* to ","vertical camera teleport")
                     camera_sample=None
                     entered=None
                     probe_logs=""
@@ -2461,7 +2462,7 @@ def capture_test_world():
                             or float(skip_milestone.group(3))<=64.0):
                         raise RuntimeError("BLACK FREQUENCY vertical cull skip milestone did not match the entered camera/anchor")
                     send_chat_command(f"/tp @s {x} {y} {z}",
-                        r"Teleported [^\\n]+ to ","return to safe pad")
+                        r"Teleported .* to ","return to safe pad")
                     send_chat_command("/gamemode survival @s",
                         r"Set own game mode to Survival Mode","return to survival")
                     # Re-enter the game through the pause screen so Minecraft explicitly
@@ -2556,7 +2557,7 @@ def capture_test_world():
                         # Keep the disposable player recoverable even if a diagnostic assertion fails.
                         try:
                             send_chat_command(f"/tp @s {x} {y} {z}",
-                                r"Teleported [^\\n]+ to ","failure recovery teleport")
+                                r"Teleported .* to ","failure recovery teleport")
                             send_chat_command("/gamemode survival @s",
                                 r"Set own game mode to Survival Mode","failure recovery survival")
                         except Exception as recovery_error:
