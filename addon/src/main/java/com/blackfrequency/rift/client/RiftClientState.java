@@ -649,7 +649,7 @@ public final class RiftClientState {
         private static final double GROUND_CORE_PULSE_RANGE=.22D;
         private static boolean continuityProfileLogged;
         // Render-thread-only guard: invariant probes run once per client JVM, not on every mesh rebuild.
-        private static boolean edgeCapContinuityProfileLogged;
+        private static boolean edgeMaskProfileLogged;
         private static boolean continuityBuildLogged;
         private static int cachedSteepStepBreaks;
         private static boolean firstRenderLogged;
@@ -1317,15 +1317,22 @@ public final class RiftClientState {
                     || segment.taperB()<=CLIFF_BREAK_TAPER+GROUND_CAP_TAPER_EPSILON);
         }
 
-        private static boolean shouldRenderGroundEdge(GroundSample sample,GroundSegment segment,boolean left) {
+        private static final int GROUND_EDGE_LEFT_MASK=1;
+        private static final int GROUND_EDGE_RIGHT_MASK=2;
+
+        // Compute the shared terrain-cap decision once; both violet lips consume the same mask.
+        private static int groundEdgeMask(GroundSample sample,GroundSegment segment) {
             if(sample==null || segment==null
-                || !Double.isFinite(segment.taperA()) || !Double.isFinite(segment.taperB())) return false;
-            return isGroundSegmentCap(segment)
-                || (left ? !sample.leftEdgeNotched() : !sample.rightEdgeNotched());
+                || !Double.isFinite(segment.taperA()) || !Double.isFinite(segment.taperB())) return 0;
+            if(isGroundSegmentCap(segment)) return GROUND_EDGE_LEFT_MASK|GROUND_EDGE_RIGHT_MASK;
+            int mask=0;
+            if(!sample.leftEdgeNotched()) mask|=GROUND_EDGE_LEFT_MASK;
+            if(!sample.rightEdgeNotched()) mask|=GROUND_EDGE_RIGHT_MASK;
+            return mask;
         }
 
-        private static void verifyGroundEdgeCapContinuityProfile() {
-            if(edgeCapContinuityProfileLogged) return;
+        private static void verifyGroundEdgeMaskProfile() {
+            if(edgeMaskProfileLogged) return;
             GroundSample notched=new GroundSample(0.0D,0.0D,0.0D,0.0D,0.0D,
                 0.0D,1.0D,0.0D,1.0D,1.0D,0.0D,false,true,true);
             GroundSample intact=new GroundSample(0.0D,0.0D,0.0D,0.0D,0.0D,
@@ -1340,24 +1347,26 @@ public final class RiftClientState {
                 .8D,CLIFF_BREAK_TAPER,1.0D,1.0D,0.0D,0.0D);
             GroundSegment invalid=new GroundSegment(a,b,0.0D,1.0D,notched,
                 Double.NaN,.8D,1.0D,1.0D,0.0D,0.0D);
-            boolean ordinaryNotchesPreserved=!shouldRenderGroundEdge(notched,ordinary,true)
-                && !shouldRenderGroundEdge(notched,ordinary,false);
-            boolean startCapLipsPreserved=shouldRenderGroundEdge(notched,startCap,true)
-                && shouldRenderGroundEdge(notched,startCap,false);
-            boolean endCapLipsPreserved=shouldRenderGroundEdge(notched,endCap,true)
-                && shouldRenderGroundEdge(notched,endCap,false);
-            boolean intactLipsPreserved=shouldRenderGroundEdge(intact,ordinary,true)
-                && shouldRenderGroundEdge(intact,ordinary,false);
-            boolean invalidRejected=!shouldRenderGroundEdge(notched,invalid,true)
-                && !shouldRenderGroundEdge(null,ordinary,true)
-                && !shouldRenderGroundEdge(notched,null,true);
+            int ordinaryMask=groundEdgeMask(notched,ordinary);
+            int startCapMask=groundEdgeMask(notched,startCap);
+            int endCapMask=groundEdgeMask(notched,endCap);
+            int intactMask=groundEdgeMask(intact,ordinary);
+            int invalidMask=groundEdgeMask(notched,invalid);
+            int bothEdgesMask=GROUND_EDGE_LEFT_MASK|GROUND_EDGE_RIGHT_MASK;
+            boolean ordinaryNotchesPreserved=ordinaryMask==0;
+            boolean startCapLipsPreserved=startCapMask==bothEdgesMask;
+            boolean endCapLipsPreserved=endCapMask==bothEdgesMask;
+            boolean intactLipsPreserved=intactMask==bothEdgesMask;
+            boolean invalidRejected=invalidMask==0
+                && groundEdgeMask(null,ordinary)==0
+                && groundEdgeMask(notched,null)==0;
             if(!(ordinaryNotchesPreserved && startCapLipsPreserved && endCapLipsPreserved
                 && intactLipsPreserved && invalidRejected))
-                throw new IllegalStateException("BLACK FREQUENCY ground edge cap continuity regression");
-            edgeCapContinuityProfileLogged=true;
+                throw new IllegalStateException("BLACK FREQUENCY ground edge mask regression");
+            edgeMaskProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_EDGE_CAP_CONTINUITY_VERIFIED capTaper={} notchSuppressedAtCaps=true normalNotchesPreserved=true invalidRejected=true",
-                CLIFF_BREAK_TAPER);
+                "BLACK_FREQUENCY_GROUND_MESH_EDGE_MASK_VERIFIED leftBit={} rightBit={} capMask={} ordinaryMask={} invalidMask={}",
+                GROUND_EDGE_LEFT_MASK,GROUND_EDGE_RIGHT_MASK,bothEdgesMask,ordinaryMask,invalidMask);
         }
 
         private static boolean capLastGroundSegmentAtGap(List<GroundSegment> segments,
@@ -2154,7 +2163,7 @@ public final class RiftClientState {
                 verifyTaperProfile();
                 verifyGroundSurfaceReliefProfile();
                 verifyGroundEdgeInterpolationProfile();
-                verifyGroundEdgeCapContinuityProfile();
+                verifyGroundEdgeMaskProfile();
                 verifyGroundContinuityProfile();
                 verifyGroundRebuildProfile();
                 verifyGroundRenderRangeProfile();
@@ -2830,11 +2839,12 @@ public final class RiftClientState {
                     // Leave small, deterministic gaps in each lip independently. The
                     // continuous dark core remains visible, so the seam reads as fractured
                     // earth rather than two uninterrupted luminous rails.
-                    if(shouldRenderGroundEdge(sample,segment,true))
+                    int edgeMask=groundEdgeMask(sample,segment);
+                    if((edgeMask&GROUND_EDGE_LEFT_MASK)!=0)
                         edgeRibbon(builder,matrix,camera,segment,halfWidth,true,
                             GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,
                             edgeAlphaChannelA,edgeAlphaChannelB);
-                    if(shouldRenderGroundEdge(sample,segment,false))
+                    if((edgeMask&GROUND_EDGE_RIGHT_MASK)!=0)
                         edgeRibbon(builder,matrix,camera,segment,halfWidth,false,
                             GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,
                             edgeAlphaChannelA,edgeAlphaChannelB);
