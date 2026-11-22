@@ -132,8 +132,8 @@ def verify_green_corruption_shader_source():
         "float greenOutsideCore=1.0-clamp(fractureCoverage,0.0,1.0);",
         "float greenCorruptionGlow=clamp(rimLight*.88+majorGlow*.14+filaments*.05,0.0,1.0)*greenOutsideCore;",
         "color=mix(color,vec3(.002,.011,.009),green*.18*greenOutsideCore);",
-        "color+=vec3(.10,.78,.24)*greenCorruptionGlow*green*(.72+.28*rimPulse);",
-        "color+=vec3(.14,.92,.28)*lightningFlash*majorGlow*green*greenOutsideCore*.42;",
+        "color+=vec3(.035,1.25,.035)*greenCorruptionGlow*green*(.72+.28*rimPulse);",
+        "color+=vec3(.025,1.35,.035)*lightningFlash*majorGlow*green*greenOutsideCore*.42;",
     )
     if (shader.count("float fractureCoverage=")!=1
             or any(token not in shader for token in required)
