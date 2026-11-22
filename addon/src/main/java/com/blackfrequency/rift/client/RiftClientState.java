@@ -851,6 +851,8 @@ public final class RiftClientState {
         // Preserve the actual anchor transition across cache release until the mesh is rebuilt.
         private static boolean verticalCullResumeAnchorChanged;
         private static boolean verticalCameraRangeSampleLogged;
+        // A missing anchor chunk must not discard an active vertical-cull latch; wait for it to be loaded again.
+        private static boolean unavailableAnchorChunkLogged;
         // Diagnostic-only: each skipped frame avoids one border probe, chunk probe and rebuild check.
         private static long verticallyCulledSkippedFrames;
         private static boolean supportFilterLogged;
@@ -2765,10 +2767,7 @@ public final class RiftClientState {
                 || !SURFACE_Y_BY_COLUMN.isEmpty()) clearGeometryCache();
         }
 
-        private static void clearCache() {
-            if(VERIFY_GROUND_MESH_PROFILES) flushVerticalCullSkipDiagnostics("cache-reset");
-            else verticallyCulledSkippedFrames=0L;
-            clearGeometryCache();
+        private static void resetCacheProfileFlags() {
             continuityBuildLogged=false;
             continuityProfileLogged=false;
             firstRenderLogged=false;
@@ -2786,12 +2785,40 @@ public final class RiftClientState {
             animationProfileLogged=false;
             rangeRejectLogged=false;
             rangeProfileLogged=false;
+            verticalCameraRangeSampleLogged=false;
+        }
+
+        private static void clearCache() {
+            if(VERIFY_GROUND_MESH_PROFILES) flushVerticalCullSkipDiagnostics("cache-reset");
+            else verticallyCulledSkippedFrames=0L;
+            clearGeometryCache();
+            resetCacheProfileFlags();
             verticalCullResumePending=false;
             verticalCullResumeAnchorChanged=false;
-            verticalCameraRangeSampleLogged=false;
             verticallyCulled=false;
             verticallyCulledAnchorX=Integer.MIN_VALUE;
             verticallyCulledAnchorZ=Integer.MIN_VALUE;
+            unavailableAnchorChunkLogged=false;
+        }
+
+        // A transiently unavailable client chunk must not erase a live vertical-cull latch.
+        // Keep the skip counter until the camera returns and the already-loaded chunk can rebuild.
+        // This path only observes hasChunk(); it never requests or forces a chunk load.
+        private static void clearCacheForUnavailableAnchor(int worldAnchorX,int worldAnchorZ) {
+            boolean preserveVerticalCull=verticallyCulled || verticalCullResumePending;
+            if(!preserveVerticalCull) {
+                clearCache();
+                return;
+            }
+            if(cachedLevel!=null || cachedTick!=Long.MIN_VALUE || !cachedSegments.isEmpty()
+                || !SURFACE_Y_BY_COLUMN.isEmpty()) clearGeometryCache();
+            resetCacheProfileFlags();
+            if(VERIFY_GROUND_MESH_PROFILES && !unavailableAnchorChunkLogged) {
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ANCHOR_CHUNK_UNAVAILABLE_PRESERVED anchorX={} anchorZ={} verticallyCulled={} skippedFrames={} loadedOnly=true noChunkLoad=true",
+                    worldAnchorX,worldAnchorZ,verticallyCulled,verticallyCulledSkippedFrames);
+            }
+            unavailableAnchorChunkLogged=true;
         }
 
         private static void verifyInactiveCacheCleanup(net.minecraft.client.multiplayer.ClientLevel level) {
@@ -2906,11 +2933,15 @@ public final class RiftClientState {
             // Reuse the render-thread scratch cursor instead of allocating a BlockPos
             // on every frame. buildSegments() resets this cursor before sampling.
             SURFACE_CURSOR.set(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);
-            if(!level.getWorldBorder().isWithinBounds(SURFACE_CURSOR)
-                || !level.hasChunk(worldAnchorX>>4,worldAnchorZ>>4)) {
+            if(!level.getWorldBorder().isWithinBounds(SURFACE_CURSOR)) {
                 clearCache();
                 return;
             }
+            if(!level.hasChunk(worldAnchorX>>4,worldAnchorZ>>4)) {
+                clearCacheForUnavailableAnchor(worldAnchorX,worldAnchorZ);
+                return;
+            }
+            unavailableAnchorChunkLogged=false;
             long tick=level.getGameTime();
             boolean anchorChanged=level!=cachedLevel || worldAnchorX!=cachedAnchorX || worldAnchorZ!=cachedAnchorZ;
             double cachedVerticalDelta=camera.y-cachedAnchorSurfaceY;

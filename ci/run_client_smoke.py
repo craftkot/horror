@@ -2742,6 +2742,11 @@ def capture_test_world():
                     milestone_position=probe_logs.find("BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_SKIP_MILESTONE")
                     if not (0<=sample_position<entered_position<milestone_position<summary_position<resumed_position):
                         raise RuntimeError("BLACK FREQUENCY vertical cull probe markers were not emitted in sample/enter/milestone/skip/resume order")
+                    unavailable_anchor_position=probe_logs.find(
+                        "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ANCHOR_CHUNK_UNAVAILABLE_PRESERVED")
+                    if (unavailable_anchor_position>=0
+                            and not (entered_position<unavailable_anchor_position<summary_position)):
+                        raise RuntimeError("BLACK FREQUENCY unavailable-anchor preservation marker was out of cull/resume order")
                     frames,border_skips,chunk_skips,rebuild_skips=(int(summary.group(i)) for i in range(1,5))
                     segments,arms=int(resumed.group(1)),int(resumed.group(2))
                     if (frames<3 or border_skips!=frames or chunk_skips!=frames
@@ -3250,11 +3255,12 @@ def capture_test_world():
             skip_counter=ground_render.find("verticallyCulledSkippedFrames=nextVerticalCullSkippedFrames(verticallyCulledSkippedFrames)")
             resume_flush=ground_render.find('flushVerticalCullSkipDiagnostics("camera-returned-or-anchor-changed")')
             cursor_set=ground_render.find("SURFACE_CURSOR.set(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);")
-            border_check=ground_render.find("isWithinBounds(SURFACE_CURSOR)")
-            loaded_chunk_probe=ground_render.find("!level.hasChunk(worldAnchorX>>4,worldAnchorZ>>4)")
+            border_check=ground_render.find("if(!level.getWorldBorder().isWithinBounds(SURFACE_CURSOR))")
+            loaded_chunk_probe=ground_render.find("if(!level.hasChunk(worldAnchorX>>4,worldAnchorZ>>4))")
+            unloaded_anchor_clear=ground_render.find("clearCacheForUnavailableAnchor(worldAnchorX,worldAnchorZ);")
             if ("private static final BlockPos.MutableBlockPos SURFACE_CURSOR=" not in camera_source
                     or not ground_render or latch_skip<0 or skip_counter<0 or resume_flush<0 or cursor_set<0
-                    or not (latch_skip<skip_counter<resume_flush<cursor_set<border_check<loaded_chunk_probe)
+                    or not (latch_skip<skip_counter<resume_flush<cursor_set<border_check<loaded_chunk_probe<unloaded_anchor_clear)
                     or "new BlockPos(" in ground_render
                     or "private static void flushVerticalCullSkipDiagnostics(String reason)" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: vertical cull must count skipped frames and flush the summary before world-border/chunk probes",flush=True)
@@ -3265,7 +3271,18 @@ def capture_test_world():
                     or "GROUND_MESH_VERTICAL_CULL_RESUMED" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: actual vertical cull entry/resume diagnostics are missing from the renderer",flush=True)
                 return False
+            unavailable_anchor_start=camera_source.find("private static void clearCacheForUnavailableAnchor(int worldAnchorX,int worldAnchorZ)")
+            unavailable_anchor_end=camera_source.find("\n        private static void verifyInactiveCacheCleanup",unavailable_anchor_start+1)
+            unavailable_anchor_helper=(camera_source[unavailable_anchor_start:unavailable_anchor_end]
+                                       if unavailable_anchor_start>=0 and unavailable_anchor_end>unavailable_anchor_start else "")
+            if ("boolean preserveVerticalCull=verticallyCulled || verticalCullResumePending;" not in unavailable_anchor_helper
+                    or "GROUND_MESH_VERTICAL_CULL_ANCHOR_CHUNK_UNAVAILABLE_PRESERVED" not in unavailable_anchor_helper
+                    or "noChunkLoad=true" not in unavailable_anchor_helper
+                    or "getChunk(" in unavailable_anchor_helper):
+                print("WORLD_CAPTURE_FAIL: unavailable anchor chunks must preserve an active cull without forcing chunk loads",flush=True)
+                return False
             print("WORLD_CAPTURE: vertically culled ground mesh skips world-border and loaded-chunk probes until resume",flush=True)
+            print("WORLD_CAPTURE: unavailable anchor chunks preserve the cull latch without requesting chunk loads",flush=True)
             print("WORLD_CAPTURE: actual vertical cull entry and rebuild diagnostics are wired into the renderer",flush=True)
             print("WORLD_CAPTURE: ground render anchor guard reuses its mutable cursor; no per-frame BlockPos allocation",flush=True)
             if ("long cameraHorizontalDistanceSquared=horizontalDistanceSquared(" not in camera_source
