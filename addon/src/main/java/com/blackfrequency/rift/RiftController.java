@@ -974,6 +974,8 @@ public final class RiftController {
         boolean ciNaturalBeaconRemoved, ciNaturalBeaconReplaced;
         boolean ciSparseRecoveryEligibilityLogged;
         boolean ciSurfaceFissureLogged;
+        // CI-only retry suppression; never persisted and reset when a safe side appears.
+        boolean ciBeaconApproachFailureLogged;
         // One-shot CI fixture proving the real loaded-world canopy sampler, never persisted.
         boolean ciCanopyWorldFixtureVerified;
         int ciCanopyFixtureSearchAttempts;
@@ -1835,6 +1837,10 @@ public final class RiftController {
         return Math.abs(anchorDeltaZ)>=Math.abs(anchorDeltaX);
     }
 
+    private static boolean shouldTryAlternateCiBeaconPadAxis(int primarySign) {
+        return primarySign==0;
+    }
+
     private static int selectCiBeaconPadSign(boolean positiveClear,boolean negativeClear) {
         return positiveClear?1:negativeClear?-1:0;
     }
@@ -1906,9 +1912,13 @@ public final class RiftController {
     private static void verifyCiBeaconPadSignSelection() {
         if(selectCiBeaconPadSign(true,true)!=1
             || selectCiBeaconPadSign(false,true)!=-1
-            || selectCiBeaconPadSign(false,false)!=0)
+            || selectCiBeaconPadSign(false,false)!=0
+            || !shouldTryAlternateCiBeaconPadAxis(0)
+            || shouldTryAlternateCiBeaconPadAxis(1)
+            || shouldTryAlternateCiBeaconPadAxis(-1))
             throw new IllegalStateException("CI beacon pad clear-side selection regression");
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_APPROACH_SIDE_SELECTION_VERIFIED positivePreferred=true reverseFallback=true blockedRejected=true fissureVisibilityRequired=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_APPROACH_AXIS_FALLBACK_POLICY_VERIFIED primaryPerpendicular=true alternateAfterBothSidesBlocked=true loadedOnly=true");
     }
 
     private static double ciBeaconPadDistanceSquared() {
@@ -5468,11 +5478,26 @@ public final class RiftController {
                     // and already-loaded chunks; this disposable fixture never force-loads.
                     boolean padAlongX=ciBeaconPadAlongX(s.x,s.z,demoPos.getX(),demoPos.getZ());
                     int padSign=chooseCiBeaconPadSign(level,demoPlayer,s,demoPos,padAlongX);
+                    if(shouldTryAlternateCiBeaconPadAxis(padSign)) {
+                        boolean primaryAlongX=padAlongX;
+                        boolean alternateAlongX=!primaryAlongX;
+                        int alternateSign=chooseCiBeaconPadSign(level,demoPlayer,s,demoPos,alternateAlongX);
+                        if(alternateSign!=0) {
+                            padAlongX=alternateAlongX;
+                            padSign=alternateSign;
+                            LOGGER.info("BLACK_FREQUENCY_TEST BEACON_APPROACH_AXIS_FALLBACK primaryAxis={} selectedAxis={} sign={} loadedOnly=true",
+                                primaryAlongX?"X":"Z",padAlongX?"X":"Z",padSign);
+                        }
+                    }
                     if(padSign==0) {
-                        LOGGER.warn("BLACK_FREQUENCY_TEST BEACON_APPROACH_NO_CLEAR_SIDE axis={} loadedOnly=true",
-                            padAlongX?"X":"Z");
+                        if(!s.ciBeaconApproachFailureLogged) {
+                            s.ciBeaconApproachFailureLogged=true;
+                            LOGGER.warn("BLACK_FREQUENCY_TEST BEACON_APPROACH_NO_CLEAR_SIDE axis={} alternateTried=true loadedOnly=true",
+                                padAlongX?"X":"Z");
+                        }
                         return;
                     }
+                    s.ciBeaconApproachFailureLogged=false;
                     LOGGER.info("BLACK_FREQUENCY_TEST BEACON_APPROACH_SIDE_SELECTED axis={} sign={} sightlineClear=true fissureVisible=true loadedOnly=true",
                         padAlongX?"X":"Z",padSign);
                     int padDirectionX=padAlongX?padSign:0;
