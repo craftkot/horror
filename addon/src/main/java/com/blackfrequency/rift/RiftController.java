@@ -1500,6 +1500,10 @@ public final class RiftController {
                     if(!level.hasChunk(x>>4,z>>4)) continue;
                     int y=level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,x,z);
                     if(y<level.getMinBuildHeight()+1 || y+4>=level.getMaxBuildHeight()) continue;
+                    // The fixture adds leaves at y+4. Reject taller existing canopies so
+                    // the expected MOTION_BLOCKING top remains exactly y+5 during the probe.
+                    int existingSurfaceY=level.getHeight(FISSURE_SURFACE_HEIGHTMAP,x,z);
+                    if(existingSurfaceY>y+5) continue;
                     cursor.set(x,y-1,z);
                     if(!level.getWorldBorder().isWithinBounds(cursor)
                         || !isFissureGroundSupport(level.getBlockState(cursor))) continue;
