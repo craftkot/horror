@@ -2570,16 +2570,18 @@ public final class RiftClientState {
                 && GROUND_CORE_GREEN_CHANNEL==0 && GROUND_CORE_BLUE_CHANNEL==6;
             boolean filament=GROUND_FILAMENT_RED_CHANNEL==71
                 && GROUND_FILAMENT_GREEN_CHANNEL==4 && GROUND_FILAMENT_BLUE_CHANNEL==158;
+            boolean bevel=GROUND_BEVEL_RED_CHANNEL==14
+                && GROUND_BEVEL_GREEN_CHANNEL==2 && GROUND_BEVEL_BLUE_CHANNEL==31;
             boolean edge=GROUND_EDGE_RED_CHANNEL==128
                 && GROUND_EDGE_GREEN_CHANNEL==36 && GROUND_EDGE_BLUE_CHANNEL==230;
             boolean edgePaletteBound=GROUND_EDGE_RED_CHANNEL==colorChannel(GROUND_EDGE_RED)
                 && GROUND_EDGE_GREEN_CHANNEL==colorChannel(GROUND_EDGE_GREEN)
                 && GROUND_EDGE_BLUE_CHANNEL==colorChannel(GROUND_EDGE_BLUE);
-            if(!(glow && core && filament && edge && edgePaletteBound))
+            if(!(glow && core && bevel && filament && edge && edgePaletteBound))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh static RGB cache regression");
             ribbonColorCacheProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED staticRgbChannels=12 dynamicAlphaChannels=8 edgeAlphaBaseShared=true edgeNotchesCached=true edgePaletteBound={}",
+                "BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED staticRgbChannels=15 dynamicAlphaChannels=10 edgeAlphaBaseShared=true edgeNotchesCached=true edgePaletteBound={}",
                 edgePaletteBound);
         }
 
