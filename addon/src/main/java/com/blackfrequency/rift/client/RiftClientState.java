@@ -39,6 +39,11 @@ public final class RiftClientState {
     private static final int RIFT_STATE_PACKET_INTERVAL_TICKS=10;
     private static final boolean VERIFY_RIFT_CLIENT_PROFILES=
         Boolean.getBoolean("blackfrequency.verifyGroundMeshProfiles");
+    // A separate disposable CI client may preview the shader's peak green phase.
+    // The override is inert unless the profile verifier is explicitly enabled.
+    private static final boolean CI_GREEN_PHASE_PREVIEW=
+        VERIFY_RIFT_CLIENT_PROFILES && Boolean.getBoolean("blackfrequency.ciGreenPhasePreview");
+    private static boolean ciGreenPhasePreviewLogged;
     private static boolean riftOpeningRampProfileLogged;
     private static int ticksSincePacket;
     private static int anchorX;
@@ -114,7 +119,18 @@ public final class RiftClientState {
             && Math.abs((long)worldAnchorZ)<=30_000_000L;
     }
     public static float strength() { return progress; }
-    public static float greenPhase() { return greenPhase(collapse,finaleTicks); }
+    public static float greenPhase() {
+        if(CI_GREEN_PHASE_PREVIEW && progress>0.0F) {
+            if(!ciGreenPhasePreviewLogged) {
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_CI_GREEN_PHASE_PREVIEW_ACTIVE strength={} collapse={} finaleTicks={}",
+                    progress,collapse,finaleTicks);
+                ciGreenPhasePreviewLogged=true;
+            }
+            return 1.0F;
+        }
+        return greenPhase(collapse,finaleTicks);
+    }
 
     private static float smoothstep01(float value) {
         float t=Math.max(0.0F,Math.min(1.0F,value));
@@ -233,6 +249,7 @@ public final class RiftClientState {
     public static int anchorZ() { return anchorZ; }
     public static void reset() {
         progress=0;collapse=false;finaleTicks=0;serverFinaleTicks=0;ticksSincePacket=0;
+        ciGreenPhasePreviewLogged=false;
         anchorX=0;anchorZ=0;anchorValid=false;
         beaconPosition=Long.MIN_VALUE;beaconBlockPos=null;beaconPositionValid=false;restorationActive=false;
         beaconAuraCompletionFadeTicks=0;beaconAuraCompletionFadeProfileLogged=false;
