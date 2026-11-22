@@ -2643,6 +2643,12 @@ def capture_test_world():
             )
             snow_shape_match=snow_shape_probe.search(sample_source)
             snow_shape_index=snow_shape_match.start() if snow_shape_match else -1
+            support_offset_profile=re.compile(
+                r"double supportOffset=boundedShapeHeight\\(supportHeight,1\\.0D\\);"
+                r"\\s*if\\(Double\\.isFinite\\(snowLayerHeight\\)\\s*&&\\s*snowLayerHeight>0\\.0D\\)"
+                r"\\s*return supportOffset\\+Math\\.min\\(1\\.0D,snowLayerHeight\\);"
+                r"\\s*return supportOffset;"
+            )
             headroom_index=sample_source.find("cursor.set(blockX,candidateY+1,blockZ);")
             snow_offset_index=sample_source.find("groundSurfaceOffset(supportHeight,snowLayerHeight)")
             if ("private static double groundSurfaceOffset(double supportHeight,double snowLayerHeight)" not in camera_source
@@ -2654,7 +2660,7 @@ def capture_test_world():
                     or "coverShape" in sample_source
                     or "Double.isFinite(snowLayerHeight)" not in camera_source
                     or "Math.min(1.0D,snowLayerHeight)" not in camera_source
-                    or "return boundedShapeHeight(supportHeight,1.0D);" not in camera_source):
+                    or not support_offset_profile.search(camera_source)):
                 print("WORLD_CAPTURE_FAIL: ground mesh surface-height contract does not preserve foliage occlusion while lifting above snow layers",flush=True)
                 return False
             if ("private static boolean isGroundHeadClear(BlockState head)" not in camera_source
