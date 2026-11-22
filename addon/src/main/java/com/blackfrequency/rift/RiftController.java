@@ -1506,6 +1506,11 @@ public final class RiftController {
             && !isFissureCanopyFixtureCellClearable(Blocks.WATER.defaultBlockState(),level,policyPos)
             && !isFissureCanopyFixtureCellClearable(Blocks.CHEST.defaultBlockState(),level,policyPos)
             && !isFissureCanopyFixtureCellClearable(Blocks.STONE.defaultBlockState(),level,policyPos);
+        boolean fixtureBaseSurfacePolicy=
+            isFissureSurfaceAvailable(Blocks.AIR.defaultBlockState())
+            && isFissureSurfaceAvailable(Blocks.DANDELION.defaultBlockState())
+            && !isFissureSurfaceAvailable(Blocks.OAK_LEAVES.defaultBlockState())
+            && !isFissureSurfaceAvailable(Blocks.WATER.defaultBlockState());
         int fixtureX=Integer.MIN_VALUE,fixtureZ=Integer.MIN_VALUE,baseY=Integer.MIN_VALUE;
         for(int radius=2;radius<=8 && fixtureX==Integer.MIN_VALUE;radius++) {
             for(int dx=-radius;dx<=radius && fixtureX==Integer.MIN_VALUE;dx++) {
@@ -1526,7 +1531,11 @@ public final class RiftController {
                     for(int offset=0;offset<=4;offset++) {
                         cursor.set(x,y+offset,z);
                         BlockState existing=level.getBlockState(cursor);
-                        if(!isFissureCanopyFixtureCellClearable(existing,level,cursor)) {
+                        // The base cell must be an actual visible surface, not a leaf
+                        // block. Leaves are valid canopy cells above it, but a leaf at
+                        // ground level correctly hides the terrain sampler's support.
+                        if((offset==0 && !isFissureSurfaceAvailable(existing))
+                            || !isFissureCanopyFixtureCellClearable(existing,level,cursor)) {
                             clearColumn=false;
                             break;
                         }
@@ -1617,15 +1626,18 @@ public final class RiftController {
                 throw new IllegalStateException("CI canopy fixture cleanup failed");
         }
 
-        if(!(fixtureCellPolicy && canopyAccepted && horizontalLogRejected && roofRejected && unloadedChunkRejected))
+        if(!(fixtureCellPolicy && fixtureBaseSurfacePolicy && canopyAccepted
+            && horizontalLogRejected && roofRejected && unloadedChunkRejected))
             throw new IllegalStateException("CI real-world canopy scan/structure occlusion regression"
-                +" fixtureCellPolicy="+fixtureCellPolicy+" canopyAccepted="+canopyAccepted
+                +" fixtureCellPolicy="+fixtureCellPolicy+" fixtureBaseSurfacePolicy="+fixtureBaseSurfacePolicy
+                +" canopyAccepted="+canopyAccepted
                 +" canopyFound="+canopyFound+" canopyTop="+canopyTop+" expectedCanopyTop="+(baseY+5)
                 +" canopySurfaceY="+canopySurfaceY+" expectedSurfaceY="+baseY
                 +" canopyParticleY="+canopyParticleY+" expectedCanopyParticleY="+expectedCanopyParticleY+" surfaceShapeHeight="+canopySurfaceShapeHeight+" horizontalLogRejected="+horizontalLogRejected
                 +" roofRejected="+roofRejected+" unloadedChunkRejected="+unloadedChunkRejected
                 +" fixture="+fixtureX+","+baseY+","+fixtureZ+" originalSurfaceY="+originalSurfaceY);
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_FIXTURE_CELL_POLICY_VERIFIED air=true leaves=true nonSolidPlants=true fluids=false blockEntities=false solids=false");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_BASE_SURFACE_POLICY_VERIFIED air=true plants=true leavesRejected=true fluidsRejected=true");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_FIXTURE_RESTORATION_VERIFIED originalHeightRestored=true loadedOnly=true radius=8");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_TRAVERSAL_VERIFIED verticalLogs=true leaves=true horizontalLogsRejected=true roofBlocksRejected=true nonSolidPlantsRetained=true heightmapIncludesLeaves=true depthBound=32");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_WORLD_CANOPY_SAMPLE_VERIFIED heightmapTopOffset=5 canopyBlocks=4 surfaceFound=true horizontalLogRejected=true roofRejected=true loadedOnly=true searchRadius=8 restored=true rejectedResultCleared=true unloadedChunkRejected=true");
