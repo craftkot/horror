@@ -113,6 +113,25 @@ def parse_fissure_particle_emission(log_text):
     return tuple(int(value) for value in match.groups()) if match else None
 
 
+def verify_green_corruption_shader_source():
+    shader_path=(ROOT/"addon"/"src"/"main"/"resources"/"assets"/"blackfrequency"/"shaders"/"core"/"sky_rift.fsh")
+    shader=shader_path.read_text(encoding="utf-8")
+    required=(
+        "float greenOutsideCore=1.0-clamp(fractureCoverage,0.0,1.0);",
+        "float greenCorruptionGlow=clamp(rimLight*.88+majorGlow*.14+filaments*.05,0.0,1.0)*greenOutsideCore;",
+        "color=mix(color,vec3(.002,.011,.009),green*.18);",
+        "color+=vec3(.10,.78,.24)*greenCorruptionGlow*green*(.72+.28*rimPulse);",
+        "color+=vec3(.14,.92,.28)*lightningFlash*majorGlow*green*greenOutsideCore*.42;",
+    )
+    if (shader.count("float fractureCoverage=")!=1
+            or any(token not in shader for token in required)
+            or "color=mix(color,vec3(.002,.011,.009),green);" in shader):
+        raise RuntimeError("BLACK FREQUENCY green corruption must illuminate fracture edges without washing out dark cores")
+    if shader.index("float fractureCoverage=")>shader.index("float greenOutsideCore="):
+        raise RuntimeError("BLACK FREQUENCY green edge mask must be derived after fracture-core coverage")
+    print("WORLD_CAPTURE: green corruption keeps near-black cores and adds bounded toxic-green edge emission",flush=True)
+
+
 def verify_beacon_aura_source():
     root=ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"
     network=(root/"RiftNetwork.java").read_text(encoding="utf-8")
@@ -665,6 +684,7 @@ def verify_beacon_interaction_reach_geometry():
 verify_fissure_target_view_score_profile()
 verify_restoration_particle_source()
 verify_beacon_aura_source()
+verify_green_corruption_shader_source()
 verify_real_beacon_break_source()
 verify_beacon_interaction_reach_geometry()
 verify_camera_input_profile()

@@ -209,11 +209,19 @@ void main(){
  float rimPulse=.78+.22*sin(t*3.1+longitude*23.+.8*sin(longitude*5.-t*.4));
  float rimLight=spineRim*.92+branchRim*.76+upperRim*.84+lowerRim*.72+crownRim*.88+zenithRim*.94*zenithPulse;
  color+=edge*rimLight*(1.08*rimPulse);
- // The green transition is a separate phase, not a persistent tint.
- color=mix(color,vec3(.002,.011,.009),green);
+ // Keep the fracture cores near-black while the corruption phase
+ // contaminates their rims with a restrained, animated toxic-green emission.
+ float fractureCoverage=max(zenithCore,max(max(spineCore,upperCore),max(lowerCore,max(branches,crownCore))));
+ float greenOutsideCore=1.0-clamp(fractureCoverage,0.0,1.0);
+ float greenCorruptionGlow=clamp(rimLight*.88+majorGlow*.14+filaments*.05,0.0,1.0)*greenOutsideCore;
+ // Preserve the dark violet atmosphere; green replaces only a small part
+ // of the base color, then adds light outside the near-black fracture cores.
+ color=mix(color,vec3(.002,.011,.009),green*.18);
+ color+=vec3(.018,.11,.035)*majorGlow*green*greenOutsideCore;
+ color+=vec3(.10,.78,.24)*greenCorruptionGlow*green*(.72+.28*rimPulse);
+ color+=vec3(.14,.92,.28)*lightningFlash*majorGlow*green*greenOutsideCore*.42;
  // Side fractures must contribute to alpha as well as RGB; otherwise
  // their glow fades against the unmodified world behind the sky overlay.
- float fractureCoverage=max(zenithCore,max(max(spineCore,upperCore),max(lowerCore,max(branches,crownCore))));
  // Fade the world sky almost completely behind the active catastrophe.
  // This keeps the blue vanilla sky from washing out the near-black violet void.
  // The overlay still fades with RiftStrength and is fully transparent when inactive.
