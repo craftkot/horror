@@ -1886,10 +1886,6 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_PREBUILD_VERTICAL_CULL_VERIFIED sameAnchorOutside=true insideRetained=true anchorChangeRetained=true emptyMeshRetained=true invalidRangeCulled=true");
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_HYSTERESIS_PROFILE_VERIFIED cullRadius={} resumeRadius={} deadband={} boundary=true outsideRejected=true",
-                GROUND_RENDER_RADIUS,GROUND_RENDER_RESUME_RADIUS,
-                GROUND_RENDER_RADIUS-GROUND_RENDER_RESUME_RADIUS);
-            com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_RESUME_ANCHOR_PROFILE_VERIFIED sameAnchor=false changedAnchor=true");
             boolean finiteCameraAccepted=isSafeCameraPosition(new Vec3(0.5D,65.0D,0.5D));
             boolean nanCameraRejected=!isSafeCameraPosition(new Vec3(Double.NaN,65.0D,0.5D));
@@ -1907,6 +1903,10 @@ public final class RiftClientState {
                 || !(center && horizontalBoundary && verticalBoundary && verticalOutside
                 && resumeBoundary && resumeOutside && horizontalOutside && nanRejected && infinityRejected))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh 3D range regression");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_HYSTERESIS_PROFILE_VERIFIED cullRadius={} resumeRadius={} deadband={} boundary=true outsideRejected=true",
+                GROUND_RENDER_RADIUS,GROUND_RENDER_RESUME_RADIUS,
+                GROUND_RENDER_RADIUS-GROUND_RENDER_RESUME_RADIUS);
             if(!(finiteCameraAccepted && nanCameraRejected && infiniteCameraRejected
                 && outOfWorldCameraRejected && cameraOutsideWhilePlayerNear && cameraInsideWhilePlayerOutside))
                 throw new IllegalStateException("BLACK FREQUENCY camera-based ground mesh culling regression");
