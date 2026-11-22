@@ -3096,7 +3096,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: crack-lip notches are not cached and independently applied",flush=True)
                 return False
             ribbon_cache_marker=("BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED "
-                                 "staticRgbChannels=12 dynamicAlphaChannels=8 edgeAlphaBaseShared=true edgeNotchesCached=true edgePaletteBound=true")
+                                 "staticRgbChannels=15 dynamicAlphaChannels=10 edgeAlphaBaseShared=true edgeNotchesCached=true edgePaletteBound=true")
             if ribbon_cache_marker in final_log:
                 expected_static_channels=(
                     "private static final int GROUND_GLOW_RED_CHANNEL=colorChannel(.20F);",
@@ -3105,6 +3105,9 @@ def capture_test_world():
                     "private static final int GROUND_CORE_RED_CHANNEL=colorChannel(.008F);",
                     "private static final int GROUND_CORE_GREEN_CHANNEL=colorChannel(.001F);",
                     "private static final int GROUND_CORE_BLUE_CHANNEL=colorChannel(.022F);",
+                    "private static final int GROUND_BEVEL_RED_CHANNEL=colorChannel(.055F);",
+                    "private static final int GROUND_BEVEL_GREEN_CHANNEL=colorChannel(.008F);",
+                    "private static final int GROUND_BEVEL_BLUE_CHANNEL=colorChannel(.12F);",
                     "private static final int GROUND_FILAMENT_RED_CHANNEL=colorChannel(.28F);",
                     "private static final int GROUND_FILAMENT_GREEN_CHANNEL=colorChannel(.015F);",
                     "private static final int GROUND_FILAMENT_BLUE_CHANNEL=colorChannel(.62F);",
@@ -3114,6 +3117,8 @@ def capture_test_world():
                 dynamic_alpha_calls=(
                     "int glowAlphaChannelA=colorChannel(alphaA*GROUND_GLOW_ALPHA);",
                     "int glowAlphaChannelB=colorChannel(alphaB*GROUND_GLOW_ALPHA);",
+                    "int bevelAlphaChannelA=colorChannel(alphaA*.82F);",
+                    "int bevelAlphaChannelB=colorChannel(alphaB*.82F);",
                     "int coreAlphaChannelA=colorChannel(alphaA*.94F);",
                     "int coreAlphaChannelB=colorChannel(alphaB*.94F);",
                     "int filamentAlphaChannelA=colorChannel(alphaA*corePulse);",
@@ -3122,6 +3127,8 @@ def capture_test_world():
                     "int edgeAlphaChannelB=colorChannel(edgeAlphaB);")
                 ribbon_call_patterns=(
                     r"GROUND_GLOW_RED_CHANNEL,GROUND_GLOW_GREEN_CHANNEL,GROUND_GLOW_BLUE_CHANNEL,\s*glowAlphaChannelA,glowAlphaChannelB",
+                    r"bevelRibbon\(builder,matrix,camera,segment,halfWidth,true,\s*GROUND_BEVEL_RED_CHANNEL,GROUND_BEVEL_GREEN_CHANNEL,GROUND_BEVEL_BLUE_CHANNEL,\s*bevelAlphaChannelA,bevelAlphaChannelB\)",
+                    r"bevelRibbon\(builder,matrix,camera,segment,halfWidth,false,\s*GROUND_BEVEL_RED_CHANNEL,GROUND_BEVEL_GREEN_CHANNEL,GROUND_BEVEL_BLUE_CHANNEL,\s*bevelAlphaChannelA,bevelAlphaChannelB\)",
                     r"GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,\s*filamentAlphaChannelA,filamentAlphaChannelB",
                     r"GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,\s*edgeAlphaChannelA,edgeAlphaChannelB")
                 prefix_start=camera_source.find("int firstVisibleSegmentIndex=-1;")
@@ -3150,7 +3157,7 @@ def capture_test_world():
                         or "if(segmentIndex==firstVisibleSegmentIndex)" not in render_source
                         or "segmentFadeA=firstVisibleFadeA;" not in render_source
                         or "segmentFadeB=firstVisibleFadeB;" not in render_source
-                        or render_source.count("colorChannel(")!=8
+                        or render_source.count("colorChannel(")!=10
                         or "coreRibbon(builder,matrix,camera,segment,halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS," not in render_source
                         or any(re.search(pattern,render_source) is None for pattern in ribbon_call_patterns)
                         or len(re.findall(r"GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,\s*edgeAlphaChannelA,edgeAlphaChannelB",render_source))!=2
@@ -3160,7 +3167,7 @@ def capture_test_world():
                         or "isGroundEdgeNotched(" in render_source
                         or "verifyPackedColorProfile();" not in build_source
                         or "verifyRibbonColorCacheProfile();" not in build_source):
-                    print("WORLD_CAPTURE_FAIL: ground ribbon must cache 12 static RGB channels and compute two endpoint alphas for each of four layers",flush=True)
+                    print("WORLD_CAPTURE_FAIL: ground ribbon must cache 15 static RGB channels and compute ten endpoint alphas across five material layers",flush=True)
                     return False
                 reuse_profile=re.search(
                     r"BLACK_FREQUENCY_TEST GROUND_MESH_VISIBILITY_PREFIX_REUSE_VERIFIED firstVisibleIndex=(\d+) prefixFadeChecks=(\d+) cachedFirstSegmentFade=true redundantPrefixRechecksAvoided=(\d+)",
@@ -3186,7 +3193,7 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: adjacent ground endpoint fades were not safely reused across connected segments",flush=True)
                     return False
                 print("WORLD_CAPTURE: adjacent ground segments reuse shared endpoint fades; disconnected starts recompute",flush=True)
-                print("WORLD_CAPTURE: ground ribbon reuses 12 static RGB channels, eight endpoint alpha channels, and cached first-visible fades",flush=True)
+                print("WORLD_CAPTURE: ground ribbon reuses 15 static RGB channels, ten endpoint alpha channels, and cached first-visible fades",flush=True)
             else:
                 channel_calls=("int redChannel=colorChannel(red);",
                                "int greenChannel=colorChannel(green);",
