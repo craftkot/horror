@@ -870,9 +870,22 @@ def capture_test_world():
     """Best-effort UI automation; confirm world entrance from the actual client log."""
     game_window=None
     def focus_game():
-        if game_window:
-            subprocess.run(["xdotool","windowactivate","--sync",game_window],
-                           stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+        if not game_window:
+            return False
+        # windowactivate can return before the X server has actually transferred focus.
+        # Verify the focused window before sending chat commands to the integrated server.
+        for _ in range(3):
+            activated=subprocess.run(["xdotool","windowactivate","--sync",game_window],
+                                     stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+            focused=subprocess.run(["xdotool","windowfocus","--sync",game_window],
+                                   stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+            current=subprocess.run(["xdotool","getwindowfocus"],
+                                   capture_output=True,text=True,check=False)
+            if (activated.returncode==0 and focused.returncode==0 and current.returncode==0
+                    and current.stdout.strip()==str(game_window)):
+                return True
+            time.sleep(0.15)
+        return False
     def key(k,focus=True):
         if focus:
             focus_game()
@@ -2387,12 +2400,19 @@ def capture_test_world():
                     # Do not send the next command until the server's own response is in latest.log.
                     for attempt in range(2):
                         log_offset=latest.stat().st_size if latest.exists() else 0
-                        focus_game()
+                        if not focus_game():
+                            print("WORLD_CAPTURE: Minecraft window focus was not confirmed; retrying",
+                                  description,"attempt",attempt+1,flush=True)
+                            continue
+                        print("WORLD_CAPTURE_INPUT: Minecraft window focus confirmed for",description,flush=True)
                         opened=key("t",focus=False)
-                        time.sleep(0.18)
+                        # Let the chat screen consume the opening key before typing.
+                        time.sleep(0.35)
                         typed=subprocess.run(
-                            ["xdotool","type","--clearmodifiers","--delay","1",command],
+                            ["xdotool","type","--clearmodifiers","--delay","5",command],
                             check=False)
+                        # Flush the final characters before Enter; the game may be busy rendering.
+                        time.sleep(0.12)
                         submitted=key("Return",focus=False)
                         if opened.returncode!=0 or typed.returncode!=0 or submitted.returncode!=0:
                             raise RuntimeError("BLACK FREQUENCY vertical cull probe could not submit a Minecraft command")
