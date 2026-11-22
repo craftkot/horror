@@ -2101,13 +2101,19 @@ public final class RiftController {
     private static boolean hasLoadedBeaconSightline(ServerLevel level,
             net.minecraft.server.level.ServerPlayer player,BlockPos beacon,
             net.minecraft.world.phys.Vec3 target) {
-        if(level==null || player==null || beacon==null || target==null
-            || !Double.isFinite(target.x) || !Double.isFinite(target.y) || !Double.isFinite(target.z)
+        return hasLoadedBeaconSightline(level,player,beacon,target,null);
+    }
+
+    private static boolean hasLoadedBeaconSightline(ServerLevel level,
+            net.minecraft.server.level.ServerPlayer player,BlockPos beacon,
+            net.minecraft.world.phys.Vec3 target,net.minecraft.world.phys.Vec3 expectedHitPoint) {
+        if(level==null || player==null || beacon==null || !isFiniteBeaconVector(target)
+            || (expectedHitPoint!=null && !isFiniteBeaconVector(expectedHitPoint))
             || target.x<beacon.getX()-1.0E-5D || target.x>beacon.getX()+1.0D+1.0E-5D
             || target.y<beacon.getY()-1.0E-5D || target.y>beacon.getY()+1.0D+1.0E-5D
             || target.z<beacon.getZ()-1.0E-5D || target.z>beacon.getZ()+1.0D+1.0E-5D) return false;
         net.minecraft.world.phys.Vec3 eye=player.getEyePosition();
-        if(eye==null || !Double.isFinite(eye.y)
+        if(!isFiniteBeaconVector(eye)
             || !fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ))) {
             if(CI_TEST && !ciBeaconSightlineFailureLogged) {
                 ciBeaconSightlineFailureLogged=true;
@@ -2118,15 +2124,36 @@ public final class RiftController {
         var hit=level.clip(new net.minecraft.world.level.ClipContext(eye,target,
             net.minecraft.world.level.ClipContext.Block.OUTLINE,
             net.minecraft.world.level.ClipContext.Fluid.NONE,player));
-        // Level.clip already returns a BlockHitResult in Minecraft 1.20.1.
         boolean reachesBeacon=hit.getType()==net.minecraft.world.phys.HitResult.Type.BLOCK
             && hit.getBlockPos().equals(beacon);
-        if(!reachesBeacon && CI_TEST && !ciBeaconSightlineFailureLogged) {
+        boolean hitPointMatches=expectedHitPoint==null
+            || sameBeaconHitPoint(hit.getLocation(),expectedHitPoint);
+        boolean verified=reachesBeacon && hitPointMatches;
+        if(!verified && CI_TEST && !ciBeaconSightlineFailureLogged) {
             ciBeaconSightlineFailureLogged=true;
-            LOGGER.warn("BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_BLOCKER_DIAGNOSTIC reason=ray-hit type={} block={} eye={} target={}",
-                hit.getType(),hit.getBlockPos(),eye,beacon);
+            LOGGER.warn("BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_BLOCKER_DIAGNOSTIC reason={} type={} block={} eye={} target={}",
+                reachesBeacon?"hit-point-mismatch":"ray-hit",hit.getType(),hit.getBlockPos(),eye,beacon);
         }
-        return reachesBeacon;
+        return verified;
+    }
+
+    private static boolean isFiniteBeaconVector(net.minecraft.world.phys.Vec3 value) {
+        return value!=null && Double.isFinite(value.x)
+            && Double.isFinite(value.y) && Double.isFinite(value.z);
+    }
+
+    private static double eyeDistanceSquaredToHit(net.minecraft.world.phys.Vec3 eye,
+            net.minecraft.world.phys.Vec3 hitPoint) {
+        if(!isFiniteBeaconVector(eye) || !isFiniteBeaconVector(hitPoint)) return Double.NaN;
+        double distanceSquared=eye.distanceToSqr(hitPoint);
+        return Double.isFinite(distanceSquared) && distanceSquared>=0.0D
+            ? distanceSquared : Double.NaN;
+    }
+
+    private static boolean sameBeaconHitPoint(net.minecraft.world.phys.Vec3 actual,
+            net.minecraft.world.phys.Vec3 expected) {
+        double distanceSquared=eyeDistanceSquaredToHit(actual,expected);
+        return Double.isFinite(distanceSquared) && distanceSquared<=1.0E-6D;
     }
 
     /**
@@ -3953,6 +3980,24 @@ public final class RiftController {
             new net.minecraft.world.phys.Vec3(-CI_BEACON_INTERACTION_MAX_DISTANCE,64.5D,.5D),target);
         double outsideAabbReach=eyeDistanceSquaredToBlock(
             new net.minecraft.world.phys.Vec3(-Math.nextUp(CI_BEACON_INTERACTION_MAX_DISTANCE),64.5D,.5D),target);
+        net.minecraft.world.phys.Vec3 beaconHitPoint=new net.minecraft.world.phys.Vec3(0.0D,64.5D,.5D);
+        net.minecraft.world.phys.Vec3 exactHitEye=new net.minecraft.world.phys.Vec3(
+            -CI_BEACON_INTERACTION_MAX_DISTANCE,64.5D,.5D);
+        net.minecraft.world.phys.Vec3 outsideHitEye=new net.minecraft.world.phys.Vec3(
+            -Math.nextUp(CI_BEACON_INTERACTION_MAX_DISTANCE),64.5D,.5D);
+        double exactHitPointReach=eyeDistanceSquaredToHit(exactHitEye,beaconHitPoint);
+        double outsideHitPointReach=eyeDistanceSquaredToHit(outsideHitEye,beaconHitPoint);
+        double invalidHitPointReach=eyeDistanceSquaredToHit(exactHitEye,
+            new net.minecraft.world.phys.Vec3(Double.NaN,64.5D,.5D));
+        if(Math.abs(exactHitPointReach-reachSquared)>1.0E-9D
+            || !withinBeaconInteractionReach(exactHitPointReach)
+            || withinBeaconInteractionReach(outsideHitPointReach)
+            || withinBeaconInteractionReach(invalidHitPointReach)
+            || !sameBeaconHitPoint(beaconHitPoint,new net.minecraft.world.phys.Vec3(0.0005D,64.5D,.5D))
+            || sameBeaconHitPoint(beaconHitPoint,new net.minecraft.world.phys.Vec3(0.0011D,64.5D,.5D))
+            || sameBeaconHitPoint(beaconHitPoint,new net.minecraft.world.phys.Vec3(Double.NaN,64.5D,.5D)))
+            throw new IllegalStateException("CI beacon exact hit-point reach/ray-match regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_HIT_POINT_GUARD_PROFILE_VERIFIED exactBoundary=true outsideRejected=true invalidRejected=true rayMatch=true displacedRejected=true");
         if(Math.abs(exactAabbReach-reachSquared)>1.0E-9D
             || !(outsideAabbReach>reachSquared)
             || !mayActivateBeacon(main,true,false,exactAabbReach,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
@@ -4141,16 +4186,27 @@ public final class RiftController {
         // a beacon through a wall. Trace only chunks already loaded along the eye ray.
         var hit=event.getHitVec();
         if(hit==null || !hit.getBlockPos().equals(pos)) return;
+        var requestedHitPoint=hit.getLocation();
+        double hitDistanceSquared=eyeDistanceSquaredToHit(player.getEyePosition(),requestedHitPoint);
+        if(!withinBeaconInteractionReach(hitDistanceSquared)) {
+            if(CI_TEST) LOGGER.warn("BLACK_FREQUENCY_TEST BEACON_HIT_POINT_REACH_REJECTED distanceSquared={} maxDistanceSquared={}",
+                hitDistanceSquared,CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE);
+            return;
+        }
         var face=hit.getDirection();
         // Move a fraction inside the clicked face so a boundary hit at x/z=16
         // does not falsely require the adjacent, unrelated chunk to be loaded.
-        var hitPoint=hit.getLocation().subtract(
+        var hitPoint=requestedHitPoint.subtract(
             face.getStepX()*1.0E-4D,face.getStepY()*1.0E-4D,face.getStepZ()*1.0E-4D);
-        if(!hasLoadedBeaconSightline(level,player,pos,hitPoint)) {
+        if(!hasLoadedBeaconSightline(level,player,pos,hitPoint,requestedHitPoint)) {
             if(CI_TEST) LOGGER.warn("BLACK_FREQUENCY_TEST BEACON_ACTIVATION_SIGHTLINE_REJECTED loadedChunksOnly=true");
             return;
         }
-        if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_ACTIVATION_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true");
+        if(CI_TEST) {
+            LOGGER.info("BLACK_FREQUENCY_TEST BEACON_ACTIVATION_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true");
+            LOGGER.info("BLACK_FREQUENCY_TEST BEACON_HIT_POINT_ACCEPTED_VERIFIED distanceSquared={} maxDistanceSquared={} rayMatch=true",
+                hitDistanceSquared,CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE);
+        }
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
         if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
         if(!beaconWithinAnchor(pos.getX(),pos.getZ(),s.x,s.z)) return;
