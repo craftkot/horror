@@ -2593,6 +2593,13 @@ def capture_test_world():
                 snap("recovery-beacon-ground-context-final-failure.png")
                 return False
             final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+            camera_source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
+            try:
+                camera_source=camera_source_path.read_text(encoding="utf-8",errors="replace")
+            except OSError as exc:
+                print(f"WORLD_CAPTURE_FAIL: could not read GroundRenderer source for structural verification: {exc}",
+                      flush=True)
+                return False
             support_top_marker = (
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_TOP_PROFILE_VERIFIED "
                 "fullBlock=1.0 bottomSlab=0.5 invalidFallback=1.0 nonCollidingCoverIgnored=true"
@@ -2625,8 +2632,6 @@ def capture_test_world():
             if support_shape_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: ground mesh accepted an empty or zero-height support shape",flush=True)
                 return False
-            camera_source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftClientState.java"
-            camera_source=camera_source_path.read_text(encoding="utf-8",errors="replace")
             sample_start=camera_source.find("private static double sampleGroundY(")
             sample_end=camera_source.find("private static long columnKey(",sample_start+1)
             sample_source=(camera_source[sample_start:sample_end]
