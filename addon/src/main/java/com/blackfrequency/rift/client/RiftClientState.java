@@ -768,6 +768,9 @@ public final class RiftClientState {
         private static final double GROUND_SURFACE_CLEARANCE=.010D;
         private static final double GROUND_MIN_CORE_CLEARANCE=.005D;
         private static final double GROUND_CORE_RECESS=.005D;
+        // Two shallow dark-violet bevels break the flat ribbon silhouette without editing terrain.
+        private static final double GROUND_BEVEL_WIDTH=.045D;
+        private static final double GROUND_BEVEL_LIFT=.018D;
         private static final double GROUND_FILAMENT_LIFT=.001D;
         private static final double GROUND_EDGE_LIFT=.005D;
         // Shift the ground rails away from hot magenta toward the sky-rift's deep violet palette.
@@ -786,6 +789,9 @@ public final class RiftClientState {
         private static final int GROUND_CORE_RED_CHANNEL=colorChannel(.008F);
         private static final int GROUND_CORE_GREEN_CHANNEL=colorChannel(.001F);
         private static final int GROUND_CORE_BLUE_CHANNEL=colorChannel(.022F);
+        private static final int GROUND_BEVEL_RED_CHANNEL=colorChannel(.055F);
+        private static final int GROUND_BEVEL_GREEN_CHANNEL=colorChannel(.008F);
+        private static final int GROUND_BEVEL_BLUE_CHANNEL=colorChannel(.12F);
         private static final int GROUND_FILAMENT_RED_CHANNEL=colorChannel(.28F);
         private static final int GROUND_FILAMENT_GREEN_CHANNEL=colorChannel(.015F);
         private static final int GROUND_FILAMENT_BLUE_CHANNEL=colorChannel(.62F);
@@ -1360,6 +1366,16 @@ public final class RiftClientState {
                 -GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE*(1.0D-GROUND_CORE_SKEW_AMPLITUDE))
                 -GROUND_EDGE_HALF_WIDTH;
             double minimumCoreEdgeGap=Math.min(leftCoreEdgeGap,rightCoreEdgeGap);
+            double maximumBevelHalfWidth=maximumCoreHalfWidth+GROUND_BEVEL_WIDTH;
+            double bevelOuterClearance=GROUND_SURFACE_CLEARANCE+GROUND_BEVEL_LIFT;
+            double leftBevelOffset=groundBevelOuterOffset(.12D,1.0D,true);
+            double rightBevelOffset=groundBevelOuterOffset(-.12D,1.0D,false);
+            double halfTaperBevelOffset=groundBevelOuterOffset(.12D,.5D,true);
+            boolean bevelOffsets=Math.abs(leftBevelOffset-.165D)<1.0E-9D
+                && Math.abs(rightBevelOffset+.165D)<1.0E-9D
+                && Math.abs(halfTaperBevelOffset-.1425D)<1.0E-9D;
+            boolean invalidBevelRejected=Double.isNaN(groundBevelOuterOffset(Double.NaN,1.0D,true))
+                && Double.isNaN(groundBevelOuterOffset(.12D,Double.POSITIVE_INFINITY,false));
             if(!Double.isFinite(coreClearance) || !Double.isFinite(glowClearance)
                 || !Double.isFinite(filamentClearance) || !Double.isFinite(edgeClearance)
                 || !Double.isFinite(minimumGlowHalfWidth) || !Double.isFinite(maximumGlowHalfWidth)
@@ -1379,7 +1395,14 @@ public final class RiftClientState {
                 || Math.abs(GROUND_SURFACE_CLEARANCE-.010D)>1.0E-9D
                 || Math.abs(GROUND_CORE_RECESS-.005D)>1.0E-9D
                 || Math.abs(GROUND_FILAMENT_LIFT-.001D)>1.0E-9D
-                || Math.abs(GROUND_EDGE_LIFT-.005D)>1.0E-9D)
+                || Math.abs(GROUND_EDGE_LIFT-.005D)>1.0E-9D
+                || Math.abs(GROUND_BEVEL_WIDTH-.045D)>1.0E-9D
+                || Math.abs(GROUND_BEVEL_LIFT-.018D)>1.0E-9D
+                || !Double.isFinite(maximumBevelHalfWidth)
+                || !(maximumCoreHalfWidth<maximumBevelHalfWidth
+                    && maximumBevelHalfWidth<maximumGlowHalfWidth)
+                || !(edgeClearance<bevelOuterClearance && bevelOuterClearance<.05D)
+                || !bevelOffsets || !invalidBevelRejected)
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh surface relief regression");
             double fullBlockSnowOffset=groundSurfaceOffset(1.0D,.125D);
             double partialSupportSnowOffset=groundSurfaceOffset(.9375D,.125D);
@@ -1405,6 +1428,9 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_RECESSED_CORE_PROFILE_VERIFIED minClearance={} supportTop=true depthTest=true",
                 GROUND_MIN_CORE_CLEARANCE);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_BEVEL_PROFILE_VERIFIED width={} lift={} innerRecess={} maxOuterHalfWidth={} maxGlowHalfWidth={} withinGlow=true offsets=true invalidRejected=true",
+                GROUND_BEVEL_WIDTH,GROUND_BEVEL_LIFT,GROUND_CORE_RECESS,maximumBevelHalfWidth,maximumGlowHalfWidth);
         }
 
         private static double boundedShapeHeight(double height,double fallback) {
@@ -2565,6 +2591,39 @@ public final class RiftClientState {
                 .endVertex();
         }
 
+        // Extend the dark core's two sides into shallow bevels. The inner edge stays
+        // recessed while the outer lip rises slightly above the sampled support surface.
+        private static double groundBevelOuterOffset(double coreOffset,double taper,boolean left) {
+            if(!Double.isFinite(coreOffset) || !Double.isFinite(taper)
+                || taper<0.0D || taper>1.0D) return Double.NaN;
+            double offset=coreOffset+(left?1.0D:-1.0D)*GROUND_BEVEL_WIDTH*taper;
+            return Double.isFinite(offset) ? offset : Double.NaN;
+        }
+
+        private static void bevelRibbon(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
+                GroundSegment segment,double halfWidth,boolean left,
+                int redChannel,int greenChannel,int blueChannel,int alphaChannelA,int alphaChannelB) {
+            GroundPoint a=segment.a();
+            GroundPoint b=segment.b();
+            double innerA=left
+                ? halfWidth*segment.coreWidthScaleA()*(1.0D+segment.coreSkewA())*segment.taperA()
+                : -halfWidth*segment.coreWidthScaleA()*(1.0D-segment.coreSkewA())*segment.taperA();
+            double innerB=left
+                ? halfWidth*segment.coreWidthScaleB()*(1.0D+segment.coreSkewB())*segment.taperB()
+                : -halfWidth*segment.coreWidthScaleB()*(1.0D-segment.coreSkewB())*segment.taperB();
+            double outerA=groundBevelOuterOffset(innerA,segment.taperA(),left);
+            double outerB=groundBevelOuterOffset(innerB,segment.taperB(),left);
+            if(!Double.isFinite(outerA) || !Double.isFinite(outerB)) return;
+            vertex(builder,matrix,camera,a.x()+segment.normalX()*outerA,a.y()+GROUND_BEVEL_LIFT,
+                a.z()+segment.normalZ()*outerA,redChannel,greenChannel,blueChannel,alphaChannelA);
+            vertex(builder,matrix,camera,b.x()+segment.normalX()*outerB,b.y()+GROUND_BEVEL_LIFT,
+                b.z()+segment.normalZ()*outerB,redChannel,greenChannel,blueChannel,alphaChannelB);
+            vertex(builder,matrix,camera,b.x()+segment.normalX()*innerB,b.y()-GROUND_CORE_RECESS,
+                b.z()+segment.normalZ()*innerB,redChannel,greenChannel,blueChannel,alphaChannelB);
+            vertex(builder,matrix,camera,a.x()+segment.normalX()*innerA,a.y()-GROUND_CORE_RECESS,
+                a.z()+segment.normalZ()*innerA,redChannel,greenChannel,blueChannel,alphaChannelA);
+        }
+
         // Interpolate the dark core's precomputed spatial width at both endpoints so
         // its static profile changes gradually across sample boundaries.
         private static void coreRibbon(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
@@ -2992,6 +3051,8 @@ public final class RiftClientState {
                     int glowAlphaChannelB=colorChannel(alphaB*GROUND_GLOW_ALPHA);
                     int coreAlphaChannelA=colorChannel(alphaA*.94F);
                     int coreAlphaChannelB=colorChannel(alphaB*.94F);
+                    int bevelAlphaChannelA=colorChannel(alphaA*.82F);
+                    int bevelAlphaChannelB=colorChannel(alphaB*.82F);
                     float corePulse=(float)boundedCorePulse(wave);
                     int filamentAlphaChannelA=colorChannel(alphaA*corePulse);
                     int filamentAlphaChannelB=colorChannel(alphaB*corePulse);
@@ -3002,6 +3063,12 @@ public final class RiftClientState {
                     ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_GLOW_WIDTH_SCALE,0.0D,
                         GROUND_GLOW_RED_CHANNEL,GROUND_GLOW_GREEN_CHANNEL,GROUND_GLOW_BLUE_CHANNEL,
                         glowAlphaChannelA,glowAlphaChannelB);
+                    bevelRibbon(builder,matrix,camera,segment,halfWidth,true,
+                        GROUND_BEVEL_RED_CHANNEL,GROUND_BEVEL_GREEN_CHANNEL,GROUND_BEVEL_BLUE_CHANNEL,
+                        bevelAlphaChannelA,bevelAlphaChannelB);
+                    bevelRibbon(builder,matrix,camera,segment,halfWidth,false,
+                        GROUND_BEVEL_RED_CHANNEL,GROUND_BEVEL_GREEN_CHANNEL,GROUND_BEVEL_BLUE_CHANNEL,
+                        bevelAlphaChannelA,bevelAlphaChannelB);
                     coreRibbon(builder,matrix,camera,segment,halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS,
                         GROUND_CORE_RED_CHANNEL,GROUND_CORE_GREEN_CHANNEL,GROUND_CORE_BLUE_CHANNEL,
                         coreAlphaChannelA,coreAlphaChannelB);
