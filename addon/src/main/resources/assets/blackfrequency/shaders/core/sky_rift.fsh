@@ -216,7 +216,7 @@ void main(){
  float greenCorruptionGlow=clamp(rimLight*.88+majorGlow*.14+filaments*.05,0.0,1.0)*greenOutsideCore;
  // Preserve the dark violet atmosphere; green replaces only a small part
  // of the base color, then adds light outside the near-black fracture cores.
- color=mix(color,vec3(.002,.011,.009),green*.18);
+ color=mix(color,vec3(.002,.011,.009),green*.18*greenOutsideCore);
  color+=vec3(.018,.11,.035)*majorGlow*green*greenOutsideCore;
  color+=vec3(.10,.78,.24)*greenCorruptionGlow*green*(.72+.28*rimPulse);
  color+=vec3(.14,.92,.28)*lightningFlash*majorGlow*green*greenOutsideCore*.42;
