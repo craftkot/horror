@@ -648,6 +648,8 @@ public final class RiftClientState {
         private static final double GROUND_CORE_PULSE_BASE=.10D;
         private static final double GROUND_CORE_PULSE_RANGE=.22D;
         private static boolean continuityProfileLogged;
+        // Render-thread-only guard: invariant probes run once per client JVM, not on every mesh rebuild.
+        private static boolean edgeCapContinuityProfileLogged;
         private static boolean continuityBuildLogged;
         private static int cachedSteepStepBreaks;
         private static boolean firstRenderLogged;
@@ -1323,6 +1325,7 @@ public final class RiftClientState {
         }
 
         private static void verifyGroundEdgeCapContinuityProfile() {
+            if(edgeCapContinuityProfileLogged) return;
             GroundSample notched=new GroundSample(0.0D,0.0D,0.0D,0.0D,0.0D,
                 0.0D,1.0D,0.0D,1.0D,1.0D,0.0D,false,true,true);
             GroundSample intact=new GroundSample(0.0D,0.0D,0.0D,0.0D,0.0D,
@@ -1351,6 +1354,7 @@ public final class RiftClientState {
             if(!(ordinaryNotchesPreserved && startCapLipsPreserved && endCapLipsPreserved
                 && intactLipsPreserved && invalidRejected))
                 throw new IllegalStateException("BLACK FREQUENCY ground edge cap continuity regression");
+            edgeCapContinuityProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_EDGE_CAP_CONTINUITY_VERIFIED capTaper={} notchSuppressedAtCaps=true normalNotchesPreserved=true invalidRejected=true",
                 CLIFF_BREAK_TAPER);
