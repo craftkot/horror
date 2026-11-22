@@ -218,8 +218,8 @@ void main(){
  // of the base color, then adds light outside the near-black fracture cores.
  color=mix(color,vec3(.002,.011,.009),green*.18*greenOutsideCore);
  color+=vec3(.018,.11,.035)*majorGlow*green*greenOutsideCore;
- color+=vec3(.10,.78,.24)*greenCorruptionGlow*green*(.72+.28*rimPulse);
- color+=vec3(.14,.92,.28)*lightningFlash*majorGlow*green*greenOutsideCore*.42;
+ color+=vec3(.035,1.25,.035)*greenCorruptionGlow*green*(.72+.28*rimPulse);
+ color+=vec3(.025,1.35,.035)*lightningFlash*majorGlow*green*greenOutsideCore*.42;
  // Side fractures must contribute to alpha as well as RGB; otherwise
  // their glow fades against the unmodified world behind the sky overlay.
  // Fade the world sky almost completely behind the active catastrophe.
