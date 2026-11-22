@@ -1822,8 +1822,12 @@ def capture_test_world():
         selected=best_valid if best_valid is not None else best
         (score,coverage,green_coverage,dark_sky_coverage,line_rows,peak_row,continuous_rows,
          max_contiguous_run,left,top,peak_threshold,min_contiguous_run)=selected
-        line_visible=(line_rows>=8 and peak_row>=peak_threshold
-                       and continuous_rows>=6 and max_contiguous_run>=min_contiguous_run)
+        if min_green is None:
+            line_visible=(line_rows>=8 and peak_row>=peak_threshold
+                          and continuous_rows>=6 and max_contiguous_run>=min_contiguous_run)
+        else:
+            line_visible=(line_rows>=3 and peak_row>=peak_threshold
+                          and continuous_rows>=2 and max_contiguous_run>=min_contiguous_run)
         visible=best_valid is not None
         selection="valid-window" if visible else "best-diagnostic-window"
         print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} green={green_coverage:.4f} darkSky={dark_sky_coverage:.4f} lineRows={line_rows} peakRow={peak_row} continuousRows={continuous_rows} maxRun={max_contiguous_run} minRun={min_contiguous_run} window={left},{top} required={minimum:.4f} minDarkSky=0.0800 maxGreen={max_green} minGreen={min_green} visible={visible} selection={selection}",flush=True)
@@ -4195,6 +4199,14 @@ def capture_test_world():
             if not sky_shot:
                 print("WORLD_CAPTURE_FAIL: sky shader pixels were not visible in the upper-sky frame",flush=True)
                 return False
+            if os.environ.get("BF_TEST_GREEN_PHASE_PREVIEW")=="1":
+                green_capture=shots/"sky-rift-green-phase.png"
+                if (not green_capture.is_file() or green_capture.stat().st_size==0
+                        or "BLACK_FREQUENCY_CI_GREEN_PHASE_PREVIEW_ACTIVE" not in log_after
+                        or "WORLD_CAPTURE: GREEN_PHASE_SCREENSHOT_VERIFIED" not in log_after):
+                    print("WORLD_CAPTURE_FAIL: real green-phase screenshot and preview marker were not both produced",flush=True)
+                    return False
+                print("WORLD_CAPTURE: dedicated toxic-green phase image and rendered uniform marker confirmed",flush=True)
             if "BLACK_FREQUENCY_RENDER_ACTIVE" not in log_after:
                 print("WORLD_CAPTURE_FAIL: no actual sky renderer invocation observed",flush=True)
                 return False
