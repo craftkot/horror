@@ -28,7 +28,11 @@ public final class RiftClientState {
     private static float progress;
     private static boolean collapse;
     private static int finaleTicks;
+    // Last authoritative server value; finaleTicks is the bounded client prediction.
+    private static int serverFinaleTicks;
     private static final int RIFT_OPENING_RAMP_TICKS=60;
+    // Active world-state packets are sent every ten server ticks.
+    private static final int RIFT_STATE_PACKET_INTERVAL_TICKS=10;
     private static final boolean VERIFY_RIFT_CLIENT_PROFILES=
         Boolean.getBoolean("blackfrequency.verifyGroundMeshProfiles");
     private static boolean riftOpeningRampProfileLogged;
@@ -91,7 +95,8 @@ public final class RiftClientState {
         }
         progress=safeProgress;
         collapse=collapsing;
-        finaleTicks=Math.max(0,ticks);
+        serverFinaleTicks=Math.max(0,ticks);
+        finaleTicks=serverFinaleTicks;
         if(VERIFY_RIFT_CLIENT_PROFILES) verifyRiftOpeningRampProfile();
         anchorX=worldAnchorX;
         anchorZ=worldAnchorZ;
@@ -127,16 +132,37 @@ public final class RiftClientState {
             monotonic &= Float.isFinite(current) && current>=previous && current<=1.0F;
             previous=current;
         }
+        int packetStart=predictedFinaleTicks(0,0);
+        int packetMiddle=predictedFinaleTicks(0,5);
+        int packetEnd=predictedFinaleTicks(0,RIFT_STATE_PACKET_INTERVAL_TICKS);
+        int packetLate=predictedFinaleTicks(0,RIFT_STATE_PACKET_INTERVAL_TICKS+50);
+        int packetBase=predictedFinaleTicks(55,5);
+        int packetNegative=predictedFinaleTicks(-4,-2);
+        int packetOverflow=predictedFinaleTicks(Integer.MAX_VALUE,100);
+        boolean packetMonotonic=true;
+        int previousPacketTick=packetStart;
+        for(int age=1;age<=RIFT_STATE_PACKET_INTERVAL_TICKS;age++) {
+            int current=predictedFinaleTicks(0,age);
+            packetMonotonic &= current>=previousPacketTick;
+            previousPacketTick=current;
+        }
         if(start!=0.0F || Math.abs(quarter-.15625F)>1.0E-6F
             || Math.abs(midpoint-.5F)>1.0E-6F
             || Math.abs(threeQuarter-.84375F)>1.0E-6F
             || end!=1.0F || riftOpeningRamp(-1)!=0.0F
             || riftOpeningRamp(RIFT_OPENING_RAMP_TICKS+1)!=1.0F || !monotonic)
             throw new IllegalStateException("BLACK FREQUENCY rift opening ramp regression");
+        if(packetStart!=0 || packetMiddle!=5 || packetEnd!=10 || packetLate!=10
+            || packetBase!=60 || packetNegative!=0 || packetOverflow!=Integer.MAX_VALUE
+            || !packetMonotonic)
+            throw new IllegalStateException("BLACK FREQUENCY rift packet interpolation regression");
         riftOpeningRampProfileLogged=true;
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_RIFT_OPENING_RAMP_PROFILE_VERIFIED ticks={} curve=smoothstep quarter={} midpoint={} threeQuarter={} endpoints=true monotonic=true",
             RIFT_OPENING_RAMP_TICKS,quarter,midpoint,threeQuarter);
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_RIFT_PACKET_INTERPOLATION_VERIFIED intervalTicks={} cap={} monotonic=true overflowSafe=true negativeSafe=true",
+            RIFT_STATE_PACKET_INTERVAL_TICKS,packetEnd);
     }
 
     public static float visibleStrength() {
@@ -147,7 +173,7 @@ public final class RiftClientState {
     public static int anchorX() { return anchorX; }
     public static int anchorZ() { return anchorZ; }
     public static void reset() {
-        progress=0;collapse=false;finaleTicks=0;ticksSincePacket=0;
+        progress=0;collapse=false;finaleTicks=0;serverFinaleTicks=0;ticksSincePacket=0;
         anchorX=0;anchorZ=0;anchorValid=false;
         beaconPosition=Long.MIN_VALUE;beaconBlockPos=null;beaconPositionValid=false;restorationActive=false;
         beaconAuraCompletionFadeTicks=0;beaconAuraCompletionFadeProfileLogged=false;
@@ -174,6 +200,12 @@ public final class RiftClientState {
             int finaleTicks,boolean restoring) {
         return restoring || collapsing || finaleTicks>0
             || (Float.isFinite(value) && value>0.0F);
+    }
+
+    private static int predictedFinaleTicks(int packetFinaleTicks,int packetAgeTicks) {
+        long base=Math.max(0L,(long)packetFinaleTicks);
+        long age=Math.max(0L,Math.min((long)RIFT_STATE_PACKET_INTERVAL_TICKS,(long)packetAgeTicks));
+        return (int)Math.min((long)Integer.MAX_VALUE,base+age);
     }
 
     private static boolean isClientPacketStateStale(int ticksSincePacket) {
@@ -562,8 +594,11 @@ public final class RiftClientState {
         // fracture overlay while the simulation is paused in a menu.
         if(net.minecraft.client.Minecraft.getInstance().isPaused()) return;
         if(beaconAuraCompletionFadeTicks>0) beaconAuraCompletionFadeTicks--;
-        if(hasActiveTimedClientState(progress,collapse,finaleTicks,restorationActive)
-            && isClientPacketStateStale(++ticksSincePacket)) reset();
+        if(hasActiveTimedClientState(progress,collapse,finaleTicks,restorationActive)) {
+            ticksSincePacket=Math.min(CLIENT_STATE_PACKET_TIMEOUT_TICKS+1,ticksSincePacket+1);
+            if(collapse) finaleTicks=predictedFinaleTicks(serverFinaleTicks,ticksSincePacket);
+            if(isClientPacketStateStale(ticksSincePacket)) reset();
+        }
     }
     @net.minecraftforge.eventbus.api.SubscribeEvent
     public static void onLogout(net.minecraftforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) { reset(); lastLevel=null; }
