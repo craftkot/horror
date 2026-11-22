@@ -1565,7 +1565,10 @@ public final class RiftController {
             BlockState fixtureSurface=level.getBlockState(cursor);
             canopySurfaceShapeHeight=fixtureSurface.isAir()?0.0D
                 : fixtureSurface.getShape(level,cursor).max(net.minecraft.core.Direction.Axis.Y);
-            expectedCanopyParticleY=fissureSurfaceParticleY(baseY,canopySurfaceShapeHeight);
+            double boundedCanopyShapeHeight=Double.isFinite(canopySurfaceShapeHeight)
+                ? Math.max(0.0D,Math.min(1.0D,canopySurfaceShapeHeight)) : 0.0D;
+            // Keep this expectation independent of fissureSurfaceParticleY(), the method under test.
+            expectedCanopyParticleY=baseY+boundedCanopyShapeHeight+0.10D;
             canopyAccepted=canopyTop==baseY+5 && canopyFound && canopySurfaceY==baseY
                 && Math.abs(canopyParticleY-expectedCanopyParticleY)<1.0E-9D;
             if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,originalSurfaceY,cursor))
