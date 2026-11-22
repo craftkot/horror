@@ -2561,12 +2561,21 @@ def capture_test_world():
                     break
                 try_beacon_click(current)
                 capture_sky_before_beacon()
+                current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else current
                 if "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in current and not fracture_seen:
                     fracture_seen=True
                     print("WORLD_CAPTURE: first physical terrain fracture confirmed",flush=True)
-                # Both modes must wait for the bounded fissure particle pass and
-                # its actual player-view capture before the recovery beacon is clicked.
-                if fracture_seen and terrain_shot:
+                beacon_test_required=os.environ.get("BF_TEST_PLAYER_BEACON")=="1"
+                beacon_interaction_confirmed=(
+                    "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in current
+                    and "BLACK_FREQUENCY_TEST BEACON_ACTIVATION_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" in current
+                    and "BLACK_FREQUENCY_TEST BEACON_START_ACTIONBAR_ONLY" in current
+                    and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current
+                )
+                # A terrain frame is not the end of the smoke test: keep polling so
+                # the next real client-input attempt can follow sky capture/reload.
+                if fracture_seen and terrain_shot and (
+                        not beacon_test_required or beacon_interaction_confirmed):
                     break
                 time.sleep(0.1)
             if not fracture_seen:
