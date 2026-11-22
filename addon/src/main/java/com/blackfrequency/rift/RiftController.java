@@ -1166,11 +1166,23 @@ public final class RiftController {
             int snapshotCount=boundedSnapshotCount(saved.size());
             boolean snapshotStateRepaired=false;
             int quarantinedSnapshotPayloads=0;
+            int duplicateSnapshotPositions=0;
+            // A fractured block is recorded once. Keep the oldest valid record for a
+            // position and quarantine later duplicates so conflicting NBT cannot make
+            // recovery depend on cursor order after a damaged save or interrupted write.
+            var seenSnapshotPositions=new it.unimi.dsi.fastutil.longs.LongOpenHashSet(snapshotCount);
             for(int i=0;i<snapshotCount;i++) {
                 CompoundTag entry=saved.getCompound(i);
                 long candidateEstimate=boundedSnapshotPayloadEstimate(entry);
                 if(candidateEstimate>0L
                     && withinSnapshotRetentionBudget(s.retainedSnapshotEstimateBytes,candidateEstimate)) {
+                    long packedPosition=entry.getLong("pos");
+                    if(!seenSnapshotPositions.add(packedPosition)) {
+                        s.snapshots.add(new CompoundTag());
+                        snapshotStateRepaired=true;
+                        duplicateSnapshotPositions++;
+                        continue;
+                    }
                     // Preserve the oldest, anchor-nearest snapshots first when a damaged
                     // save exceeds the aggregate budget; these are the recovery core.
                     s.snapshots.add(entry);
@@ -1186,6 +1198,9 @@ public final class RiftController {
             if(quarantinedSnapshotPayloads>0)
                 LOGGER.warn("BLACK FREQUENCY: quarantined {} recovery snapshot payloads; retained estimate {} bytes of {} byte budget",
                     quarantinedSnapshotPayloads,s.retainedSnapshotEstimateBytes,MAX_SNAPSHOT_RETAINED_ESTIMATE_BYTES);
+            if(duplicateSnapshotPositions>0)
+                LOGGER.warn("BLACK FREQUENCY: quarantined {} duplicate recovery snapshot positions; retained the first valid occurrence",
+                    duplicateSnapshotPositions);
             if(snapshotCount>s.edits) {
                 // The pending snapshots are authoritative when a damaged save
                 // has a smaller edit counter; keep restoration accounting consistent.
@@ -3398,6 +3413,46 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_CURSOR_REPAIR_PERSISTENCE_VERIFIED indexClamped=true scanClamped=true dirty=true roundTrip=true validUnchanged=true malformedIndexType=true malformedScanType=true malformedCenterOutType=true missingCenterOutIndex=true");
     }
 
+    private static void verifyDuplicateRecoverySnapshotQuarantine() {
+        BlockPos duplicatePos=new BlockPos(4,64,5);
+        ListTag snapshots=new ListTag();
+        CompoundTag first=new CompoundTag();
+        first.putLong("pos",duplicatePos.asLong());
+        first.put("state",NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
+        snapshots.add(first);
+        CompoundTag conflicting=new CompoundTag();
+        conflicting.putLong("pos",duplicatePos.asLong());
+        conflicting.put("state",NbtUtils.writeBlockState(Blocks.DIRT.defaultBlockState()));
+        snapshots.add(conflicting);
+
+        CompoundTag input=new CompoundTag();
+        input.putBoolean("restoring",true);
+        input.putInt("edits",2);
+        input.putInt("restoreIndex",1);
+        input.putInt("restoreScan",1);
+        input.put("snapshots",snapshots);
+        State loaded=State.load(input);
+        CompoundTag persisted=loaded.save(new CompoundTag());
+        State roundTrip=State.load(persisted);
+        ListTag savedSnapshots=persisted.getList("snapshots",Tag.TAG_COMPOUND);
+        boolean oldestRecordKept=savedSnapshots.size()==2
+            && savedSnapshots.getCompound(0).getLong("pos")==duplicatePos.asLong()
+            && savedSnapshots.getCompound(0).getCompound("state")
+                .equals(NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
+        boolean duplicatePayloadQuarantined=savedSnapshots.size()==2
+            && savedSnapshots.getCompound(1).isEmpty();
+        boolean cursorPreserved=roundTrip.restoreIndex==1 && roundTrip.restoreScan==1;
+        boolean activeRecoveryPreserved=roundTrip.restoring && !roundTrip.restored
+            && roundTrip.snapshots.size()==2 && roundTrip.edits==2;
+        boolean retainedBudgetCountsOnlyTrustedPayload=
+            roundTrip.retainedSnapshotEstimateBytes==boundedSnapshotPayloadEstimate(first);
+        if(!(oldestRecordKept && duplicatePayloadQuarantined && cursorPreserved
+            && activeRecoveryPreserved && retainedBudgetCountsOnlyTrustedPayload
+            && loaded.isDirty() && roundTrip.isDirty()))
+            throw new IllegalStateException("CI duplicate recovery snapshot position quarantine regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_DUPLICATE_SNAPSHOT_POSITION_QUARANTINE_VERIFIED entries=2 retained=1 quarantined=1 oldestWins=true cursorPreserved=true budgetSafe=true roundTrip=true");
+    }
+
     private static void verifyCompletedRecoveryStateQuarantine() {
         ListTag staleSnapshots=new ListTag();
         CompoundTag staleEntry=new CompoundTag();
@@ -4131,6 +4186,7 @@ public final class RiftController {
         verifyRecoveryBeaconVisualAnchorBounds();
         verifyNaturalBeaconIdPersistence();
         verifyRestoreCursorRepairPersistence();
+        verifyDuplicateRecoverySnapshotQuarantine();
         verifyCompletedRecoveryStateQuarantine();
         verifyInvalidSnapshotWarningRateLimit();
         verifyRecoveryAudienceBounds();
