@@ -131,16 +131,18 @@ def verify_green_corruption_shader_source():
     required=(
         "float greenOutsideCore=1.0-clamp(fractureCoverage,0.0,1.0);",
         "float greenCorruptionGlow=clamp(rimLight*.88+majorGlow*.14+filaments*.05,0.0,1.0)*greenOutsideCore;",
-        "color=mix(color,vec3(.002,.011,.009),green*.18);",
+        "color=mix(color,vec3(.002,.011,.009),green*.18*greenOutsideCore);",
         "color+=vec3(.10,.78,.24)*greenCorruptionGlow*green*(.72+.28*rimPulse);",
         "color+=vec3(.14,.92,.28)*lightningFlash*majorGlow*green*greenOutsideCore*.42;",
     )
     if (shader.count("float fractureCoverage=")!=1
             or any(token not in shader for token in required)
+            or "color=mix(color,vec3(.002,.011,.009),green*.18);" in shader
             or "color=mix(color,vec3(.002,.011,.009),green);" in shader):
         raise RuntimeError("BLACK FREQUENCY green corruption must illuminate fracture edges without washing out dark cores")
     if shader.index("float fractureCoverage=")>shader.index("float greenOutsideCore="):
         raise RuntimeError("BLACK FREQUENCY green edge mask must be derived after fracture-core coverage")
+    print("WORLD_CAPTURE: green base tint and edge emission are both masked off fracture cores",flush=True)
     print("WORLD_CAPTURE: green corruption keeps near-black cores and adds bounded toxic-green edge emission",flush=True)
 
 
