@@ -19,10 +19,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        recovery: [normal, sparse]
+        recovery: [normal, sparse, green-phase]
     env:
       BF_TEST_SPARSE_RECOVERY: ${{ matrix.recovery == 'sparse' && '1' || '0' }}
       BF_TEST_SNOW_BEACON: ${{ matrix.recovery == 'sparse' && '1' || '0' }}
+      BF_TEST_GREEN_PHASE_PREVIEW: ${{ matrix.recovery == 'green-phase' && '1' || '0' }}
       CF_API_KEY: ${{ secrets.CF_API_KEY }}
       DISPLAY: :99
       BF_ISOLATED_TEST: "1"
