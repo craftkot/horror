@@ -163,7 +163,7 @@ public final class RiftClientState {
             || greenPhase(false,(GREEN_PHASE_START_TICK+GREEN_PHASE_END_TICK)/2)!=0.0F
             || !bounded || !rising || !falling)
             throw new IllegalStateException("BLACK FREQUENCY green corruption phase easing regression");
-        LOGGER.info("BLACK_FREQUENCY_GREEN_PHASE_EASING_VERIFIED start={} fadeTicks={} peak={} plateauEnd={} end={} fadeInMidpoint={} fadeOutMidpoint={} bounded=true monotonic=true",
+        com.mojang.logging.LogUtils.getLogger().info("BLACK_FREQUENCY_GREEN_PHASE_EASING_VERIFIED start={} fadeTicks={} peak={} plateauEnd={} end={} fadeInMidpoint={} fadeOutMidpoint={} bounded=true monotonic=true",
             GREEN_PHASE_START_TICK,GREEN_PHASE_FADE_TICKS,
             GREEN_PHASE_START_TICK+GREEN_PHASE_FADE_TICKS,
             GREEN_PHASE_END_TICK-GREEN_PHASE_FADE_TICKS,GREEN_PHASE_END_TICK,
