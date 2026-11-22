@@ -67,6 +67,7 @@ jobs:
             # This activation-guard suite runs when restoration starts; fracture/sparse modes have no player.
             grep -q 'BLACK_FREQUENCY_TEST BEACON_INTERACTION_GUARD_VERIFIED maxDistance=4.5 maxDistanceSquared=20.25 eyeToAabb=true strictBoundary=true remote64Rejected=true invalidRejected=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST BEACON_HIT_POINT_GUARD_PROFILE_VERIFIED exactBoundary=true outsideRejected=true invalidRejected=true rayMatch=true displacedRejected=true' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST ACTIVE_RECOVERY_BEACON_MENU_GUARD_VERIFIED sameBeaconSuppressed=true otherBeaconPreserved=true inactivePreserved=true completedPreserved=true missingPositionPreserved=true noPendingPreserved=true' world-test.log
             # Recovery-only diagnostics are emitted when this mode actually starts restoration.
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_PAYLOAD_QUARANTINE_VERIFIED entries=2 retainedPayload=false' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_RESOURCE_LOCATION_QUARANTINE_VERIFIED invalidRejected=true validNamespaced=true quarantined=true' world-test.log

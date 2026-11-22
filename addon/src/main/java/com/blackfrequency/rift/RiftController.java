@@ -2156,6 +2156,16 @@ public final class RiftController {
         return Double.isFinite(distanceSquared) && distanceSquared<=1.0E-6D;
     }
 
+    // Only the exact beacon that owns an in-progress recovery loses its vanilla menu.
+    // Other nearby beacons, completed recoveries and legacy saves without a known
+    // beacon coordinate keep their normal interaction behavior.
+    private static boolean shouldSuppressActiveRecoveryBeaconMenu(boolean started,boolean restoring,
+            boolean restored,boolean beaconPosPresent,long activeBeaconPos,long clickedBeaconPos,
+            boolean hasPendingSnapshots) {
+        return started && restoring && !restored && beaconPosPresent && hasPendingSnapshots
+            && activeBeaconPos==clickedBeaconPos;
+    }
+
     /**
      * Disposable-client regression: prove that a loaded obstruction between the player
      * and the physical beacon is rejected by the same server ray used for activation.
@@ -3998,6 +4008,23 @@ public final class RiftController {
             || sameBeaconHitPoint(beaconHitPoint,new net.minecraft.world.phys.Vec3(Double.NaN,64.5D,.5D)))
             throw new IllegalStateException("CI beacon exact hit-point reach/ray-match regression");
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_HIT_POINT_GUARD_PROFILE_VERIFIED exactBoundary=true outsideRejected=true invalidRejected=true rayMatch=true displacedRejected=true");
+        long activeBeaconPosition=target.asLong();
+        boolean sameActiveBeaconSuppressed=shouldSuppressActiveRecoveryBeaconMenu(
+            true,true,false,true,activeBeaconPosition,activeBeaconPosition,true);
+        boolean differentBeaconPreserved=!shouldSuppressActiveRecoveryBeaconMenu(
+            true,true,false,true,activeBeaconPosition,activeBeaconPosition+1L,true);
+        boolean inactiveBeaconPreserved=!shouldSuppressActiveRecoveryBeaconMenu(
+            false,true,false,true,activeBeaconPosition,activeBeaconPosition,true);
+        boolean completedBeaconPreserved=!shouldSuppressActiveRecoveryBeaconMenu(
+            true,false,true,true,activeBeaconPosition,activeBeaconPosition,true);
+        boolean missingPositionPreserved=!shouldSuppressActiveRecoveryBeaconMenu(
+            true,true,false,false,activeBeaconPosition,activeBeaconPosition,true);
+        boolean noPendingSnapshotsPreserved=!shouldSuppressActiveRecoveryBeaconMenu(
+            true,true,false,true,activeBeaconPosition,activeBeaconPosition,false);
+        if(!(sameActiveBeaconSuppressed && differentBeaconPreserved && inactiveBeaconPreserved
+            && completedBeaconPreserved && missingPositionPreserved && noPendingSnapshotsPreserved))
+            throw new IllegalStateException("CI active recovery beacon menu guard regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST ACTIVE_RECOVERY_BEACON_MENU_GUARD_VERIFIED sameBeaconSuppressed=true otherBeaconPreserved=true inactivePreserved=true completedPreserved=true missingPositionPreserved=true noPendingPreserved=true");
         if(Math.abs(exactAabbReach-reachSquared)>1.0E-9D
             || !(outsideAabbReach>reachSquared)
             || !mayActivateBeacon(main,true,false,exactAabbReach,false,net.minecraftforge.eventbus.api.Event.Result.DEFAULT,net.minecraftforge.eventbus.api.Event.Result.DEFAULT)
@@ -4208,6 +4235,16 @@ public final class RiftController {
                 hitDistanceSquared,CI_BEACON_INTERACTION_MAX_DISTANCE*CI_BEACON_INTERACTION_MAX_DISTANCE);
         }
         State s=level.getDataStorage().computeIfAbsent(State::load,State::new,"blackfrequency_finale");
+        if(shouldSuppressActiveRecoveryBeaconMenu(s.started,s.restoring,s.restored,
+                s.beaconPosPresent,s.beaconPos,pos.asLong(),!s.snapshots.isEmpty())) {
+            // A second click on the recovery beacon must not fall through to the
+            // vanilla BeaconScreen while the world is already being restored.
+            event.setCanceled(true);
+            event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+            if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_ACTIVE_MENU_INTERACTION_SUPPRESSED x={} y={} z={}",
+                pos.getX(),pos.getY(),pos.getZ());
+            return;
+        }
         if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
         if(!beaconWithinAnchor(pos.getX(),pos.getZ(),s.x,s.z)) return;
         // Log only accepted player interactions; rejected distant beacons must

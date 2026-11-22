@@ -586,6 +586,11 @@ def verify_real_beacon_break_source():
             or "withinBeaconInteractionReach(hitDistanceSquared)" not in activation
             or "hasLoadedBeaconSightline(level,player,pos,hitPoint,requestedHitPoint)" not in activation
             or "BEACON_HIT_POINT_ACCEPTED_VERIFIED" not in activation
+            or "shouldSuppressActiveRecoveryBeaconMenu(s.started,s.restoring,s.restored," not in activation
+            or "s.beaconPosPresent,s.beaconPos,pos.asLong(),!s.snapshots.isEmpty()" not in activation
+            or "BEACON_ACTIVE_MENU_INTERACTION_SUPPRESSED" not in activation
+            or "private static boolean shouldSuppressActiveRecoveryBeaconMenu(" not in controller
+            or "ACTIVE_RECOVERY_BEACON_MENU_GUARD_VERIFIED" not in controller
             or "for(var nearbyPlayer:level.players())" not in activation
             or "for(var player:level.players())" in activation
             or "BEACON_ACTIVATION_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" not in activation
@@ -1615,6 +1620,30 @@ def capture_test_world():
                 and metrics["pixels"]>=5000)
 
     from PIL import Image,ImageDraw
+
+    def measure_beacon_menu(frame):
+        width,height=frame.size
+        left,right=int(width*.22),int(width*.78)
+        top,bottom=int(height*.03),int(height*.96)
+        pixels=frame.convert("RGB").crop((left,top,right,bottom)).getdata()
+        hits=0
+        for red,green,blue in pixels:
+            if (175<=red<=220 and 175<=green<=220 and 175<=blue<=220
+                    and max(red,green,blue)-min(red,green,blue)<=18):
+                hits+=1
+        return hits/((right-left)*(bottom-top))
+
+    def beacon_menu_visible(fraction):
+        return math.isfinite(fraction) and fraction>=.10
+
+    _beacon_menu_fixture=Image.new("RGB",(1280,720),(35,52,30))
+    ImageDraw.Draw(_beacon_menu_fixture).rectangle((300,32,980,684),fill=(198,198,198))
+    _beacon_world_fixture=Image.new("RGB",(1280,720),(35,52,30))
+    if (not beacon_menu_visible(measure_beacon_menu(_beacon_menu_fixture))
+            or beacon_menu_visible(measure_beacon_menu(_beacon_world_fixture))):
+        raise RuntimeError("BLACK FREQUENCY vanilla beacon menu classifier regression")
+    print("WORLD_CAPTURE: vanilla beacon menu classifier verified",flush=True)
+
     _compact_overlay_fixture=Image.new("RGB",(1280,720),(0,0,0))
     ImageDraw.Draw(_compact_overlay_fixture).rectangle((300,240,980,320),fill=(86,20,197))
     _wide_overlay_fixture=Image.new("RGB",(1280,720),(0,0,0))
@@ -1828,7 +1857,41 @@ def capture_test_world():
             if vertical_cull_probe_verified:
                 print("WORLD_CAPTURE_INPUT: post-cull physical beacon right-click confirmed by server",flush=True)
             print("WORLD_CAPTURE: physical beacon activation confirmed before screenshot",flush=True)
+            # Exercise the same physical beacon again while recovery is active.
+            # The server must suppress the vanilla BeaconScreen for this exact
+            # recovery beacon, while leaving unrelated beacons untouched.
+            repeat_marker="BLACK_FREQUENCY_TEST BEACON_ACTIVE_MENU_INTERACTION_SUPPRESSED"
+            repeat_logs=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+            repeat_count_before=repeat_logs.count(repeat_marker)
+            focus_game()
+            repeat_down=subprocess.run(["xdotool","mousedown","3"],check=False)
+            time.sleep(0.12)
+            repeat_up=subprocess.run(["xdotool","mouseup","3"],check=False)
+            if repeat_down.returncode!=0 or repeat_up.returncode!=0:
+                raise RuntimeError("BLACK FREQUENCY could not send the repeated physical beacon right-click")
+            print("WORLD_CAPTURE_INPUT: repeated physical right-click during active restoration",flush=True)
+            repeat_deadline=time.monotonic()+2.0
+            repeat_confirmed=False
+            while time.monotonic()<repeat_deadline and p.poll() is None:
+                repeat_logs=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                if repeat_logs.count(repeat_marker)>repeat_count_before:
+                    repeat_confirmed=True
+                    break
+                if "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" in repeat_logs:
+                    break
+                time.sleep(0.05)
+            if not repeat_confirmed:
+                raise RuntimeError("BLACK FREQUENCY repeated active-beacon click was not rejected by the server")
+            time.sleep(0.12)
             snap("beacon-after-right-click.png")
+            with Image.open(shots/"beacon-after-right-click.png") as frame:
+                menu_fraction=measure_beacon_menu(frame)
+            if beacon_menu_visible(menu_fraction):
+                raise RuntimeError(
+                    "BLACK FREQUENCY vanilla BeaconScreen opened during active recovery "
+                    f"(neutral-gray fraction={menu_fraction:.4f})")
+            print("WORLD_CAPTURE: repeated active-beacon click suppressed the vanilla menu",
+                  {"neutralGrayFraction":round(menu_fraction,4)},flush=True)
         else:
             # A missed click is recoverable; never publish its stale prompt frame as
             # evidence of activation. The outer loop will retry after aim recovery.
