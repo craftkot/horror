@@ -2742,9 +2742,21 @@ def capture_test_world():
             if opening_ramp_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: sky-rift opening ramp did not pass its monotonic smoothstep profile",flush=True)
                 return False
+            packet_interpolation_marker = (
+                "BLACK_FREQUENCY_RIFT_PACKET_INTERPOLATION_VERIFIED "
+                "intervalTicks=10 cap=10 monotonic=true overflowSafe=true negativeSafe=true"
+            )
+            if packet_interpolation_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: client did not interpolate finale ticks between authoritative state packets",flush=True)
+                return False
             if ("private static float riftOpeningRamp(int ticks)" not in camera_source
                     or "return t*t*(3.0F-2.0F*t);" not in camera_source
-                    or "return collapse ? strength()*riftOpeningRamp(finaleTicks) : strength();" not in camera_source):
+                    or "return collapse ? strength()*riftOpeningRamp(finaleTicks) : strength();" not in camera_source
+                    or "private static int serverFinaleTicks;" not in camera_source
+                    or "private static final int RIFT_STATE_PACKET_INTERVAL_TICKS=10;" not in camera_source
+                    or "private static int predictedFinaleTicks(int packetFinaleTicks,int packetAgeTicks)" not in camera_source
+                    or "finaleTicks=predictedFinaleTicks(serverFinaleTicks,ticksSincePacket);" not in camera_source
+                    or "ticksSincePacket=Math.min(CLIENT_STATE_PACKET_TIMEOUT_TICKS+1,ticksSincePacket+1);" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: sky-rift opening ramp is not wired into visible client strength",flush=True)
                 return False
             support_top_marker = (
