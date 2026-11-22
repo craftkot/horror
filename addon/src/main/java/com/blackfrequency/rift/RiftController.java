@@ -1536,6 +1536,9 @@ public final class RiftController {
             original[offset]=level.getBlockState(cursor);
         }
         boolean canopyAccepted=false,horizontalLogRejected=false,roofRejected=false,unloadedChunkRejected=false;
+        boolean canopyFound=false;
+        int canopyTop=Integer.MIN_VALUE,canopySurfaceY=Integer.MIN_VALUE;
+        double canopyParticleY=Double.NaN;
         try {
             BlockState verticalLog=Blocks.OAK_LOG.defaultBlockState().setValue(
                 net.minecraft.world.level.block.RotatedPillarBlock.AXIS,net.minecraft.core.Direction.Axis.Y);
@@ -1551,11 +1554,13 @@ public final class RiftController {
             if(!level.setBlock(cursor,leaves,2))
                 throw new IllegalStateException("CI could not place temporary canopy leaves");
 
-            int canopyTop=level.getHeight(FISSURE_SURFACE_HEIGHTMAP,fixtureX,fixtureZ);
+            canopyTop=level.getHeight(FISSURE_SURFACE_HEIGHTMAP,fixtureX,fixtureZ);
             FissureGroundSample sample=new FissureGroundSample();
-            boolean found=findFissureGroundSample(level,fixtureX,fixtureZ,cursor,sample);
-            canopyAccepted=canopyTop==baseY+5 && found && sample.surfaceY==baseY
-                && Math.abs(sample.particleY-(baseY+.10D))<1.0E-9D;
+            canopyFound=findFissureGroundSample(level,fixtureX,fixtureZ,cursor,sample);
+            canopySurfaceY=sample.surfaceY;
+            canopyParticleY=sample.particleY;
+            canopyAccepted=canopyTop==baseY+5 && canopyFound && canopySurfaceY==baseY
+                && Math.abs(canopyParticleY-(baseY+.10D))<1.0E-9D;
             if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,originalSurfaceY,cursor))
                 throw new IllegalStateException("CI failed to restore temporary canopy fixture");
 
@@ -1588,7 +1593,13 @@ public final class RiftController {
         }
 
         if(!(fixtureCellPolicy && canopyAccepted && horizontalLogRejected && roofRejected && unloadedChunkRejected))
-            throw new IllegalStateException("CI real-world canopy scan/structure occlusion regression");
+            throw new IllegalStateException("CI real-world canopy scan/structure occlusion regression"
+                +" fixtureCellPolicy="+fixtureCellPolicy+" canopyAccepted="+canopyAccepted
+                +" canopyFound="+canopyFound+" canopyTop="+canopyTop+" expectedCanopyTop="+(baseY+5)
+                +" canopySurfaceY="+canopySurfaceY+" expectedSurfaceY="+baseY
+                +" canopyParticleY="+canopyParticleY+" horizontalLogRejected="+horizontalLogRejected
+                +" roofRejected="+roofRejected+" unloadedChunkRejected="+unloadedChunkRejected
+                +" fixture="+fixtureX+","+baseY+","+fixtureZ+" originalSurfaceY="+originalSurfaceY);
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_FIXTURE_CELL_POLICY_VERIFIED air=true leaves=true nonSolidPlants=true fluids=false blockEntities=false solids=false");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_FIXTURE_RESTORATION_VERIFIED originalHeightRestored=true loadedOnly=true radius=8");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_TRAVERSAL_VERIFIED verticalLogs=true leaves=true horizontalLogsRejected=true roofBlocksRejected=true nonSolidPlantsRetained=true heightmapIncludesLeaves=true depthBound=32");
