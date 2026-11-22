@@ -31,6 +31,10 @@ public final class RiftClientState {
     // Last authoritative server value; finaleTicks is the bounded client prediction.
     private static int serverFinaleTicks;
     private static final int RIFT_OPENING_RAMP_TICKS=60;
+    // The green corruption flash is a short phase, but its color must not pop at either edge.
+    private static final int GREEN_PHASE_START_TICK=100;
+    private static final int GREEN_PHASE_END_TICK=180;
+    private static final int GREEN_PHASE_FADE_TICKS=8;
     // Active world-state packets are sent every ten server ticks.
     private static final int RIFT_STATE_PACKET_INTERVAL_TICKS=10;
     private static final boolean VERIFY_RIFT_CLIENT_PROFILES=
@@ -110,7 +114,61 @@ public final class RiftClientState {
             && Math.abs((long)worldAnchorZ)<=30_000_000L;
     }
     public static float strength() { return progress; }
-    public static float greenPhase() { return collapse && finaleTicks>=100 && finaleTicks<180 ? 1f : 0f; }
+    public static float greenPhase() { return greenPhase(collapse,finaleTicks); }
+
+    private static float smoothstep01(float value) {
+        float t=Math.max(0.0F,Math.min(1.0F,value));
+        return t*t*(3.0F-2.0F*t);
+    }
+
+    private static float greenPhase(boolean collapsing,int ticks) {
+        if(!collapsing || ticks<GREEN_PHASE_START_TICK || ticks>GREEN_PHASE_END_TICK) return 0.0F;
+        float fadeIn=smoothstep01((ticks-GREEN_PHASE_START_TICK)/(float)GREEN_PHASE_FADE_TICKS);
+        float fadeOut=smoothstep01((GREEN_PHASE_END_TICK-ticks)/(float)GREEN_PHASE_FADE_TICKS);
+        return Math.min(fadeIn,fadeOut);
+    }
+
+    private static void verifyGreenPhaseProfile() {
+        float before=greenPhase(true,GREEN_PHASE_START_TICK-1);
+        float start=greenPhase(true,GREEN_PHASE_START_TICK);
+        float fadeInMidpoint=greenPhase(true,GREEN_PHASE_START_TICK+GREEN_PHASE_FADE_TICKS/2);
+        float peak=greenPhase(true,GREEN_PHASE_START_TICK+GREEN_PHASE_FADE_TICKS);
+        float plateau=greenPhase(true,(GREEN_PHASE_START_TICK+GREEN_PHASE_END_TICK)/2);
+        float plateauEnd=greenPhase(true,GREEN_PHASE_END_TICK-GREEN_PHASE_FADE_TICKS);
+        float fadeOutMidpoint=greenPhase(true,GREEN_PHASE_END_TICK-GREEN_PHASE_FADE_TICKS/2);
+        float end=greenPhase(true,GREEN_PHASE_END_TICK);
+        float after=greenPhase(true,GREEN_PHASE_END_TICK+1);
+        boolean bounded=true;
+        for(int tick=0;tick<=GREEN_PHASE_END_TICK+20;tick++) {
+            float sample=greenPhase(true,tick);
+            bounded &= Float.isFinite(sample) && sample>=0.0F && sample<=1.0F;
+        }
+        boolean rising=true;
+        float previous=start;
+        for(int tick=GREEN_PHASE_START_TICK+1;tick<=GREEN_PHASE_START_TICK+GREEN_PHASE_FADE_TICKS;tick++) {
+            float current=greenPhase(true,tick);
+            rising &= current>=previous;
+            previous=current;
+        }
+        boolean falling=true;
+        previous=plateauEnd;
+        for(int tick=GREEN_PHASE_END_TICK-GREEN_PHASE_FADE_TICKS+1;tick<=GREEN_PHASE_END_TICK;tick++) {
+            float current=greenPhase(true,tick);
+            falling &= current<=previous;
+            previous=current;
+        }
+        if(before!=0.0F || start!=0.0F || Math.abs(fadeInMidpoint-.5F)>1.0E-6F
+            || peak!=1.0F || plateau!=1.0F || plateauEnd!=1.0F
+            || Math.abs(fadeOutMidpoint-.5F)>1.0E-6F || end!=0.0F || after!=0.0F
+            || greenPhase(false,(GREEN_PHASE_START_TICK+GREEN_PHASE_END_TICK)/2)!=0.0F
+            || !bounded || !rising || !falling)
+            throw new IllegalStateException("BLACK FREQUENCY green corruption phase easing regression");
+        LOGGER.info("BLACK_FREQUENCY_GREEN_PHASE_EASING_VERIFIED start={} fadeTicks={} peak={} plateauEnd={} end={} fadeInMidpoint={} fadeOutMidpoint={} bounded=true monotonic=true",
+            GREEN_PHASE_START_TICK,GREEN_PHASE_FADE_TICKS,
+            GREEN_PHASE_START_TICK+GREEN_PHASE_FADE_TICKS,
+            GREEN_PHASE_END_TICK-GREEN_PHASE_FADE_TICKS,GREEN_PHASE_END_TICK,
+            fadeInMidpoint,fadeOutMidpoint);
+    }
 
     // Ease the first three seconds of the rift in without changing its final strength.
     private static float riftOpeningRamp(int ticks) {
@@ -156,6 +214,7 @@ public final class RiftClientState {
             || packetBase!=60 || packetNegative!=0 || packetOverflow!=Integer.MAX_VALUE
             || !packetMonotonic)
             throw new IllegalStateException("BLACK FREQUENCY rift packet interpolation regression");
+        verifyGreenPhaseProfile();
         riftOpeningRampProfileLogged=true;
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_RIFT_OPENING_RAMP_PROFILE_VERIFIED ticks={} curve=smoothstep quarter={} midpoint={} threeQuarter={} endpoints=true monotonic=true",
