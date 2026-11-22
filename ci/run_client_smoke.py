@@ -582,7 +582,10 @@ def verify_real_beacon_break_source():
             or "face.getStepX()*1.0E-4D" not in activation
             or "face.getStepY()*1.0E-4D" not in activation
             or "face.getStepZ()*1.0E-4D" not in activation
-            or "hasLoadedBeaconSightline(level,player,pos,hitPoint)" not in activation
+            or "eyeDistanceSquaredToHit(player.getEyePosition(),requestedHitPoint)" not in activation
+            or "withinBeaconInteractionReach(hitDistanceSquared)" not in activation
+            or "hasLoadedBeaconSightline(level,player,pos,hitPoint,requestedHitPoint)" not in activation
+            or "BEACON_HIT_POINT_ACCEPTED_VERIFIED" not in activation
             or "for(var nearbyPlayer:level.players())" not in activation
             or "for(var player:level.players())" in activation
             or "BEACON_ACTIVATION_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" not in activation
@@ -590,6 +593,9 @@ def verify_real_beacon_break_source():
             or "Blocks.BARRIER.defaultBlockState()" not in sightline
             or "BEACON_SIGHTLINE_OCCLUSION_REJECTED" not in sightline
             or "private static boolean hasLoadedBeaconSightline(" not in sightline
+            or "sameBeaconHitPoint(hit.getLocation(),expectedHitPoint)" not in sightline
+            or "private static double eyeDistanceSquaredToHit(" not in controller
+            or "private static boolean sameBeaconHitPoint(" not in controller
             or "fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ))" not in sightline
             or "ClipContext.Block.OUTLINE" not in sightline
             or "ClipContext.Fluid.NONE" not in sightline
@@ -1763,6 +1769,7 @@ def capture_test_world():
             interaction_logs=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
             if ("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in interaction_logs
                     and "BLACK_FREQUENCY_TEST BEACON_ACTIVATION_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" in interaction_logs
+                    and "BLACK_FREQUENCY_TEST BEACON_HIT_POINT_ACCEPTED_VERIFIED" in interaction_logs
                     and "BLACK_FREQUENCY_TEST BEACON_START_ACTIONBAR_ONLY" in interaction_logs
                     and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in interaction_logs):
                 interaction_confirmed=True
@@ -2569,6 +2576,7 @@ def capture_test_world():
                 beacon_interaction_confirmed=(
                     "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in current
                     and "BLACK_FREQUENCY_TEST BEACON_ACTIVATION_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" in current
+                    and "BLACK_FREQUENCY_TEST BEACON_HIT_POINT_ACCEPTED_VERIFIED" in current
                     and "BLACK_FREQUENCY_TEST BEACON_START_ACTIONBAR_ONLY" in current
                     and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current
                 )
@@ -3893,6 +3901,9 @@ def capture_test_world():
                     return False
                 if "BLACK_FREQUENCY_TEST BEACON_ACTIVATION_SIGHTLINE_VERIFIED hit=beacon loadedChunksOnly=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: actual beacon activation did not pass the server-side loaded-only sightline guard",flush=True)
+                    return False
+                if "BLACK_FREQUENCY_TEST BEACON_HIT_POINT_ACCEPTED_VERIFIED" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: actual beacon click did not pass exact hit-point reach and ray-match validation",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST BEACON_SIGHTLINE_OCCLUSION_REJECTED temporaryBarrier=true restored=true loadedChunksOnly=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: server sightline guard did not reject and restore a temporary obstruction",flush=True)
