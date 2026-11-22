@@ -3306,10 +3306,10 @@ def capture_test_world():
                 return False
             edge_width_profiles = {
                 "GROUND_EDGE_HALF_WIDTH=.026D;": {
-                    "embedded": (.25875,.4255,.05519475,.10657,.1920707,.199996,.0079253,.006,.015,.017,.023),
+                    "embedded": (.25875,.4255,.05519475,.10657,.1920707,.199996,.0079253,.005,.010,.011,.015),
                 },
                 "GROUND_EDGE_HALF_WIDTH=.032D;": {
-                    "embedded": (.25875,.4255,.0507195,.10057,.1764974,.193996,.0174986,.006,.015,.017,.023),
+                    "embedded": (.25875,.4255,.0507195,.10057,.1764974,.193996,.0174986,.005,.010,.011,.015),
                 },
             }
             edge_width_profile = next(
@@ -3331,7 +3331,7 @@ def capture_test_world():
             relief_profile_match=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_SURFACE_RELIEF_VERIFIED coreRecess=([-+0-9.eE]+) filamentLift=([-+0-9.eE]+) edgeLift=([-+0-9.eE]+) coreClearance=([-+0-9.eE]+) glowClearance=([-+0-9.eE]+) filamentClearance=([-+0-9.eE]+) edgeClearance=([-+0-9.eE]+) ordered=true",
                 final_log)
-            expected_relief=(.009,.002,.008,.006,.015,.017,.023)
+            expected_relief=(.005,.001,.005,.005,.010,.011,.015)
             if (not relief_profile_match
                     or any(not math.isclose(float(relief_profile_match.group(i)),expected_relief[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
@@ -3352,12 +3352,12 @@ def capture_test_world():
                     or "return supportOffset+Math.min(1.0D,snowLayerHeight);" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: snow-layer offset ignores the support collision height",flush=True)
                 return False
-            if ("GROUND_SURFACE_CLEARANCE=.015D;" not in camera_source
+            if ("GROUND_SURFACE_CLEARANCE=.010D;" not in camera_source
                     or "GROUND_MIN_CORE_CLEARANCE=.005D;" not in camera_source
                     or "coreClearance<GROUND_MIN_CORE_CLEARANCE" not in camera_source
-                    or "GROUND_CORE_RECESS=.009D;" not in camera_source
-                    or "GROUND_FILAMENT_LIFT=.002D;" not in camera_source
-                    or "GROUND_EDGE_LIFT=.008D;" not in camera_source
+                    or "GROUND_CORE_RECESS=.005D;" not in camera_source
+                    or "GROUND_FILAMENT_LIFT=.001D;" not in camera_source
+                    or "GROUND_EDGE_LIFT=.005D;" not in camera_source
                     or "return candidateY-1+surfaceOffset+GROUND_SURFACE_CLEARANCE;" not in camera_source
                     or "double offset,double halfWidth,double verticalOffset," not in camera_source
                     or camera_source.count("a.y()+verticalOffset")!=2

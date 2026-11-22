@@ -763,11 +763,11 @@ public final class RiftClientState {
         private static final double GROUND_EDGE_HALF_WIDTH=.026D;
         private static final double GROUND_MIN_CORE_EDGE_GAP=.0075D;
         // Keep the dark core near the support top while retaining a measurable depth-buffer gap.
-        private static final double GROUND_SURFACE_CLEARANCE=.015D;
+        private static final double GROUND_SURFACE_CLEARANCE=.010D;
         private static final double GROUND_MIN_CORE_CLEARANCE=.005D;
-        private static final double GROUND_CORE_RECESS=.009D;
-        private static final double GROUND_FILAMENT_LIFT=.002D;
-        private static final double GROUND_EDGE_LIFT=.008D;
+        private static final double GROUND_CORE_RECESS=.005D;
+        private static final double GROUND_FILAMENT_LIFT=.001D;
+        private static final double GROUND_EDGE_LIFT=.005D;
         // Shift the ground rails away from hot magenta toward the sky-rift's deep violet palette.
         private static final float GROUND_EDGE_RED=.50F;
         private static final float GROUND_EDGE_GREEN=.14F;
@@ -1374,10 +1374,10 @@ public final class RiftClientState {
                 || Math.abs(GROUND_EDGE_OFFSET_SCALE-3.0D)>1.0E-9D
                 || Math.abs(GROUND_EDGE_OFFSET_SKEW_SCALE-.12D)>1.0E-9D
                 || Math.abs(GROUND_CORE_SKEW_AMPLITUDE-.15D)>1.0E-9D
-                || Math.abs(GROUND_SURFACE_CLEARANCE-.015D)>1.0E-9D
-                || Math.abs(GROUND_CORE_RECESS-.009D)>1.0E-9D
-                || Math.abs(GROUND_FILAMENT_LIFT-.002D)>1.0E-9D
-                || Math.abs(GROUND_EDGE_LIFT-.008D)>1.0E-9D)
+                || Math.abs(GROUND_SURFACE_CLEARANCE-.010D)>1.0E-9D
+                || Math.abs(GROUND_CORE_RECESS-.005D)>1.0E-9D
+                || Math.abs(GROUND_FILAMENT_LIFT-.001D)>1.0E-9D
+                || Math.abs(GROUND_EDGE_LIFT-.005D)>1.0E-9D)
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh surface relief regression");
             double fullBlockSnowOffset=groundSurfaceOffset(1.0D,.125D);
             double partialSupportSnowOffset=groundSurfaceOffset(.9375D,.125D);
