@@ -3127,8 +3127,8 @@ def capture_test_world():
                     "int edgeAlphaChannelB=colorChannel(edgeAlphaB);")
                 ribbon_call_patterns=(
                     r"GROUND_GLOW_RED_CHANNEL,GROUND_GLOW_GREEN_CHANNEL,GROUND_GLOW_BLUE_CHANNEL,\s*glowAlphaChannelA,glowAlphaChannelB",
-                    r"bevelRibbon\(builder,matrix,camera,segment,halfWidth,true,\s*GROUND_BEVEL_RED_CHANNEL,GROUND_BEVEL_GREEN_CHANNEL,GROUND_BEVEL_BLUE_CHANNEL,\s*bevelAlphaChannelA,bevelAlphaChannelB\)",
-                    r"bevelRibbon\(builder,matrix,camera,segment,halfWidth,false,\s*GROUND_BEVEL_RED_CHANNEL,GROUND_BEVEL_GREEN_CHANNEL,GROUND_BEVEL_BLUE_CHANNEL,\s*bevelAlphaChannelA,bevelAlphaChannelB\)",
+                    r"bevelRibbon\(builder,matrix,camera,segment,halfWidth,true,leftBevelLiftScale,\s*GROUND_BEVEL_RED_CHANNEL,GROUND_BEVEL_GREEN_CHANNEL,GROUND_BEVEL_BLUE_CHANNEL,\s*bevelAlphaChannelA,bevelAlphaChannelB\)",
+                    r"bevelRibbon\(builder,matrix,camera,segment,halfWidth,false,rightBevelLiftScale,\s*GROUND_BEVEL_RED_CHANNEL,GROUND_BEVEL_GREEN_CHANNEL,GROUND_BEVEL_BLUE_CHANNEL,\s*bevelAlphaChannelA,bevelAlphaChannelB\)",
                     r"GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,\s*filamentAlphaChannelA,filamentAlphaChannelB",
                     r"GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,\s*edgeAlphaChannelA,edgeAlphaChannelB")
                 prefix_start=camera_source.find("int firstVisibleSegmentIndex=-1;")
@@ -3366,6 +3366,26 @@ def capture_test_world():
                     or "private static final double GROUND_BEVEL_LIFT=.018D;" not in camera_source
                     or "groundBevelOuterOffset(" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: beveled ground fissure cross-section was not verified",flush=True)
+                return False
+            bevel_pulse=re.search(
+                r"BLACK_FREQUENCY_GROUND_MESH_BEVEL_PULSE_PROFILE_VERIFIED minScale=([-+0-9.eE]+) maxScale=([-+0-9.eE]+) midpointLeft=([-+0-9.eE]+) midpointRight=([-+0-9.eE]+) complementary=true bounded=true invalidRejected=true noExtraTrig=true",
+                final_log)
+            expected_bevel_pulse=(.9,1.1,1.0,1.0)
+            bevel_lift_start=camera_source.find("private static double groundBevelLiftScale(")
+            bevel_lift_end=camera_source.find("private static void bevelRibbon(",bevel_lift_start)
+            bevel_lift_source=(camera_source[bevel_lift_start:bevel_lift_end]
+                               if bevel_lift_start>=0 and bevel_lift_end>bevel_lift_start else "")
+            if (not bevel_pulse
+                    or any(not math.isclose(float(bevel_pulse.group(i)),expected_bevel_pulse[i-1],
+                                             rel_tol=0.0,abs_tol=1.0e-9)
+                           for i in range(1,5))
+                    or "GROUND_BEVEL_LIFT_PULSE_RANGE=.10D;" not in camera_source
+                    or "double leftBevelLiftScale=groundBevelLiftScale(wave,true);" not in camera_source
+                    or "double rightBevelLiftScale=groundBevelLiftScale(wave,false);" not in camera_source
+                    or "double bevelLift=GROUND_BEVEL_LIFT*liftScale;" not in camera_source
+                    or not bevel_lift_source
+                    or "Math.sin(" in bevel_lift_source):
+                print("WORLD_CAPTURE_FAIL: travelling bevel-lift pulse was not bounded, complementary, or allocation-free",flush=True)
                 return False
             snow_offset_marker=(
                 "BLACK_FREQUENCY_GROUND_MESH_SNOW_SURFACE_OFFSET_VERIFIED "
