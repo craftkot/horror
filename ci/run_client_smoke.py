@@ -116,6 +116,18 @@ def parse_fissure_particle_emission(log_text):
 def verify_green_corruption_shader_source():
     shader_path=(ROOT/"addon"/"src"/"main"/"resources"/"assets"/"blackfrequency"/"shaders"/"core"/"sky_rift.fsh")
     shader=shader_path.read_text(encoding="utf-8")
+    client_state_path=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"client"/"RiftClientState.java")
+    client_state=client_state_path.read_text(encoding="utf-8")
+    preview_start=client_state.find("public static float greenPhase()")
+    preview_end=client_state.find("\n    private static float smoothstep01",preview_start)
+    preview_body=client_state[preview_start:preview_end] if preview_start>=0 and preview_end>preview_start else ""
+    if ("VERIFY_RIFT_CLIENT_PROFILES && Boolean.getBoolean(\"blackfrequency.ciGreenPhasePreview\")" not in client_state
+            or "if(CI_GREEN_PHASE_PREVIEW && progress>0.0F)" not in preview_body
+            or "BLACK_FREQUENCY_CI_GREEN_PHASE_PREVIEW_ACTIVE" not in preview_body
+            or "return 1.0F;" not in preview_body
+            or "return greenPhase(collapse,finaleTicks);" not in preview_body):
+        raise RuntimeError("BLACK FREQUENCY green-phase preview must be client-only, profile-gated, and inactive without an active rift")
+    print("WORLD_CAPTURE: green-phase preview is gated behind the disposable client profile")
     required=(
         "float greenOutsideCore=1.0-clamp(fractureCoverage,0.0,1.0);",
         "float greenCorruptionGlow=clamp(rimLight*.88+majorGlow*.14+filaments*.05,0.0,1.0)*greenOutsideCore;",
@@ -838,7 +850,7 @@ opts.update({
     "executablePath":"java",
     "defaultExecutablePath":"java",
     "gameDirectory":str(MC),
-    "jvmArguments":["-Xms1G","-Xmx6G","-Djava.awt.headless=false","-Dblackfrequency.ciTestMode=true","-Dblackfrequency.verifyGroundMeshProfiles=true","-Dblackfrequency.ciTickStep=2400"] + (["-Dblackfrequency.ciClientSmokeTest=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []) + (["-Dblackfrequency.ciExerciseRestoration=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []) + (["-Dblackfrequency.ciPlayerBeaconTest=true"] if os.environ.get("BF_TEST_PLAYER_BEACON")=="1" else []) + (["-Dblackfrequency.ciNaturalBeaconTest=true"] if os.environ.get("BF_TEST_NATURAL_BEACON")=="1" else []) + (["-Dblackfrequency.ciPostRestoreBeaconBreakTest=true"] if os.environ.get("BF_TEST_NATURAL_BEACON")=="1" else []) + (["-Dblackfrequency.ciSparseRecoveryTest=true"] if os.environ.get("BF_TEST_SPARSE_RECOVERY")=="1" else []) + (["-Dblackfrequency.ciSnowBeaconTest=true"] if os.environ.get("BF_TEST_SNOW_BEACON")=="1" else []),
+    "jvmArguments":["-Xms1G","-Xmx6G","-Djava.awt.headless=false","-Dblackfrequency.ciTestMode=true","-Dblackfrequency.verifyGroundMeshProfiles=true","-Dblackfrequency.ciTickStep=2400"] + (["-Dblackfrequency.ciGreenPhasePreview=true"] if os.environ.get("BF_TEST_GREEN_PHASE_PREVIEW")=="1" else []) + (["-Dblackfrequency.ciClientSmokeTest=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []) + (["-Dblackfrequency.ciExerciseRestoration=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []) + (["-Dblackfrequency.ciPlayerBeaconTest=true"] if os.environ.get("BF_TEST_PLAYER_BEACON")=="1" else []) + (["-Dblackfrequency.ciNaturalBeaconTest=true"] if os.environ.get("BF_TEST_NATURAL_BEACON")=="1" else []) + (["-Dblackfrequency.ciPostRestoreBeaconBreakTest=true"] if os.environ.get("BF_TEST_NATURAL_BEACON")=="1" else []) + (["-Dblackfrequency.ciSparseRecoveryTest=true"] if os.environ.get("BF_TEST_SPARSE_RECOVERY")=="1" else []) + (["-Dblackfrequency.ciSnowBeaconTest=true"] if os.environ.get("BF_TEST_SNOW_BEACON")=="1" else []),
     "customResolution":True,
     "resolutionWidth":"1280",
     "resolutionHeight":"720",
@@ -1704,7 +1716,7 @@ def capture_test_world():
             or restoration_palette_evidence_passes(_palette_missing,_palette_missing)):
         raise RuntimeError("BLACK FREQUENCY restoration palette density/evidence guard regression")
 
-    def verify_sky_pixels(name, region, minimum, max_green=None):
+    def verify_sky_pixels(name, region, minimum, max_green=None, min_green=None):
         from PIL import Image
         path=shots/name
         if not path.is_file():
@@ -1731,10 +1743,15 @@ def capture_test_world():
                 dark_sky=0
                 purple_rows=[]
                 purple_longest_runs=[]
+                green_rows=[]
+                green_longest_runs=[]
                 for y in range(crop.height):
                     row_purple=0
                     row_longest=0
                     current_run=0
+                    row_green=0
+                    green_row_longest=0
+                    green_current_run=0
                     start=y*crop.width
                     for r,g,b in pixels[start:start+crop.width]:
                         if is_rift_violet_pixel(r,g,b):
@@ -1746,29 +1763,51 @@ def capture_test_world():
                             current_run=0
                         if g>r*1.15 and g>b*1.15 and g>25:
                             green+=1
+                            row_green+=1
+                            green_current_run+=1
+                            green_row_longest=max(green_row_longest,green_current_run)
+                        else:
+                            green_current_run=0
                         # Ground cracks can contain the same violet pixels as the sky shader.
-                        # Require a real dark sky field behind the tear, not just purple geometry.
+                        # Require a real dark sky field behind the tear, not just colored geometry.
                         if max(r,g,b)<50 and b>=g:
                             dark_sky+=1
                     purple_rows.append(row_purple)
                     purple_longest_runs.append(row_longest)
+                    green_rows.append(row_green)
+                    green_longest_runs.append(green_row_longest)
                 coverage=purple/(crop.width*crop.height)
                 green_coverage=green/(crop.width*crop.height)
                 dark_sky_coverage=dark_sky/(crop.width*crop.height)
-                score=coverage-.35*green_coverage
-                row_threshold=max(6,int(crop.width*.01))
-                peak_threshold=max(12,int(crop.width*.025))
-                min_contiguous_run=max(64,int(crop.width*.22))
-                line_rows=sum(1 for count in purple_rows if count>=row_threshold)
-                peak_row=max(purple_rows,default=0)
-                continuous_rows=sum(1 for run in purple_longest_runs if run>=min_contiguous_run)
-                max_contiguous_run=max(purple_longest_runs,default=0)
+                if min_green is None:
+                    score=coverage-.35*green_coverage
+                    row_threshold=max(6,int(crop.width*.01))
+                    peak_threshold=max(12,int(crop.width*.025))
+                    min_contiguous_run=max(64,int(crop.width*.22))
+                    line_rows=sum(1 for count in purple_rows if count>=row_threshold)
+                    peak_row=max(purple_rows,default=0)
+                    continuous_rows=sum(1 for run in purple_longest_runs if run>=min_contiguous_run)
+                    max_contiguous_run=max(purple_longest_runs,default=0)
+                    line_visible=(line_rows>=8 and peak_row>=peak_threshold
+                                  and has_continuous_sky_band(purple_longest_runs,min_contiguous_run))
+                else:
+                    # Green preview frames must contain an actual rendered green fracture,
+                    # not merely the test-only uniform value or a green HUD element.
+                    score=green_coverage-.35*coverage
+                    row_threshold=max(2,int(crop.width*.004))
+                    peak_threshold=max(3,int(crop.width*.012))
+                    min_contiguous_run=max(16,int(crop.width*.06))
+                    line_rows=sum(1 for count in green_rows if count>=row_threshold)
+                    peak_row=max(green_rows,default=0)
+                    continuous_rows=sum(1 for run in green_longest_runs if run>=min_contiguous_run)
+                    max_contiguous_run=max(green_longest_runs,default=0)
+                    line_visible=(line_rows>=3 and peak_row>=peak_threshold
+                                  and continuous_rows>=2 and max_contiguous_run>=min_contiguous_run)
                 candidate=(score,coverage,green_coverage,dark_sky_coverage,line_rows,peak_row,
                            continuous_rows,max_contiguous_run,left,top,peak_threshold,min_contiguous_run)
-                line_visible=(line_rows>=8 and peak_row>=peak_threshold
-                              and has_continuous_sky_band(purple_longest_runs,min_contiguous_run))
                 valid=(coverage>=minimum and dark_sky_coverage>=.08 and line_visible
-                       and (max_green is None or green_coverage<=max_green))
+                       and (max_green is None or green_coverage<=max_green)
+                       and (min_green is None or green_coverage>=min_green))
                 if best is None or candidate[0]>best[0]:
                     best=candidate
                 # The highest-scoring window may contain too much foliage even
@@ -1787,7 +1826,7 @@ def capture_test_world():
                        and continuous_rows>=6 and max_contiguous_run>=min_contiguous_run)
         visible=best_valid is not None
         selection="valid-window" if visible else "best-diagnostic-window"
-        print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} green={green_coverage:.4f} darkSky={dark_sky_coverage:.4f} lineRows={line_rows} peakRow={peak_row} continuousRows={continuous_rows} maxRun={max_contiguous_run} minRun={min_contiguous_run} window={left},{top} required={minimum:.4f} minDarkSky=0.0800 maxGreen={max_green} visible={visible} selection={selection}",flush=True)
+        print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} green={green_coverage:.4f} darkSky={dark_sky_coverage:.4f} lineRows={line_rows} peakRow={peak_row} continuousRows={continuous_rows} maxRun={max_contiguous_run} minRun={min_contiguous_run} window={left},{top} required={minimum:.4f} minDarkSky=0.0800 maxGreen={max_green} minGreen={min_green} visible={visible} selection={selection}",flush=True)
         return visible
     beacon_attempts=0
     beacon_ready_at=None
@@ -2437,6 +2476,16 @@ def capture_test_world():
                               None if measured is None else round(measured[1],2),flush=True)
                     upper_visible=False
                     last_upper_candidate=None
+                    green_phase_preview=os.environ.get("BF_TEST_GREEN_PHASE_PREVIEW")=="1"
+                    if green_phase_preview:
+                        preview_deadline=time.monotonic()+8.0
+                        while time.monotonic()<preview_deadline:
+                            preview_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                            if "BLACK_FREQUENCY_CI_GREEN_PHASE_PREVIEW_ACTIVE" in preview_log:
+                                break
+                            time.sleep(.1)
+                        else:
+                            raise RuntimeError("BLACK FREQUENCY green-phase preview did not reach an active rendered rift")
                     for index in range(10 if upper_camera_confirmed else 0):
                         if index:
                             move_camera_horizontal(170)
@@ -2445,10 +2494,20 @@ def capture_test_world():
                         candidate_name=f"sky-rift-upper-candidate-{index:02d}.png"
                         snap(candidate_name)
                         last_upper_candidate=shots/candidate_name
-                        if verify_sky_pixels(candidate_name,"upper",.08,.25):
+                        candidate_visible=(
+                            verify_sky_pixels(candidate_name,"upper",.02,None,.0015)
+                            if green_phase_preview else verify_sky_pixels(candidate_name,"upper",.08,.25)
+                        )
+                        if candidate_visible:
+                            if green_phase_preview:
+                                shutil.copyfile(last_upper_candidate,shots/"sky-rift-green-phase.png")
                             shutil.copyfile(last_upper_candidate,shots/"sky-rift-upper.png")
                             upper_visible=True
-                            print("WORLD_CAPTURE: adaptive upper-sky frame selected",candidate_name,flush=True)
+                            print("WORLD_CAPTURE: adaptive green-phase upper-sky frame selected" if green_phase_preview
+                                  else "WORLD_CAPTURE: adaptive upper-sky frame selected",
+                                  candidate_name,flush=True)
+                            if green_phase_preview:
+                                print("WORLD_CAPTURE: GREEN_PHASE_SCREENSHOT_VERIFIED",flush=True)
                             break
                     if not upper_visible and last_upper_candidate and last_upper_candidate.is_file():
                         shutil.copyfile(last_upper_candidate,shots/"sky-rift-upper.png")
