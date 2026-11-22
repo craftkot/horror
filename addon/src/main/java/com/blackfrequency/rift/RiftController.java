@@ -1468,6 +1468,14 @@ public final class RiftController {
             throw new IllegalStateException("CI fissure canopy traversal/structure occlusion regression");
     }
 
+    /** Allow only air, leaves, or dry non-colliding plants in the disposable fixture column. */
+    private static boolean isFissureCanopyFixtureCellClearable(BlockState state,ServerLevel level,BlockPos pos) {
+        if(state==null || state.hasBlockEntity()) return false;
+        if(state.isAir() || state.is(net.minecraft.tags.BlockTags.LEAVES)) return true;
+        return !state.blocksMotion() && state.getFluidState().isEmpty()
+            && state.getCollisionShape(level,pos).isEmpty();
+    }
+
     /**
      * Exercise the production sampler against a real, already-loaded ServerLevel column.
      * The fixture is confined to eight blocks from the rift anchor and restored in the
@@ -1475,6 +1483,14 @@ public final class RiftController {
      */
     private static boolean verifyFissureCanopyTraversalInWorld(ServerLevel level,State s) {
         BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();
+        BlockPos policyPos=level.getSharedSpawnPos();
+        boolean fixtureCellPolicy=
+            isFissureCanopyFixtureCellClearable(Blocks.AIR.defaultBlockState(),level,policyPos)
+            && isFissureCanopyFixtureCellClearable(Blocks.OAK_LEAVES.defaultBlockState(),level,policyPos)
+            && isFissureCanopyFixtureCellClearable(Blocks.DANDELION.defaultBlockState(),level,policyPos)
+            && !isFissureCanopyFixtureCellClearable(Blocks.WATER.defaultBlockState(),level,policyPos)
+            && !isFissureCanopyFixtureCellClearable(Blocks.CHEST.defaultBlockState(),level,policyPos)
+            && !isFissureCanopyFixtureCellClearable(Blocks.STONE.defaultBlockState(),level,policyPos);
         int fixtureX=Integer.MIN_VALUE,fixtureZ=Integer.MIN_VALUE,baseY=Integer.MIN_VALUE;
         for(int radius=2;radius<=8 && fixtureX==Integer.MIN_VALUE;radius++) {
             for(int dx=-radius;dx<=radius && fixtureX==Integer.MIN_VALUE;dx++) {
@@ -1482,7 +1498,7 @@ public final class RiftController {
                     if(Math.max(Math.abs(dx),Math.abs(dz))!=radius || dx*dx+dz*dz>64) continue;
                     int x=s.x+dx,z=s.z+dz;
                     if(!level.hasChunk(x>>4,z>>4)) continue;
-                    int y=level.getHeight(FISSURE_SURFACE_HEIGHTMAP,x,z);
+                    int y=level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,x,z);
                     if(y<level.getMinBuildHeight()+1 || y+4>=level.getMaxBuildHeight()) continue;
                     cursor.set(x,y-1,z);
                     if(!level.getWorldBorder().isWithinBounds(cursor)
@@ -1491,7 +1507,7 @@ public final class RiftController {
                     for(int offset=0;offset<=4;offset++) {
                         cursor.set(x,y+offset,z);
                         BlockState existing=level.getBlockState(cursor);
-                        if(!existing.isAir() || existing.hasBlockEntity()) {
+                        if(!isFissureCanopyFixtureCellClearable(existing,level,cursor)) {
                             clearColumn=false;
                             break;
                         }
@@ -1509,6 +1525,7 @@ public final class RiftController {
             return false;
         }
 
+        int originalSurfaceY=level.getHeight(FISSURE_SURFACE_HEIGHTMAP,fixtureX,fixtureZ);
         BlockState[] original=new BlockState[5];
         for(int offset=0;offset<original.length;offset++) {
             cursor.set(fixtureX,baseY+offset,fixtureZ);
@@ -1566,15 +1583,17 @@ public final class RiftController {
                 throw new IllegalStateException("CI canopy fixture cleanup failed");
         }
 
-        if(!(canopyAccepted && horizontalLogRejected && roofRejected && unloadedChunkRejected))
+        if(!(fixtureCellPolicy && canopyAccepted && horizontalLogRejected && roofRejected && unloadedChunkRejected))
             throw new IllegalStateException("CI real-world canopy scan/structure occlusion regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_FIXTURE_CELL_POLICY_VERIFIED air=true leaves=true nonSolidPlants=true fluids=false blockEntities=false solids=false");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_FIXTURE_RESTORATION_VERIFIED originalHeightRestored=true loadedOnly=true radius=8");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_TRAVERSAL_VERIFIED verticalLogs=true leaves=true horizontalLogsRejected=true roofBlocksRejected=true nonSolidPlantsRetained=true heightmapIncludesLeaves=true depthBound=32");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_WORLD_CANOPY_SAMPLE_VERIFIED heightmapTopOffset=5 canopyBlocks=4 surfaceFound=true horizontalLogRejected=true roofRejected=true loadedOnly=true searchRadius=8 restored=true rejectedResultCleared=true unloadedChunkRejected=true");
         return true;
     }
 
     private static boolean restoreFissureCanopyFixtureColumn(ServerLevel level,int x,int baseY,int z,
-            BlockState[] original,BlockPos.MutableBlockPos cursor) {
+            BlockState[] original,int originalSurfaceY,BlockPos.MutableBlockPos cursor) {
         for(int offset=0;offset<original.length;offset++) {
             cursor.set(x,baseY+offset,z);
             if(!level.getBlockState(cursor).equals(original[offset])
@@ -1582,7 +1601,7 @@ public final class RiftController {
             if(!level.getBlockState(cursor).equals(original[offset])) return false;
         }
         return level.hasChunk(x>>4,z>>4)
-            && level.getHeight(FISSURE_SURFACE_HEIGHTMAP,x,z)==baseY;
+            && level.getHeight(FISSURE_SURFACE_HEIGHTMAP,x,z)==originalSurfaceY;
     }
 
     // One scratch result is reused for every sampled column. The surface BlockState
