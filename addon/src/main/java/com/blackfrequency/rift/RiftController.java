@@ -1556,7 +1556,7 @@ public final class RiftController {
             boolean found=findFissureGroundSample(level,fixtureX,fixtureZ,cursor,sample);
             canopyAccepted=canopyTop==baseY+5 && found && sample.surfaceY==baseY
                 && Math.abs(sample.particleY-(baseY+.10D))<1.0E-9D;
-            if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,cursor))
+            if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,originalSurfaceY,cursor))
                 throw new IllegalStateException("CI failed to restore temporary canopy fixture");
 
             BlockState horizontalLog=verticalLog.setValue(
@@ -1566,7 +1566,7 @@ public final class RiftController {
                 throw new IllegalStateException("CI could not place temporary horizontal beam");
             horizontalLogRejected=!findFissureGroundSample(level,fixtureX,fixtureZ,cursor,sample)
                 && sample.isEmpty();
-            if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,cursor))
+            if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,originalSurfaceY,cursor))
                 throw new IllegalStateException("CI failed to restore temporary beam fixture");
 
             cursor.set(fixtureX,baseY+2,fixtureZ);
@@ -1574,7 +1574,7 @@ public final class RiftController {
                 throw new IllegalStateException("CI could not place temporary roof fixture");
             roofRejected=!findFissureGroundSample(level,fixtureX,fixtureZ,cursor,sample)
                 && sample.isEmpty();
-            if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,cursor))
+            if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,originalSurfaceY,cursor))
                 throw new IllegalStateException("CI failed to restore temporary roof fixture");
 
             // A rejected lookup must not leave the previous successful column in the reusable result.
@@ -1583,7 +1583,7 @@ public final class RiftController {
             unloadedChunkRejected=!findFissureGroundSample(
                 level,Integer.MAX_VALUE,Integer.MAX_VALUE,cursor,sample) && sample.isEmpty();
         } finally {
-            if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,cursor))
+            if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,originalSurfaceY,cursor))
                 throw new IllegalStateException("CI canopy fixture cleanup failed");
         }
 
