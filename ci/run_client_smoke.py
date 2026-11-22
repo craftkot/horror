@@ -135,7 +135,7 @@ def verify_beacon_aura_source():
             or "shouldShowBeaconAura(collapse,progress,restorationActive)" not in client
             or "BEACON_AURA_RESTORATION_VISIBILITY_VERIFIED zeroProgressRestoring=true completed=false" not in client
             or "hasActiveTimedClientState(progress,collapse,finaleTicks,restorationActive)" not in client
-            or "isClientPacketStateStale(++ticksSincePacket)" not in client
+            or "isClientPacketStateStale(ticksSincePacket)" not in client
             or "BEACON_AURA_STALE_PACKET_EXPIRY_VERIFIED restorationOnly=true idle=false timeoutTicks=100" not in client
             or "nextBeaconAuraCompletionFadeTicks(" not in client
             or "beaconAuraCompletionFadeTicks,wasRestoring,worldRestorationActive,collapsing,safeProgress)" not in client
