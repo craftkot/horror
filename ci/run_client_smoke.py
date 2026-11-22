@@ -2735,6 +2735,18 @@ def capture_test_world():
                 print(f"WORLD_CAPTURE_FAIL: could not read GroundRenderer source for structural verification: {exc}",
                       flush=True)
                 return False
+            opening_ramp_marker = (
+                "BLACK_FREQUENCY_RIFT_OPENING_RAMP_PROFILE_VERIFIED "
+                "ticks=60 curve=smoothstep quarter=0.15625 midpoint=0.5 threeQuarter=0.84375 endpoints=true monotonic=true"
+            )
+            if opening_ramp_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: sky-rift opening ramp did not pass its monotonic smoothstep profile",flush=True)
+                return False
+            if ("private static float riftOpeningRamp(int ticks)" not in camera_source
+                    or "return t*t*(3.0F-2.0F*t);" not in camera_source
+                    or "return collapse ? strength()*riftOpeningRamp(finaleTicks) : strength();" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: sky-rift opening ramp is not wired into visible client strength",flush=True)
+                return False
             support_top_marker = (
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_TOP_PROFILE_VERIFIED "
                 "fullBlock=1.0 bottomSlab=0.5 invalidFallback=1.0 nonCollidingCoverIgnored=true"
