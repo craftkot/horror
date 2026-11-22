@@ -2644,10 +2644,10 @@ def capture_test_world():
             snow_shape_match=snow_shape_probe.search(sample_source)
             snow_shape_index=snow_shape_match.start() if snow_shape_match else -1
             support_offset_profile=re.compile(
-                r"double supportOffset=boundedShapeHeight\\(supportHeight,1\\.0D\\);"
-                r"\\s*if\\(Double\\.isFinite\\(snowLayerHeight\\)\\s*&&\\s*snowLayerHeight>0\\.0D\\)"
-                r"\\s*return supportOffset\\+Math\\.min\\(1\\.0D,snowLayerHeight\\);"
-                r"\\s*return supportOffset;"
+                r"double supportOffset=boundedShapeHeight\(supportHeight,1\.0D\);"
+                r"\s*if\(Double\.isFinite\(snowLayerHeight\)\s*&&\s*snowLayerHeight>0\.0D\)"
+                r"\s*return supportOffset\+Math\.min\(1\.0D,snowLayerHeight\);"
+                r"\s*return supportOffset;"
             )
             headroom_index=sample_source.find("cursor.set(blockX,candidateY+1,blockZ);")
             snow_offset_index=sample_source.find("groundSurfaceOffset(supportHeight,snowLayerHeight)")
