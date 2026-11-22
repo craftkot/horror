@@ -2906,8 +2906,10 @@ def capture_test_world():
                 return False
             edge_cap_marker=("BLACK_FREQUENCY_GROUND_MESH_EDGE_CAP_CONTINUITY_VERIFIED "
                              "capTaper=0.06 notchSuppressedAtCaps=true normalNotchesPreserved=true invalidRejected=true")
-            if edge_cap_marker not in final_log:
-                print("WORLD_CAPTURE_FAIL: terrain-break edge continuity guard was not verified",flush=True)
+            edge_cap_marker_count=final_log.count(edge_cap_marker)
+            if edge_cap_marker_count!=1:
+                print(f"WORLD_CAPTURE_FAIL: expected one terrain-break edge continuity probe, observed {edge_cap_marker_count}",
+                      flush=True)
                 return False
             if core_width_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: interpolated ground-core width profile was not verified",flush=True)
