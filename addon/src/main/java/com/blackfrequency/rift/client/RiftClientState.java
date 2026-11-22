@@ -2810,15 +2810,21 @@ public final class RiftClientState {
                 clearCache();
                 return;
             }
-            if(cachedLevel!=null || cachedTick!=Long.MIN_VALUE || !cachedSegments.isEmpty()
-                || !SURFACE_Y_BY_COLUMN.isEmpty()) clearGeometryCache();
-            resetCacheProfileFlags();
-            if(VERIFY_GROUND_MESH_PROFILES && !unavailableAnchorChunkLogged) {
-                com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ANCHOR_CHUNK_UNAVAILABLE_PRESERVED anchorX={} anchorZ={} verticallyCulled={} skippedFrames={} loadedOnly=true noChunkLoad=true",
-                    worldAnchorX,worldAnchorZ,verticallyCulled,verticallyCulledSkippedFrames);
+            // The unavailable-chunk episode can span many render frames. Release stale geometry
+            // and reset one-shot profile flags only on entry, not on every frame.
+            if(!unavailableAnchorChunkLogged) {
+                if(cachedLevel!=null || cachedTick!=Long.MIN_VALUE || !cachedSegments.isEmpty()
+                    || !SURFACE_Y_BY_COLUMN.isEmpty()) clearGeometryCache();
+                resetCacheProfileFlags();
+                // The camera sample was already emitted before this availability check.
+                verticalCameraRangeSampleLogged=true;
+                if(VERIFY_GROUND_MESH_PROFILES) {
+                    com.mojang.logging.LogUtils.getLogger().info(
+                        "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ANCHOR_CHUNK_UNAVAILABLE_PRESERVED anchorX={} anchorZ={} verticallyCulled={} skippedFrames={} loadedOnly=true noChunkLoad=true resetOnce=true",
+                        worldAnchorX,worldAnchorZ,verticallyCulled,verticallyCulledSkippedFrames);
+                }
+                unavailableAnchorChunkLogged=true;
             }
-            unavailableAnchorChunkLogged=true;
         }
 
         private static void verifyInactiveCacheCleanup(net.minecraft.client.multiplayer.ClientLevel level) {

@@ -3275,14 +3275,23 @@ def capture_test_world():
             unavailable_anchor_end=camera_source.find("\n        private static void verifyInactiveCacheCleanup",unavailable_anchor_start+1)
             unavailable_anchor_helper=(camera_source[unavailable_anchor_start:unavailable_anchor_end]
                                        if unavailable_anchor_start>=0 and unavailable_anchor_end>unavailable_anchor_start else "")
+            first_unavailable_guard=unavailable_anchor_helper.find("if(!unavailableAnchorChunkLogged) {")
+            geometry_release=unavailable_anchor_helper.find("clearGeometryCache();")
+            profile_reset=unavailable_anchor_helper.find("resetCacheProfileFlags();")
+            camera_sample_latch=unavailable_anchor_helper.find("verticalCameraRangeSampleLogged=true;")
+            unavailable_log=unavailable_anchor_helper.find("GROUND_MESH_VERTICAL_CULL_ANCHOR_CHUNK_UNAVAILABLE_PRESERVED")
+            unavailable_latch=unavailable_anchor_helper.find("unavailableAnchorChunkLogged=true;")
             if ("boolean preserveVerticalCull=verticallyCulled || verticalCullResumePending;" not in unavailable_anchor_helper
-                    or "GROUND_MESH_VERTICAL_CULL_ANCHOR_CHUNK_UNAVAILABLE_PRESERVED" not in unavailable_anchor_helper
-                    or "noChunkLoad=true" not in unavailable_anchor_helper
-                    or "getChunk(" in unavailable_anchor_helper):
-                print("WORLD_CAPTURE_FAIL: unavailable anchor chunks must preserve an active cull without forcing chunk loads",flush=True)
+                    or "noChunkLoad=true resetOnce=true" not in unavailable_anchor_helper
+                    or "getChunk(" in unavailable_anchor_helper
+                    or first_unavailable_guard<0
+                    or not (first_unavailable_guard<geometry_release<profile_reset<camera_sample_latch<unavailable_log<unavailable_latch)
+                    or unavailable_anchor_helper.count("resetCacheProfileFlags();")!=1
+                    or unavailable_anchor_helper.count("unavailableAnchorChunkLogged=true;")!=1):
+                print("WORLD_CAPTURE_FAIL: unavailable anchor handling must release/reset once per episode and never force chunk loads",flush=True)
                 return False
             print("WORLD_CAPTURE: vertically culled ground mesh skips world-border and loaded-chunk probes until resume",flush=True)
-            print("WORLD_CAPTURE: unavailable anchor chunks preserve the cull latch without requesting chunk loads",flush=True)
+            print("WORLD_CAPTURE: unavailable anchor chunks preserve the cull latch, release cache and reset profile flags once without forcing loads",flush=True)
             print("WORLD_CAPTURE: actual vertical cull entry and rebuild diagnostics are wired into the renderer",flush=True)
             print("WORLD_CAPTURE: ground render anchor guard reuses its mutable cursor; no per-frame BlockPos allocation",flush=True)
             if ("long cameraHorizontalDistanceSquared=horizontalDistanceSquared(" not in camera_source
