@@ -686,6 +686,8 @@ public final class RiftClientState {
         private static final int RADIUS=RiftGeometry.RADIUS;
         // Keep the sampled vertical window consistent with the 64-block 3D render envelope.
         private static final int GROUND_RENDER_RADIUS=64;
+        // Resume two blocks inside the fade boundary to prevent camera-bob rebuild churn.
+        private static final int GROUND_RENDER_RESUME_RADIUS=62;
         private static final int GROUND_SURFACE_SEARCH_BELOW=GROUND_RENDER_RADIUS;
         private static final int GROUND_SURFACE_SEARCH_ABOVE=8;
         private static final int ARM_COUNT=RiftGeometry.FISSURE_ARM_COUNT;
@@ -1676,10 +1678,21 @@ public final class RiftClientState {
         // used by its visual culling. Reject non-finite deltas instead of letting
         // NaN bypass the comparison and keep an invisible mesh pinned in memory.
         private static boolean isWithinGroundRenderRange(long horizontalDistanceSquared,double verticalDelta) {
-            long renderRadiusSquared=(long)GROUND_RENDER_RADIUS*GROUND_RENDER_RADIUS;
-            return horizontalDistanceSquared>=0L && horizontalDistanceSquared<=renderRadiusSquared
+            return isWithinGroundRange(horizontalDistanceSquared,verticalDelta,GROUND_RENDER_RADIUS);
+        }
+
+        // Rebuild only after returning inside the fade envelope. The two-block deadband
+        // avoids repeatedly allocating and resampling the mesh when the camera bobs at 64.
+        private static boolean isWithinGroundRenderResumeRange(long horizontalDistanceSquared,double verticalDelta) {
+            return isWithinGroundRange(horizontalDistanceSquared,verticalDelta,GROUND_RENDER_RESUME_RADIUS);
+        }
+
+        private static boolean isWithinGroundRange(
+                long horizontalDistanceSquared,double verticalDelta,int radius) {
+            long radiusSquared=(long)radius*radius;
+            return horizontalDistanceSquared>=0L && horizontalDistanceSquared<=radiusSquared
                 && Double.isFinite(verticalDelta)
-                && horizontalDistanceSquared+verticalDelta*verticalDelta<=(double)renderRadiusSquared;
+                && horizontalDistanceSquared+verticalDelta*verticalDelta<=(double)radiusSquared;
         }
 
         // If an unchanged cached mesh has left the 3D camera envelope, release it
@@ -1826,7 +1839,7 @@ public final class RiftClientState {
             boolean anchorChanged=isVerticalCullAnchorChanged(
                 worldAnchorX,worldAnchorZ,verticallyCulledAnchorX,verticallyCulledAnchorZ);
             if(anchorChanged
-                || isWithinGroundRenderRange(horizontalDistanceSquared,cameraY-verticallyCulledSurfaceY)) {
+                || isWithinGroundRenderResumeRange(horizontalDistanceSquared,cameraY-verticallyCulledSurfaceY)) {
                 if(verticalCullResumePending) verticalCullResumeAnchorChanged=anchorChanged;
                 verticallyCulled=false;
                 verticallyCulledAnchorX=Integer.MIN_VALUE;
@@ -1855,6 +1868,8 @@ public final class RiftClientState {
             boolean horizontalBoundary=isWithinGroundRenderRange(64L*64L,0.0D);
             boolean verticalBoundary=isWithinGroundRenderRange(0L,64.0D);
             boolean verticalOutside=!isWithinGroundRenderRange(0L,64.01D);
+            boolean resumeBoundary=isWithinGroundRenderResumeRange(0L,62.0D);
+            boolean resumeOutside=!isWithinGroundRenderResumeRange(0L,62.01D);
             boolean horizontalOutside=!isWithinGroundRenderRange(64L*64L+1L,0.0D);
             boolean nanRejected=!isWithinGroundRenderRange(0L,Double.NaN);
             boolean infinityRejected=!isWithinGroundRenderRange(0L,Double.POSITIVE_INFINITY);
@@ -1871,6 +1886,10 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_PREBUILD_VERTICAL_CULL_VERIFIED sameAnchorOutside=true insideRetained=true anchorChangeRetained=true emptyMeshRetained=true invalidRangeCulled=true");
             com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_HYSTERESIS_PROFILE_VERIFIED cullRadius={} resumeRadius={} deadband={} boundary=true outsideRejected=true",
+                GROUND_RENDER_RADIUS,GROUND_RENDER_RESUME_RADIUS,
+                GROUND_RENDER_RADIUS-GROUND_RENDER_RESUME_RADIUS);
+            com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_RESUME_ANCHOR_PROFILE_VERIFIED sameAnchor=false changedAnchor=true");
             boolean finiteCameraAccepted=isSafeCameraPosition(new Vec3(0.5D,65.0D,0.5D));
             boolean nanCameraRejected=!isSafeCameraPosition(new Vec3(Double.NaN,65.0D,0.5D));
@@ -1884,8 +1903,9 @@ public final class RiftClientState {
             boolean cameraInsideWhilePlayerOutside=
                 horizontalDistanceSquared(0,0,0,0)<=64L*64L
                 && horizontalDistanceSquared(65,0,0,0)>64L*64L;
-            if(!(center && horizontalBoundary && verticalBoundary && verticalOutside
-                && horizontalOutside && nanRejected && infinityRejected))
+            if(GROUND_RENDER_RESUME_RADIUS!=62 || GROUND_RENDER_RESUME_RADIUS>=GROUND_RENDER_RADIUS
+                || !(center && horizontalBoundary && verticalBoundary && verticalOutside
+                && resumeBoundary && resumeOutside && horizontalOutside && nanRejected && infinityRejected))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh 3D range regression");
             if(!(finiteCameraAccepted && nanCameraRejected && infiniteCameraRejected
                 && outOfWorldCameraRejected && cameraOutsideWhilePlayerNear && cameraInsideWhilePlayerOutside))
@@ -1953,7 +1973,8 @@ public final class RiftClientState {
             verticallyCulledSurfaceY=64;
             boolean stableOutOfRangeSkip=shouldSkipGroundMeshBuildWhileVerticallyCulled(1,2,0L,128.01D);
             boolean repeatedOutOfRangeSkip=shouldSkipGroundMeshBuildWhileVerticallyCulled(1,2,0L,128.01D);
-            boolean returnToRangeRebuild=!shouldSkipGroundMeshBuildWhileVerticallyCulled(1,2,0L,128.0D);
+            boolean hysteresisBandStillCulled=shouldSkipGroundMeshBuildWhileVerticallyCulled(1,2,0L,127.0D);
+            boolean returnToRangeRebuild=!shouldSkipGroundMeshBuildWhileVerticallyCulled(1,2,0L,126.0D);
             verticallyCulled=true;
             verticallyCulledAnchorX=1;
             verticallyCulledAnchorZ=2;
@@ -1962,7 +1983,7 @@ public final class RiftClientState {
             verticallyCulled=false;
             verticallyCulledAnchorX=Integer.MIN_VALUE;
             verticallyCulledAnchorZ=Integer.MIN_VALUE;
-            if(!(stableOutOfRangeSkip && repeatedOutOfRangeSkip
+            if(!(stableOutOfRangeSkip && repeatedOutOfRangeSkip && hysteresisBandStillCulled
                 && returnToRangeRebuild && anchorChangeRebuild))
                 throw new IllegalStateException("BLACK FREQUENCY vertical ground mesh cull latch regression");
             long firstSkippedFrame=nextVerticalCullSkippedFrames(0L);
@@ -1978,7 +1999,7 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_3D_RANGE_PROFILE_VERIFIED radius=64 horizontalBoundary=true verticalBoundary=true invalidRejected=true");
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_LATCH_VERIFIED stable=true returnRebuild=true anchorChangeRebuild=true");
+                "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_LATCH_VERIFIED stable=true hysteresisBandSkip=true returnRebuildAt62=true anchorChangeRebuild=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_MESH_CAMERA_CULL_PROFILE_VERIFIED radius=64 cameraPosition=true playerCameraIndependent=true");
             com.mojang.logging.LogUtils.getLogger().info(
