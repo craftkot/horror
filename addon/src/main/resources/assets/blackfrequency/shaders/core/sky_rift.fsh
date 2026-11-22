@@ -214,9 +214,11 @@ void main(){
  float fractureCoverage=max(zenithCore,max(max(spineCore,upperCore),max(lowerCore,max(branches,crownCore))));
  float greenOutsideCore=1.0-clamp(fractureCoverage,0.0,1.0);
  float greenCorruptionGlow=clamp(rimLight*.88+majorGlow*.14+filaments*.05,0.0,1.0)*greenOutsideCore;
- float greenBlueSuppression=clamp(greenCorruptionGlow*green*.62,0.0,.62);
- // Remove excess violet-blue from illuminated rims before adding toxic green, avoiding cyan blending.
- color.b=max(0.0,color.b-greenBlueSuppression);
+ float greenBlueMix=clamp(greenCorruptionGlow*green,0.0,1.0);
+ float greenBlueTarget=min(color.b,color.g*.42);
+ // Blend only the masked green-lit rims toward a bounded blue/green ratio.
+ // This scales with the source color instead of subtracting a fixed amount.
+ color.b=mix(color.b,greenBlueTarget,greenBlueMix);
  // Preserve the dark violet atmosphere; green replaces only a small part
  // of the base color, then adds light outside the near-black fracture cores.
  color=mix(color,vec3(.002,.011,.009),green*.18*greenOutsideCore);
