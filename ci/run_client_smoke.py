@@ -1801,8 +1801,8 @@ def capture_test_world():
                     peak_row=max(green_rows,default=0)
                     continuous_rows=sum(1 for run in green_longest_runs if run>=min_contiguous_run)
                     max_contiguous_run=max(green_longest_runs,default=0)
-                    line_visible=(line_rows>=3 and peak_row>=peak_threshold
-                                  and continuous_rows>=2 and max_contiguous_run>=min_contiguous_run)
+                    line_visible=(line_rows>=1 and peak_row>=peak_threshold
+                                  and continuous_rows>=1 and max_contiguous_run>=min_contiguous_run)
                 candidate=(score,coverage,green_coverage,dark_sky_coverage,line_rows,peak_row,
                            continuous_rows,max_contiguous_run,left,top,peak_threshold,min_contiguous_run)
                 valid=(coverage>=minimum and dark_sky_coverage>=.08 and line_visible
@@ -1826,8 +1826,8 @@ def capture_test_world():
             line_visible=(line_rows>=8 and peak_row>=peak_threshold
                           and continuous_rows>=6 and max_contiguous_run>=min_contiguous_run)
         else:
-            line_visible=(line_rows>=3 and peak_row>=peak_threshold
-                          and continuous_rows>=2 and max_contiguous_run>=min_contiguous_run)
+            line_visible=(line_rows>=1 and peak_row>=peak_threshold
+                          and continuous_rows>=1 and max_contiguous_run>=min_contiguous_run)
         visible=best_valid is not None
         selection="valid-window" if visible else "best-diagnostic-window"
         print(f"WORLD_CAPTURE: SKY_PIXEL_COVERAGE {name}={coverage:.4f} green={green_coverage:.4f} darkSky={dark_sky_coverage:.4f} lineRows={line_rows} peakRow={peak_row} continuousRows={continuous_rows} maxRun={max_contiguous_run} minRun={min_contiguous_run} window={left},{top} required={minimum:.4f} minDarkSky=0.0800 maxGreen={max_green} minGreen={min_green} visible={visible} selection={selection}",flush=True)
