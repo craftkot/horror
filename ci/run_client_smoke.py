@@ -131,6 +131,8 @@ def verify_green_corruption_shader_source():
     required=(
         "float greenOutsideCore=1.0-clamp(fractureCoverage,0.0,1.0);",
         "float greenCorruptionGlow=clamp(rimLight*.88+majorGlow*.14+filaments*.05,0.0,1.0)*greenOutsideCore;",
+        "float greenBlueSuppression=clamp(greenCorruptionGlow*green*.62,0.0,.62);",
+        "color.b=max(0.0,color.b-greenBlueSuppression);",
         "color=mix(color,vec3(.002,.011,.009),green*.18*greenOutsideCore);",
         "color+=vec3(.035,1.25,.035)*greenCorruptionGlow*green*(.72+.28*rimPulse);",
         "color+=vec3(.025,1.35,.035)*lightningFlash*majorGlow*green*greenOutsideCore*.42;",
@@ -142,7 +144,12 @@ def verify_green_corruption_shader_source():
         raise RuntimeError("BLACK FREQUENCY green corruption must illuminate fracture edges without washing out dark cores")
     if shader.index("float fractureCoverage=")>shader.index("float greenOutsideCore="):
         raise RuntimeError("BLACK FREQUENCY green edge mask must be derived after fracture-core coverage")
+    if not (shader.index("float greenCorruptionGlow=")<shader.index("float greenBlueSuppression=")
+            <shader.index("color.b=max(0.0,color.b-greenBlueSuppression);")
+            <shader.index("color+=vec3(.035,1.25,.035)")):
+        raise RuntimeError("BLACK FREQUENCY green chroma correction must only desaturate masked rims before green emission")
     print("WORLD_CAPTURE: green base tint and edge emission are both masked off fracture cores",flush=True)
+    print("WORLD_CAPTURE: blue suppression separates toxic-green rims from violet edge emission",flush=True)
     print("WORLD_CAPTURE: green corruption keeps near-black cores and adds bounded toxic-green edge emission",flush=True)
 
 
