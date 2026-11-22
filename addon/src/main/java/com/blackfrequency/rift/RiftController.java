@@ -1538,7 +1538,7 @@ public final class RiftController {
         boolean canopyAccepted=false,horizontalLogRejected=false,roofRejected=false,unloadedChunkRejected=false;
         boolean canopyFound=false;
         int canopyTop=Integer.MIN_VALUE,canopySurfaceY=Integer.MIN_VALUE;
-        double canopyParticleY=Double.NaN;
+        double canopyParticleY=Double.NaN,canopySurfaceShapeHeight=Double.NaN,expectedCanopyParticleY=Double.NaN;
         try {
             BlockState verticalLog=Blocks.OAK_LOG.defaultBlockState().setValue(
                 net.minecraft.world.level.block.RotatedPillarBlock.AXIS,net.minecraft.core.Direction.Axis.Y);
@@ -1559,8 +1559,15 @@ public final class RiftController {
             canopyFound=findFissureGroundSample(level,fixtureX,fixtureZ,cursor,sample);
             canopySurfaceY=sample.surfaceY;
             canopyParticleY=sample.particleY;
+            // The real surface may be a path, slab-like support, or another partial shape.
+            // Derive the expected particle height from that sampled cell instead of assuming a full cube.
+            cursor.set(fixtureX,baseY,fixtureZ);
+            BlockState fixtureSurface=level.getBlockState(cursor);
+            canopySurfaceShapeHeight=fixtureSurface.isAir()?0.0D
+                : fixtureSurface.getShape(level,cursor).max(net.minecraft.core.Direction.Axis.Y);
+            expectedCanopyParticleY=fissureSurfaceParticleY(baseY,canopySurfaceShapeHeight);
             canopyAccepted=canopyTop==baseY+5 && canopyFound && canopySurfaceY==baseY
-                && Math.abs(canopyParticleY-(baseY+.10D))<1.0E-9D;
+                && Math.abs(canopyParticleY-expectedCanopyParticleY)<1.0E-9D;
             if(!restoreFissureCanopyFixtureColumn(level,fixtureX,baseY,fixtureZ,original,originalSurfaceY,cursor))
                 throw new IllegalStateException("CI failed to restore temporary canopy fixture");
 
@@ -1597,13 +1604,14 @@ public final class RiftController {
                 +" fixtureCellPolicy="+fixtureCellPolicy+" canopyAccepted="+canopyAccepted
                 +" canopyFound="+canopyFound+" canopyTop="+canopyTop+" expectedCanopyTop="+(baseY+5)
                 +" canopySurfaceY="+canopySurfaceY+" expectedSurfaceY="+baseY
-                +" canopyParticleY="+canopyParticleY+" horizontalLogRejected="+horizontalLogRejected
+                +" canopyParticleY="+canopyParticleY+" expectedCanopyParticleY="+expectedCanopyParticleY+" surfaceShapeHeight="+canopySurfaceShapeHeight+" horizontalLogRejected="+horizontalLogRejected
                 +" roofRejected="+roofRejected+" unloadedChunkRejected="+unloadedChunkRejected
                 +" fixture="+fixtureX+","+baseY+","+fixtureZ+" originalSurfaceY="+originalSurfaceY);
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_FIXTURE_CELL_POLICY_VERIFIED air=true leaves=true nonSolidPlants=true fluids=false blockEntities=false solids=false");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_FIXTURE_RESTORATION_VERIFIED originalHeightRestored=true loadedOnly=true radius=8");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_TRAVERSAL_VERIFIED verticalLogs=true leaves=true horizontalLogsRejected=true roofBlocksRejected=true nonSolidPlantsRetained=true heightmapIncludesLeaves=true depthBound=32");
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_WORLD_CANOPY_SAMPLE_VERIFIED heightmapTopOffset=5 canopyBlocks=4 surfaceFound=true horizontalLogRejected=true roofRejected=true loadedOnly=true searchRadius=8 restored=true rejectedResultCleared=true unloadedChunkRejected=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_CANOPY_PARTICLE_HEIGHT_VERIFIED shapeHeight={} particleY={} expectedParticleY={} shapeDerived=true",canopySurfaceShapeHeight,canopyParticleY,expectedCanopyParticleY);
         return true;
     }
 
