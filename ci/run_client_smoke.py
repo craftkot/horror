@@ -2646,6 +2646,12 @@ def capture_test_world():
                       (x,y,z),flush=True)
                 restored=False
                 try:
+                    # PLAYER_BEACON_SAFE_TELEPORT is a destination, not proof that the
+                    # player is already standing there. Establish the baseline first; otherwise
+                    # y+80 can return the player to the original spawn height and never cross
+                    # the live renderer's vertical-cull boundary.
+                    send_chat_command(f"/tp @s {x} {y} {z}",
+                        r"Teleported .* to ","move to verified safe pad before vertical cull")
                     send_chat_command("/gamemode spectator @s",
                         r"Set own game mode to Spectator Mode","spectator mode")
                     send_chat_command(f"/tp @s {x} {y+80} {z}",

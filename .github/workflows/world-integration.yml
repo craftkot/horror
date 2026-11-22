@@ -83,6 +83,7 @@ jobs:
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_BEACON_POSITION_TYPE_QUARANTINE_VERIFIED malformedType=true dirty=true removedOnSave=true roundTrip=true fallbackPreserved=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST NATURAL_BEACON_UUID_POSITION_PAIR_VERIFIED orphanRejected=true zeroPositionPreserved=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RESTORE_CURSOR_REPAIR_PERSISTENCE_VERIFIED indexClamped=true scanClamped=true dirty=true roundTrip=true validUnchanged=true' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST RECOVERY_DUPLICATE_SNAPSHOT_POSITION_QUARANTINE_VERIFIED entries=2 retained=1 quarantined=1 oldestWins=true cursorPreserved=true budgetSafe=true roundTrip=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST COMPLETED_RECOVERY_STALE_SNAPSHOT_QUARANTINE_VERIFIED conflictingFlags=true staleSnapshots=true malformedContainer=true terminalPreserved=true dirty=true roundTrip=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_INVALID_SNAPSHOT_WARNING_RATE_LIMIT_VERIFIED attempts=1000 warnings=1 persisted=true legacyDefault=false' world-test.log
             grep -Eq 'BLACK_FREQUENCY_TEST RECOVERY_INVALID_SNAPSHOT_SUMMARY_EMITTED count=[1-9][0-9]* singleSummary=true' world-test.log
