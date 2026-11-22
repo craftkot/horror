@@ -582,6 +582,7 @@ public final class RiftClientState {
         private static final double MAX_GROUND_SEGMENT_GRADE=2.5D;
         // Taper cliff-side ribbon tips almost to a point without bridging terrain discontinuities.
         private static final double CLIFF_BREAK_TAPER=.06D;
+        private static final double GROUND_CAP_TAPER_EPSILON=1.0E-9D;
         // Keep the soft halo broad while giving the dark seam more weight than its violet lips.
         private static final double GROUND_GLOW_WIDTH_SCALE=5.75D;
         private static final double GROUND_CORE_WIDTH_SCALE=1.85D;
@@ -1302,6 +1303,57 @@ public final class RiftClientState {
         private static double cliffBreakTaper(double taper) {
             if(!Double.isFinite(taper)) return 0.0D;
             return Math.max(0.0D,Math.min(CLIFF_BREAK_TAPER,taper));
+        }
+
+        // Keep the violet lips intact where the mesh already tapers into a real terrain break.
+        // This removes stacked decorative gaps without extending geometry across the break.
+        private static boolean isGroundSegmentCap(GroundSegment segment) {
+            return segment!=null
+                && Double.isFinite(segment.taperA())
+                && Double.isFinite(segment.taperB())
+                && (segment.taperA()<=CLIFF_BREAK_TAPER+GROUND_CAP_TAPER_EPSILON
+                    || segment.taperB()<=CLIFF_BREAK_TAPER+GROUND_CAP_TAPER_EPSILON);
+        }
+
+        private static boolean shouldRenderGroundEdge(GroundSample sample,GroundSegment segment,boolean left) {
+            if(sample==null || segment==null
+                || !Double.isFinite(segment.taperA()) || !Double.isFinite(segment.taperB())) return false;
+            return isGroundSegmentCap(segment)
+                || (left ? !sample.leftEdgeNotched() : !sample.rightEdgeNotched());
+        }
+
+        private static void verifyGroundEdgeCapContinuityProfile() {
+            GroundSample notched=new GroundSample(0.0D,0.0D,0.0D,0.0D,0.0D,
+                0.0D,1.0D,0.0D,1.0D,1.0D,0.0D,false,true,true);
+            GroundSample intact=new GroundSample(0.0D,0.0D,0.0D,0.0D,0.0D,
+                0.0D,1.0D,0.0D,1.0D,1.0D,0.0D,false,false,false);
+            GroundPoint a=new GroundPoint(0.0D,64.0D,0.0D);
+            GroundPoint b=new GroundPoint(1.0D,64.0D,0.0D);
+            GroundSegment ordinary=new GroundSegment(a,b,0.0D,1.0D,notched,
+                .5D,.8D,1.0D,1.0D,0.0D,0.0D);
+            GroundSegment startCap=new GroundSegment(a,b,0.0D,1.0D,notched,
+                CLIFF_BREAK_TAPER,.8D,1.0D,1.0D,0.0D,0.0D);
+            GroundSegment endCap=new GroundSegment(a,b,0.0D,1.0D,notched,
+                .8D,CLIFF_BREAK_TAPER,1.0D,1.0D,0.0D,0.0D);
+            GroundSegment invalid=new GroundSegment(a,b,0.0D,1.0D,notched,
+                Double.NaN,.8D,1.0D,1.0D,0.0D,0.0D);
+            boolean ordinaryNotchesPreserved=!shouldRenderGroundEdge(notched,ordinary,true)
+                && !shouldRenderGroundEdge(notched,ordinary,false);
+            boolean startCapLipsPreserved=shouldRenderGroundEdge(notched,startCap,true)
+                && shouldRenderGroundEdge(notched,startCap,false);
+            boolean endCapLipsPreserved=shouldRenderGroundEdge(notched,endCap,true)
+                && shouldRenderGroundEdge(notched,endCap,false);
+            boolean intactLipsPreserved=shouldRenderGroundEdge(intact,ordinary,true)
+                && shouldRenderGroundEdge(intact,ordinary,false);
+            boolean invalidRejected=!shouldRenderGroundEdge(notched,invalid,true)
+                && !shouldRenderGroundEdge(null,ordinary,true)
+                && !shouldRenderGroundEdge(notched,null,true);
+            if(!(ordinaryNotchesPreserved && startCapLipsPreserved && endCapLipsPreserved
+                && intactLipsPreserved && invalidRejected))
+                throw new IllegalStateException("BLACK FREQUENCY ground edge cap continuity regression");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_EDGE_CAP_CONTINUITY_VERIFIED capTaper={} notchSuppressedAtCaps=true normalNotchesPreserved=true invalidRejected=true",
+                CLIFF_BREAK_TAPER);
         }
 
         private static boolean capLastGroundSegmentAtGap(List<GroundSegment> segments,
@@ -2098,6 +2150,7 @@ public final class RiftClientState {
                 verifyTaperProfile();
                 verifyGroundSurfaceReliefProfile();
                 verifyGroundEdgeInterpolationProfile();
+                verifyGroundEdgeCapContinuityProfile();
                 verifyGroundContinuityProfile();
                 verifyGroundRebuildProfile();
                 verifyGroundRenderRangeProfile();
@@ -2773,11 +2826,11 @@ public final class RiftClientState {
                     // Leave small, deterministic gaps in each lip independently. The
                     // continuous dark core remains visible, so the seam reads as fractured
                     // earth rather than two uninterrupted luminous rails.
-                    if(!sample.leftEdgeNotched())
+                    if(shouldRenderGroundEdge(sample,segment,true))
                         edgeRibbon(builder,matrix,camera,segment,halfWidth,true,
                             GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,
                             edgeAlphaChannelA,edgeAlphaChannelB);
-                    if(!sample.rightEdgeNotched())
+                    if(shouldRenderGroundEdge(sample,segment,false))
                         edgeRibbon(builder,matrix,camera,segment,halfWidth,false,
                             GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,
                             edgeAlphaChannelA,edgeAlphaChannelB);

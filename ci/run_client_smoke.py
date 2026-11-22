@@ -2904,6 +2904,11 @@ def capture_test_world():
             if edge_notch_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: independently notched ground lips were not verified",flush=True)
                 return False
+            edge_cap_marker=("BLACK_FREQUENCY_GROUND_MESH_EDGE_CAP_CONTINUITY_VERIFIED "
+                             "capTaper=0.06 notchSuppressedAtCaps=true normalNotchesPreserved=true invalidRejected=true")
+            if edge_cap_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: terrain-break edge continuity guard was not verified",flush=True)
+                return False
             if core_width_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: interpolated ground-core width profile was not verified",flush=True)
                 return False
@@ -2939,15 +2944,17 @@ def capture_test_world():
                          r"if\(sample\.coreSegmentGap\(\)\)\s*\{\s*previousFadePoint=null;\s*previousFadeB=0\.0D;\s*continue;\s*\}",
                          camera_source) is None
                     or "private static boolean isGroundEdgeNotched(double phase,long salt)" not in camera_source
-                    or "return (groundSampleHash(phase,salt) & 15L)==0L;" not in camera_source
+                    or "return (groundSampleHash(phase,salt) & 31L)==0L;" not in camera_source
                     or "return (groundSampleHash(phase,GROUND_CORE_SEGMENT_GAP_SALT) & 127L)==0L;" not in camera_source
                     or "int adjacentCoreGapPairs=0;" not in camera_source
                     or "if(previousCoreSegmentGap) adjacentCoreGapPairs++;" not in camera_source
                     or "adjacentCoreGapPairs!=0" not in camera_source
                     or "isGroundEdgeNotched(phase,GROUND_LEFT_EDGE_NOTCH_SALT)" not in camera_source
                     or "isGroundEdgeNotched(phase,GROUND_RIGHT_EDGE_NOTCH_SALT)" not in camera_source
-                    or "if(!sample.leftEdgeNotched())" not in camera_source
-                    or "if(!sample.rightEdgeNotched())" not in camera_source):
+                    or "private static boolean isGroundSegmentCap(GroundSegment segment)" not in camera_source
+                    or "private static boolean shouldRenderGroundEdge(GroundSample sample,GroundSegment segment,boolean left)" not in camera_source
+                    or "shouldRenderGroundEdge(sample,segment,true)" not in camera_source
+                    or "shouldRenderGroundEdge(sample,segment,false)" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: crack-lip notches are not cached and independently applied",flush=True)
                 return False
             ribbon_cache_marker=("BLACK_FREQUENCY_GROUND_MESH_RIBBON_COLOR_CACHE_VERIFIED "
@@ -3009,8 +3016,8 @@ def capture_test_world():
                         or "coreRibbon(builder,matrix,camera,segment,halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS," not in render_source
                         or any(re.search(pattern,render_source) is None for pattern in ribbon_call_patterns)
                         or len(re.findall(r"GROUND_EDGE_RED_CHANNEL,GROUND_EDGE_GREEN_CHANNEL,GROUND_EDGE_BLUE_CHANNEL,\s*edgeAlphaChannelA,edgeAlphaChannelB",render_source))!=2
-                        or "if(!sample.leftEdgeNotched())" not in render_source
-                        or "if(!sample.rightEdgeNotched())" not in render_source
+                        or "if(shouldRenderGroundEdge(sample,segment,true))" not in render_source
+                        or "if(shouldRenderGroundEdge(sample,segment,false))" not in render_source
                         or "isGroundEdgeNotched(" in render_source
                         or "verifyPackedColorProfile();" not in build_source
                         or "verifyRibbonColorCacheProfile();" not in build_source):
