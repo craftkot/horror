@@ -869,23 +869,58 @@ threading.Thread(target=tee,daemon=True).start()
 def capture_test_world():
     """Best-effort UI automation; confirm world entrance from the actual client log."""
     game_window=None
+    def find_game_window():
+        named=subprocess.run(["xdotool","search","--onlyvisible","--name","Minecraft"],
+                             capture_output=True,text=True,check=False)
+        candidates=named.stdout.splitlines() if named.returncode==0 else []
+        if not candidates:
+            # GLFW may expose an empty or non-Minecraft WM_NAME on a fresh Xvfb session.
+            # Fall back to the largest visible application window, not the root window.
+            visible=subprocess.run(["xdotool","search","--onlyvisible","--name",".*"],
+                                   capture_output=True,text=True,check=False)
+            candidates=visible.stdout.splitlines() if visible.returncode==0 else []
+        best=None
+        best_area=0
+        for candidate in candidates:
+            geometry=subprocess.run(["xdotool","getwindowgeometry","--shell",candidate],
+                                    capture_output=True,text=True,check=False)
+            values=dict(line.split("=",1) for line in geometry.stdout.splitlines() if "=" in line)
+            try:
+                width=int(values.get("WIDTH","0"))
+                height=int(values.get("HEIGHT","0"))
+            except ValueError:
+                continue
+            area=width*height
+            if width>=800 and height>=600 and area>best_area:
+                best=candidate
+                best_area=area
+        return best
     def focus_game():
+        nonlocal game_window
+        if not game_window:
+            game_window=find_game_window()
         if not game_window:
             return False
-        # windowactivate can return before the X server has actually transferred focus.
-        # Verify the focused window before sending chat commands to the integrated server.
+        # Xvfb runs without a window manager, so windowactivate may have no active-window target.
+        # Set X input focus directly and verify the server-reported focused window.
         for _ in range(3):
-            activated=subprocess.run(["xdotool","windowactivate","--sync",game_window],
-                                     stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
             focused=subprocess.run(["xdotool","windowfocus","--sync",game_window],
                                    stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
             current=subprocess.run(["xdotool","getwindowfocus"],
                                    capture_output=True,text=True,check=False)
-            if (activated.returncode==0 and focused.returncode==0 and current.returncode==0
+            if (focused.returncode==0 and current.returncode==0
                     and current.stdout.strip()==str(game_window)):
                 return True
             time.sleep(0.15)
-        return False
+        # Reacquire once in case Minecraft recreated its GLFW window during loading.
+        game_window=find_game_window()
+        if not game_window:
+            return False
+        focused=subprocess.run(["xdotool","windowfocus","--sync",game_window],
+                               stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+        current=subprocess.run(["xdotool","getwindowfocus"],
+                               capture_output=True,text=True,check=False)
+        return focused.returncode==0 and current.returncode==0 and current.stdout.strip()==str(game_window)
     def key(k,focus=True):
         if focus:
             focus_game()
@@ -902,8 +937,8 @@ def capture_test_world():
         print("WORLD_CAPTURE_INPUT: mouse click",x,y,flush=True)
     shots=ROOT/"client-smoke-artifacts"
     os.makedirs(shots,exist_ok=True)
-    window=subprocess.run(["xdotool","search","--onlyvisible","--name","Minecraft"],capture_output=True,text=True).stdout.splitlines()
-    game_window=window[-1] if window else None
+    game_window=find_game_window()
+    print("WORLD_CAPTURE_INPUT: selected visible game window",game_window,flush=True)
     if game_window:
         focus_game()
         subprocess.run(["xdotool","windowsize",game_window,"1280","720"],check=False)
