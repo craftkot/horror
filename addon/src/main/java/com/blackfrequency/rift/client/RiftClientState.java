@@ -28,6 +28,10 @@ public final class RiftClientState {
     private static float progress;
     private static boolean collapse;
     private static int finaleTicks;
+    private static final int RIFT_OPENING_RAMP_TICKS=60;
+    private static final boolean VERIFY_RIFT_CLIENT_PROFILES=
+        Boolean.getBoolean("blackfrequency.verifyGroundMeshProfiles");
+    private static boolean riftOpeningRampProfileLogged;
     private static int ticksSincePacket;
     private static int anchorX;
     private static int anchorZ;
@@ -88,6 +92,7 @@ public final class RiftClientState {
         progress=safeProgress;
         collapse=collapsing;
         finaleTicks=Math.max(0,ticks);
+        if(VERIFY_RIFT_CLIENT_PROFILES) verifyRiftOpeningRampProfile();
         anchorX=worldAnchorX;
         anchorZ=worldAnchorZ;
         if(worldBeaconPosition!=beaconPosition) {
@@ -101,7 +106,42 @@ public final class RiftClientState {
     }
     public static float strength() { return progress; }
     public static float greenPhase() { return collapse && finaleTicks>=100 && finaleTicks<180 ? 1f : 0f; }
-    public static float visibleStrength() { return collapse && finaleTicks<60 ? strength() * (finaleTicks/60f) : strength(); }
+
+    // Ease the first three seconds of the rift in without changing its final strength.
+    private static float riftOpeningRamp(int ticks) {
+        float t=Math.max(0.0F,Math.min(1.0F,ticks/(float)RIFT_OPENING_RAMP_TICKS));
+        return t*t*(3.0F-2.0F*t);
+    }
+
+    private static void verifyRiftOpeningRampProfile() {
+        if(riftOpeningRampProfileLogged) return;
+        float start=riftOpeningRamp(0);
+        float quarter=riftOpeningRamp(15);
+        float midpoint=riftOpeningRamp(30);
+        float threeQuarter=riftOpeningRamp(45);
+        float end=riftOpeningRamp(RIFT_OPENING_RAMP_TICKS);
+        boolean monotonic=true;
+        float previous=start;
+        for(int tick=1;tick<=RIFT_OPENING_RAMP_TICKS;tick++) {
+            float current=riftOpeningRamp(tick);
+            monotonic &= Float.isFinite(current) && current>=previous && current<=1.0F;
+            previous=current;
+        }
+        if(start!=0.0F || Math.abs(quarter-.15625F)>1.0E-6F
+            || Math.abs(midpoint-.5F)>1.0E-6F
+            || Math.abs(threeQuarter-.84375F)>1.0E-6F
+            || end!=1.0F || riftOpeningRamp(-1)!=0.0F
+            || riftOpeningRamp(RIFT_OPENING_RAMP_TICKS+1)!=1.0F || !monotonic)
+            throw new IllegalStateException("BLACK FREQUENCY rift opening ramp regression");
+        riftOpeningRampProfileLogged=true;
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_RIFT_OPENING_RAMP_PROFILE_VERIFIED ticks={} curve=smoothstep quarter={} midpoint={} threeQuarter={} endpoints=true monotonic=true",
+            RIFT_OPENING_RAMP_TICKS,quarter,midpoint,threeQuarter);
+    }
+
+    public static float visibleStrength() {
+        return collapse ? strength()*riftOpeningRamp(finaleTicks) : strength();
+    }
     public static boolean collapsing() { return collapse; }
     public static boolean hasAnchor() { return anchorValid; }
     public static int anchorX() { return anchorX; }
