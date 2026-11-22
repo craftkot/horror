@@ -2896,8 +2896,8 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: full-section ground fissure gaps were not verified",flush=True)
                 return False
             edge_notch_marker=("BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED "
-                               "samples=96 left=5 right=5 asymmetricSamples=8 adjacentLeftPairs=0 adjacentRightPairs=0 "
-                               "deterministic=true notchRate=1/16")
+                               "samples=96 left=4 right=4 asymmetricSamples=6 adjacentLeftPairs=0 adjacentRightPairs=0 "
+                               "deterministic=true notchRate=1/32")
             core_width_marker=("BLACK_FREQUENCY_GROUND_MESH_CORE_WIDTH_PROFILE_VERIFIED "
                                "samples=96 minBound=0.78 maxBound=1.22 maxAdjacentDeltaLimit=0.075 interpolated=true bounded=true "
                                "harmonics=2 broadAmplitude=0.16 detailAmplitude=0.05 detailFrequency=0.43 armPhase=1.13 invalidFallback=1.0")
