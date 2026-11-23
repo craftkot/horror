@@ -3487,15 +3487,15 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: near-surface fissure core clearance was not verified",flush=True)
                 return False
             bevel_profile=re.search(
-                r"BLACK_FREQUENCY_GROUND_MESH_BEVEL_PROFILE_VERIFIED width=([-+0-9.eE]+) lift=([-+0-9.eE]+) innerRecess=([-+0-9.eE]+) maxOuterHalfWidth=([-+0-9.eE]+) maxGlowHalfWidth=([-+0-9.eE]+) withinGlow=true offsets=true invalidRejected=true",
+                r"BLACK_FREQUENCY_GROUND_MESH_BEVEL_PROFILE_VERIFIED width=([-+0-9.eE]+) lift=([-+0-9.eE]+) innerRecess=([-+0-9.eE]+) minOuterClearance=([-+0-9.eE]+) maxOuterClearance=([-+0-9.eE]+) maxOuterHalfWidth=([-+0-9.eE]+) maxGlowHalfWidth=([-+0-9.eE]+) withinGlow=true offsets=true invalidRejected=true",
                 final_log)
-            expected_bevel=(.045,.018,.005,.074*1.85*1.22*1.15+.045,.074*5.75)
+            expected_bevel=(.045,.010,.005,.019,.021,.074*1.85*1.22*1.15+.045,.074*5.75)
             if (not bevel_profile
                     or any(not math.isclose(float(bevel_profile.group(i)),expected_bevel[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
-                           for i in range(1,6))
+                           for i in range(1,8))
                     or "private static final double GROUND_BEVEL_WIDTH=.045D;" not in camera_source
-                    or "private static final double GROUND_BEVEL_LIFT=.018D;" not in camera_source
+                    or "private static final double GROUND_BEVEL_LIFT=.010D;" not in camera_source
                     or "groundBevelOuterOffset(" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: beveled ground fissure cross-section was not verified",flush=True)
                 return False
