@@ -732,7 +732,8 @@ public final class RiftClientState {
         // A single one-block sample may be skipped only when the two-sample span remains slope-safe.
         private static final double MAX_BRIDGED_GROUND_STEP_Y_DELTA=1.0D;
         // Keep the same maximum height change per segment after halving sample spacing.
-        private static final double MAX_GROUND_SEGMENT_GRADE=2.5D;
+        // Keep the absolute 0.5625-block rise budget while the shared fissure reach changes.
+        private static final double MAX_GROUND_SEGMENT_GRADE=.5625D/SAMPLE_SPACING;
         // Taper cliff-side ribbon tips almost to a point without bridging terrain discontinuities.
         private static final double CLIFF_BREAK_TAPER=.06D;
         private static final double GROUND_CAP_TAPER_EPSILON=1.0E-9D;
@@ -1025,13 +1026,16 @@ public final class RiftClientState {
             if(samplingProfileLogged) return;
             int samples=ARM_COUNT*SEGMENTS_PER_ARM;
             double extent=SEGMENTS_PER_ARM*SAMPLE_SPACING;
+            double expectedExtent=RiftGeometry.FISSURE_SEGMENTS_PER_ARM*RiftGeometry.FISSURE_SAMPLE_SPACING;
             if(ARM_COUNT!=4 || SEGMENTS_PER_ARM!=24 || samples!=96
-                || !Double.isFinite(SAMPLE_SPACING) || SAMPLE_SPACING<.22D || SAMPLE_SPACING>.23D
+                || !Double.isFinite(SAMPLE_SPACING) || SAMPLE_SPACING<.22D || SAMPLE_SPACING>.31D
                 || Math.abs(SAMPLE_SPACING-RiftGeometry.FISSURE_SAMPLE_SPACING*.5D)>1.0E-9D
                 || GROUND_ENDPOINT_TAPER_SAMPLES!=RiftGeometry.FISSURE_SEGMENTS_PER_ARM/2
                 || !Double.isFinite(RiftGeometry.FISSURE_BEND_AMPLITUDE)
                 || Math.abs(RiftGeometry.FISSURE_BEND_AMPLITUDE-.24D)>1.0E-9D
-                || Math.abs(extent-5.40D)>1.0E-9D || extent>=RADIUS)
+                || Math.abs(extent-expectedExtent)>1.0E-9D
+                || extent+RiftGeometry.FISSURE_BEND_AMPLITUDE>=RADIUS
+                || Math.abs(SAMPLE_SPACING*MAX_GROUND_SEGMENT_GRADE-.5625D)>1.0E-9D)
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh sampling profile regression");
             samplingProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
@@ -1623,7 +1627,7 @@ public final class RiftClientState {
             boolean sharpCliffCap=CLIFF_BREAK_TAPER>=.04D
                 && CLIFF_BREAK_TAPER<=.08D && CLIFF_BREAK_TAPER<.10D;
             boolean preservedRiseBudget=Math.abs(SAMPLE_SPACING*MAX_GROUND_SEGMENT_GRADE
-                -RiftGeometry.FISSURE_SAMPLE_SPACING*1.25D)<1.0E-9D;
+                -.5625D)<1.0E-9D;
             if(!(flat && snowStep && halfBlockRamp && oneBlockSampleRejected
                 && oneBlockRampAccepted && bridgeCandidate && plateauBridge && bumpBridge
                 && repeatedStepRejected && cliffBridgeRejected && invalidBridgeRejected
@@ -1634,10 +1638,11 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_VERIFIED maxStep={} maxGrade={} cliffTaper={}",
                 MAX_GROUND_SEGMENT_Y_DELTA,MAX_GROUND_SEGMENT_GRADE,CLIFF_BREAK_TAPER);
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_GRADE_GUARD_VERIFIED maxGrade=2.5 oneBlockRiseRejected=true snowAccepted=true cliffCapProfile=true");
+                "BLACK_FREQUENCY_GROUND_MESH_GRADE_GUARD_VERIFIED maxGrade={} oneBlockRiseRejected=true snowAccepted=true cliffCapProfile=true",
+                MAX_GROUND_SEGMENT_GRADE);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_GRADE_BUDGET_VERIFIED previousMaxRise={} currentMaxRise={} same=true",
-                RiftGeometry.FISSURE_SAMPLE_SPACING*1.25D,SAMPLE_SPACING*MAX_GROUND_SEGMENT_GRADE);
+                .5625D,SAMPLE_SPACING*MAX_GROUND_SEGMENT_GRADE);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SINGLE_STEP_BRIDGE_VERIFIED maxStep=1.0 spanSamples=2 plateau=true bump=true repeatedStepRejected=true cliffGuard=true invalidRejected=true");
             com.mojang.logging.LogUtils.getLogger().info(
