@@ -2366,6 +2366,16 @@ public final class RiftClientState {
                 && ((blockX^blockZ)&3)==0;
         }
 
+        private static boolean canopyAccentCandidateInsideExpandedSegmentBounds(double x,double z,
+                GroundPoint a,GroundPoint b) {
+            if(a==null || b==null || !Double.isFinite(x) || !Double.isFinite(z)
+                || !Double.isFinite(a.x()) || !Double.isFinite(a.z())
+                || !Double.isFinite(b.x()) || !Double.isFinite(b.z())) return false;
+            double margin=GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE;
+            return x>=Math.min(a.x(),b.x())-margin && x<=Math.max(a.x(),b.x())+margin
+                && z>=Math.min(a.z(),b.z())-margin && z<=Math.max(a.z(),b.z())+margin;
+        }
+
         private static boolean canopyAccentCandidateNearSegment(double x,double z,double groundY,
                 GroundSegment segment) {
             if(segment==null || !Double.isFinite(x) || !Double.isFinite(z) || !Double.isFinite(groundY))
@@ -2373,7 +2383,8 @@ public final class RiftClientState {
             GroundPoint a=segment.a(),b=segment.b();
             if(a==null || b==null || !Double.isFinite(a.x()) || !Double.isFinite(a.y())
                 || !Double.isFinite(a.z()) || !Double.isFinite(b.x()) || !Double.isFinite(b.y())
-                || !Double.isFinite(b.z())) return false;
+                || !Double.isFinite(b.z())
+                || !canopyAccentCandidateInsideExpandedSegmentBounds(x,z,a,b)) return false;
             double dx=b.x()-a.x(),dz=b.z()-a.z();
             double lengthSquared=dx*dx+dz*dz;
             if(!Double.isFinite(lengthSquared) || lengthSquared<=1.0E-10D) return false;
@@ -2448,6 +2459,15 @@ public final class RiftClientState {
             GroundSegment fixture=new GroundSegment(new GroundPoint(0.0D,70.0D,0.0D),
                 new GroundPoint(1.0D,70.0D,0.0D),0.0D,1.0D,GROUND_SAMPLES[0],
                 1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
+            boolean broadPhaseNear=canopyAccentCandidateInsideExpandedSegmentBounds(
+                .5D,.2D,fixture.a(),fixture.b());
+            boolean broadPhaseFar=!canopyAccentCandidateInsideExpandedSegmentBounds(
+                .5D,1.0D,fixture.a(),fixture.b());
+            boolean broadPhaseCorner=canopyAccentCandidateInsideExpandedSegmentBounds(
+                -.8D,.8D,fixture.a(),fixture.b());
+            boolean exactCornerRejected=!canopyAccentCandidateNearSegment(-.8D,.8D,70.05D,fixture);
+            boolean invalidBoundsRejected=!canopyAccentCandidateInsideExpandedSegmentBounds(
+                Double.NaN,.2D,fixture.a(),fixture.b());
             boolean nearSegment=canopyAccentCandidateNearSegment(.5D,.2D,70.05D,fixture);
             boolean farSegment=!canopyAccentCandidateNearSegment(.5D,1.0D,70.05D,fixture);
             boolean heightMismatch=!canopyAccentCandidateNearSegment(.5D,.2D,70.5D,fixture);
@@ -2458,7 +2478,8 @@ public final class RiftClientState {
                 && nonPlantsRejected && Math.abs(plantTop-70.92D)<1.0E-9D
                 && Math.abs(invalidHeight-70.12D)<1.0E-9D
                 && Math.abs(excessiveHeight-71.12D)<1.0E-9D
-                && nearSegment && farSegment && heightMismatch && invalidRejected
+                && broadPhaseNear && broadPhaseFar && broadPhaseCorner && exactCornerRejected
+                && invalidBoundsRejected && nearSegment && farSegment && heightMismatch && invalidRejected
                 && emptyMeshRejected && meshAccepted))
                 throw new IllegalStateException("BLACK FREQUENCY canopy accent particle profile regression");
             canopyAccentSelectorProfileLogged=true;
@@ -2466,7 +2487,7 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SELECTOR_PROFILE_VERIFIED budget={} candidateBudget={} selection=one-in-four plantOnly=true invalidRejected=true heightBounded=true segmentBounded=true",
                 GROUND_CANOPY_ACCENT_PARTICLE_BUDGET,GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET);
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED near=true far=false heightBounded=true invalidRejected=true emptyMeshRejected=true");
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED near=true far=false broadPhaseCorner=true exactCornerRejected=true invalidBoundsRejected=true heightBounded=true invalidRejected=true emptyMeshRejected=true");
         }
 
         private static double sampleGroundY(net.minecraft.client.multiplayer.ClientLevel level,

@@ -3439,7 +3439,8 @@ def capture_test_world():
                     or "GROUND_CORE_RECESS=.005D;" not in camera_source
                     or "GROUND_FILAMENT_LIFT=.001D;" not in camera_source
                     or "GROUND_EDGE_LIFT=.005D;" not in camera_source
-                    or "return candidateY-1+surfaceOffset+GROUND_SURFACE_CLEARANCE;" not in camera_source
+                    or "double groundY=candidateY-1+surfaceOffset+GROUND_SURFACE_CLEARANCE;" not in camera_source
+                    or "return groundY;" not in camera_source
                     or "double offset,double halfWidth,double verticalOffset," not in camera_source
                     or camera_source.count("a.y()+verticalOffset")!=2
                     or camera_source.count("b.y()+verticalOffset")!=2
@@ -3975,7 +3976,7 @@ def capture_test_world():
                 return False
             canopy_segment_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED "
-                "near=true far=false heightBounded=true invalidRejected=true emptyMeshRejected=true"
+                "near=true far=false broadPhaseCorner=true exactCornerRejected=true invalidBoundsRejected=true heightBounded=true invalidRejected=true emptyMeshRejected=true"
             )
             if canopy_segment_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: canopy accent candidates were not filtered against retained fissure segments",
