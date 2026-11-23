@@ -270,7 +270,7 @@ def verify_restoration_particle_source():
             or "private static double gravityAnomalyAperiodicNoise(double x,double z,int ticks)" not in source
             or "double aperiodicTurbulence=gravityAnomalyAperiodicNoise(x,z,ticks);" not in source
             or "GRAVITY_APERIODIC_TURBULENCE_AMPLITUDE=.045D;" not in source
-            or "double field=base+.12D*cross+.06D*turbulence+.035D*microTurbulence\\n            +GRAVITY_APERIODIC_TURBULENCE_AMPLITUDE*aperiodicTurbulence;" not in source
+            or "double field=base+.12D*cross+.06D*turbulence+.035D*microTurbulence\n            +GRAVITY_APERIODIC_TURBULENCE_AMPLITUDE*aperiodicTurbulence;" not in source
             or "private static void updateGravityFieldPhaseCache(int ticks)" not in source
             or "if(gravityFieldCachedTick==time) return;" not in source
             or "gravityFieldBasePhase=Math.sin(time*.011D)*1.8D;" not in source
