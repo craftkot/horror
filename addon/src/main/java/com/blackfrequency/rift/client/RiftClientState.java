@@ -2341,8 +2341,14 @@ public final class RiftClientState {
                 fullShape)-1.0D)<1.0E-9D;
             boolean emptyShapeRejected=Double.isNaN(groundSupportHeight(
                 net.minecraft.world.phys.shapes.Shapes.empty(),net.minecraft.world.phys.shapes.Shapes.empty()));
+            double cauldronSupportHeight=groundSupportHeight(
+                net.minecraft.world.level.block.Blocks.CAULDRON.defaultBlockState(),level,BlockPos.ZERO);
+            boolean cauldronTopRejected=Double.isNaN(cauldronSupportHeight);
             boolean validSupportHeights=Math.abs(fullBlockHeight-1.0D)<1.0E-9D
-                && Math.abs(partialBlockHeight-.5D)<1.0E-9D && outlineFallback && emptyShapeRejected;
+                && Math.abs(partialBlockHeight-.5D)<1.0E-9D && outlineFallback && emptyShapeRejected
+                && hasFullFootprintTop(fullShape,1.0D)
+                && hasFullFootprintTop(partialShape,.5D) && !hasFullFootprintTop(
+                    net.minecraft.world.phys.shapes.Shapes.empty(),0.0D);
             double minimumSnowOffset=Double.POSITIVE_INFINITY;
             double maximumSnowOffset=Double.NEGATIVE_INFINITY;
             double previousSnowOffset=Double.NEGATIVE_INFINITY;
@@ -2376,7 +2382,7 @@ public final class RiftClientState {
                 && Math.abs(overheightSnowClamp-1.5D)<1.0E-9D;
             if(!(naturalGrass && naturalStone && supportsSlabs && rejectsStructures && rejectsBlockEntities
                 && rejectsHazardousSurfaces && rejectsHazardousHeadroom && validSupportHeights
-                && snowSurfaceOffsets && snowSurfaceAccepted && fullSnowBlockRejected))
+                && cauldronTopRejected && snowSurfaceOffsets && snowSurfaceAccepted && fullSnowBlockRejected))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh terrain/structure/support-shape regression");
             supportFilterLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
@@ -2391,6 +2397,9 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_SHAPE_GUARD_VERIFIED fullBlock={} partial={} outlineFallback={} emptyRejected={}",
                 fullBlockHeight,partialBlockHeight,outlineFallback,emptyShapeRejected);
             com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_UNIFORM_TOP_SUPPORT_VERIFIED fullBlock=true bottomSlab=true topSlab=true doubleSlab=true cauldronRejected={}",
+                cauldronTopRejected);
+            com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SLAB_SUPPORT_VERIFIED bottom={} top={} double={} bottomSnow={} topSnow={} stairsRejected=true shapeDerived=true",
                 bottomSlabHeight,topSlabHeight,doubleSlabHeight,bottomSlabSnowOffset,topSlabSnowOffset);
             com.mojang.logging.LogUtils.getLogger().info(
@@ -2402,13 +2411,29 @@ public final class RiftClientState {
                 partialSupportSnowOffset);
         }
 
+        // A maximum Y alone is not enough: cauldrons and other hollow shapes
+        // have a high rim but cannot support a ribbon across their whole footprint.
+        // Accept only a topmost collision box that covers the complete X/Z plane.
+        private static boolean hasFullFootprintTop(
+                net.minecraft.world.phys.shapes.VoxelShape shape,double height) {
+            if(shape==null || shape.isEmpty() || !Double.isFinite(height)) return false;
+            final double epsilon=1.0E-7D;
+            for(var box:shape.toAabbs()) {
+                if(Math.abs(box.maxY-height)<=epsilon
+                    && box.minX<=epsilon && box.maxX>=1.0D-epsilon
+                    && box.minZ<=epsilon && box.maxZ>=1.0D-epsilon) return true;
+            }
+            return false;
+        }
+
         private static double groundSupportHeight(
                 net.minecraft.world.phys.shapes.VoxelShape collision,
                 net.minecraft.world.phys.shapes.VoxelShape outline) {
             var selected=collision.isEmpty()?outline:collision;
             if(selected.isEmpty()) return Double.NaN;
             double height=selected.max(Direction.Axis.Y);
-            return Double.isFinite(height) && height>0.0D ? height : Double.NaN;
+            return Double.isFinite(height) && height>0.0D
+                && hasFullFootprintTop(selected,height) ? height : Double.NaN;
         }
 
         private static double groundSupportHeight(BlockState support,Level level,BlockPos pos) {

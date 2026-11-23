@@ -3048,6 +3048,16 @@ def capture_test_world():
                     or "!isGroundSupport(net.minecraft.world.level.block.Blocks.OAK_STAIRS.defaultBlockState())" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: slab support must use real bottom/top/double collision heights while stairs remain excluded",flush=True)
                 return False
+            uniform_top_marker = (
+                "BLACK_FREQUENCY_GROUND_MESH_UNIFORM_TOP_SUPPORT_VERIFIED "
+                "fullBlock=true bottomSlab=true topSlab=true doubleSlab=true cauldronRejected=true"
+            )
+            if (uniform_top_marker not in final_log
+                    or "private static boolean hasFullFootprintTop(" not in camera_source
+                    or "shape.toAabbs()" not in camera_source
+                    or "Blocks.CAULDRON.defaultBlockState()" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: support top must cover the full footprint; hollow cauldron rims must be rejected",flush=True)
+                return False
             sample_start=camera_source.find("private static double sampleGroundY(")
             sample_end=camera_source.find("private static long columnKey(",sample_start+1)
             sample_source=(camera_source[sample_start:sample_end]
