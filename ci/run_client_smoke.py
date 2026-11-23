@@ -3569,10 +3569,41 @@ def capture_test_world():
             if edge_palette_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: violet ground-edge palette self-check was not executed",flush=True)
                 return False
+            def read_ground_double(name):
+                match=re.search(
+                    rf"private static final double {re.escape(name)}=([-+0-9.eE]+)D;",
+                    camera_source)
+                if not match:
+                    return None
+                value=float(match.group(1))
+                return value if math.isfinite(value) else None
+
+            ground_edge_constants=tuple(read_ground_double(name) for name in (
+                "GROUND_BASE_HALF_WIDTH",
+                "GROUND_WAVE_HALF_WIDTH_RANGE",
+                "GROUND_WIDTH_FLICKER",
+                "GROUND_EDGE_OFFSET_SCALE",
+                "GROUND_CORE_SKEW_AMPLITUDE",
+                "GROUND_EDGE_OFFSET_SKEW_SCALE",
+            ))
+            if (any(value is None for value in ground_edge_constants)
+                    or re.search(
+                        r"GROUND_MAX_HALF_WIDTH=\\s*GROUND_BASE_HALF_WIDTH\\+GROUND_WAVE_HALF_WIDTH_RANGE\\+GROUND_WIDTH_FLICKER;",
+                        camera_source) is None):
+                print("WORLD_CAPTURE_FAIL: ground edge-skew constants could not be derived from the active Java profile",
+                      flush=True)
+                return False
+            (base_half_width,wave_half_width_range,width_flicker,edge_offset_scale,
+             core_skew_amplitude,edge_offset_skew_scale)=ground_edge_constants
+            maximum_half_width=base_half_width+wave_half_width_range+width_flicker
+            expected_max_offset_delta=(maximum_half_width*edge_offset_scale
+                                        *core_skew_amplitude*edge_offset_skew_scale)
+            expected_edge_skew=(edge_offset_skew_scale,
+                                core_skew_amplitude*edge_offset_skew_scale,
+                                expected_max_offset_delta)
             edge_skew_match=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_EDGE_OFFSET_ASYMMETRY_VERIFIED scale=([-+0-9.eE]+) maxSkew=([-+0-9.eE]+) maxOffsetDelta=([-+0-9.eE]+) correlatedWithCore=true bounded=true",
                 final_log)
-            expected_edge_skew=(.12,.018,.003996)
             if (not edge_skew_match
                     or any(not math.isclose(float(edge_skew_match.group(i)),expected_edge_skew[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
@@ -3589,7 +3620,8 @@ def capture_test_world():
                 r"BLACK_FREQUENCY_GROUND_MESH_EDGE_ENDPOINT_INTERPOLATION_VERIFIED maxOffsetDelta=([-+0-9.eE]+) sharedBoundary=true invalidRejected=true",
                 final_log)
             if (not edge_interpolation_match
-                    or not math.isclose(float(edge_interpolation_match.group(1)),.003996,rel_tol=0.0,abs_tol=1.0e-9)):
+                    or not math.isclose(float(edge_interpolation_match.group(1)),expected_max_offset_delta,
+                                        rel_tol=0.0,abs_tol=1.0e-9)):
                 print("WORLD_CAPTURE_FAIL: violet edge rails do not interpolate their skew continuously at segment endpoints",flush=True)
                 return False
             endpoint_distance_fade=re.search(
