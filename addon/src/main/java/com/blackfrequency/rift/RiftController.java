@@ -368,6 +368,16 @@ public final class RiftController {
         return Math.max(0,Math.min(MAX_EDITS,value));
     }
 
+    // A terminal cursor is trustworthy only when every retained snapshot has
+    // an outcome. A torn/corrupt save must not report recovery complete while
+    // snapshots remain unaccounted for.
+    private static boolean recoverySnapshotsFullyAccounted(int snapshotCount,
+            int restoredBlocks,int skippedOccupied,int skippedInvalid) {
+        if(snapshotCount<0) return false;
+        long accounted=(long)restoredBlocks+(long)skippedOccupied+(long)skippedInvalid;
+        return accounted==snapshotCount;
+    }
+
     /** Reject non-canonical or malformed registry identifiers before NbtUtils resolves them. */
     private static boolean isValidSnapshotBlockId(String blockId) {
         if(blockId==null || blockId.isEmpty()
@@ -1314,6 +1324,23 @@ public final class RiftController {
                         LOGGER.warn("BLACK FREQUENCY: missing recovery restoreIndex; resuming from last snapshot");
                     s.restoreIndex=last;
                     s.restoreScan=last;
+                    restoreCursorRepaired=true;
+                } else if(s.restoreIndex==-1 && last>=0
+                    && !recoverySnapshotsFullyAccounted(s.snapshots.size(),
+                        s.restoredBlocks,s.skippedOccupied,s.skippedInvalid)) {
+                    // -1 is the completed-scan sentinel. If snapshots remain but
+                    // their outcome counters do not account for all of them, a
+                    // torn save could otherwise skip restoration and clear the queue.
+                    // Replay the validated queue: occupied blocks are preserved by
+                    // the normal restore guard, while air/flowing-fluid positions retry.
+                    LOGGER.warn("BLACK FREQUENCY: recovery cursor is terminal with {} unaccounted snapshots; replaying validated queue",
+                        s.snapshots.size()-(long)s.restoredBlocks-s.skippedOccupied-s.skippedInvalid);
+                    s.restoreIndex=last;
+                    s.restoreScan=last;
+                    s.restoreTicks=0;
+                    s.restoredBlocks=0;
+                    s.skippedOccupied=0;
+                    s.skippedInvalid=0;
                     restoreCursorRepaired=true;
                 } else if(s.restoreIndex < -1 || s.restoreIndex > last) {
                     LOGGER.warn("BLACK FREQUENCY: invalid restoreIndex={} for {} snapshots; clamping",
@@ -3624,6 +3651,37 @@ public final class RiftController {
             entry.put("state",NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
             cursorSnapshots.add(entry);
         }
+
+        // A terminal cursor with pending snapshots is valid only when every
+        // snapshot has a persisted outcome. Otherwise restart the bounded scan.
+        CompoundTag pendingTerminalCursor=new CompoundTag();
+        pendingTerminalCursor.putInt("x",0);
+        pendingTerminalCursor.putInt("z",0);
+        pendingTerminalCursor.putBoolean("started",true);
+        pendingTerminalCursor.putBoolean("restoring",true);
+        pendingTerminalCursor.putInt("edits",2);
+        pendingTerminalCursor.putInt("restoreIndex",-1);
+        pendingTerminalCursor.putInt("restoreScan",-1);
+        pendingTerminalCursor.putInt("restoreTicks",110);
+        pendingTerminalCursor.putInt("restoredBlocks",1);
+        pendingTerminalCursor.put("snapshots",cursorSnapshots.copy());
+        State resumedPendingTerminal=State.load(pendingTerminalCursor);
+        CompoundTag normalizedPendingTerminal=resumedPendingTerminal.save(new CompoundTag());
+        State reloadedPendingTerminal=State.load(normalizedPendingTerminal);
+
+        CompoundTag accountedTerminalCursor=new CompoundTag();
+        accountedTerminalCursor.putInt("x",0);
+        accountedTerminalCursor.putInt("z",0);
+        accountedTerminalCursor.putBoolean("restoring",true);
+        accountedTerminalCursor.putInt("edits",2);
+        accountedTerminalCursor.putInt("restoreIndex",-1);
+        accountedTerminalCursor.putInt("restoreScan",-1);
+        accountedTerminalCursor.putInt("restoreTicks",110);
+        accountedTerminalCursor.putInt("restoredBlocks",1);
+        accountedTerminalCursor.putInt("skippedOccupied",1);
+        accountedTerminalCursor.put("snapshots",cursorSnapshots.copy());
+        State accountedTerminal=State.load(accountedTerminalCursor);
+
         CompoundTag wrongIndexType=new CompoundTag();
         wrongIndexType.putBoolean("restoring",true);
         wrongIndexType.putString("restoreIndex","not-an-int");
@@ -3660,6 +3718,17 @@ public final class RiftController {
             || !repairedScan.isDirty()
             || untouched.restoreIndex!=-1 || untouched.restoreScan!=-1
             || untouched.isDirty()
+            || resumedPendingTerminal.restoreIndex!=1 || resumedPendingTerminal.restoreScan!=1
+            || resumedPendingTerminal.restoreTicks!=0 || resumedPendingTerminal.restoredBlocks!=0
+            || resumedPendingTerminal.skippedOccupied!=0 || resumedPendingTerminal.skippedInvalid!=0
+            || !resumedPendingTerminal.isDirty()
+            || reloadedPendingTerminal.restoreIndex!=1 || reloadedPendingTerminal.restoreScan!=1
+            || reloadedPendingTerminal.restoreTicks!=0 || !reloadedPendingTerminal.restoring
+            || accountedTerminal.restoreIndex!=-1 || accountedTerminal.restoreScan!=-1
+            || accountedTerminal.restoreTicks!=110 || accountedTerminal.restoredBlocks!=1
+            || accountedTerminal.skippedOccupied!=1 || accountedTerminal.isDirty()
+            || !recoverySnapshotsFullyAccounted(2,1,1,0)
+            || recoverySnapshotsFullyAccounted(2,1,0,0)
             || repairedWrongIndexType.restoreIndex!=1 || repairedWrongIndexType.restoreScan!=1
             || !repairedWrongIndexType.isDirty()
             || reloadedWrongIndexType.restoreIndex!=1 || reloadedWrongIndexType.restoreScan!=1
@@ -3675,6 +3744,7 @@ public final class RiftController {
             || !quarantinedMissingCenterOutIndex.finished || !quarantinedMissingCenterOutIndex.isDirty())
             throw new IllegalStateException("CI recovery cursor repair persistence regression");
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_CURSOR_REPAIR_PERSISTENCE_VERIFIED indexClamped=true scanClamped=true dirty=true roundTrip=true validUnchanged=true malformedIndexType=true malformedScanType=true malformedCenterOutType=true missingCenterOutIndex=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_TERMINAL_CURSOR_PENDING_SNAPSHOT_RECOVERY_VERIFIED pendingReplayed=true accountedTerminalPreserved=true countersReset=true dirty=true roundTrip=true");
     }
 
     private static void verifyDuplicateRecoverySnapshotQuarantine() {
