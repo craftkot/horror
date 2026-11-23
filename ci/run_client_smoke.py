@@ -3973,7 +3973,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: deterministic plant-only canopy accent selector was not verified",flush=True)
                 return False
             canopy_budget=re.search(
-                r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED emitted=(\\d+) "
+                r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED emitted=(\d+) "
                 r"budget=8 loadedOnly=true radius=48 clientOnly=true plantOnly=true",
                 log_after)
             if not canopy_budget or int(canopy_budget.group(1))>8:
