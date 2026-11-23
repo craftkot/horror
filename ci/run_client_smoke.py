@@ -4128,7 +4128,7 @@ def capture_test_world():
                     or not math.isclose(client_extent,density_extent,rel_tol=0.0,abs_tol=1.0e-9)
                     or client_radius!=48 or client_extent>=client_radius
                     or not math.isclose(client_bend,density_bend,rel_tol=0.0,abs_tol=1.0e-9)
-                    or f"BLACK_FREQUENCY_GROUND_MESH_DENSITY_VERIFIED meshSamples=96 serverSamples=48 ratio=2 evenSamplesAligned=true extent={density_extent:g}" not in log_after):
+                    or f"BLACK_FREQUENCY_GROUND_MESH_DENSITY_VERIFIED meshSamples=96 serverSamples=48 ratio=2 evenSamplesAligned=true extent={density_extent!r}" not in log_after):
                 print("WORLD_CAPTURE_FAIL: denser client mesh no longer aligns with the server fissure path",
                       "server",density_spacing,density_extent,
                       "client",client_spacing,client_extent,"radius",client_radius,flush=True)
