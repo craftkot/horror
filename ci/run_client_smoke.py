@@ -3965,6 +3965,21 @@ def capture_test_world():
             if not ground_mesh:
                 print("WORLD_CAPTURE_FAIL: client did not render a bounded ground fissure mesh",flush=True)
                 return False
+            canopy_selector_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SELECTOR_PROFILE_VERIFIED "
+                "budget=8 selection=one-in-four plantOnly=true invalidRejected=true heightBounded=true"
+            )
+            if canopy_selector_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: deterministic plant-only canopy accent selector was not verified",flush=True)
+                return False
+            canopy_budget=re.search(
+                r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED emitted=(\\d+) "
+                r"budget=8 loadedOnly=true radius=48 clientOnly=true plantOnly=true",
+                log_after)
+            if not canopy_budget or int(canopy_budget.group(1))>8:
+                print("WORLD_CAPTURE_FAIL: client canopy accent particles exceeded their bounded per-build budget",
+                      canopy_budget.groups() if canopy_budget else None,flush=True)
+                return False
             continuity=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_STATS maxStep=([-+0-9.eE]+) steepStepsSkipped=(\d+)",
                 log_after)

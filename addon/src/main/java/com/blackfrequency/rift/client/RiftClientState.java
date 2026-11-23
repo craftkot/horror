@@ -14,6 +14,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
@@ -23,6 +24,7 @@ import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
 @net.minecraftforge.fml.common.Mod.EventBusSubscriber(modid="blackfrequency", value=net.minecraftforge.api.distmarker.Dist.CLIENT)
 public final class RiftClientState {
     private static float progress;
@@ -742,6 +744,14 @@ public final class RiftClientState {
         private static final Long2DoubleOpenHashMap SURFACE_Y_BY_COLUMN=createSurfaceCache();
         private static final BlockPos.MutableBlockPos SURFACE_CURSOR=
             new BlockPos.MutableBlockPos(0,0,0);
+        // A few cached violet motes rise above non-solid plants without lifting the ground ribbon.
+        private static final int GROUND_CANOPY_ACCENT_PARTICLE_BUDGET=8;
+        private static final DustParticleOptions GROUND_CANOPY_ACCENT_DUST=
+            new DustParticleOptions(new Vector3f(.42F,.18F,.92F),.58F);
+        private static int groundCanopyAccentParticlesEmitted;
+        private static boolean canopyAccentSelectorProfileLogged;
+        private static boolean canopyAccentBuildProfileLogged;
+        private static boolean canopyAccentEmissionLogged;
         private static boolean sampleCacheReuseLogged;
         private static boolean surfaceSearchProfileLogged;
         private static net.minecraft.client.multiplayer.ClientLevel cachedLevel;
@@ -2337,8 +2347,48 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_MESH_SURFACE_SEARCH_RANGE_VERIFIED renderRadius=64 searchBelow=64 searchAbove=8 bounded=true");
         }
 
+        private static boolean shouldEmitCanopyAccentParticle(BlockState surface,
+                int blockX,int blockZ,int emitted) {
+            return surface!=null
+                && surface.getBlock() instanceof net.minecraft.world.level.block.BushBlock
+                && emitted>=0 && emitted<GROUND_CANOPY_ACCENT_PARTICLE_BUDGET
+                && ((blockX^blockZ)&3)==0;
+        }
+
+        private static double canopyAccentParticleY(int surfaceY,double shapeHeight) {
+            double boundedHeight=Double.isFinite(shapeHeight)
+                ? Math.max(0.0D,Math.min(1.0D,shapeHeight)) : 0.0D;
+            return surfaceY+boundedHeight+.12D;
+        }
+
+        private static void verifyCanopyAccentProfile() {
+            if(canopyAccentSelectorProfileLogged) return;
+            BlockState plant=net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState();
+            boolean selected=shouldEmitCanopyAccentParticle(plant,0,0,0);
+            boolean sparse=!shouldEmitCanopyAccentParticle(plant,1,0,0);
+            boolean deterministic=shouldEmitCanopyAccentParticle(plant,4,0,0)
+                && shouldEmitCanopyAccentParticle(plant,4,0,0);
+            boolean budgetRejected=!shouldEmitCanopyAccentParticle(plant,0,0,GROUND_CANOPY_ACCENT_PARTICLE_BUDGET);
+            boolean negativeCounterRejected=!shouldEmitCanopyAccentParticle(plant,0,0,-1);
+            boolean nonPlantsRejected=
+                !shouldEmitCanopyAccentParticle(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),0,0,0)
+                && !shouldEmitCanopyAccentParticle(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),0,0,0);
+            double plantTop=canopyAccentParticleY(70,.8D);
+            double invalidHeight=canopyAccentParticleY(70,Double.NaN);
+            double excessiveHeight=canopyAccentParticleY(70,2.0D);
+            if(!(selected && sparse && deterministic && budgetRejected && negativeCounterRejected
+                && nonPlantsRejected && Math.abs(plantTop-70.92D)<1.0E-9D
+                && Math.abs(invalidHeight-70.12D)<1.0E-9D
+                && Math.abs(excessiveHeight-71.12D)<1.0E-9D))
+                throw new IllegalStateException("BLACK FREQUENCY canopy accent particle profile regression");
+            canopyAccentSelectorProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SELECTOR_PROFILE_VERIFIED budget={} selection=one-in-four plantOnly=true invalidRejected=true heightBounded=true",
+                GROUND_CANOPY_ACCENT_PARTICLE_BUDGET);
+        }
+
         private static double sampleGroundY(net.minecraft.client.multiplayer.ClientLevel level,
-                int blockX,int blockZ,int referenceY,BlockPos.MutableBlockPos cursor) {
+                int blockX,int blockZ,int referenceY,BlockPos.MutableBlockPos cursor,boolean emitCanopyAccent) {
             // The caller owns one render-thread cursor for the whole mesh rebuild.
             // Every state and collision shape is consumed before the cursor moves;
             // no mutable position escapes this method or is retained by the mesh.
@@ -2374,12 +2424,26 @@ public final class RiftClientState {
                 // Snow layers are different: they cover the ground and the ribbon must clear their actual top.
                 double snowLayerHeight=surface.is(net.minecraft.world.level.block.Blocks.SNOW)
                     ? surface.getShape(level,cursor).max(Direction.Axis.Y) : Double.NaN;
+                boolean plantSurface=surface.getBlock() instanceof net.minecraft.world.level.block.BushBlock;
+                double plantShapeHeight=plantSurface
+                    ? surface.getShape(level,cursor).max(Direction.Axis.Y) : Double.NaN;
 
                 cursor.set(blockX,candidateY+1,blockZ);
                 BlockState head=level.getBlockState(cursor);
                 if(!isGroundHeadClear(head)) continue;
 
                 double surfaceOffset=groundSurfaceOffset(supportHeight,snowLayerHeight);
+                if(emitCanopyAccent && plantSurface && Double.isFinite(plantShapeHeight)
+                    && plantShapeHeight>0.0D
+                    && shouldEmitCanopyAccentParticle(surface,blockX,blockZ,groundCanopyAccentParticlesEmitted)) {
+                    double accentY=canopyAccentParticleY(candidateY,plantShapeHeight);
+                    if(Double.isFinite(accentY) && accentY>=level.getMinBuildHeight()
+                        && accentY<level.getMaxBuildHeight()) {
+                        level.addParticle(GROUND_CANOPY_ACCENT_DUST,
+                            blockX+.5D,accentY,blockZ+.5D,0.0D,.006D,0.0D);
+                        groundCanopyAccentParticlesEmitted++;
+                    }
+                }
                 return candidateY-1+surfaceOffset+GROUND_SURFACE_CLEARANCE;
             }
             return Double.NaN;
@@ -2437,10 +2501,12 @@ public final class RiftClientState {
                 verifyRibbonColorCacheProfile();
                 verifyGroundSupportProfile(level);
                 verifySurfaceCacheReuse();
+                verifyCanopyAccentProfile();
             }
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
             // The static primitive map and mutable cursor are owned by the render
             // thread and reused across rebuilds; clear() keeps the map's capacity.
+            groundCanopyAccentParticlesEmitted=0;
             SURFACE_Y_BY_COLUMN.clear();
             SURFACE_CURSOR.set(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);
             int surfaceSamples=0;
@@ -2483,7 +2549,7 @@ public final class RiftClientState {
                     if(sampledY==SURFACE_CACHE_MISS) {
                         // Unsupported columns are cached as NaN; only the +infinity
                         // default-return sentinel means this primitive-map key is absent.
-                        sampledY=sampleGroundY(level,blockX,blockZ,referenceY,SURFACE_CURSOR);
+                        sampledY=sampleGroundY(level,blockX,blockZ,referenceY,SURFACE_CURSOR,true);
                         surfaceSamples++;
                         SURFACE_Y_BY_COLUMN.put(key,sampledY);
                     } else {
@@ -2560,6 +2626,19 @@ public final class RiftClientState {
                     steepStepBreaks++;
                 }
                 if(result.size()>armStart) activeArms++;
+            }
+            if(VERIFY_GROUND_MESH_PROFILES && !canopyAccentBuildProfileLogged) {
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED emitted={} budget={} loadedOnly=true radius=48 clientOnly=true plantOnly=true",
+                    groundCanopyAccentParticlesEmitted,GROUND_CANOPY_ACCENT_PARTICLE_BUDGET);
+                canopyAccentBuildProfileLogged=true;
+            }
+            if(VERIFY_GROUND_MESH_PROFILES && groundCanopyAccentParticlesEmitted>0
+                && !canopyAccentEmissionLogged) {
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLES_EMITTED count={} cachedDust=true clientOnly=true loadedOnly=true",
+                    groundCanopyAccentParticlesEmitted);
+                canopyAccentEmissionLogged=true;
             }
             if(!continuityBuildLogged) {
                 com.mojang.logging.LogUtils.getLogger().info(
@@ -2823,6 +2902,10 @@ public final class RiftClientState {
             rangeRejectLogged=false;
             rangeProfileLogged=false;
             verticalCameraRangeSampleLogged=false;
+            canopyAccentSelectorProfileLogged=false;
+            canopyAccentBuildProfileLogged=false;
+            canopyAccentEmissionLogged=false;
+            groundCanopyAccentParticlesEmitted=0;
         }
 
         private static void clearCache() {
