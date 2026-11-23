@@ -619,7 +619,7 @@ public final class RiftController {
             && gravityAnomalyField(30_000_001.0D,0.0D,0)==0.0D;
         double noiseAtZero=gravityAnomalyAperiodicNoise(-17.5D,20.5D,0);
         double noiseRepeated=gravityAnomalyAperiodicNoise(-17.5D,20.5D,0);
-        double noiseLater=gravityAnomalyAperiodicNoise(-17.5D,20.5D,1200);
+        double noiseLater=gravityAnomalyAperiodicNoise(-17.5D,20.5D,2400);
         double noiseAtBasePeriod=gravityAnomalyAperiodicNoise(
             -17.5D+2.0D*Math.PI/.115D,20.5D,0);
         double noiseNearBoundary=gravityAnomalyAperiodicNoise(0.0D,0.0D,0);
