@@ -313,12 +313,14 @@ public final class RiftSkyRenderer {
             if(mc.level==null || mc.player==null) return;
             // A stale Overworld packet must not draw the fracture in other dimensions.
             if(!mc.level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
+            // Keep CI camera telemetry live even after the rift has faded out:
+            // post-restoration beacon mining still needs the player's current eye pose.
+            logCiCameraRotation(event.getCamera());
             float strength=RiftClientState.visibleStrength();
             // Reject corrupted client state before sending it to the GPU, and
             // skip the draw entirely while the shader would output transparency.
             if(!shouldRender(strength)) return;
             strength=Math.min(strength,1f);
-            logCiCameraRotation(event.getCamera());
             if(!firstVisibleFrameLogged) {
                 firstVisibleFrameLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info("BLACK_FREQUENCY_RENDER_ACTIVE strength={}",strength);

@@ -1323,6 +1323,12 @@ def capture_test_world():
     if (parsed_camera_pose is None or parsed_camera_pose[:3]!=(9.5,67.62,-3.5)
             or parsed_camera_pose[3:]!=(90.0,35.247574)):
         raise RuntimeError("BLACK FREQUENCY rendered camera pose parser regression")
+    renderer_source_path=ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"client"/"RiftSkyRenderer.java"
+    renderer_source=renderer_source_path.read_text(encoding="utf-8")
+    camera_log_offset=renderer_source.index("logCiCameraRotation(event.getCamera());")
+    invisible_guard_offset=renderer_source.index("if(!shouldRender(strength)) return;")
+    if camera_log_offset>invisible_guard_offset:
+        raise RuntimeError("BLACK FREQUENCY camera pose telemetry stopped before the invisible-rift guard")
     post_restore_aim_sample="\n".join((
         "BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=-7.6293945E-6 pitch=54.20249",
         "BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY x=6 y=65 z=-4",
