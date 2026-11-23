@@ -2680,7 +2680,25 @@ def capture_test_world():
                 safe_pad=re.search(
                     r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
                     current)
-                if not safe_pad or "BLACK_FREQUENCY_GROUND_MESH_RENDERED" not in current:
+                first_edit=re.search(
+                    r"BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x=(-?\d+) y=(-?\d+) z=(-?\d+)",
+                    current)
+                if not safe_pad or not first_edit:
+                    return False
+                # Ignore the pre-event spawn mesh. Probe only after a mesh for the
+                # actual first fractured column has been rendered.
+                first_anchor_x=int(first_edit.group(1))
+                first_anchor_z=int(first_edit.group(3))
+                rendered_meshes=list(re.finditer(
+                    r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) arms=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+)",
+                    current))
+                matching_mesh=next((match for match in reversed(rendered_meshes)
+                    if match.start()>first_edit.start()
+                    and int(match.group(1))>=MIN_GROUND_MESH_SEGMENTS
+                    and int(match.group(2))>=MIN_GROUND_MESH_ARMS
+                    and int(match.group(3))==first_anchor_x
+                    and int(match.group(4))==first_anchor_z),None)
+                if matching_mesh is None:
                     return False
                 x,y,z=(int(value) for value in safe_pad.groups())
                 vertical_cull_probe_attempted=True
@@ -2879,6 +2897,14 @@ def capture_test_world():
                 if p.poll() is not None:
                     break
                 snap(f"world-stage-{stage:02d}.png")
+                if (os.environ.get("BF_ISOLATED_TEST")=="1"
+                        and not vertical_cull_probe_verified):
+                    current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                    if ("BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT" in current
+                            and "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in current):
+                        if run_vertical_ground_cull_probe():
+                            print("WORLD_CAPTURE: live vertical cull probe completed immediately after the active fracture mesh became available",
+                                  flush=True)
                 if os.environ.get("BF_TEST_RESTORATION")=="1" and not restoration_shot:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     capture_terrain_fracture(current)
