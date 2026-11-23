@@ -836,8 +836,8 @@ public final class RiftClientState {
         // Fixed hash salts create independent, reproducible chips in the two exposed crack lips.
         private static final long GROUND_LEFT_EDGE_NOTCH_SALT=0x9E3779B97F4A7C15L;
         private static final long GROUND_RIGHT_EDGE_NOTCH_SALT=0xD1B54A32D192ED03L;
-        // One in 128 full-section breaks keep the core mostly continuous while preserving rare fracture gaps.
-        private static final long GROUND_CORE_SEGMENT_GAP_SALT=0x94D049BB133111EBL;
+        // Two deterministic full-section breaks on separate arms interrupt the core without fragmenting it.
+        private static final long GROUND_CORE_SEGMENT_GAP_SALT=0x2E2AC13EF8E8D8D2L;
         // RGB values are invariant across every frame and segment; pack them once at class initialization.
         private static final int GROUND_GLOW_RED_CHANNEL=colorChannel(.20F);
         private static final int GROUND_GLOW_GREEN_CHANNEL=colorChannel(.025F);
@@ -957,7 +957,7 @@ public final class RiftClientState {
 
         private static boolean isGroundCoreSegmentGap(double phase) {
             if(!Double.isFinite(phase)) return true;
-            return (groundSampleHash(phase,GROUND_CORE_SEGMENT_GAP_SALT) & 127L)==0L;
+            return (groundSampleHash(phase,GROUND_CORE_SEGMENT_GAP_SALT) & 63L)==0L;
         }
 
         private static double groundCoreWidthScale(double phase,int arm) {
@@ -1106,6 +1106,9 @@ public final class RiftClientState {
             int checked=0;
             int coreSegmentGaps=0;
             int adjacentCoreGapPairs=0;
+            int coreGapArmMask=0;
+            int previousCoreGapSampleIndex=-1;
+            int minimumCoreGapSeparation=Integer.MAX_VALUE;
             int leftEdgeNotches=0;
             int rightEdgeNotches=0;
             int adjacentLeftEdgeNotchPairs=0;
@@ -1180,6 +1183,12 @@ public final class RiftClientState {
                     if(sample.coreSegmentGap()) {
                         coreSegmentGaps++;
                         if(previousCoreSegmentGap) adjacentCoreGapPairs++;
+                        coreGapArmMask|=1<<arm;
+                        int gapSampleIndex=arm*SEGMENTS_PER_ARM+segment-1;
+                        if(previousCoreGapSampleIndex>=0)
+                            minimumCoreGapSeparation=Math.min(minimumCoreGapSeparation,
+                                gapSampleIndex-previousCoreGapSampleIndex);
+                        previousCoreGapSampleIndex=gapSampleIndex;
                     }
                     previousCoreSegmentGap=sample.coreSegmentGap();
                     if(sample.leftEdgeNotched()) {
@@ -1252,8 +1261,9 @@ public final class RiftClientState {
             if(groundCoreSkew(Double.NaN,0)!=0.0D
                 || groundCoreSkew(0.0D,ARM_COUNT)!=0.0D)
                 throw new IllegalStateException("BLACK FREQUENCY ground core skew invalid-input fallback regression");
-            if(checked!=96 || !evenSamplesAligned || coreSegmentGaps!=1
-                || adjacentCoreGapPairs!=0 || leftEdgeNotches!=4 || rightEdgeNotches!=4
+            if(checked!=96 || !evenSamplesAligned || coreSegmentGaps!=2
+                || adjacentCoreGapPairs!=0 || Integer.bitCount(coreGapArmMask)!=2
+                || minimumCoreGapSeparation<12 || leftEdgeNotches!=4 || rightEdgeNotches!=4
                 || adjacentLeftEdgeNotchPairs!=0 || adjacentRightEdgeNotchPairs!=0 || asymmetricEdgeSamples!=6
                 || minimumCoreWidthScale<GROUND_MIN_CORE_WIDTH_SCALE
                 || maximumCoreWidthScale>GROUND_MAX_CORE_WIDTH_SCALE
@@ -1263,8 +1273,8 @@ public final class RiftClientState {
                 || maximumAdjacentCoreSkewDelta>.04D)
                 throw new IllegalStateException("BLACK FREQUENCY ground edge notch profile regression");
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_CORE_SEGMENT_GAP_PROFILE_VERIFIED samples={} gaps={} adjacentGapPairs={} deterministic=true gapRate=1/128",
-                checked,coreSegmentGaps,adjacentCoreGapPairs);
+                "BLACK_FREQUENCY_GROUND_MESH_CORE_SEGMENT_GAP_PROFILE_VERIFIED samples={} gaps={} adjacentGapPairs={} gapArms={} minGapSeparation={} deterministic=true gapRate=1/64",
+                checked,coreSegmentGaps,adjacentCoreGapPairs,Integer.bitCount(coreGapArmMask),minimumCoreGapSeparation);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED samples={} left={} right={} asymmetricSamples={} adjacentLeftPairs={} adjacentRightPairs={} deterministic=true notchRate=1/32",
                 checked,leftEdgeNotches,rightEdgeNotches,asymmetricEdgeSamples,
@@ -3395,7 +3405,7 @@ public final class RiftClientState {
                         GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,
                         filamentAlphaChannelA,filamentAlphaChannelB);
                     // Leave small, deterministic gaps in each lip independently. The
-                    // continuous dark core remains visible, so the seam reads as fractured
+                    // mostly continuous dark core remains visible, so the seam reads as fractured
                     // earth rather than two uninterrupted luminous rails.
                     int edgeMask=groundEdgeMask(sample,segment);
                     if((edgeMask&GROUND_EDGE_LEFT_MASK)!=0)
