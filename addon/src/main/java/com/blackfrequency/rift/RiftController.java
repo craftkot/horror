@@ -1023,7 +1023,11 @@ public final class RiftController {
         static State load(CompoundTag n) {
             State s = new State();
             s.elapsed=readBoundedElapsed(n,s);
-            s.x=n.getInt("x");s.z=n.getInt("z");
+            boolean anchorCoordinatesValid=n.contains("x",Tag.TAG_INT)&&n.contains("z",Tag.TAG_INT);
+            // Never let a truncated or mistyped anchor silently default to (0,0).
+            // Active fracture state is quarantined below; restoration snapshots remain usable.
+            s.x=anchorCoordinatesValid?n.getInt("x"):0;
+            s.z=anchorCoordinatesValid?n.getInt("z"):0;
             s.cursorX=n.getInt("cx");s.cursorZ=n.getInt("cz");s.cursorY=n.getInt("cy");
             s.edits=readBoundedCounter(n,"edits",MAX_EDITS,s);
             s.finaleTicks=readBoundedCounter(n,"finaleTicks",Integer.MAX_VALUE,s);
@@ -1248,6 +1252,60 @@ public final class RiftController {
                 }
                 // Persist cursor repairs even if no later restoration tick runs.
                 if(restoreCursorRepaired) s.setDirty();
+            }
+            boolean anchorCoordinatesNeedRepair=!anchorCoordinatesValid
+                && (n.contains("x") || n.contains("z") || s.initialized || s.started
+                    || s.edits>0 || s.restoring || s.restored);
+            if(anchorCoordinatesNeedRepair) {
+                // Recovery has a stronger source of truth than the optional scan anchor:
+                // prefer the physical beacon, then its owned replacement, then the oldest
+                // retained snapshot. This only repairs the audience/scan origin; snapshots
+                // still pass their own bounds and loaded-chunk checks before any world write.
+                if(s.beaconPosPresent) {
+                    BlockPos recoveryAnchor=BlockPos.of(s.beaconPos);
+                    s.x=recoveryAnchor.getX();
+                    s.z=recoveryAnchor.getZ();
+                } else if(s.naturalBeaconPos!=Long.MIN_VALUE) {
+                    BlockPos recoveryAnchor=BlockPos.of(s.naturalBeaconPos);
+                    s.x=recoveryAnchor.getX();
+                    s.z=recoveryAnchor.getZ();
+                } else {
+                    for(CompoundTag entry:s.snapshots) {
+                        if(!entry.contains("pos",Tag.TAG_LONG)) continue;
+                        BlockPos recoveryAnchor=BlockPos.of(entry.getLong("pos"));
+                        s.x=recoveryAnchor.getX();
+                        s.z=recoveryAnchor.getZ();
+                        break;
+                    }
+                }
+                boolean destructiveProgress=s.edits>0 || !s.snapshots.isEmpty();
+                boolean activeFracture=!s.restoring && !s.restored && !s.finished
+                    && (s.initialized || s.started || destructiveProgress);
+                boolean activeFractureStopped=activeFracture && destructiveProgress;
+                boolean emptyFractureReinitialized=activeFracture && !destructiveProgress;
+                if(activeFractureStopped) {
+                    // Preserve every recovery snapshot, but never resume destructive edits
+                    // from an invented origin after losing the saved anchor coordinates.
+                    s.finished=true;
+                    if(s.centerOutScan) s.centerOutIndex=CENTER_OUT_COLUMN_COUNT;
+                    else {
+                        s.cursorX=RADIUS+1;
+                        s.cursorZ=0;
+                        s.cursorY=Integer.MIN_VALUE;
+                    }
+                    LOGGER.warn("BLACK FREQUENCY: stopped fracture resumption because saved anchor coordinates are missing or malformed");
+                } else if(emptyFractureReinitialized) {
+                    // No terrain was changed yet, so restart the scan from the current shared spawn.
+                    s.initialized=false;
+                    s.cursorX=0;
+                    s.cursorZ=0;
+                    s.cursorY=Integer.MIN_VALUE;
+                    s.surfaceFirstScan=true;
+                    s.centerOutScan=true;
+                    s.centerOutIndex=0;
+                }
+                s.setDirty();
+                LOGGER.warn("BLACK FREQUENCY: repaired missing or malformed saved anchor coordinates");
             }
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST STATE_LOADED elapsed={} edits={} restored={} restoring={} snapshots={}",s.elapsed,s.edits,s.restored,s.restoring,s.snapshots.size());
             return s;
@@ -2905,8 +2963,93 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_LIST_CONTAINER_QUARANTINE_VERIFIED wrongTagType=true wrongElementType=true normalized=true legacyMissingAllowed=true");
     }
 
+    private static void verifySavedAnchorCoordinateQuarantine() {
+        BlockPos damagedPos=new BlockPos(12,64,-7);
+        CompoundTag snapshot=new CompoundTag();
+        snapshot.putLong("pos",damagedPos.asLong());
+        snapshot.put("state",NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
+        ListTag snapshots=new ListTag();
+        snapshots.add(snapshot);
+
+        CompoundTag missingAnchor=new CompoundTag();
+        missingAnchor.putBoolean("initialized",true);
+        missingAnchor.putBoolean("started",true);
+        missingAnchor.putBoolean("surfaceFirstScan",true);
+        missingAnchor.putBoolean("centerOutScan",true);
+        missingAnchor.putInt("centerOutIndex",12);
+        missingAnchor.putInt("edits",1);
+        missingAnchor.put("snapshots",snapshots.copy());
+        State missing=State.load(missingAnchor);
+        boolean missingStopped=missing.finished
+            && missing.centerOutIndex==CENTER_OUT_COLUMN_COUNT
+            && missing.snapshots.size()==1
+            && missing.snapshots.get(0).getLong("pos")==damagedPos.asLong()
+            && missing.isDirty();
+
+        CompoundTag wrongTypeAnchor=missingAnchor.copy();
+        wrongTypeAnchor.putInt("x",12);
+        wrongTypeAnchor.putString("z","not-an-int");
+        State wrongType=State.load(wrongTypeAnchor);
+        boolean wrongTypeStopped=wrongType.finished
+            && wrongType.centerOutIndex==CENTER_OUT_COLUMN_COUNT
+            && wrongType.snapshots.size()==1
+            && wrongType.x==damagedPos.getX() && wrongType.z==damagedPos.getZ()
+            && wrongType.isDirty();
+
+        CompoundTag emptyFracture=new CompoundTag();
+        emptyFracture.putBoolean("initialized",true);
+        emptyFracture.putBoolean("started",true);
+        emptyFracture.putBoolean("surfaceFirstScan",true);
+        emptyFracture.putBoolean("centerOutScan",true);
+        emptyFracture.putInt("centerOutIndex",12);
+        emptyFracture.put("snapshots",new ListTag());
+        State reinitialized=State.load(emptyFracture);
+        boolean emptyFractureReinitialized=!reinitialized.initialized
+            && !reinitialized.finished && reinitialized.centerOutIndex==0
+            && reinitialized.cursorY==Integer.MIN_VALUE && reinitialized.isDirty();
+
+        BlockPos beaconFallback=new BlockPos(30,64,-40);
+        CompoundTag activeRecovery=new CompoundTag();
+        activeRecovery.putBoolean("initialized",true);
+        activeRecovery.putBoolean("started",true);
+        activeRecovery.putBoolean("restoring",true);
+        activeRecovery.putInt("edits",1);
+        activeRecovery.putInt("restoreIndex",0);
+        activeRecovery.putInt("restoreScan",0);
+        activeRecovery.putLong("beaconPos",beaconFallback.asLong());
+        activeRecovery.put("snapshots",snapshots.copy());
+        State recovery=State.load(activeRecovery);
+        boolean restoringPreserved=recovery.restoring && !recovery.finished
+            && recovery.snapshots.size()==1
+            && recovery.x==beaconFallback.getX() && recovery.z==beaconFallback.getZ()
+            && recovery.isDirty();
+
+        CompoundTag validAnchor=new CompoundTag();
+        validAnchor.putInt("x",12);
+        validAnchor.putInt("z",-7);
+        validAnchor.putBoolean("initialized",true);
+        validAnchor.putBoolean("started",true);
+        validAnchor.putBoolean("surfaceFirstScan",true);
+        validAnchor.putBoolean("centerOutScan",true);
+        validAnchor.putInt("centerOutIndex",12);
+        validAnchor.put("snapshots",new ListTag());
+        State valid=State.load(validAnchor);
+        boolean validUnchanged=valid.x==12 && valid.z==-7 && !valid.isDirty();
+
+        if(!missingStopped || !wrongTypeStopped || !emptyFractureReinitialized
+            || !restoringPreserved || !validUnchanged)
+            throw new IllegalStateException("CI saved fracture anchor coordinate quarantine regression"
+                +" missingStopped="+missingStopped
+                +" wrongTypeStopped="+wrongTypeStopped
+                +" emptyReinitialized="+emptyFractureReinitialized
+                +" restoringPreserved="+restoringPreserved
+                +" validUnchanged="+validUnchanged);
+        LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_ANCHOR_COORDINATE_QUARANTINE_VERIFIED missing=true wrongType=true activeFractureStopped=true emptyFractureReinitialized=true restoringPreserved=true validUnchanged=true fallbackBeacon=true");
+    }
+
     /** Verify that a pending terrain snapshot survives a SavedData round trip. */
     private static void verifyPendingSnapshotPersistence() {
+        verifySavedAnchorCoordinateQuarantine();
         verifyRestoreFailureCacheReuse();
         verifySnapshotListContainerQuarantine();
         State original=new State();
