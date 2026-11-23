@@ -2335,8 +2335,15 @@ public final class RiftClientState {
                 && !isGroundHeadClear(net.minecraft.world.level.block.Blocks.LAVA.defaultBlockState());
             var fullShape=net.minecraft.world.phys.shapes.Shapes.block();
             var partialShape=net.minecraft.world.phys.shapes.Shapes.box(0.0D,0.0D,0.0D,1.0D,.5D,1.0D);
+            var overheightShape=net.minecraft.world.phys.shapes.Shapes.box(0.0D,0.0D,0.0D,1.0D,1.25D,1.0D);
+            var epsilonOverheightShape=net.minecraft.world.phys.shapes.Shapes.box(
+                0.0D,0.0D,0.0D,1.0D,1.0D+GROUND_SUPPORT_SHAPE_EPSILON*.5D,1.0D);
             double fullBlockHeight=groundSupportHeight(fullShape,net.minecraft.world.phys.shapes.Shapes.empty());
             double partialBlockHeight=groundSupportHeight(partialShape,net.minecraft.world.phys.shapes.Shapes.empty());
+            boolean overheightSupportRejected=Double.isNaN(groundSupportHeight(
+                overheightShape,net.minecraft.world.phys.shapes.Shapes.empty()));
+            boolean epsilonOverheightAccepted=Double.isFinite(groundSupportHeight(
+                epsilonOverheightShape,net.minecraft.world.phys.shapes.Shapes.empty()));
             boolean outlineFallback=Math.abs(groundSupportHeight(net.minecraft.world.phys.shapes.Shapes.empty(),
                 fullShape)-1.0D)<1.0E-9D;
             boolean emptyShapeRejected=Double.isNaN(groundSupportHeight(
@@ -2351,6 +2358,7 @@ public final class RiftClientState {
             boolean malformedProbeBoundsRejected=verifyMalformedSupportProbeBounds();
             boolean validSupportHeights=Math.abs(fullBlockHeight-1.0D)<1.0E-9D
                 && Math.abs(partialBlockHeight-.5D)<1.0E-9D && outlineFallback && emptyShapeRejected
+                && overheightSupportRejected && epsilonOverheightAccepted
                 && reusableProbeSequence && !hasFullFootprintTop(
                     net.minecraft.world.phys.shapes.Shapes.empty(),0.0D);
             double minimumSnowOffset=Double.POSITIVE_INFINITY;
@@ -2401,6 +2409,9 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_SHAPE_GUARD_VERIFIED fullBlock={} partial={} outlineFallback={} emptyRejected={}",
                 fullBlockHeight,partialBlockHeight,outlineFallback,emptyShapeRejected);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_HEIGHT_BOUND_VERIFIED maxHeight=1.0 overheightRejected={} epsilonTolerance={}",
+                overheightSupportRejected,epsilonOverheightAccepted);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_UNIFORM_TOP_SUPPORT_VERIFIED fullBlock=true bottomSlab=true topSlab=true doubleSlab=true cauldronRejected={}",
                 cauldronTopRejected);
@@ -2493,6 +2504,7 @@ public final class RiftClientState {
             if(selected.isEmpty()) return Double.NaN;
             double height=selected.max(Direction.Axis.Y);
             return Double.isFinite(height) && height>0.0D
+                && height<=1.0D+GROUND_SUPPORT_SHAPE_EPSILON
                 && hasFullFootprintTop(selected,height) ? height : Double.NaN;
         }
 
