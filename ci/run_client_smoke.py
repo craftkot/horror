@@ -3946,6 +3946,10 @@ def capture_test_world():
             if world_canopy_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: rejected fissure samples retained stale output or touched an unloaded chunk",flush=True)
                 return False
+            if "BLACK_FREQUENCY_TEST FRACTURE_ANCHOR_COORDINATE_QUARANTINE_VERIFIED missing=true wrongType=true activeFractureStopped=true emptyFractureReinitialized=true restoringPreserved=true validUnchanged=true fallbackBeacon=true" not in log_after:
+                print("WORLD_CAPTURE_FAIL: malformed saved fracture anchors were not quarantined safely",
+                      flush=True)
+                return False
             ground_mesh=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) arms=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+) sampledColumns=(\d+) cacheHits=(\d+)",
                 log_after)
@@ -4036,8 +4040,13 @@ def capture_test_world():
                     or "SURFACE_Y_BY_COLUMN.containsKey(key)" in build_source.group(0)):
                 print("WORLD_CAPTURE_FAIL: ground sample cache does not use the single-lookup miss sentinel",flush=True)
                 return False
-            if ("BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_VERIFIED maxStep=1.25 maxGrade=2.5" not in log_after
-                    or not continuity or abs(float(continuity.group(1))-1.25)>1.0E-9):
+            continuity_profile=re.search(
+                r"BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_VERIFIED maxStep=([-+0-9.eE]+) "
+                r"maxGrade=([-+0-9.eE]+) cliffTaper=([-+0-9.eE]+)",
+                log_after)
+            if (not continuity_profile or not continuity
+                    or abs(float(continuity.group(1))-1.25)>1.0E-9
+                    or abs(float(continuity_profile.group(1))-1.25)>1.0E-9):
                 print("WORLD_CAPTURE_FAIL: ground mesh did not verify its cliff-discontinuity guard",
                       flush=True)
                 return False
@@ -4048,6 +4057,14 @@ def capture_test_world():
                       flush=True)
                 return False
             expected_grade=0.5625/client_spacing
+            if (not continuity_profile
+                    or abs(float(continuity_profile.group(2))-expected_grade)>1.0E-9
+                    or abs(float(continuity_profile.group(3))-.06)>1.0E-9):
+                print("WORLD_CAPTURE_FAIL: logged ground grade/taper no longer matches the fixed rise budget",
+                      "expectedGrade",expected_grade,
+                      "profile",continuity_profile.groups() if continuity_profile else None,
+                      flush=True)
+                return False
             grade_guard_marker=(
                 "BLACK_FREQUENCY_GROUND_MESH_GRADE_GUARD_VERIFIED "
                 f"maxGrade={expected_grade:g} oneBlockRiseRejected=true snowAccepted=true cliffCapProfile=true"
@@ -4068,9 +4085,7 @@ def capture_test_world():
                     or int(grade_stats.group(4))+int(grade_stats.group(5))>GROUND_MESH_SAMPLES):
                 print("WORLD_CAPTURE_FAIL: cliff-end taper or single-step bridge accounting is invalid",flush=True)
                 return False
-            if (not any(contract in camera_source for contract in (
-                        "private static final double MAX_GROUND_SEGMENT_GRADE=2.5D;",
-                        "private static final double MAX_GROUND_SEGMENT_GRADE=1.125D/RiftGeometry.FISSURE_SAMPLE_SPACING;"))
+            if ("private static final double MAX_GROUND_SEGMENT_GRADE=.5625D/SAMPLE_SPACING;" not in camera_source
                     or "isContinuousGroundStep(previous.y(),current.y(),length)" not in camera_source
                     or "private static boolean canStartSingleGroundStepBridge" not in camera_source
                     or "private static boolean canBridgeSingleGroundStep" not in camera_source
