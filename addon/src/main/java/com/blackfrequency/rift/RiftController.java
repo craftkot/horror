@@ -1253,8 +1253,12 @@ public final class RiftController {
                 // Persist cursor repairs even if no later restoration tick runs.
                 if(restoreCursorRepaired) s.setDirty();
             }
+            // Older saves used initialized to persist a row-major cursor before the
+            // scan anchor was serialized. Missing both coordinates in that legacy
+            // format is not corruption: preserve its cursor until there is evidence
+            // that a current anchor was written or destructive progress exists.
             boolean anchorCoordinatesNeedRepair=!anchorCoordinatesValid
-                && (n.contains("x") || n.contains("z") || s.initialized || s.started
+                && (n.contains("x") || n.contains("z") || s.started
                     || s.edits>0 || (s.restoring && (!s.snapshots.isEmpty() || s.beaconPosPresent)));
             if(anchorCoordinatesNeedRepair) {
                 // Recovery has a stronger source of truth than the optional scan anchor:
