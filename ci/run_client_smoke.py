@@ -3588,7 +3588,7 @@ def capture_test_world():
             ))
             if (any(value is None for value in ground_edge_constants)
                     or re.search(
-                        r"GROUND_MAX_HALF_WIDTH=\\s*GROUND_BASE_HALF_WIDTH\\+GROUND_WAVE_HALF_WIDTH_RANGE\\+GROUND_WIDTH_FLICKER;",
+                        r"GROUND_MAX_HALF_WIDTH=\s*GROUND_BASE_HALF_WIDTH\+GROUND_WAVE_HALF_WIDTH_RANGE\+GROUND_WIDTH_FLICKER;",
                         camera_source) is None):
                 print("WORLD_CAPTURE_FAIL: ground edge-skew constants could not be derived from the active Java profile",
                       flush=True)
