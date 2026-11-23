@@ -45,6 +45,11 @@ public final class RiftController {
     private static double gravityFieldMicroTimeOffset;
     // Reuse the diagonal cross-wave to warp micro-anomaly phase without another trig call per player.
     private static final double GRAVITY_MICRO_PHASE_WARP_AMPLITUDE=.55D;
+    // A low-amplitude deterministic value-noise layer breaks broad sine bands into drifting, non-repeating pockets.
+    private static final double GRAVITY_APERIODIC_TURBULENCE_AMPLITUDE=.045D;
+    private static final double GRAVITY_APERIODIC_TURBULENCE_SPATIAL_SCALE=.035D;
+    private static final double GRAVITY_APERIODIC_TURBULENCE_TIME_X=.00073D;
+    private static final double GRAVITY_APERIODIC_TURBULENCE_TIME_Z=.00091D;
     private static final double GRAVITY_LIFT_ZONE_THRESHOLD=.42D;
     private static final double GRAVITY_LIFT_BASE_DRIFT=.035D;
     private static final double GRAVITY_LIFT_CROSS_SHEAR_SCALE=.008D;
@@ -536,6 +541,53 @@ public final class RiftController {
             *GRAVITY_LIFT_CROSS_SHEAR_SCALE;
     }
 
+    private static long gravityAnomalyLatticeHash(int cellX,int cellZ) {
+        long value=(((long)cellX)<<32)^(cellZ&0xffffffffL)^0xD1B54A32D192ED03L;
+        value=(value^(value>>>30))*0xBF58476D1CE4E5B9L;
+        value=(value^(value>>>27))*0x94D049BB133111EBL;
+        return value^(value>>>31);
+    }
+
+    private static double gravityAnomalyLatticeValue(int cellX,int cellZ) {
+        return ((gravityAnomalyLatticeHash(cellX,cellZ)>>>11)*0x1.0p-53D)*2.0D-1.0D;
+    }
+
+    private static double gravityAnomalySmoothstep(double value) {
+        double t=Math.max(0.0D,Math.min(1.0D,value));
+        return t*t*(3.0D-2.0D*t);
+    }
+
+    private static double gravityAnomalyLerp(double from,double to,double progress) {
+        return from+(to-from)*progress;
+    }
+
+    /**
+     * Smooth, deterministic value noise with independent spatial and time drift.
+     * Integer lattice hashing avoids Random allocations and extra trigonometric calls.
+     */
+    private static double gravityAnomalyAperiodicNoise(double x,double z,int ticks) {
+        if(!Double.isFinite(x) || !Double.isFinite(z)
+            || Math.abs(x)>30_000_000.0D || Math.abs(z)>30_000_000.0D) return 0.0D;
+        int time=Math.max(0,ticks);
+        double sampleX=x*GRAVITY_APERIODIC_TURBULENCE_SPATIAL_SCALE
+            +time*GRAVITY_APERIODIC_TURBULENCE_TIME_X;
+        double sampleZ=z*GRAVITY_APERIODIC_TURBULENCE_SPATIAL_SCALE
+            -time*GRAVITY_APERIODIC_TURBULENCE_TIME_Z;
+        double floorX=Math.floor(sampleX);
+        double floorZ=Math.floor(sampleZ);
+        int cellX=(int)floorX;
+        int cellZ=(int)floorZ;
+        double blendX=gravityAnomalySmoothstep(sampleX-floorX);
+        double blendZ=gravityAnomalySmoothstep(sampleZ-floorZ);
+        double near=gravityAnomalyLerp(
+            gravityAnomalyLatticeValue(cellX,cellZ),
+            gravityAnomalyLatticeValue(cellX+1,cellZ),blendX);
+        double far=gravityAnomalyLerp(
+            gravityAnomalyLatticeValue(cellX,cellZ+1),
+            gravityAnomalyLatticeValue(cellX+1,cellZ+1),blendX);
+        return gravityAnomalyLerp(near,far,blendZ);
+    }
+
     private static double gravityAnomalyField(double x,double z,int ticks) {
         if(!Double.isFinite(x) || !Double.isFinite(z)
             || Math.abs(x)>30_000_000.0D || Math.abs(z)>30_000_000.0D) return 0.0D;
@@ -547,7 +599,9 @@ public final class RiftController {
         double microTurbulence=Math.sin((x*.17D+z*.13D)
             +gravityFieldMicroPhase+gravityFieldMicroTimeOffset
             +cross*GRAVITY_MICRO_PHASE_WARP_AMPLITUDE);
-        double field=base+.12D*cross+.06D*turbulence+.035D*microTurbulence;
+        double aperiodicTurbulence=gravityAnomalyAperiodicNoise(x,z,ticks);
+        double field=base+.12D*cross+.06D*turbulence+.035D*microTurbulence
+            +GRAVITY_APERIODIC_TURBULENCE_AMPLITUDE*aperiodicTurbulence;
         return Math.max(-1.0D,Math.min(1.0D,field));
     }
 
@@ -563,6 +617,26 @@ public final class RiftController {
         boolean drifting=Math.abs(later-lift)>.05D;
         boolean invalidRejected=gravityAnomalyField(Double.NaN,0.0D,0)==0.0D
             && gravityAnomalyField(30_000_001.0D,0.0D,0)==0.0D;
+        double noiseAtZero=gravityAnomalyAperiodicNoise(-17.5D,20.5D,0);
+        double noiseRepeated=gravityAnomalyAperiodicNoise(-17.5D,20.5D,0);
+        double noiseLater=gravityAnomalyAperiodicNoise(-17.5D,20.5D,1200);
+        double noiseAtBasePeriod=gravityAnomalyAperiodicNoise(
+            -17.5D+2.0D*Math.PI/.115D,20.5D,0);
+        double noiseNearBoundary=gravityAnomalyAperiodicNoise(0.0D,0.0D,0);
+        double noiseAcrossBoundary=gravityAnomalyAperiodicNoise(1.0E-4D,0.0D,0);
+        boolean aperiodicNoiseProfile=Double.isFinite(noiseAtZero)
+            && noiseAtZero>=-1.0D && noiseAtZero<=1.0D
+            && Math.abs(noiseAtZero-noiseRepeated)<=1.0E-12D
+            && Math.abs(noiseLater-noiseAtZero)>.1D
+            && Math.abs(noiseAtBasePeriod-noiseAtZero)>.01D
+            && Math.abs(noiseAcrossBoundary-noiseNearBoundary)<1.0E-5D
+            && gravityAnomalyAperiodicNoise(Double.NaN,0.0D,0)==0.0D
+            && gravityAnomalyAperiodicNoise(0.0D,Double.POSITIVE_INFINITY,0)==0.0D;
+        if(!aperiodicNoiseProfile)
+            throw new IllegalStateException("CI aperiodic gravity turbulence regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_APERIODIC_TURBULENCE_VERIFIED amplitude={} cellScale={} timeDriftX={} timeDriftZ={} deterministic=true bounded=true smooth=true nonRepeating=true",
+            GRAVITY_APERIODIC_TURBULENCE_AMPLITUDE,GRAVITY_APERIODIC_TURBULENCE_SPATIAL_SCALE,
+            GRAVITY_APERIODIC_TURBULENCE_TIME_X,GRAVITY_APERIODIC_TURBULENCE_TIME_Z);
         double shearAtThreshold=gravityAnomalyCrossShear(GRAVITY_LIFT_ZONE_THRESHOLD);
         double shearAtMidpoint=gravityAnomalyCrossShear(.71D);
         double shearAtPeak=gravityAnomalyCrossShear(1.0D);
@@ -611,13 +685,17 @@ public final class RiftController {
             +expectedCross*GRAVITY_MICRO_PHASE_WARP_AMPLITUDE);
         double expectedMicroLaterUnwarped=Math.sin((sampleX*.17D+sampleZ*.13D)
             +Math.sin(85.0D*.027D)*.8D+85.0D*.031D);
+        double expectedNoise=gravityAnomalyAperiodicNoise(sampleX,sampleZ,85);
         double expected=Math.max(-1.0D,Math.min(1.0D,
-            expectedBase+.12D*expectedCross+.06D*expectedTurbulence+.035D*expectedMicroTurbulence));
+            expectedBase+.12D*expectedCross+.06D*expectedTurbulence+.035D*expectedMicroTurbulence
+                +GRAVITY_APERIODIC_TURBULENCE_AMPLITUDE*expectedNoise));
+        double expectedNoiseAtZero=gravityAnomalyAperiodicNoise(sampleX,sampleZ,0);
         double expectedAtZero=Math.max(-1.0D,Math.min(1.0D,
             Math.sin(sampleX*.115D)*Math.cos(sampleZ*.125D)
                 +.12D*Math.sin((sampleX+sampleZ)*.047D)
                 +.06D*Math.sin((sampleX-sampleZ)*.083D)
-                +.035D*expectedMicroAtZero));
+                +.035D*expectedMicroAtZero
+                +GRAVITY_APERIODIC_TURBULENCE_AMPLITUDE*expectedNoiseAtZero));
         double at85Before=gravityAnomalyField(sampleX,sampleZ,85);
         long refreshCountAt85=gravityFieldCacheRefreshCount;
         double sameTickSample=gravityAnomalyField(sampleX+1.0D,sampleZ-1.0D,85);

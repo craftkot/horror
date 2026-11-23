@@ -267,7 +267,10 @@ def verify_restoration_particle_source():
             or "double cross=Math.sin((x+z)*.047D+gravityFieldCrossPhase-gravityFieldCrossTimeOffset);" not in source
             or "double turbulence=Math.sin((x-z)*.083D+gravityFieldTurbulencePhase+gravityFieldTurbulenceTimeOffset);" not in source
             or "double microTurbulence=Math.sin((x*.17D+z*.13D)" not in source
-            or "double field=base+.12D*cross+.06D*turbulence+.035D*microTurbulence;" not in source
+            or "private static double gravityAnomalyAperiodicNoise(double x,double z,int ticks)" not in source
+            or "double aperiodicTurbulence=gravityAnomalyAperiodicNoise(x,z,ticks);" not in source
+            or "GRAVITY_APERIODIC_TURBULENCE_AMPLITUDE=.045D;" not in source
+            or "double field=base+.12D*cross+.06D*turbulence+.035D*microTurbulence\\n            +GRAVITY_APERIODIC_TURBULENCE_AMPLITUDE*aperiodicTurbulence;" not in source
             or "private static void updateGravityFieldPhaseCache(int ticks)" not in source
             or "if(gravityFieldCachedTick==time) return;" not in source
             or "gravityFieldBasePhase=Math.sin(time*.011D)*1.8D;" not in source
@@ -3833,6 +3836,10 @@ def capture_test_world():
             anomaly_field_marker="BLACK_FREQUENCY_TEST ANOMALY_FIELD_TURBULENCE_VERIFIED baseWeight=1.0 crossAmplitude=0.12 bounded=true deterministic=true liftPocket=true sinkPocket=true timeDrift=true invalidRejected=true"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and anomaly_field_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: shared bounded gravity anomaly field was not verified",flush=True)
+                return False
+            aperiodic_anomaly_marker="BLACK_FREQUENCY_TEST ANOMALY_FIELD_APERIODIC_TURBULENCE_VERIFIED"
+            if os.environ.get("BF_TEST_RESTORATION")=="1" and aperiodic_anomaly_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: deterministic aperiodic gravity turbulence was not verified",flush=True)
                 return False
             multi_scale_marker="BLACK_FREQUENCY_TEST ANOMALY_FIELD_MULTI_SCALE_VERIFIED turbulenceAmplitude=0.06 samples=100 deterministic=true bounded=true"
             if os.environ.get("BF_TEST_RESTORATION")=="1" and multi_scale_marker not in log_after:
