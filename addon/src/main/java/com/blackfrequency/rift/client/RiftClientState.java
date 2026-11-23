@@ -985,6 +985,13 @@ public final class RiftClientState {
             return Double.isFinite(offset) ? offset : 0.0D;
         }
 
+        private static double groundEdgeMaximumOffsetDelta(double halfWidth) {
+            if(!Double.isFinite(halfWidth) || halfWidth<0.0D) return 0.0D;
+            double delta=halfWidth*GROUND_EDGE_OFFSET_SCALE
+                *GROUND_CORE_SKEW_AMPLITUDE*GROUND_EDGE_OFFSET_SKEW_SCALE;
+            return Double.isFinite(delta) ? delta : 0.0D;
+        }
+
         private static void verifyGroundEdgeInterpolationProfile() {
             if(edgeInterpolationProfileLogged) return;
             double halfWidth=GROUND_MAX_HALF_WIDTH;
@@ -994,8 +1001,7 @@ public final class RiftClientState {
             double negativeLeft=groundEdgeCenterOffset(halfWidth,-GROUND_CORE_SKEW_AMPLITUDE,true);
             double positiveRight=groundEdgeCenterOffset(halfWidth,GROUND_CORE_SKEW_AMPLITUDE,false);
             double negativeRight=groundEdgeCenterOffset(halfWidth,-GROUND_CORE_SKEW_AMPLITUDE,false);
-            double maximumOffsetDelta=halfWidth*GROUND_EDGE_OFFSET_SCALE
-                *GROUND_CORE_SKEW_AMPLITUDE*GROUND_EDGE_OFFSET_SKEW_SCALE;
+            double maximumOffsetDelta=groundEdgeMaximumOffsetDelta(halfWidth);
             GroundSample sample=GROUND_SAMPLES[0];
             GroundSegment first=new GroundSegment(new GroundPoint(0.0D,0.0D,0.0D),
                 new GroundPoint(1.0D,0.0D,0.0D),0.0D,1.0D,sample,1.0D,1.0D,
@@ -1021,7 +1027,9 @@ public final class RiftClientState {
                 && Double.doubleToLongBits(firstRightEnd)==Double.doubleToLongBits(secondRightStart);
             boolean invalidRejected=groundEdgeCenterOffset(Double.NaN,.1D,true)==0.0D
                 && groundEdgeCenterOffset(halfWidth,Double.POSITIVE_INFINITY,false)==0.0D
-                && groundEdgeCenterOffset(-.1D,.1D,true)==0.0D;
+                && groundEdgeCenterOffset(-.1D,.1D,true)==0.0D
+                && groundEdgeMaximumOffsetDelta(Double.NaN)==0.0D
+                && groundEdgeMaximumOffsetDelta(-.1D)==0.0D;
             if(!(centered && skewed && bounded && sharedBoundary && invalidRejected
                 && Double.isFinite(maximumOffsetDelta) && maximumOffsetDelta<=.004D))
                 throw new IllegalStateException("BLACK FREQUENCY ground edge endpoint interpolation regression");
@@ -1358,7 +1366,7 @@ public final class RiftClientState {
                     -GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE*(1.0D-GROUND_CORE_SKEW_AMPLITUDE))
                     -GROUND_EDGE_HALF_WIDTH;
                 double minimumCoreEdgeGap=Math.min(leftCoreEdgeGap,rightCoreEdgeGap);
-                double maximumEdgeOffsetDelta=maximumHalfWidth*GROUND_EDGE_OFFSET_SCALE*edgeOffsetSkew;
+                double maximumEdgeOffsetDelta=groundEdgeMaximumOffsetDelta(maximumHalfWidth);
                 if(Math.abs(GROUND_GLOW_WIDTH_SCALE-5.75D)>1.0E-9D
                     || Math.abs(GROUND_CORE_WIDTH_SCALE-1.5D)>1.0E-9D
                     || Math.abs(GROUND_EDGE_OFFSET_SCALE-2.6D)>1.0E-9D

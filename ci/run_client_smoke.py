@@ -3609,6 +3609,10 @@ def capture_test_world():
                                              rel_tol=0.0,abs_tol=1.0e-9)
                            for i in range(1,4))
                     or "private static double groundEdgeCenterOffset(double halfWidth,double coreSkew,boolean left)" not in camera_source
+                    or "private static double groundEdgeMaximumOffsetDelta(double halfWidth)" not in camera_source
+                    or "groundEdgeMaximumOffsetDelta(halfWidth)" not in camera_source
+                    or "groundEdgeMaximumOffsetDelta(maximumHalfWidth)" not in camera_source
+                    or "groundEdgeMaximumOffsetDelta(Double.NaN)==0.0D" not in camera_source
                     or "groundEdgeCenterOffset(halfWidth,segment.coreSkewA(),left)" not in camera_source
                     or "groundEdgeCenterOffset(halfWidth,segment.coreSkewB(),left)" not in camera_source
                     or "private static void edgeRibbon(" not in camera_source
