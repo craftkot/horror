@@ -824,7 +824,7 @@ public final class RiftClientState {
         private static final double GROUND_CORE_RECESS=.005D;
         // Two shallow dark-violet bevels break the flat ribbon silhouette without editing terrain.
         private static final double GROUND_BEVEL_WIDTH=.045D;
-        private static final double GROUND_BEVEL_LIFT=.018D;
+        private static final double GROUND_BEVEL_LIFT=.010D;
         // Reuse the travelling width wave to raise one crack lip as the opposite lip settles.
         private static final double GROUND_BEVEL_LIFT_PULSE_RANGE=.10D;
         private static final double GROUND_FILAMENT_LIFT=.001D;
@@ -1475,13 +1475,14 @@ public final class RiftClientState {
                 || Math.abs(GROUND_FILAMENT_LIFT-.001D)>1.0E-9D
                 || Math.abs(GROUND_EDGE_LIFT-.005D)>1.0E-9D
                 || Math.abs(GROUND_BEVEL_WIDTH-.045D)>1.0E-9D
-                || Math.abs(GROUND_BEVEL_LIFT-.018D)>1.0E-9D
+                || Math.abs(GROUND_BEVEL_LIFT-.010D)>1.0E-9D
                 || Math.abs(GROUND_BEVEL_LIFT_PULSE_RANGE-.10D)>1.0E-9D
                 || !Double.isFinite(maximumBevelHalfWidth)
                 || !(maximumCoreHalfWidth<maximumBevelHalfWidth
                     && maximumBevelHalfWidth<maximumGlowHalfWidth)
                 || !(edgeClearance<minimumBevelOuterClearance
-                    && maximumBevelOuterClearance<.05D)
+                    && minimumBevelOuterClearance>=.018D
+                    && maximumBevelOuterClearance<=.022D)
                 || Math.abs(midpointLeftBevelLiftScale-1.0D)>1.0E-12D
                 || Math.abs(midpointRightBevelLiftScale-1.0D)>1.0E-12D
                 || !complementaryBevelLift || !invalidBevelLiftRejected
@@ -1512,8 +1513,8 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_GROUND_MESH_RECESSED_CORE_PROFILE_VERIFIED minClearance={} supportTop=true depthTest=true",
                 GROUND_MIN_CORE_CLEARANCE);
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_BEVEL_PROFILE_VERIFIED width={} lift={} innerRecess={} maxOuterHalfWidth={} maxGlowHalfWidth={} withinGlow=true offsets=true invalidRejected=true",
-                GROUND_BEVEL_WIDTH,GROUND_BEVEL_LIFT,GROUND_CORE_RECESS,maximumBevelHalfWidth,maximumGlowHalfWidth);
+                "BLACK_FREQUENCY_GROUND_MESH_BEVEL_PROFILE_VERIFIED width={} lift={} innerRecess={} minOuterClearance={} maxOuterClearance={} maxOuterHalfWidth={} maxGlowHalfWidth={} withinGlow=true offsets=true invalidRejected=true",
+                GROUND_BEVEL_WIDTH,GROUND_BEVEL_LIFT,GROUND_CORE_RECESS,minimumBevelOuterClearance,maximumBevelOuterClearance,maximumBevelHalfWidth,maximumGlowHalfWidth);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_BEVEL_PULSE_PROFILE_VERIFIED minScale={} maxScale={} midpointLeft={} midpointRight={} complementary=true bounded=true invalidRejected=true noExtraTrig=true",
                 minimumBevelLiftScale,maximumBevelLiftScale,midpointLeftBevelLiftScale,midpointRightBevelLiftScale);
