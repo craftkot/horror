@@ -2525,10 +2525,12 @@ public final class RiftController {
         double extent=FISSURE_SEGMENTS_PER_ARM*FISSURE_SAMPLE_SPACING;
         if(FISSURE_ARM_COUNT!=4 || samples!=48 || samples*FISSURE_MOTES_PER_SAMPLE!=48
             || FISSURE_MOTES_PER_SAMPLE<1 || !Double.isFinite(FISSURE_SAMPLE_SPACING)
-            || FISSURE_SAMPLE_SPACING<=0.0D || FISSURE_SAMPLE_SPACING>0.5D
+            || !(Math.abs(FISSURE_SAMPLE_SPACING-.45D)<1.0E-9D
+                || Math.abs(FISSURE_SAMPLE_SPACING-.60D)<1.0E-9D)
             || !Double.isFinite(RiftGeometry.FISSURE_BEND_AMPLITUDE)
             || Math.abs(RiftGeometry.FISSURE_BEND_AMPLITUDE-.24D)>1.0E-9D
-            || Math.abs(extent-5.40D)>1.0E-9D || extent>=RADIUS
+            || !(Math.abs(extent-5.40D)<1.0E-9D || Math.abs(extent-7.20D)<1.0E-9D)
+            || extent+RiftGeometry.FISSURE_BEND_AMPLITUDE>=RADIUS
             || FISSURE_VIOLET_EDGE_DUST==null
             || !isOutermostValidFissureSample(1,0)
             || !isOutermostValidFissureSample(11,8)
