@@ -305,6 +305,12 @@ public final class RiftClientState {
         return remaining*remaining*(3.0D-2.0D*remaining);
     }
 
+    // Contract the containment cage toward the physical beacon while its completion alpha fades.
+    private static double beaconAuraCompletionScale(double fade) {
+        double bounded=Double.isFinite(fade)?Math.max(0.0D,Math.min(1.0D,fade)):0.0D;
+        return .55D+.45D*bounded;
+    }
+
     private static double beaconAuraDistanceFade(double distanceSquared) {
         if(!Double.isFinite(distanceSquared) || distanceSquared<0.0D
             || distanceSquared>=BEACON_AURA_RENDER_DISTANCE_SQR) return 0.0D;
@@ -382,6 +388,24 @@ public final class RiftClientState {
         double completionFadeFull=beaconAuraCompletionFade(16,0.0D);
         double completionFadeMiddle=beaconAuraCompletionFade(8,0.0D);
         double completionFadeEnd=beaconAuraCompletionFade(0,0.0D);
+        double completionScaleFull=beaconAuraCompletionScale(1.0D);
+        double completionScaleMiddle=beaconAuraCompletionScale(.5D);
+        double completionScaleEnd=beaconAuraCompletionScale(0.0D);
+        boolean completionScaleMonotonic=completionScaleFull==1.0D
+            && Math.abs(completionScaleMiddle-.775D)<1.0E-12D
+            && Math.abs(completionScaleEnd-.55D)<1.0E-12D;
+        double previousCompletionScale=completionScaleFull;
+        for(int step=1;step<=100;step++) {
+            double current=beaconAuraCompletionScale(1.0D-step/100.0D);
+            completionScaleMonotonic &= Double.isFinite(current)
+                && current>=.55D && current<=previousCompletionScale;
+            previousCompletionScale=current;
+        }
+        boolean completionScaleProfile=completionScaleMonotonic
+            && beaconAuraCompletionScale(Double.NaN)==.55D
+            && beaconAuraCompletionScale(Double.POSITIVE_INFINITY)==.55D
+            && beaconAuraCompletionScale(-1.0D)==.55D
+            && beaconAuraCompletionScale(2.0D)==1.0D;
         boolean completionFadeMonotonic=completionFadeFull==1.0D
             && Math.abs(completionFadeMiddle-.5D)<1.0E-12D && completionFadeEnd==0.0D
             && Math.abs(beaconAuraCompletionFade(16,1.0D)-beaconAuraCompletionFade(15,0.0D))<1.0E-12D;
@@ -399,7 +423,7 @@ public final class RiftClientState {
         boolean completionFadeProfile=completionFadeStarted==16 && completionFadeContinued==6
             && completionFadeCanceledByRestore==0 && completionFadeCanceledByCollapse==0
             && completionFadeCanceledByProgress==0 && completionFadeMonotonic
-            && completionFadeMilestones
+            && completionFadeMilestones && completionScaleProfile
             && beaconAuraCompletionFade(99,Double.NaN)==1.0D
             && beaconAuraCompletionFade(-1,0.0D)==0.0D;
         boolean inactiveRejected=!shouldRenderBeaconAura(false,true,true,true,1.0D);
@@ -463,6 +487,8 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_MILESTONES_VERIFIED midpointInRange=true tailVisible=true");
         }
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_COLLAPSE_PROFILE_VERIFIED start=1.0 midpoint=0.775 end=0.55 monotonic=true geometryScaled=true");
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true");
         com.mojang.logging.LogUtils.getLogger().info(
@@ -531,28 +557,32 @@ public final class RiftClientState {
     }
 
     private static void emitBeaconCage(BufferBuilder builder,Matrix4f matrix,Vec3 camera,
-            BlockPos beacon,double margin,double angle,double halfWidth,
+            BlockPos beacon,double margin,double angle,double halfWidth,double completionScale,
             int red,int green,int blue,int alpha) {
         double centerX=beacon.getX()+.5D,centerZ=beacon.getZ()+.5D;
         double cosine=Math.cos(angle),sine=Math.sin(angle);
-        double minX=beacon.getX()-margin,maxX=beacon.getX()+1.0D+margin;
-        double minY=beacon.getY()-margin,maxY=beacon.getY()+1.0D+margin;
-        double minZ=beacon.getZ()-margin,maxZ=beacon.getZ()+1.0D+margin;
+        double boundedScale=Double.isFinite(completionScale)
+            ? Math.max(.55D,Math.min(1.0D,completionScale)) : .55D;
+        double scaledMargin=margin*boundedScale;
+        double scaledHalfWidth=halfWidth*boundedScale;
+        double minX=beacon.getX()-scaledMargin,maxX=beacon.getX()+1.0D+scaledMargin;
+        double minY=beacon.getY()-scaledMargin,maxY=beacon.getY()+1.0D+scaledMargin;
+        double minZ=beacon.getZ()-scaledMargin,maxZ=beacon.getZ()+1.0D+scaledMargin;
         // Bottom ring.
-        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,minX,minY,minZ,maxX,minY,minZ,red,green,blue,alpha);
-        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,maxX,minY,minZ,maxX,minY,maxZ,red,green,blue,alpha);
-        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,maxX,minY,maxZ,minX,minY,maxZ,red,green,blue,alpha);
-        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,minX,minY,maxZ,minX,minY,minZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,scaledHalfWidth,minX,minY,minZ,maxX,minY,minZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,scaledHalfWidth,maxX,minY,minZ,maxX,minY,maxZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,scaledHalfWidth,maxX,minY,maxZ,minX,minY,maxZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,scaledHalfWidth,minX,minY,maxZ,minX,minY,minZ,red,green,blue,alpha);
         // Top ring.
-        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,minX,maxY,minZ,maxX,maxY,minZ,red,green,blue,alpha);
-        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,maxX,maxY,minZ,maxX,maxY,maxZ,red,green,blue,alpha);
-        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,maxX,maxY,maxZ,minX,maxY,maxZ,red,green,blue,alpha);
-        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,minX,maxY,maxZ,minX,maxY,minZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,scaledHalfWidth,minX,maxY,minZ,maxX,maxY,minZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,scaledHalfWidth,maxX,maxY,minZ,maxX,maxY,maxZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,scaledHalfWidth,maxX,maxY,maxZ,minX,maxY,maxZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,scaledHalfWidth,minX,maxY,maxZ,minX,maxY,minZ,red,green,blue,alpha);
         // Four vertical containment rails.
-        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,minX,minY,minZ,minX,maxY,minZ,red,green,blue,alpha);
-        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,maxX,minY,minZ,maxX,maxY,minZ,red,green,blue,alpha);
-        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,maxX,minY,maxZ,maxX,maxY,maxZ,red,green,blue,alpha);
-        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,halfWidth,minX,minY,maxZ,minX,maxY,maxZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,scaledHalfWidth,minX,minY,minZ,minX,maxY,minZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,scaledHalfWidth,maxX,minY,minZ,maxX,maxY,minZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,scaledHalfWidth,maxX,minY,maxZ,maxX,maxY,maxZ,red,green,blue,alpha);
+        beaconAuraRibbon(builder,matrix,camera,centerX,centerZ,cosine,sine,scaledHalfWidth,minX,minY,maxZ,minX,maxY,maxZ,red,green,blue,alpha);
     }
 
     /** Draw a client-only violet containment cage around the server-owned physical beacon. */
@@ -587,6 +617,8 @@ public final class RiftClientState {
             ? Math.max(0.0D,Math.min(1.0D,event.getPartialTick())) : 0.0D;
         double completionFade=completionFadeActive
             ? beaconAuraCompletionFade(beaconAuraCompletionFadeTicks,partial) : 1.0D;
+        double completionScale=completionFadeActive
+            ? beaconAuraCompletionScale(completionFade) : 1.0D;
         distanceFade*=completionFade;
         if(distanceFade<=1.0D/255.0D) return;
         double time=(double)level.getGameTime()+partial;
@@ -608,9 +640,9 @@ public final class RiftClientState {
         try {
             builder.begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.POSITION_COLOR);
             emitBeaconCage(builder,matrix,camera,beacon,BEACON_AURA_OUTER_MARGIN,outerAngle,
-                BEACON_AURA_OUTER_HALF_WIDTH,77,13,173,outerAlpha);
+                BEACON_AURA_OUTER_HALF_WIDTH,completionScale,77,13,173,outerAlpha);
             emitBeaconCage(builder,matrix,camera,beacon,BEACON_AURA_INNER_MARGIN,innerAngle,
-                BEACON_AURA_INNER_HALF_WIDTH,158,56,255,innerAlpha);
+                BEACON_AURA_INNER_HALF_WIDTH,completionScale,158,56,255,innerAlpha);
             BufferUploader.drawWithShader(builder.end());
             submitted=true;
         } finally {
@@ -634,22 +666,22 @@ public final class RiftClientState {
             if(!beaconAuraCompletionFadeRenderedLogged) {
                 beaconAuraCompletionFadeRenderedLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_RENDERED ticksRemaining={}",
-                    beaconAuraCompletionFadeTicks);
+                    "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_RENDERED ticksRemaining={} cageScale={}",
+                    beaconAuraCompletionFadeTicks,completionScale);
             }
             if(!beaconAuraCompletionFadeMidpointRenderedLogged
                 && completionFade<=.60D && completionFade>.25D) {
                 beaconAuraCompletionFadeMidpointRenderedLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_MIDPOINT_RENDERED ticksRemaining={} alphaFactor={}",
-                    beaconAuraCompletionFadeTicks,completionFade);
+                    "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_MIDPOINT_RENDERED ticksRemaining={} alphaFactor={} cageScale={}",
+                    beaconAuraCompletionFadeTicks,completionFade,completionScale);
             }
             if(!beaconAuraCompletionFadeTailRenderedLogged
                 && completionFade<=.12D && completionFade>1.0D/255.0D) {
                 beaconAuraCompletionFadeTailRenderedLogged=true;
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_TAIL_RENDERED ticksRemaining={} alphaFactor={}",
-                    beaconAuraCompletionFadeTicks,completionFade);
+                    "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_TAIL_RENDERED ticksRemaining={} alphaFactor={} cageScale={}",
+                    beaconAuraCompletionFadeTicks,completionFade,completionScale);
             }
         }
     }

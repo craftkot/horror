@@ -194,6 +194,8 @@ def verify_beacon_aura_source():
             or "nextBeaconAuraCompletionFadeTicks(" not in client
             or "beaconAuraCompletionFadeTicks,wasRestoring,worldRestorationActive,collapsing,safeProgress)" not in client
             or "BEACON_AURA_COMPLETION_FADE_PROFILE_VERIFIED ticks=16 curve=smoothstep partialTick=true" not in client
+            or "beaconAuraCompletionScale(" not in client
+            or "BEACON_AURA_COMPLETION_COLLAPSE_PROFILE_VERIFIED start=1.0 midpoint=0.775 end=0.55 monotonic=true geometryScaled=true" not in client
             or "BEACON_AURA_COMPLETION_FADE_RENDERED" not in client
             or "BEACON_AURA_COMPLETION_FADE_MIDPOINT_RENDERED" not in client
             or "BEACON_AURA_COMPLETION_FADE_TAIL_RENDERED" not in client
@@ -3658,30 +3660,37 @@ def capture_test_world():
                             break
                         time.sleep(.02)
                     start_match=re.search(
-                        r"BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_RENDERED ticksRemaining=(\d+)",
+                        r"BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_RENDERED ticksRemaining=(\d+) cageScale=([0-9.eE+-]+)",
                         fade_logs)
                     midpoint_match=re.search(
-                        r"BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_MIDPOINT_RENDERED ticksRemaining=(\d+) alphaFactor=([0-9.eE+-]+)",
+                        r"BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_MIDPOINT_RENDERED ticksRemaining=(\d+) alphaFactor=([0-9.eE+-]+) cageScale=([0-9.eE+-]+)",
                         fade_logs)
                     tail_match=re.search(
-                        r"BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_TAIL_RENDERED ticksRemaining=(\d+) alphaFactor=([0-9.eE+-]+)",
+                        r"BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_TAIL_RENDERED ticksRemaining=(\d+) alphaFactor=([0-9.eE+-]+) cageScale=([0-9.eE+-]+)",
                         fade_logs)
                     if not (fade_start_marker in fade_logs and fade_midpoint_shot and fade_tail_shot
                             and start_match and midpoint_match and tail_match):
                         print("WORLD_CAPTURE_FAIL: completed restoration did not render start, midpoint and tail of the beacon fade",flush=True)
                         return False
                     start_ticks=int(start_match.group(1))
+                    start_scale=float(start_match.group(2))
                     midpoint_ticks=int(midpoint_match.group(1))
                     midpoint_alpha=float(midpoint_match.group(2))
+                    midpoint_scale=float(midpoint_match.group(3))
                     tail_ticks=int(tail_match.group(1))
                     tail_alpha=float(tail_match.group(2))
+                    tail_scale=float(tail_match.group(3))
                     if not (start_ticks>midpoint_ticks>tail_ticks
+                            and .97<=start_scale<=1.0
                             and .25<midpoint_alpha<=.60
-                            and 1.0/255.0<tail_alpha<=.12):
-                        print("WORLD_CAPTURE_FAIL: beacon fade render milestones were out of order or outside their alpha windows",
-                              {"startTicks":start_ticks,"midpointTicks":midpoint_ticks,
-                               "midpointAlpha":midpoint_alpha,"tailTicks":tail_ticks,
-                               "tailAlpha":tail_alpha},flush=True)
+                            and .65<=midpoint_scale<=.83
+                            and 1.0/255.0<tail_alpha<=.12
+                            and .55<=tail_scale<=.605):
+                        print("WORLD_CAPTURE_FAIL: beacon fade milestones or cage collapse scale were outside their expected windows",
+                              {"startTicks":start_ticks,"startScale":start_scale,
+                               "midpointTicks":midpoint_ticks,"midpointAlpha":midpoint_alpha,
+                               "midpointScale":midpoint_scale,"tailTicks":tail_ticks,
+                               "tailAlpha":tail_alpha,"tailScale":tail_scale},flush=True)
                         return False
                     print("WORLD_CAPTURE: real beacon fade midpoint and visible tail captured",
                           {"startTicks":start_ticks,"midpointTicks":midpoint_ticks,
