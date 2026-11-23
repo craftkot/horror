@@ -817,8 +817,8 @@ public final class RiftClientState {
         private static final double GROUND_WIDTH_FLICKER=.005D;
         private static final double GROUND_MAX_HALF_WIDTH=
             GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE+GROUND_WIDTH_FLICKER;
-        // Slightly wider violet lips keep the dark seam legible in grass-heavy terrain.
-        private static final double GROUND_EDGE_HALF_WIDTH=.026D;
+        // Keep violet lip thickness proportional to the travelling core width so pulse minima cannot overlap the dark seam.
+        private static final double GROUND_EDGE_HALF_WIDTH=.025D;
         private static final double GROUND_MIN_CORE_EDGE_GAP=.0075D;
         // Keep the dark core near the support top while retaining a measurable depth-buffer gap.
         private static final double GROUND_SURFACE_CLEARANCE=.010D;
@@ -1014,6 +1014,16 @@ public final class RiftClientState {
             double delta=halfWidth*GROUND_EDGE_OFFSET_SCALE
                 *GROUND_CORE_SKEW_AMPLITUDE*GROUND_EDGE_OFFSET_SKEW_SCALE;
             return Double.isFinite(delta) ? delta : 0.0D;
+        }
+
+        // Scale the lip thickness with the same pulse width as its center offset.
+        // This preserves the dark-core clearance at the narrowest wave and on slopes.
+        private static double groundEdgeHalfWidth(double halfWidth) {
+            if(!Double.isFinite(halfWidth) || halfWidth<=0.0D) return 0.0D;
+            double scale=Math.min(1.0D,halfWidth/GROUND_MAX_HALF_WIDTH);
+            double edgeHalfWidth=GROUND_EDGE_HALF_WIDTH*scale;
+            return Double.isFinite(edgeHalfWidth)
+                ? Math.max(0.0D,Math.min(GROUND_EDGE_HALF_WIDTH,edgeHalfWidth)) : 0.0D;
         }
 
         private static void verifyGroundEdgeInterpolationProfile() {
@@ -1574,32 +1584,45 @@ public final class RiftClientState {
             double maxGrade=groundSlopeWidthScale(flatA,maxGradeB);
             double overGrade=groundSlopeWidthScale(flatA,overGradeB);
             double invalid=groundSlopeWidthScale(new GroundPoint(Double.NaN,0.0D,0.0D),flatB);
+            double minimumPulseHalfWidth=GROUND_MIN_HALF_WIDTH*(1.0D-GROUND_SLOPE_WIDTH_REDUCTION);
+            double minimumEdgeHalfWidth=groundEdgeHalfWidth(minimumPulseHalfWidth);
+            double midpointEdgeHalfWidth=groundEdgeHalfWidth(
+                (minimumPulseHalfWidth+GROUND_MAX_HALF_WIDTH)*.5D);
+            double maximumEdgeHalfWidth=groundEdgeHalfWidth(GROUND_MAX_HALF_WIDTH);
+            double invalidEdgeHalfWidth=groundEdgeHalfWidth(Double.NaN);
             double maximumEdgeSkew=GROUND_CORE_SKEW_AMPLITUDE*GROUND_EDGE_OFFSET_SKEW_SCALE;
-            double leftGap=(1.0D-GROUND_SLOPE_WIDTH_REDUCTION)*GROUND_MAX_HALF_WIDTH
+            double leftGap=minimumPulseHalfWidth
                 *(GROUND_EDGE_OFFSET_SCALE*(1.0D+maximumEdgeSkew)
                     -GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE*(1.0D+GROUND_CORE_SKEW_AMPLITUDE))
-                -GROUND_EDGE_HALF_WIDTH;
-            double rightGap=(1.0D-GROUND_SLOPE_WIDTH_REDUCTION)*GROUND_MAX_HALF_WIDTH
+                -minimumEdgeHalfWidth;
+            double rightGap=minimumPulseHalfWidth
                 *(GROUND_EDGE_OFFSET_SCALE*(1.0D-maximumEdgeSkew)
                     -GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE*(1.0D-GROUND_CORE_SKEW_AMPLITUDE))
-                -GROUND_EDGE_HALF_WIDTH;
+                -minimumEdgeHalfWidth;
             double minimumCoreEdgeGap=Math.min(leftGap,rightGap);
             GroundSegment cached=new GroundSegment(flatA,maxGradeB,0.0D,1.0D,GROUND_SAMPLES[0],
                 1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
+            boolean edgeWidthMonotonic=minimumEdgeHalfWidth<=midpointEdgeHalfWidth
+                && midpointEdgeHalfWidth<=maximumEdgeHalfWidth;
             if(Math.abs(GROUND_SLOPE_WIDTH_REDUCTION-.15D)>1.0E-12D
+                || Math.abs(GROUND_EDGE_HALF_WIDTH-.025D)>1.0E-12D
                 || Math.abs(flat-1.0D)>1.0E-12D
                 || Math.abs(halfGrade-.925D)>1.0E-12D
                 || Math.abs(maxGrade-.85D)>1.0E-12D
                 || Math.abs(overGrade-.85D)>1.0E-12D
                 || invalid!=1.0D
                 || Math.abs(cached.slopeWidthScale()-maxGrade)>1.0E-12D
+                || !edgeWidthMonotonic
+                || invalidEdgeHalfWidth!=0.0D
+                || Math.abs(maximumEdgeHalfWidth-GROUND_EDGE_HALF_WIDTH)>1.0E-12D
                 || !Double.isFinite(minimumCoreEdgeGap)
                 || minimumCoreEdgeGap<GROUND_MIN_CORE_EDGE_GAP)
-                throw new IllegalStateException("BLACK FREQUENCY ground slope width profile regression");
+                throw new IllegalStateException("BLACK FREQUENCY ground slope/edge width profile regression");
             slopeWidthProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_SLOPE_WIDTH_PROFILE_VERIFIED reduction={} flat={} halfGrade={} maxGrade={} overGrade={} minCoreEdgeGap={} bounded=true monotonic=true cachedPerSegment=true invalidNeutral=true",
-                GROUND_SLOPE_WIDTH_REDUCTION,flat,halfGrade,maxGrade,overGrade,minimumCoreEdgeGap);
+                "BLACK_FREQUENCY_GROUND_MESH_SLOPE_WIDTH_PROFILE_VERIFIED reduction={} flat={} halfGrade={} maxGrade={} overGrade={} minPulseHalfWidth={} minEdgeHalfWidth={} maxEdgeHalfWidth={} minCoreEdgeGap={} bounded=true monotonic=true cachedPerSegment=true invalidNeutral=true coreSeparated=true",
+                GROUND_SLOPE_WIDTH_REDUCTION,flat,halfGrade,maxGrade,overGrade,minimumPulseHalfWidth,
+                minimumEdgeHalfWidth,maximumEdgeHalfWidth,minimumCoreEdgeGap);
         }
 
         private static double boundedShapeHeight(double height,double fallback) {
@@ -3010,10 +3033,11 @@ public final class RiftClientState {
             GroundPoint b=segment.b();
             double centerA=groundEdgeCenterOffset(halfWidth,segment.coreSkewA(),left);
             double centerB=groundEdgeCenterOffset(halfWidth,segment.coreSkewB(),left);
-            double leftA=(centerA+GROUND_EDGE_HALF_WIDTH)*segment.taperA();
-            double rightA=(centerA-GROUND_EDGE_HALF_WIDTH)*segment.taperA();
-            double leftB=(centerB+GROUND_EDGE_HALF_WIDTH)*segment.taperB();
-            double rightB=(centerB-GROUND_EDGE_HALF_WIDTH)*segment.taperB();
+            double edgeHalfWidth=groundEdgeHalfWidth(halfWidth);
+            double leftA=(centerA+edgeHalfWidth)*segment.taperA();
+            double rightA=(centerA-edgeHalfWidth)*segment.taperA();
+            double leftB=(centerB+edgeHalfWidth)*segment.taperB();
+            double rightB=(centerB-edgeHalfWidth)*segment.taperB();
             vertex(builder,matrix,camera,a.x()+segment.normalX()*leftA,a.y()+GROUND_EDGE_LIFT,a.z()+segment.normalZ()*leftA,
                 redChannel,greenChannel,blueChannel,alphaChannelA);
             vertex(builder,matrix,camera,b.x()+segment.normalX()*leftB,b.y()+GROUND_EDGE_LIFT,b.z()+segment.normalZ()*leftB,

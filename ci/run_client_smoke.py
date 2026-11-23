@@ -3470,19 +3470,24 @@ def capture_test_world():
                       flush=True)
                 return False
             slope_width_match=re.search(
-                r"BLACK_FREQUENCY_GROUND_MESH_SLOPE_WIDTH_PROFILE_VERIFIED reduction=([-+0-9.eE]+) flat=([-+0-9.eE]+) halfGrade=([-+0-9.eE]+) maxGrade=([-+0-9.eE]+) overGrade=([-+0-9.eE]+) minCoreEdgeGap=([-+0-9.eE]+) bounded=true monotonic=true cachedPerSegment=true invalidNeutral=true",
+                r"BLACK_FREQUENCY_GROUND_MESH_SLOPE_WIDTH_PROFILE_VERIFIED reduction=([-+0-9.eE]+) flat=([-+0-9.eE]+) halfGrade=([-+0-9.eE]+) maxGrade=([-+0-9.eE]+) overGrade=([-+0-9.eE]+) minPulseHalfWidth=([-+0-9.eE]+) minEdgeHalfWidth=([-+0-9.eE]+) maxEdgeHalfWidth=([-+0-9.eE]+) minCoreEdgeGap=([-+0-9.eE]+) bounded=true monotonic=true cachedPerSegment=true invalidNeutral=true coreSeparated=true",
                 final_log)
-            expected_slope_width=(.15,1.0,.925,.85,.85,.00811067)
+            expected_slope_width=(.15,1.0,.925,.85,.85,.03825,.0129222972972973,.025,.00782067770270272)
             if (not slope_width_match
                     or any(not math.isclose(float(slope_width_match.group(i)),expected_slope_width[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
-                           for i in range(1,7))
+                           for i in range(1,10))
                     or "GROUND_SLOPE_WIDTH_REDUCTION=.15D;" not in camera_source
+                    or "GROUND_EDGE_HALF_WIDTH=.025D;" not in camera_source
                     or "private static double groundSlopeWidthScale(GroundPoint a,GroundPoint b)" not in camera_source
+                    or "private static double groundEdgeHalfWidth(double halfWidth)" not in camera_source
                     or "double coreSkewA,double coreSkewB,double slopeWidthScale)" not in camera_source
                     or "groundSlopeWidthScale(a,b)" not in camera_source
                     or "verifyGroundSlopeWidthProfile();" not in camera_source
-                    or "halfWidth*=segment.slopeWidthScale();" not in camera_source):
+                    or "halfWidth*=segment.slopeWidthScale();" not in camera_source
+                    or "double edgeHalfWidth=groundEdgeHalfWidth(halfWidth);" not in camera_source
+                    or "centerA+edgeHalfWidth" not in camera_source
+                    or "centerB-edgeHalfWidth" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: slope-aware ground ribbon width was not bounded or cached per segment",
                       flush=True)
                 return False
