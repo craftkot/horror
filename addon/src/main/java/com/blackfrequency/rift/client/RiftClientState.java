@@ -2341,13 +2341,16 @@ public final class RiftClientState {
                 fullShape)-1.0D)<1.0E-9D;
             boolean emptyShapeRejected=Double.isNaN(groundSupportHeight(
                 net.minecraft.world.phys.shapes.Shapes.empty(),net.minecraft.world.phys.shapes.Shapes.empty()));
-            double cauldronSupportHeight=groundSupportHeight(
-                net.minecraft.world.level.block.Blocks.CAULDRON.defaultBlockState(),level,BlockPos.ZERO);
+            var cauldronState=net.minecraft.world.level.block.Blocks.CAULDRON.defaultBlockState();
+            var cauldronShape=cauldronState.getCollisionShape(level,BlockPos.ZERO);
+            double cauldronSupportHeight=groundSupportHeight(cauldronState,level,BlockPos.ZERO);
             boolean cauldronTopRejected=Double.isNaN(cauldronSupportHeight);
+            boolean reusableProbeSequence=hasFullFootprintTop(fullShape,1.0D)
+                && !hasFullFootprintTop(cauldronShape,1.0D)
+                && hasFullFootprintTop(partialShape,.5D);
             boolean validSupportHeights=Math.abs(fullBlockHeight-1.0D)<1.0E-9D
                 && Math.abs(partialBlockHeight-.5D)<1.0E-9D && outlineFallback && emptyShapeRejected
-                && hasFullFootprintTop(fullShape,1.0D)
-                && hasFullFootprintTop(partialShape,.5D) && !hasFullFootprintTop(
+                && reusableProbeSequence && !hasFullFootprintTop(
                     net.minecraft.world.phys.shapes.Shapes.empty(),0.0D);
             double minimumSnowOffset=Double.POSITIVE_INFINITY;
             double maximumSnowOffset=Double.NEGATIVE_INFINITY;
@@ -2400,6 +2403,9 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_GROUND_MESH_UNIFORM_TOP_SUPPORT_VERIFIED fullBlock=true bottomSlab=true topSlab=true doubleSlab=true cauldronRejected={}",
                 cauldronTopRejected);
             com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_SCAN_ALLOCATION_VERIFIED strategy=forAllBoxes reusableProbe=true materializedAabbs=false staleResultCleared={}",
+                reusableProbeSequence);
+            com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SLAB_SUPPORT_VERIFIED bottom={} top={} double={} bottomSnow={} topSnow={} stairsRejected=true shapeDerived=true",
                 bottomSlabHeight,topSlabHeight,doubleSlabHeight,bottomSlabSnowOffset,topSlabSnowOffset);
             com.mojang.logging.LogUtils.getLogger().info(
@@ -2411,19 +2417,45 @@ public final class RiftClientState {
                 partialSupportSnowOffset);
         }
 
+        // GroundRenderer runs on the render thread. Reuse one callback instead of
+        // materializing a List<AABB> for every candidate support block during a mesh rebuild.
+        private static final double GROUND_SUPPORT_SHAPE_EPSILON=1.0E-7D;
+        private static final class FullFootprintTopProbe
+                implements net.minecraft.world.phys.shapes.Shapes.DoubleLineConsumer {
+            private double expectedHeight;
+            private boolean found;
+
+            private void reset(double height) {
+                expectedHeight=height;
+                found=false;
+            }
+
+            private boolean found() {
+                return found;
+            }
+
+            @Override
+            public void consume(double minX,double minY,double minZ,
+                    double maxX,double maxY,double maxZ) {
+                if(!found && Math.abs(maxY-expectedHeight)<=GROUND_SUPPORT_SHAPE_EPSILON
+                    && minX<=GROUND_SUPPORT_SHAPE_EPSILON
+                    && maxX>=1.0D-GROUND_SUPPORT_SHAPE_EPSILON
+                    && minZ<=GROUND_SUPPORT_SHAPE_EPSILON
+                    && maxZ>=1.0D-GROUND_SUPPORT_SHAPE_EPSILON) found=true;
+            }
+        }
+        private static final FullFootprintTopProbe GROUND_SUPPORT_TOP_PROBE=
+            new FullFootprintTopProbe();
+
         // A maximum Y alone is not enough: cauldrons and other hollow shapes
         // have a high rim but cannot support a ribbon across their whole footprint.
-        // Accept only a topmost collision box that covers the complete X/Z plane.
+        // forAllBoxes streams the boxes without allocating a temporary AABB list.
         private static boolean hasFullFootprintTop(
                 net.minecraft.world.phys.shapes.VoxelShape shape,double height) {
             if(shape==null || shape.isEmpty() || !Double.isFinite(height)) return false;
-            final double epsilon=1.0E-7D;
-            for(var box:shape.toAabbs()) {
-                if(Math.abs(box.maxY-height)<=epsilon
-                    && box.minX<=epsilon && box.maxX>=1.0D-epsilon
-                    && box.minZ<=epsilon && box.maxZ>=1.0D-epsilon) return true;
-            }
-            return false;
+            GROUND_SUPPORT_TOP_PROBE.reset(height);
+            shape.forAllBoxes(GROUND_SUPPORT_TOP_PROBE);
+            return GROUND_SUPPORT_TOP_PROBE.found();
         }
 
         private static double groundSupportHeight(
