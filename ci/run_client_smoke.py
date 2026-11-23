@@ -3681,8 +3681,18 @@ def capture_test_world():
                     tail_ticks=int(tail_match.group(1))
                     tail_alpha=float(tail_match.group(2))
                     tail_scale=float(tail_match.group(3))
-                    if not (start_ticks>midpoint_ticks>tail_ticks
-                            and .97<=start_scale<=1.0
+                    # The first render callback can arrive a few client ticks after the
+                    # server-state transition. Validate the observed scale against the
+                    # exact partial-tick easing interval instead of assuming partialTick=0.
+                    bounded_start_ticks=max(0,min(16,start_ticks))
+                    def start_scale_at(partial_tick):
+                        remaining=max(0.0,min(1.0,(bounded_start_ticks-partial_tick)/16.0))
+                        fade=remaining*remaining*(3.0-2.0*remaining)
+                        return .55+.45*fade
+                    expected_start_scale_min=start_scale_at(1.0)
+                    expected_start_scale_max=start_scale_at(0.0)
+                    if not (start_ticks>=12 and start_ticks>midpoint_ticks>tail_ticks
+                            and expected_start_scale_min-1.0e-6<=start_scale<=expected_start_scale_max+1.0e-6
                             and .25<midpoint_alpha<=.60
                             and .65<=midpoint_scale<=.83
                             and 1.0/255.0<tail_alpha<=.12
