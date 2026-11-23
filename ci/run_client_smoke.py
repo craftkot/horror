@@ -3052,11 +3052,18 @@ def capture_test_world():
                 "BLACK_FREQUENCY_GROUND_MESH_UNIFORM_TOP_SUPPORT_VERIFIED "
                 "fullBlock=true bottomSlab=true topSlab=true doubleSlab=true cauldronRejected=true"
             )
+            support_scan_marker = (
+                "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_SCAN_ALLOCATION_VERIFIED "
+                "strategy=forAllBoxes reusableProbe=true materializedAabbs=false staleResultCleared=true"
+            )
             if (uniform_top_marker not in final_log
+                    or support_scan_marker not in final_log
                     or "private static boolean hasFullFootprintTop(" not in camera_source
-                    or "shape.toAabbs()" not in camera_source
+                    or "private static final class FullFootprintTopProbe" not in camera_source
+                    or "shape.forAllBoxes(GROUND_SUPPORT_TOP_PROBE);" not in camera_source
+                    or "shape.toAabbs()" in camera_source
                     or "Blocks.CAULDRON.defaultBlockState()" not in camera_source):
-                print("WORLD_CAPTURE_FAIL: support top must cover the full footprint; hollow cauldron rims must be rejected",flush=True)
+                print("WORLD_CAPTURE_FAIL: full-footprint support must stream VoxelShape boxes through the reusable allocation-bounded probe",flush=True)
                 return False
             sample_start=camera_source.find("private static double sampleGroundY(")
             sample_end=camera_source.find("private static long columnKey(",sample_start+1)
