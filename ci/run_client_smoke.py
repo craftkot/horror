@@ -3443,6 +3443,23 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: broadened ground fissure visual profile self-check was not executed or is out of bounds",
                       flush=True)
                 return False
+            slope_width_match=re.search(
+                r"BLACK_FREQUENCY_GROUND_MESH_SLOPE_WIDTH_PROFILE_VERIFIED reduction=([-+0-9.eE]+) flat=([-+0-9.eE]+) halfGrade=([-+0-9.eE]+) maxGrade=([-+0-9.eE]+) overGrade=([-+0-9.eE]+) minCoreEdgeGap=([-+0-9.eE]+) bounded=true monotonic=true cachedPerSegment=true invalidNeutral=true",
+                final_log)
+            expected_slope_width=(.15,1.0,.925,.85,.85,.00811067)
+            if (not slope_width_match
+                    or any(not math.isclose(float(slope_width_match.group(i)),expected_slope_width[i-1],
+                                             rel_tol=0.0,abs_tol=1.0e-9)
+                           for i in range(1,7))
+                    or "GROUND_SLOPE_WIDTH_REDUCTION=.15D;" not in camera_source
+                    or "private static double groundSlopeWidthScale(GroundPoint a,GroundPoint b)" not in camera_source
+                    or "double coreSkewA,double coreSkewB,double slopeWidthScale)" not in camera_source
+                    or "groundSlopeWidthScale(a,b)" not in camera_source
+                    or "verifyGroundSlopeWidthProfile();" not in camera_source
+                    or "halfWidth*=segment.slopeWidthScale();" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: slope-aware ground ribbon width was not bounded or cached per segment",
+                      flush=True)
+                return False
             cliff_taper_match=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_CLIFF_TAPER_PROFILE_VERIFIED taper=([-+0-9.eE]+) previousTaper=0.25 sharper=true invalidInputsZero=true",
                 final_log)

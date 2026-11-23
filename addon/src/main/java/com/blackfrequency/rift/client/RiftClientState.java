@@ -787,6 +787,8 @@ public final class RiftClientState {
         // Keep the same maximum height change per segment after halving sample spacing.
         // Keep the absolute 0.5625-block rise budget while the shared fissure reach changes.
         private static final double MAX_GROUND_SEGMENT_GRADE=.5625D/SAMPLE_SPACING;
+        // Narrow the ribbon on sloped samples so its outer halo is less likely to cross block sides.
+        private static final double GROUND_SLOPE_WIDTH_REDUCTION=.15D;
         // Taper cliff-side ribbon tips almost to a point without bridging terrain discontinuities.
         private static final double CLIFF_BREAK_TAPER=.06D;
         private static final double GROUND_CAP_TAPER_EPSILON=1.0E-9D;
@@ -877,6 +879,7 @@ public final class RiftClientState {
         private static boolean taperProfileLogged;
         private static boolean visualProfileLogged;
         private static boolean reliefProfileLogged;
+        private static boolean slopeWidthProfileLogged;
         private static boolean surfaceWindowLogged;
         // Keep only the first few rebuild timings: the first includes one-time profile checks.
         private static int groundBuildTimingSamplesLogged;
@@ -923,13 +926,34 @@ public final class RiftClientState {
         private static boolean inactiveCacheCleanupLogged;
 
         private record GroundPoint(double x,double y,double z) {}
+        private static double groundSlopeWidthScale(GroundPoint a,GroundPoint b) {
+            if(a==null || b==null || !Double.isFinite(a.x()) || !Double.isFinite(a.y())
+                || !Double.isFinite(a.z()) || !Double.isFinite(b.x()) || !Double.isFinite(b.y())
+                || !Double.isFinite(b.z())) return 1.0D;
+            double horizontal=Math.hypot(b.x()-a.x(),b.z()-a.z());
+            double rise=Math.abs(b.y()-a.y());
+            if(!Double.isFinite(horizontal) || horizontal<=1.0E-5D || !Double.isFinite(rise)) return 1.0D;
+            double grade=rise/horizontal;
+            if(!Double.isFinite(grade)) return 1.0D;
+            double normalizedGrade=Math.max(0.0D,Math.min(1.0D,grade/MAX_GROUND_SEGMENT_GRADE));
+            double scale=1.0D-GROUND_SLOPE_WIDTH_REDUCTION*normalizedGrade;
+            return Double.isFinite(scale)
+                ? Math.max(1.0D-GROUND_SLOPE_WIDTH_REDUCTION,Math.min(1.0D,scale)) : 1.0D;
+        }
         private record GroundSample(double forwardX,double bendX,double forwardZ,double bendZ,double phase,
                 double phaseSin,double phaseCos,double flickerPhaseSin,double flickerPhaseCos,
                 double coreWidthScale,double coreSkew,boolean coreSegmentGap,
                 boolean leftEdgeNotched,boolean rightEdgeNotched) {}
         private record GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,
                 GroundSample sample,double taperA,double taperB,double coreWidthScaleA,double coreWidthScaleB,
-                double coreSkewA,double coreSkewB) {}
+                double coreSkewA,double coreSkewB,double slopeWidthScale) {
+            private GroundSegment(GroundPoint a,GroundPoint b,double normalX,double normalZ,
+                    GroundSample sample,double taperA,double taperB,double coreWidthScaleA,double coreWidthScaleB,
+                    double coreSkewA,double coreSkewB) {
+                this(a,b,normalX,normalZ,sample,taperA,taperB,coreWidthScaleA,coreWidthScaleB,
+                    coreSkewA,coreSkewB,groundSlopeWidthScale(a,b));
+            }
+        }
         private record GroundMesh(List<GroundSegment> segments,int activeArms,int sampledColumns,int cacheHits,
                 int steepStepBreaks) {}
 
@@ -1536,6 +1560,46 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_BEVEL_PULSE_PROFILE_VERIFIED minScale={} maxScale={} midpointLeft={} midpointRight={} complementary=true bounded=true invalidRejected=true noExtraTrig=true",
                 minimumBevelLiftScale,maximumBevelLiftScale,midpointLeftBevelLiftScale,midpointRightBevelLiftScale);
+        }
+
+        private static void verifyGroundSlopeWidthProfile() {
+            if(slopeWidthProfileLogged) return;
+            GroundPoint flatA=new GroundPoint(0.0D,0.0D,0.0D);
+            GroundPoint flatB=new GroundPoint(1.0D,0.0D,0.0D);
+            GroundPoint halfGradeB=new GroundPoint(1.0D,MAX_GROUND_SEGMENT_GRADE*.5D,0.0D);
+            GroundPoint maxGradeB=new GroundPoint(1.0D,MAX_GROUND_SEGMENT_GRADE,0.0D);
+            GroundPoint overGradeB=new GroundPoint(1.0D,MAX_GROUND_SEGMENT_GRADE*2.0D,0.0D);
+            double flat=groundSlopeWidthScale(flatA,flatB);
+            double halfGrade=groundSlopeWidthScale(flatA,halfGradeB);
+            double maxGrade=groundSlopeWidthScale(flatA,maxGradeB);
+            double overGrade=groundSlopeWidthScale(flatA,overGradeB);
+            double invalid=groundSlopeWidthScale(new GroundPoint(Double.NaN,0.0D,0.0D),flatB);
+            double maximumEdgeSkew=GROUND_CORE_SKEW_AMPLITUDE*GROUND_EDGE_OFFSET_SKEW_SCALE;
+            double leftGap=(1.0D-GROUND_SLOPE_WIDTH_REDUCTION)*GROUND_MAX_HALF_WIDTH
+                *(GROUND_EDGE_OFFSET_SCALE*(1.0D+maximumEdgeSkew)
+                    -GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE*(1.0D+GROUND_CORE_SKEW_AMPLITUDE))
+                -GROUND_EDGE_HALF_WIDTH;
+            double rightGap=(1.0D-GROUND_SLOPE_WIDTH_REDUCTION)*GROUND_MAX_HALF_WIDTH
+                *(GROUND_EDGE_OFFSET_SCALE*(1.0D-maximumEdgeSkew)
+                    -GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE*(1.0D-GROUND_CORE_SKEW_AMPLITUDE))
+                -GROUND_EDGE_HALF_WIDTH;
+            double minimumCoreEdgeGap=Math.min(leftGap,rightGap);
+            GroundSegment cached=new GroundSegment(flatA,maxGradeB,0.0D,1.0D,GROUND_SAMPLES[0],
+                1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
+            if(Math.abs(GROUND_SLOPE_WIDTH_REDUCTION-.15D)>1.0E-12D
+                || Math.abs(flat-1.0D)>1.0E-12D
+                || Math.abs(halfGrade-.925D)>1.0E-12D
+                || Math.abs(maxGrade-.85D)>1.0E-12D
+                || Math.abs(overGrade-.85D)>1.0E-12D
+                || invalid!=1.0D
+                || Math.abs(cached.slopeWidthScale()-maxGrade)>1.0E-12D
+                || !Double.isFinite(minimumCoreEdgeGap)
+                || minimumCoreEdgeGap<GROUND_MIN_CORE_EDGE_GAP)
+                throw new IllegalStateException("BLACK FREQUENCY ground slope width profile regression");
+            slopeWidthProfileLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_SLOPE_WIDTH_PROFILE_VERIFIED reduction={} flat={} halfGrade={} maxGrade={} overGrade={} minCoreEdgeGap={} bounded=true monotonic=true cachedPerSegment=true invalidNeutral=true",
+                GROUND_SLOPE_WIDTH_REDUCTION,flat,halfGrade,maxGrade,overGrade,minimumCoreEdgeGap);
         }
 
         private static double boundedShapeHeight(double height,double fallback) {
@@ -2617,6 +2681,7 @@ public final class RiftClientState {
                 verifySurfaceSearchOrder();
                 verifyTaperProfile();
                 verifyGroundSurfaceReliefProfile();
+                verifyGroundSlopeWidthProfile();
                 verifyGroundEdgeInterpolationProfile();
                 verifyGroundEdgeMaskProfile();
                 verifyGroundContinuityProfile();
@@ -3024,6 +3089,7 @@ public final class RiftClientState {
             taperProfileLogged=false;
             visualProfileLogged=false;
             reliefProfileLogged=false;
+            slopeWidthProfileLogged=false;
             edgeInterpolationProfileLogged=false;
             surfaceWindowLogged=false;
             supportSurfaceProfileLogged=false;
@@ -3379,6 +3445,7 @@ public final class RiftClientState {
                         *(flickerSin*sample.flickerPhaseCos()+flickerCos*sample.flickerPhaseSin());
                     double halfWidth=Math.max(GROUND_MIN_HALF_WIDTH,
                         GROUND_BASE_HALF_WIDTH+GROUND_WAVE_HALF_WIDTH_RANGE*wave+widthFlicker);
+                    halfWidth*=segment.slopeWidthScale();
                     float pulse=(float)(.78D+.22D*(pulseSin*sample.phaseCos()+pulseCos*sample.phaseSin()));
                     float alphaA=segmentStrengthA*pulse;
                     float alphaB=segmentStrengthB*pulse;
