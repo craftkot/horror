@@ -4056,35 +4056,6 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: isolated one-block ground-step bridge policy was not verified",
                       flush=True)
                 return False
-            expected_grade=0.5625/client_spacing
-            if (not continuity_profile
-                    or abs(float(continuity_profile.group(2))-expected_grade)>1.0E-9
-                    or abs(float(continuity_profile.group(3))-.06)>1.0E-9):
-                print("WORLD_CAPTURE_FAIL: logged ground grade/taper no longer matches the fixed rise budget",
-                      "expectedGrade",expected_grade,
-                      "profile",continuity_profile.groups() if continuity_profile else None,
-                      flush=True)
-                return False
-            grade_guard_marker=(
-                "BLACK_FREQUENCY_GROUND_MESH_GRADE_GUARD_VERIFIED "
-                f"maxGrade={expected_grade:g} oneBlockRiseRejected=true snowAccepted=true cliffCapProfile=true"
-            )
-            if grade_guard_marker not in log_after:
-                print("WORLD_CAPTURE_FAIL: slope-aware ground fissure guard was not verified",flush=True)
-                return False
-            if "BLACK_FREQUENCY_GROUND_MESH_GRADE_BUDGET_VERIFIED previousMaxRise=0.5625 currentMaxRise=0.5625 same=true" not in log_after:
-                print("WORLD_CAPTURE_FAIL: denser mesh changed the maximum allowed terrain rise",flush=True)
-                return False
-            grade_stats=re.search(
-                r"BLACK_FREQUENCY_GROUND_MESH_GRADE_STATS maxGrade=([-+0-9.eE]+) "
-                r"cliffCaps=(\d+) unsupportedGapCaps=(\d+) singleStepBridges=(\d+) steepStepsSkipped=(\d+)",
-                log_after)
-            if (not grade_stats
-                    or abs(float(grade_stats.group(1))-expected_grade)>1.0E-9
-                    or int(grade_stats.group(2))>int(grade_stats.group(5))
-                    or int(grade_stats.group(4))+int(grade_stats.group(5))>GROUND_MESH_SAMPLES):
-                print("WORLD_CAPTURE_FAIL: cliff-end taper or single-step bridge accounting is invalid",flush=True)
-                return False
             if ("private static final double MAX_GROUND_SEGMENT_GRADE=.5625D/SAMPLE_SPACING;" not in camera_source
                     or "isContinuousGroundStep(previous.y(),current.y(),length)" not in camera_source
                     or "private static boolean canStartSingleGroundStepBridge" not in camera_source
@@ -4154,6 +4125,36 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: denser client mesh no longer aligns with the server fissure path",
                       "server",density_spacing,density_extent,
                       "client",client_spacing,client_extent,"radius",client_radius,flush=True)
+                return False
+            # Validate the grade only after the client sampling profile defines client_spacing.
+            expected_grade=0.5625/client_spacing
+            if (not continuity_profile
+                    or abs(float(continuity_profile.group(2))-expected_grade)>1.0E-9
+                    or abs(float(continuity_profile.group(3))-.06)>1.0E-9):
+                print("WORLD_CAPTURE_FAIL: logged ground grade/taper no longer matches the fixed rise budget",
+                      "expectedGrade",expected_grade,
+                      "profile",continuity_profile.groups() if continuity_profile else None,
+                      flush=True)
+                return False
+            grade_guard_marker=(
+                "BLACK_FREQUENCY_GROUND_MESH_GRADE_GUARD_VERIFIED "
+                f"maxGrade={expected_grade:g} oneBlockRiseRejected=true snowAccepted=true cliffCapProfile=true"
+            )
+            if grade_guard_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: slope-aware ground fissure guard was not verified",flush=True)
+                return False
+            if "BLACK_FREQUENCY_GROUND_MESH_GRADE_BUDGET_VERIFIED previousMaxRise=0.5625 currentMaxRise=0.5625 same=true" not in log_after:
+                print("WORLD_CAPTURE_FAIL: denser mesh changed the maximum allowed terrain rise",flush=True)
+                return False
+            grade_stats=re.search(
+                r"BLACK_FREQUENCY_GROUND_MESH_GRADE_STATS maxGrade=([-+0-9.eE]+) "
+                r"cliffCaps=(\d+) unsupportedGapCaps=(\d+) singleStepBridges=(\d+) steepStepsSkipped=(\d+)",
+                log_after)
+            if (not grade_stats
+                    or abs(float(grade_stats.group(1))-expected_grade)>1.0E-9
+                    or int(grade_stats.group(2))>int(grade_stats.group(5))
+                    or int(grade_stats.group(4))+int(grade_stats.group(5))>GROUND_MESH_SAMPLES):
+                print("WORLD_CAPTURE_FAIL: cliff-end taper or single-step bridge accounting is invalid",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_BEND_PROFILE_VERIFIED amplitude=0.24 maxOffset=0.24 shared=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: server fissure bend profile was not verified",flush=True)
