@@ -746,8 +746,19 @@ public final class RiftClientState {
             new BlockPos.MutableBlockPos(0,0,0);
         // A few cached violet motes rise above non-solid plants without lifting the ground ribbon.
         private static final int GROUND_CANOPY_ACCENT_PARTICLE_BUDGET=8;
+        // Queue candidates while sampling, then emit only when the final mesh retains a nearby segment.
+        private static final int GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET=32;
+        private static final double GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE=.85D;
+        private static final double GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE_SQR=
+            GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE*GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE;
+        private static final double GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA=.35D;
+        private static final int[] GROUND_CANOPY_ACCENT_X=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
+        private static final int[] GROUND_CANOPY_ACCENT_Z=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
+        private static final double[] GROUND_CANOPY_ACCENT_Y=new double[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
+        private static final double[] GROUND_CANOPY_ACCENT_GROUND_Y=new double[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final DustParticleOptions GROUND_CANOPY_ACCENT_DUST=
             new DustParticleOptions(new Vector3f(.42F,.18F,.92F),.58F);
+        private static int groundCanopyAccentCandidateCount;
         private static int groundCanopyAccentParticlesEmitted;
         private static boolean canopyAccentSelectorProfileLogged;
         private static boolean canopyAccentBuildProfileLogged;
@@ -2347,12 +2358,69 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_MESH_SURFACE_SEARCH_RANGE_VERIFIED renderRadius=64 searchBelow=64 searchAbove=8 bounded=true");
         }
 
-        private static boolean shouldEmitCanopyAccentParticle(BlockState surface,
-                int blockX,int blockZ,int emitted) {
+        private static boolean shouldQueueCanopyAccentCandidate(BlockState surface,
+                int blockX,int blockZ,int queued) {
             return surface!=null
                 && surface.getBlock() instanceof net.minecraft.world.level.block.BushBlock
-                && emitted>=0 && emitted<GROUND_CANOPY_ACCENT_PARTICLE_BUDGET
+                && queued>=0 && queued<GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET
                 && ((blockX^blockZ)&3)==0;
+        }
+
+        private static boolean canopyAccentCandidateNearSegment(double x,double z,double groundY,
+                GroundSegment segment) {
+            if(segment==null || !Double.isFinite(x) || !Double.isFinite(z) || !Double.isFinite(groundY))
+                return false;
+            GroundPoint a=segment.a(),b=segment.b();
+            if(a==null || b==null || !Double.isFinite(a.x()) || !Double.isFinite(a.y())
+                || !Double.isFinite(a.z()) || !Double.isFinite(b.x()) || !Double.isFinite(b.y())
+                || !Double.isFinite(b.z())) return false;
+            double dx=b.x()-a.x(),dz=b.z()-a.z();
+            double lengthSquared=dx*dx+dz*dz;
+            if(!Double.isFinite(lengthSquared) || lengthSquared<=1.0E-10D) return false;
+            double t=((x-a.x())*dx+(z-a.z())*dz)/lengthSquared;
+            if(!Double.isFinite(t)) return false;
+            t=Math.max(0.0D,Math.min(1.0D,t));
+            double nearestX=a.x()+dx*t,nearestZ=a.z()+dz*t;
+            double offsetX=x-nearestX,offsetZ=z-nearestZ;
+            double horizontalDistanceSquared=offsetX*offsetX+offsetZ*offsetZ;
+            double segmentY=a.y()+(b.y()-a.y())*t;
+            double groundDelta=Math.abs(groundY-segmentY);
+            return Double.isFinite(horizontalDistanceSquared) && Double.isFinite(groundDelta)
+                && horizontalDistanceSquared<=GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE_SQR
+                && groundDelta<=GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA;
+        }
+
+        private static boolean canopyAccentCandidateTouchesMesh(int blockX,int blockZ,double groundY,
+                List<GroundSegment> segments) {
+            if(segments==null || segments.isEmpty()) return false;
+            double x=blockX+.5D,z=blockZ+.5D;
+            for(GroundSegment segment:segments)
+                if(canopyAccentCandidateNearSegment(x,z,groundY,segment)) return true;
+            return false;
+        }
+
+        private static void emitCanopyAccentCandidates(Level level,List<GroundSegment> segments,
+                int worldAnchorX,int worldAnchorZ) {
+            groundCanopyAccentParticlesEmitted=0;
+            if(level==null || segments==null || segments.isEmpty()) return;
+            for(int i=0;i<groundCanopyAccentCandidateCount
+                && groundCanopyAccentParticlesEmitted<GROUND_CANOPY_ACCENT_PARTICLE_BUDGET;i++) {
+                int x=GROUND_CANOPY_ACCENT_X[i],z=GROUND_CANOPY_ACCENT_Z[i];
+                long dx=(long)x-worldAnchorX,dz=(long)z-worldAnchorZ;
+                if(Math.abs(dx)>RADIUS || Math.abs(dz)>RADIUS || dx*dx+dz*dz>(long)RADIUS*RADIUS)
+                    continue;
+                double accentY=GROUND_CANOPY_ACCENT_Y[i];
+                double groundY=GROUND_CANOPY_ACCENT_GROUND_Y[i];
+                if(!Double.isFinite(accentY) || !Double.isFinite(groundY)
+                    || accentY<level.getMinBuildHeight() || accentY>=level.getMaxBuildHeight()
+                    || groundY<level.getMinBuildHeight() || groundY>=level.getMaxBuildHeight()) continue;
+                SURFACE_CURSOR.set(x,(int)Math.floor(groundY),z);
+                if(!level.getWorldBorder().isWithinBounds(SURFACE_CURSOR)
+                    || !level.hasChunk(x>>4,z>>4)
+                    || !canopyAccentCandidateTouchesMesh(x,z,groundY,segments)) continue;
+                level.addParticle(GROUND_CANOPY_ACCENT_DUST,x+.5D,accentY,z+.5D,0.0D,.006D,0.0D);
+                groundCanopyAccentParticlesEmitted++;
+            }
         }
 
         private static double canopyAccentParticleY(int surfaceY,double shapeHeight) {
@@ -2364,27 +2432,41 @@ public final class RiftClientState {
         private static void verifyCanopyAccentProfile() {
             if(canopyAccentSelectorProfileLogged) return;
             BlockState plant=net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState();
-            boolean selected=shouldEmitCanopyAccentParticle(plant,0,0,0);
-            boolean sparse=!shouldEmitCanopyAccentParticle(plant,1,0,0);
-            boolean deterministic=shouldEmitCanopyAccentParticle(plant,4,0,0)
-                && shouldEmitCanopyAccentParticle(plant,4,0,0);
-            boolean budgetRejected=!shouldEmitCanopyAccentParticle(plant,0,0,GROUND_CANOPY_ACCENT_PARTICLE_BUDGET);
-            boolean negativeCounterRejected=!shouldEmitCanopyAccentParticle(plant,0,0,-1);
+            boolean selected=shouldQueueCanopyAccentCandidate(plant,0,0,0);
+            boolean sparse=!shouldQueueCanopyAccentCandidate(plant,1,0,0);
+            boolean deterministic=shouldQueueCanopyAccentCandidate(plant,4,0,0)
+                && shouldQueueCanopyAccentCandidate(plant,4,0,0);
+            boolean candidateBudgetRejected=!shouldQueueCanopyAccentCandidate(
+                plant,0,0,GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET);
+            boolean negativeCounterRejected=!shouldQueueCanopyAccentCandidate(plant,0,0,-1);
             boolean nonPlantsRejected=
-                !shouldEmitCanopyAccentParticle(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),0,0,0)
-                && !shouldEmitCanopyAccentParticle(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),0,0,0);
+                !shouldQueueCanopyAccentCandidate(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),0,0,0)
+                && !shouldQueueCanopyAccentCandidate(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),0,0,0);
             double plantTop=canopyAccentParticleY(70,.8D);
             double invalidHeight=canopyAccentParticleY(70,Double.NaN);
             double excessiveHeight=canopyAccentParticleY(70,2.0D);
-            if(!(selected && sparse && deterministic && budgetRejected && negativeCounterRejected
+            GroundSegment fixture=new GroundSegment(new GroundPoint(0.0D,70.0D,0.0D),
+                new GroundPoint(1.0D,70.0D,0.0D),0.0D,1.0D,GROUND_SAMPLES[0],
+                1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
+            boolean nearSegment=canopyAccentCandidateNearSegment(.5D,.2D,70.05D,fixture);
+            boolean farSegment=!canopyAccentCandidateNearSegment(.5D,1.0D,70.05D,fixture);
+            boolean heightMismatch=!canopyAccentCandidateNearSegment(.5D,.2D,70.5D,fixture);
+            boolean invalidRejected=!canopyAccentCandidateNearSegment(Double.NaN,.2D,70.05D,fixture);
+            boolean emptyMeshRejected=!canopyAccentCandidateTouchesMesh(0,0,70.0D,List.of());
+            boolean meshAccepted=canopyAccentCandidateTouchesMesh(0,0,70.05D,List.of(fixture));
+            if(!(selected && sparse && deterministic && candidateBudgetRejected && negativeCounterRejected
                 && nonPlantsRejected && Math.abs(plantTop-70.92D)<1.0E-9D
                 && Math.abs(invalidHeight-70.12D)<1.0E-9D
-                && Math.abs(excessiveHeight-71.12D)<1.0E-9D))
+                && Math.abs(excessiveHeight-71.12D)<1.0E-9D
+                && nearSegment && farSegment && heightMismatch && invalidRejected
+                && emptyMeshRejected && meshAccepted))
                 throw new IllegalStateException("BLACK FREQUENCY canopy accent particle profile regression");
             canopyAccentSelectorProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SELECTOR_PROFILE_VERIFIED budget={} selection=one-in-four plantOnly=true invalidRejected=true heightBounded=true",
-                GROUND_CANOPY_ACCENT_PARTICLE_BUDGET);
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SELECTOR_PROFILE_VERIFIED budget={} candidateBudget={} selection=one-in-four plantOnly=true invalidRejected=true heightBounded=true segmentBounded=true",
+                GROUND_CANOPY_ACCENT_PARTICLE_BUDGET,GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED near=true far=false heightBounded=true invalidRejected=true emptyMeshRejected=true");
         }
 
         private static double sampleGroundY(net.minecraft.client.multiplayer.ClientLevel level,
@@ -2433,18 +2515,23 @@ public final class RiftClientState {
                 if(!isGroundHeadClear(head)) continue;
 
                 double surfaceOffset=groundSurfaceOffset(supportHeight,snowLayerHeight);
+                double groundY=candidateY-1+surfaceOffset+GROUND_SURFACE_CLEARANCE;
                 if(emitCanopyAccent && plantSurface && Double.isFinite(plantShapeHeight)
                     && plantShapeHeight>0.0D
-                    && shouldEmitCanopyAccentParticle(surface,blockX,blockZ,groundCanopyAccentParticlesEmitted)) {
+                    && shouldQueueCanopyAccentCandidate(surface,blockX,blockZ,groundCanopyAccentCandidateCount)) {
                     double accentY=canopyAccentParticleY(candidateY,plantShapeHeight);
                     if(Double.isFinite(accentY) && accentY>=level.getMinBuildHeight()
-                        && accentY<level.getMaxBuildHeight()) {
-                        level.addParticle(GROUND_CANOPY_ACCENT_DUST,
-                            blockX+.5D,accentY,blockZ+.5D,0.0D,.006D,0.0D);
-                        groundCanopyAccentParticlesEmitted++;
+                        && accentY<level.getMaxBuildHeight()
+                        && Double.isFinite(groundY) && groundY>=level.getMinBuildHeight()
+                        && groundY<level.getMaxBuildHeight()) {
+                        int candidate=groundCanopyAccentCandidateCount++;
+                        GROUND_CANOPY_ACCENT_X[candidate]=blockX;
+                        GROUND_CANOPY_ACCENT_Z[candidate]=blockZ;
+                        GROUND_CANOPY_ACCENT_Y[candidate]=accentY;
+                        GROUND_CANOPY_ACCENT_GROUND_Y[candidate]=groundY;
                     }
                 }
-                return candidateY-1+surfaceOffset+GROUND_SURFACE_CLEARANCE;
+                return groundY;
             }
             return Double.NaN;
         }
@@ -2506,6 +2593,7 @@ public final class RiftClientState {
             List<GroundSegment> result=new ArrayList<>(ARM_COUNT*(SEGMENTS_PER_ARM-1));
             // The static primitive map and mutable cursor are owned by the render
             // thread and reused across rebuilds; clear() keeps the map's capacity.
+            groundCanopyAccentCandidateCount=0;
             groundCanopyAccentParticlesEmitted=0;
             SURFACE_Y_BY_COLUMN.clear();
             SURFACE_CURSOR.set(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);
@@ -2627,10 +2715,12 @@ public final class RiftClientState {
                 }
                 if(result.size()>armStart) activeArms++;
             }
+            emitCanopyAccentCandidates(level,result,worldAnchorX,worldAnchorZ);
             if(VERIFY_GROUND_MESH_PROFILES && !canopyAccentBuildProfileLogged) {
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED emitted={} budget={} loadedOnly=true radius=48 clientOnly=true plantOnly=true",
-                    groundCanopyAccentParticlesEmitted,GROUND_CANOPY_ACCENT_PARTICLE_BUDGET);
+                    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED candidates={} emitted={} candidateBudget={} budget={} loadedOnly=true radius=48 clientOnly=true plantOnly=true segmentBounded=true",
+                    groundCanopyAccentCandidateCount,groundCanopyAccentParticlesEmitted,
+                    GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET,GROUND_CANOPY_ACCENT_PARTICLE_BUDGET);
                 canopyAccentBuildProfileLogged=true;
             }
             if(VERIFY_GROUND_MESH_PROFILES && groundCanopyAccentParticlesEmitted>0
@@ -2905,6 +2995,7 @@ public final class RiftClientState {
             canopyAccentSelectorProfileLogged=false;
             canopyAccentBuildProfileLogged=false;
             canopyAccentEmissionLogged=false;
+            groundCanopyAccentCandidateCount=0;
             groundCanopyAccentParticlesEmitted=0;
         }
 
