@@ -3060,9 +3060,14 @@ def capture_test_world():
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_PROBE_BOUNDS_VERIFIED "
                 "nonFiniteRejected=true invertedBoundsRejected=true invertedYRejected=true degenerateYRejected=true validAccepted=true"
             )
+            support_height_bound_marker = (
+                "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_HEIGHT_BOUND_VERIFIED "
+                "maxHeight=1.0 overheightRejected=true epsilonTolerance=true"
+            )
             if (uniform_top_marker not in final_log
                     or support_scan_marker not in final_log
                     or support_probe_bounds_marker not in final_log
+                    or support_height_bound_marker not in final_log
                     or "private static boolean hasFullFootprintTop(" not in camera_source
                     or "private static final class FullFootprintTopProbe" not in camera_source
                     or "shape.forAllBoxes(GROUND_SUPPORT_TOP_PROBE);" not in camera_source
@@ -3071,6 +3076,8 @@ def capture_test_world():
                     or "minX>maxX" not in camera_source
                     or "minY>=maxY" not in camera_source
                     or "minZ>maxZ" not in camera_source
+                    or "height<=1.0D+GROUND_SUPPORT_SHAPE_EPSILON" not in camera_source
+                    or "overheightSupportRejected" not in camera_source
                     or "verifyMalformedSupportProbeBounds()" not in camera_source
                     or "shape.toAabbs()" in camera_source
                     or "Blocks.CAULDRON.defaultBlockState()" not in camera_source):
