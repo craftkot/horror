@@ -3967,17 +3967,29 @@ def capture_test_world():
                 return False
             canopy_selector_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SELECTOR_PROFILE_VERIFIED "
-                "budget=8 selection=one-in-four plantOnly=true invalidRejected=true heightBounded=true"
+                "budget=8 candidateBudget=32 selection=one-in-four plantOnly=true "
+                "invalidRejected=true heightBounded=true segmentBounded=true"
             )
             if canopy_selector_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: deterministic plant-only canopy accent selector was not verified",flush=True)
                 return False
+            canopy_segment_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED "
+                "near=true far=false heightBounded=true invalidRejected=true emptyMeshRejected=true"
+            )
+            if canopy_segment_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: canopy accent candidates were not filtered against retained fissure segments",
+                      flush=True)
+                return False
             canopy_budget=re.search(
-                r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED emitted=(\d+) "
-                r"budget=8 loadedOnly=true radius=48 clientOnly=true plantOnly=true",
+                r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED "
+                r"candidates=(\d+) emitted=(\d+) candidateBudget=32 budget=8 "
+                r"loadedOnly=true radius=48 clientOnly=true plantOnly=true segmentBounded=true",
                 log_after)
-            if not canopy_budget or int(canopy_budget.group(1))>8:
-                print("WORLD_CAPTURE_FAIL: client canopy accent particles exceeded their bounded per-build budget",
+            if (not canopy_budget or int(canopy_budget.group(1))>32
+                or int(canopy_budget.group(2))>8
+                or int(canopy_budget.group(2))>int(canopy_budget.group(1))):
+                print("WORLD_CAPTURE_FAIL: client canopy accent candidates or emitted particles exceeded their bounded budgets",
                       canopy_budget.groups() if canopy_budget else None,flush=True)
                 return False
             continuity=re.search(
