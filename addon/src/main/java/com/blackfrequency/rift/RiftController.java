@@ -955,6 +955,8 @@ public final class RiftController {
         int edits;
         int finaleTicks;
         boolean started, finished, initialized, restoring, restored;
+        // Transient: legacy saves may have a valid cursor but predate persisted x/z.
+        boolean anchorCoordinatesNeedInitialization;
         int restoreIndex, restoreScan, restoreTicks, restoredBlocks, skippedOccupied, skippedInvalid;
         long beaconPos;
         // Distinguish an absent/corrupt NBT field from a legitimate beacon at BlockPos.ZERO.
@@ -1311,6 +1313,12 @@ public final class RiftController {
                 s.setDirty();
                 LOGGER.warn("BLACK FREQUENCY: repaired missing or malformed saved anchor coordinates");
             }
+            // A legacy cursor without an anchor is safe to keep only before any edits.
+            // Resolve its origin from the live spawn on the server tick, not to (0,0).
+            s.anchorCoordinatesNeedInitialization=!anchorCoordinatesValid
+                && !n.contains("x") && !n.contains("z")
+                && s.initialized && !s.started && !s.finished && !s.restoring && !s.restored
+                && s.edits==0 && s.snapshots.isEmpty();
             if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST STATE_LOADED elapsed={} edits={} restored={} restoring={} snapshots={}",s.elapsed,s.edits,s.restored,s.restoring,s.snapshots.size());
             return s;
         }
@@ -2708,6 +2716,15 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FRACTURE_CUE_RULE_VERIFIED");
     }
 
+    private static boolean initializeLegacyAnchorFromSpawn(State s,BlockPos spawn) {
+        if(!s.anchorCoordinatesNeedInitialization || spawn==null) return false;
+        s.x=spawn.getX();
+        s.z=spawn.getZ();
+        s.anchorCoordinatesNeedInitialization=false;
+        s.setDirty();
+        return true;
+    }
+
     private static void verifySurfaceFirstScanMigration() {
         if(fractureEditBudget(false)!=96 || fractureEditBudget(true)!=160
             || EDIT_BUDGET!=fractureEditBudget(CI_TEST))
@@ -2730,8 +2747,16 @@ public final class RiftController {
         legacyTag.putBoolean("initialized",true);
         legacyTag.putInt("cy",12);
         State legacy=State.load(legacyTag);
-        if(legacy.surfaceFirstScan || legacy.centerOutScan || legacy.cursorY!=12 || legacy.isDirty())
+        if(legacy.surfaceFirstScan || legacy.centerOutScan || legacy.cursorY!=12 || legacy.isDirty()
+            || !legacy.anchorCoordinatesNeedInitialization)
             throw new IllegalStateException("CI legacy fracture cursor migration regression");
+        BlockPos legacySpawn=new BlockPos(123,64,-456);
+        if(!initializeLegacyAnchorFromSpawn(legacy,legacySpawn)
+            || legacy.x!=123 || legacy.z!=-456 || legacy.cursorY!=12
+            || legacy.surfaceFirstScan || legacy.centerOutScan
+            || legacy.anchorCoordinatesNeedInitialization || !legacy.isDirty())
+            throw new IllegalStateException("CI legacy cursor spawn-anchor initialization regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST LEGACY_ANCHORLESS_CURSOR_REBOUND_VERIFIED spawnX=123 spawnZ=-456 cursorPreserved=true noOriginFallback=true");
 
         // The intermediate surface-first format predates center-out metadata and remains valid.
         CompoundTag intermediateTag=new CompoundTag();
@@ -5442,6 +5467,8 @@ public final class RiftController {
         if(event.phase != TickEvent.Phase.END || !(event.level instanceof ServerLevel level)
            || !level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD)) return;
         State s = level.getDataStorage().computeIfAbsent(State::load, State::new, "blackfrequency_finale");
+        if(initializeLegacyAnchorFromSpawn(s,level.getSharedSpawnPos()))
+            LOGGER.warn("BLACK FREQUENCY: initialized legacy fracture anchor from current world spawn without resetting its cursor");
         verifyCiNaturalBeaconBreakNoDrop(level,s);
         // Validate the real player fall-flying flag once in disposable CI worlds.
         // The probe restores the original chest item and flight state immediately.
