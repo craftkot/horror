@@ -2286,9 +2286,31 @@ public final class RiftClientState {
             if(supportFilterLogged) return;
             boolean naturalGrass=isGroundSupport(net.minecraft.world.level.block.Blocks.GRASS_BLOCK.defaultBlockState());
             boolean naturalStone=isGroundSupport(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+            BlockState bottomSlab=net.minecraft.world.level.block.Blocks.COBBLESTONE_SLAB.defaultBlockState();
+            BlockState topSlab=bottomSlab.setValue(net.minecraft.world.level.block.SlabBlock.TYPE,
+                net.minecraft.world.level.block.state.properties.SlabType.TOP);
+            BlockState doubleSlab=bottomSlab.setValue(net.minecraft.world.level.block.SlabBlock.TYPE,
+                net.minecraft.world.level.block.state.properties.SlabType.DOUBLE);
+            double bottomSlabHeight=groundSupportHeight(bottomSlab,level,BlockPos.ZERO);
+            double topSlabHeight=groundSupportHeight(topSlab,level,BlockPos.ZERO);
+            double doubleSlabHeight=groundSupportHeight(doubleSlab,level,BlockPos.ZERO);
+            double bottomSlabSnowOffset=groundSurfaceOffset(bottomSlabHeight,.5D);
+            double topSlabSnowOffset=groundSurfaceOffset(topSlabHeight,.5D);
+            boolean supportsSlabs=isGroundSupport(bottomSlab) && isGroundSupport(topSlab)
+                && isGroundSupport(doubleSlab)
+                && bottomSlab.getValue(net.minecraft.world.level.block.SlabBlock.TYPE)
+                    ==net.minecraft.world.level.block.state.properties.SlabType.BOTTOM
+                && topSlab.getValue(net.minecraft.world.level.block.SlabBlock.TYPE)
+                    ==net.minecraft.world.level.block.state.properties.SlabType.TOP
+                && doubleSlab.getValue(net.minecraft.world.level.block.SlabBlock.TYPE)
+                    ==net.minecraft.world.level.block.state.properties.SlabType.DOUBLE
+                && Math.abs(bottomSlabHeight-.5D)<1.0E-9D
+                && Math.abs(topSlabHeight-1.0D)<1.0E-9D
+                && Math.abs(doubleSlabHeight-1.0D)<1.0E-9D
+                && Math.abs(bottomSlabSnowOffset-1.0D)<1.0E-9D
+                && Math.abs(topSlabSnowOffset-1.5D)<1.0E-9D;
             boolean rejectsStructures=
                 !isGroundSupport(net.minecraft.world.level.block.Blocks.OAK_STAIRS.defaultBlockState())
-                && !isGroundSupport(net.minecraft.world.level.block.Blocks.COBBLESTONE_SLAB.defaultBlockState())
                 && !isGroundSupport(net.minecraft.world.level.block.Blocks.COBBLESTONE_WALL.defaultBlockState())
                 && !isGroundSupport(net.minecraft.world.level.block.Blocks.OAK_FENCE.defaultBlockState())
                 && !isGroundSupport(net.minecraft.world.level.block.Blocks.OAK_FENCE_GATE.defaultBlockState())
@@ -2352,7 +2374,7 @@ public final class RiftClientState {
                 && Math.abs(partialSupportSnowOffset-1.0D)<1.0E-9D
                 && Math.abs(invalidSnowFallback-.5D)<1.0E-9D
                 && Math.abs(overheightSnowClamp-1.5D)<1.0E-9D;
-            if(!(naturalGrass && naturalStone && rejectsStructures && rejectsBlockEntities
+            if(!(naturalGrass && naturalStone && supportsSlabs && rejectsStructures && rejectsBlockEntities
                 && rejectsHazardousSurfaces && rejectsHazardousHeadroom && validSupportHeights
                 && snowSurfaceOffsets && snowSurfaceAccepted && fullSnowBlockRejected))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh terrain/structure/support-shape regression");
@@ -2368,6 +2390,9 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_SHAPE_GUARD_VERIFIED fullBlock={} partial={} outlineFallback={} emptyRejected={}",
                 fullBlockHeight,partialBlockHeight,outlineFallback,emptyShapeRejected);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_SLAB_SUPPORT_VERIFIED bottom={} top={} double={} bottomSnow={} topSnow={} stairsRejected=true shapeDerived=true",
+                bottomSlabHeight,topSlabHeight,doubleSlabHeight,bottomSlabSnowOffset,topSlabSnowOffset);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SNOW_LAYER_SURFACE_HEIGHT_VERIFIED layers=1..8 minOffset={} maxOffset={} invalidFallback={} overheightClamp={} monotonic=true shapeDerived=true surfaceAccepted={} fullSnowBlockRejected={}",
                 minimumSnowOffset,maximumSnowOffset,invalidSnowFallback,overheightSnowClamp,
@@ -2391,6 +2416,7 @@ public final class RiftClientState {
             return groundSupportHeight(collision,collision.isEmpty()?support.getShape(level,pos):collision);
         }
 
+        // Slabs have a uniform support plane across their footprint; stairs do not.
         private static boolean isGroundSupport(BlockState state) {
             return state.blocksMotion()
                 && !state.hasBlockEntity()
@@ -2398,7 +2424,6 @@ public final class RiftClientState {
                 && !state.is(BlockTags.LEAVES)
                 && !state.is(BlockTags.PLANKS)
                 && !state.is(BlockTags.STAIRS)
-                && !state.is(BlockTags.SLABS)
                 && !state.is(BlockTags.WALLS)
                 && !state.is(BlockTags.FENCES)
                 && !state.is(BlockTags.FENCE_GATES)

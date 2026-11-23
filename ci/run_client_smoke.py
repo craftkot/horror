@@ -3034,6 +3034,20 @@ def capture_test_world():
             if support_shape_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: ground mesh accepted an empty or zero-height support shape",flush=True)
                 return False
+            slab_support_marker = (
+                "BLACK_FREQUENCY_GROUND_MESH_SLAB_SUPPORT_VERIFIED "
+                "bottom=0.5 top=1.0 double=1.0 bottomSnow=1.0 topSnow=1.5 stairsRejected=true shapeDerived=true"
+            )
+            if (slab_support_marker not in final_log
+                    or "!state.is(BlockTags.SLABS)" in camera_source
+                    or "SlabBlock.TYPE" not in camera_source
+                    or "SlabType.BOTTOM" not in camera_source
+                    or "SlabType.TOP" not in camera_source
+                    or "SlabType.DOUBLE" not in camera_source
+                    or "boolean supportsSlabs=" not in camera_source
+                    or "!isGroundSupport(net.minecraft.world.level.block.Blocks.OAK_STAIRS.defaultBlockState())" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: slab support must use real bottom/top/double collision heights while stairs remain excluded",flush=True)
+                return False
             sample_start=camera_source.find("private static double sampleGroundY(")
             sample_end=camera_source.find("private static long columnKey(",sample_start+1)
             sample_source=(camera_source[sample_start:sample_end]
