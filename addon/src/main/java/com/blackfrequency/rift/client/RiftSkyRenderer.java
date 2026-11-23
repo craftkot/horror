@@ -74,6 +74,9 @@ public final class RiftSkyRenderer {
     private static final boolean CI_TEST_MODE=Boolean.getBoolean("blackfrequency.ciTestMode");
     private static float lastCiCameraYaw=Float.NaN;
     private static float lastCiCameraPitch=Float.NaN;
+    private static double lastCiCameraX=Double.NaN;
+    private static double lastCiCameraY=Double.NaN;
+    private static double lastCiCameraZ=Double.NaN;
 
     private static boolean shouldRender(float strength) {
         // Match the fragment shader's transparent early-out exactly. Avoid
@@ -101,13 +104,30 @@ public final class RiftSkyRenderer {
         if(!CI_TEST_MODE || camera==null) return;
         float yaw=camera.getYRot();
         float pitch=camera.getXRot();
-        if(!Float.isFinite(yaw) || !Float.isFinite(pitch)) return;
+        var position=camera.getPosition();
+        double x=position.x;
+        double y=position.y;
+        double z=position.z;
+        if(!Float.isFinite(yaw) || !Float.isFinite(pitch)
+            || !Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)) return;
         boolean changed=!Float.isFinite(lastCiCameraYaw)
             || Math.abs(wrappedDegrees(yaw-lastCiCameraYaw))>=0.25F
-            || Math.abs(pitch-lastCiCameraPitch)>=0.25F;
+            || Math.abs(pitch-lastCiCameraPitch)>=0.25F
+            || !Double.isFinite(lastCiCameraX) || Math.abs(x-lastCiCameraX)>=0.05D
+            || !Double.isFinite(lastCiCameraY) || Math.abs(y-lastCiCameraY)>=0.05D
+            || !Double.isFinite(lastCiCameraZ) || Math.abs(z-lastCiCameraZ)>=0.05D;
         if(!changed) return;
         lastCiCameraYaw=yaw;
         lastCiCameraPitch=pitch;
+        lastCiCameraX=x;
+        lastCiCameraY=y;
+        lastCiCameraZ=z;
+        // The post-restoration mining fixture may move the player after the
+        // original server aim was recorded. Log the rendered eye position only
+        // in CI so the physical click can be aimed at the beacon's current pose.
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST CLIENT_CAMERA_POSE x={} y={} z={} yaw={} pitch={}",
+            x,y,z,yaw,pitch);
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST CLIENT_CAMERA_ROTATION yaw={} pitch={}",yaw,pitch);
     }

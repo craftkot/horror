@@ -1079,6 +1079,54 @@ def capture_test_world():
             return None
         return yaw,pitch
 
+    def read_client_camera_pose(log_text=None):
+        if log_text is None:
+            log_text=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+        matches=list(re.finditer(
+            r"BLACK_FREQUENCY_TEST CLIENT_CAMERA_POSE x=([-+0-9.eE]+) y=([-+0-9.eE]+) z=([-+0-9.eE]+) yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)",
+            log_text))
+        if not matches:
+            return None
+        pose=tuple(map(float,matches[-1].groups()))
+        return pose if all(math.isfinite(value) for value in pose) else None
+
+    def beacon_aim_from_camera_pose(pose,beacon_pos):
+        if pose is None or beacon_pos is None or len(pose)!=5 or len(beacon_pos)!=3:
+            raise ValueError("beacon aim requires a finite rendered camera pose and block position")
+        values=tuple(float(value) for value in pose)+tuple(float(value) for value in beacon_pos)
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError("beacon aim coordinates must be finite")
+        eye_x,eye_y,eye_z,_,_=values[:5]
+        block_x,block_y,block_z=values[5:]
+        dx=block_x+0.5-eye_x
+        dy=block_y+0.5-eye_y
+        dz=block_z+0.5-eye_z
+        horizontal=math.hypot(dx,dz)
+        if not math.isfinite(horizontal) or horizontal<=1.0E-6:
+            raise ValueError("beacon aim requires a non-zero horizontal distance")
+        yaw=(math.degrees(math.atan2(dz,dx))-90.0+180.0)%360.0-180.0
+        pitch=-math.degrees(math.atan2(dy,horizontal))
+        if not math.isfinite(yaw) or not math.isfinite(pitch):
+            raise ValueError("beacon aim produced a non-finite rotation")
+        return yaw,pitch
+
+    def read_post_restore_beacon_aim(log_text=None):
+        if log_text is None:
+            log_text=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+        matches=list(re.finditer(
+            r"BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY x=(-?[0-9]+) y=(-?[0-9]+) z=(-?[0-9]+)",
+            log_text))
+        if not matches:
+            return None
+        pose=read_client_camera_pose(log_text)
+        if pose is None:
+            return None
+        beacon_pos=tuple(map(int,matches[-1].groups()))
+        try:
+            return beacon_aim_from_camera_pose(pose,beacon_pos)
+        except (TypeError,ValueError,OverflowError):
+            return None
+
     def read_beacon_aim(log_text=None):
         if log_text is None:
             log_text=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
@@ -1217,7 +1265,25 @@ def capture_test_world():
         return None
 
     def aim_camera_at_beacon(log_text=None,allow_disposable_teleport=False):
-        target=read_beacon_aim(log_text)
+        if log_text is None:
+            log_text=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+        post_restore_marker=re.search(
+            r"BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY x=(-?[0-9]+) y=(-?[0-9]+) z=(-?[0-9]+)",
+            log_text)
+        target=read_post_restore_beacon_aim(log_text)
+        if post_restore_marker is not None:
+            deadline=time.monotonic()+2.0
+            while target is None and time.monotonic()<deadline and p.poll() is None:
+                time.sleep(0.05)
+                log_text=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else log_text
+                target=read_post_restore_beacon_aim(log_text)
+            if target is None:
+                print("WORLD_CAPTURE: current rendered camera pose is not ready for post-restoration beacon aim",flush=True)
+                return False
+            print("WORLD_CAPTURE: post-restoration beacon aim recomputed from live camera pose",
+                  round(target[0],3),round(target[1],3),flush=True)
+        else:
+            target=read_beacon_aim(log_text)
         if target is None:
             print("WORLD_CAPTURE: beacon aim telemetry is not ready; deferring click",flush=True)
             return False
@@ -1252,6 +1318,28 @@ def capture_test_world():
     if (read_client_camera_rotation(camera_sample)!=(179.0,26.5)
             or abs(wrapped_angle_delta(-179.0,179.0)-2.0)>1.0E-9):
         raise RuntimeError("BLACK FREQUENCY client camera telemetry parser regression")
+    camera_pose_sample="BLACK_FREQUENCY_TEST CLIENT_CAMERA_POSE x=9.5 y=67.62 z=-3.5 yaw=90.0 pitch=35.247574"
+    parsed_camera_pose=read_client_camera_pose(camera_pose_sample)
+    if (parsed_camera_pose is None or parsed_camera_pose[:3]!=(9.5,67.62,-3.5)
+            or parsed_camera_pose[3:]!=(90.0,35.247574)):
+        raise RuntimeError("BLACK FREQUENCY rendered camera pose parser regression")
+    post_restore_aim_sample="\n".join((
+        "BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=-7.6293945E-6 pitch=54.20249",
+        "BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY x=6 y=65 z=-4",
+        camera_pose_sample))
+    recomputed_post_restore_aim=read_post_restore_beacon_aim(post_restore_aim_sample)
+    if (recomputed_post_restore_aim is None
+            or abs(wrapped_angle_delta(recomputed_post_restore_aim[0],90.0))>1.0E-6
+            or abs(recomputed_post_restore_aim[1]-35.24757505834628)>1.0E-6):
+        raise RuntimeError("BLACK FREQUENCY post-restoration live beacon aim regression")
+    if read_post_restore_beacon_aim("BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY x=6 y=65 z=-4") is not None:
+        raise RuntimeError("BLACK FREQUENCY post-restoration aim accepted a missing camera pose")
+    try:
+        beacon_aim_from_camera_pose((float("nan"),67.0,-3.5,0.0,0.0),(6,65,-4))
+    except ValueError:
+        pass
+    else:
+        raise RuntimeError("BLACK FREQUENCY post-restoration aim accepted a non-finite camera pose")
     beacon_aim_sample="BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=-7.6293945E-6 pitch=54.20249"
     parsed_beacon_aim=read_beacon_aim(beacon_aim_sample)
     if (parsed_beacon_aim is None
@@ -1287,7 +1375,7 @@ def capture_test_world():
     else:
         raise RuntimeError("BLACK FREQUENCY non-finite disposable camera rotation was accepted")
     print("WORLD_CAPTURE: exact disposable-world camera rotation command and finite guards verified",flush=True)
-    print("WORLD_CAPTURE: client camera telemetry, beacon aim parser and correction directions verified",flush=True)
+    print("WORLD_CAPTURE: client camera telemetry, live post-restoration beacon aim and correction directions verified",flush=True)
     def is_rift_violet_pixel(r,g,b):
         # Reject pale lavender UI/death-screen skies; the rift must be saturated violet.
         return r>55 and b>80 and b>g*1.5 and r>g*1.5 and b-r<150
