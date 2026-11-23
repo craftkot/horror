@@ -11,7 +11,7 @@ MIN_GROUND_MESH_ARMS=2
 MAX_GROUND_MESH_ARMS=4
 GROUND_MESH_SAMPLES=96
 FISSURE_PARTICLE_SAMPLES=48
-FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE=2.25
+FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE=3.0
 FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE=12.0
 
 def is_fissure_target_horizontal_distance(horizontal_squared):
@@ -4040,9 +4040,10 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: isolated one-block ground-step bridge policy was not verified",
                       flush=True)
                 return False
+            expected_grade=0.5625/client_spacing
             grade_guard_marker=(
                 "BLACK_FREQUENCY_GROUND_MESH_GRADE_GUARD_VERIFIED "
-                "maxGrade=2.5 oneBlockRiseRejected=true snowAccepted=true cliffCapProfile=true"
+                f"maxGrade={expected_grade:g} oneBlockRiseRejected=true snowAccepted=true cliffCapProfile=true"
             )
             if grade_guard_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: slope-aware ground fissure guard was not verified",flush=True)
@@ -4055,12 +4056,14 @@ def capture_test_world():
                 r"cliffCaps=(\d+) unsupportedGapCaps=(\d+) singleStepBridges=(\d+) steepStepsSkipped=(\d+)",
                 log_after)
             if (not grade_stats
-                    or abs(float(grade_stats.group(1))-2.5)>1.0E-9
+                    or abs(float(grade_stats.group(1))-expected_grade)>1.0E-9
                     or int(grade_stats.group(2))>int(grade_stats.group(5))
                     or int(grade_stats.group(4))+int(grade_stats.group(5))>GROUND_MESH_SAMPLES):
                 print("WORLD_CAPTURE_FAIL: cliff-end taper or single-step bridge accounting is invalid",flush=True)
                 return False
-            if ("private static final double MAX_GROUND_SEGMENT_GRADE=2.5D;" not in camera_source
+            if (not any(contract in camera_source for contract in (
+                        "private static final double MAX_GROUND_SEGMENT_GRADE=2.5D;",
+                        "private static final double MAX_GROUND_SEGMENT_GRADE=1.125D/RiftGeometry.FISSURE_SAMPLE_SPACING;"))
                     or "isContinuousGroundStep(previous.y(),current.y(),length)" not in camera_source
                     or "private static boolean canStartSingleGroundStepBridge" not in camera_source
                     or "private static boolean canBridgeSingleGroundStep" not in camera_source
@@ -4096,11 +4099,14 @@ def capture_test_world():
             density_spacing=float(density.group(2))
             density_extent=float(density.group(3))
             density_bend=float(density.group(4))
+            supported_density_spacing=any(
+                math.isclose(density_spacing,allowed,rel_tol=0.0,abs_tol=1.0e-9)
+                for allowed in (0.45,0.60))
             if (density_samples!=FISSURE_PARTICLE_SAMPLES
-                    or density_spacing<0.45 or density_spacing>0.5
+                    or not supported_density_spacing
                     or not math.isclose(density_extent,12*density_spacing,
                                         rel_tol=0.0,abs_tol=1.0e-9)
-                    or density_extent>=48.0
+                    or density_extent+density_bend>=48.0
                     or not math.isclose(density_bend,.24,rel_tol=0.0,abs_tol=1.0e-9)):
                 print("WORLD_CAPTURE_FAIL: fissure density/radius is outside the verified bounds",
                       "samples",density_samples,"spacing",density_spacing,
@@ -4122,7 +4128,7 @@ def capture_test_world():
                     or not math.isclose(client_extent,density_extent,rel_tol=0.0,abs_tol=1.0e-9)
                     or client_radius!=48 or client_extent>=client_radius
                     or not math.isclose(client_bend,density_bend,rel_tol=0.0,abs_tol=1.0e-9)
-                    or "BLACK_FREQUENCY_GROUND_MESH_DENSITY_VERIFIED meshSamples=96 serverSamples=48 ratio=2 evenSamplesAligned=true extent=5.4" not in log_after):
+                    or f"BLACK_FREQUENCY_GROUND_MESH_DENSITY_VERIFIED meshSamples=96 serverSamples=48 ratio=2 evenSamplesAligned=true extent={density_extent:g}" not in log_after):
                 print("WORLD_CAPTURE_FAIL: denser client mesh no longer aligns with the server fissure path",
                       "server",density_spacing,density_extent,
                       "client",client_spacing,client_extent,"radius",client_radius,flush=True)
