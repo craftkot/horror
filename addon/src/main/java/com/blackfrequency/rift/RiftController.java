@@ -1255,7 +1255,7 @@ public final class RiftController {
             }
             boolean anchorCoordinatesNeedRepair=!anchorCoordinatesValid
                 && (n.contains("x") || n.contains("z") || s.initialized || s.started
-                    || s.edits>0 || s.restoring || s.restored);
+                    || s.edits>0 || (s.restoring && (!s.snapshots.isEmpty() || s.beaconPosPresent)));
             if(anchorCoordinatesNeedRepair) {
                 // Recovery has a stronger source of truth than the optional scan anchor:
                 // prefer the physical beacon, then its owned replacement, then the oldest
