@@ -1333,8 +1333,8 @@ public final class RiftController {
                     // torn save could otherwise skip restoration and clear the queue.
                     // Replay the validated queue: occupied blocks are preserved by
                     // the normal restore guard, while air/flowing-fluid positions retry.
-                    LOGGER.warn("BLACK FREQUENCY: recovery cursor is terminal with {} unaccounted snapshots; replaying validated queue",
-                        s.snapshots.size()-(long)s.restoredBlocks-s.skippedOccupied-s.skippedInvalid);
+                    LOGGER.warn("BLACK FREQUENCY: recovery cursor has inconsistent snapshot accounting; replaying {} validated snapshots",
+                        s.snapshots.size());
                     s.restoreIndex=last;
                     s.restoreScan=last;
                     s.restoreTicks=0;
