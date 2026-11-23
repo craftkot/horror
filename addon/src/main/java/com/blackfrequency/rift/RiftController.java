@@ -1530,8 +1530,8 @@ public final class RiftController {
     }
 
     private record FissureEmission(int samples,int accentDustMotes,int violetDustMotes,
-            int edgeDustMotes,int edgeFallbackArms,int edgeDustSmallMotes,
-            int edgeDustBaseMotes,int edgeDustLargeMotes,double averageSurfaceY) {
+            int edgeDustMotes,int edgeArmsWithSamples,int edgeFallbackArms,
+            int edgeDustSmallMotes,int edgeDustBaseMotes,int edgeDustLargeMotes,double averageSurfaceY) {
         private int totalParticles() {
             return accentDustMotes+violetDustMotes+edgeDustMotes;
         }
@@ -1933,6 +1933,7 @@ public final class RiftController {
         int accentDustMotes=0;
         int violetDustMotes=0;
         int edgeDustMotes=0;
+        int edgeArmsWithSamples=0;
         int edgeFallbackArms=0;
         int edgeDustSmallMotes=0;
         int edgeDustBaseMotes=0;
@@ -1985,6 +1986,7 @@ public final class RiftController {
             }
             // Emit exactly one edge accent per arm that had a valid, already-loaded sample.
             if(hasEdgeCandidate) {
+                edgeArmsWithSamples++;
                 DustParticleOptions edgeDust=fissureEdgeDustForWave(edgeWave);
                 level.sendParticles(edgeDust,
                     edgeX,edgeY+.025D+edgePulse,edgeZ,1,.025D,.012D,.025D,.004D);
@@ -1995,8 +1997,10 @@ public final class RiftController {
                 if(edgeCandidateSegment<FISSURE_SEGMENTS_PER_ARM) edgeFallbackArms++;
             }
         }
+        if(edgeDustMotes!=edgeArmsWithSamples)
+            throw new IllegalStateException("BLACK FREQUENCY edge Dust must match valid fissure arms");
         return new FissureEmission(samples,accentDustMotes,violetDustMotes,edgeDustMotes,
-            edgeFallbackArms,edgeDustSmallMotes,edgeDustBaseMotes,edgeDustLargeMotes,
+            edgeArmsWithSamples,edgeFallbackArms,edgeDustSmallMotes,edgeDustBaseMotes,edgeDustLargeMotes,
             samples==0?Double.NaN:surfaceYTotal/samples);
     }
 
@@ -5793,8 +5797,8 @@ public final class RiftController {
                             LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples={} accentDust={} violetDust={} edgeDust={} total={} heightmap=motion-blocking ground=terrain-support-filtered averageY={}",
                                 emission.samples(),emission.accentDustMotes(),emission.violetDustMotes(),
                                 emission.edgeDustMotes(),emission.totalParticles(),emission.averageSurfaceY());
-                            LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_EMITTED count={} material=dust minScale={} baseScale={} maxScale={} minCount={} baseCount={} maxCount={} fallbackArms={}",
-                                emission.edgeDustMotes(),FISSURE_VIOLET_EDGE_DUST_SMALL.getScale(),
+                            LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_EMITTED count={} validArms={} material=dust minScale={} baseScale={} maxScale={} minCount={} baseCount={} maxCount={} fallbackArms={}",
+                                emission.edgeDustMotes(),emission.edgeArmsWithSamples(),FISSURE_VIOLET_EDGE_DUST_SMALL.getScale(),
                                 FISSURE_VIOLET_EDGE_DUST.getScale(),FISSURE_VIOLET_EDGE_DUST_LARGE.getScale(),
                                 emission.edgeDustSmallMotes(),emission.edgeDustBaseMotes(),
                                 emission.edgeDustLargeMotes(),emission.edgeFallbackArms());
