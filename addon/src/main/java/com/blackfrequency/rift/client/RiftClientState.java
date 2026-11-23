@@ -1386,19 +1386,21 @@ public final class RiftClientState {
                 double minimumCoreHalfWidth=minimumHalfWidth*GROUND_CORE_WIDTH_SCALE*GROUND_MIN_CORE_WIDTH_SCALE
                     *(1.0D-GROUND_CORE_SKEW_AMPLITUDE);
                 double edgeOffsetSkew=GROUND_CORE_SKEW_AMPLITUDE*GROUND_EDGE_OFFSET_SKEW_SCALE;
-                double minimumEdgeInnerHalfWidth=minimumHalfWidth*GROUND_EDGE_OFFSET_SCALE
-                    *(1.0D-edgeOffsetSkew)-GROUND_EDGE_HALF_WIDTH;
+                double minimumEdgeHalfWidth=groundEdgeHalfWidth(minimumHalfWidth);
                 double maximumGlowHalfWidth=maximumHalfWidth*GROUND_GLOW_WIDTH_SCALE;
                 double maximumCoreHalfWidth=maximumHalfWidth*GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE
                     *(1.0D+GROUND_CORE_SKEW_AMPLITUDE);
+                double maximumEdgeHalfWidth=groundEdgeHalfWidth(maximumHalfWidth);
+                double minimumEdgeInnerHalfWidth=minimumHalfWidth*GROUND_EDGE_OFFSET_SCALE
+                    *(1.0D-edgeOffsetSkew)-minimumEdgeHalfWidth;
                 double maximumEdgeInnerHalfWidth=maximumHalfWidth*GROUND_EDGE_OFFSET_SCALE
-                    *(1.0D+edgeOffsetSkew)-GROUND_EDGE_HALF_WIDTH;
+                    *(1.0D+edgeOffsetSkew)-maximumEdgeHalfWidth;
                 double leftCoreEdgeGap=maximumHalfWidth*(GROUND_EDGE_OFFSET_SCALE*(1.0D+edgeOffsetSkew)
                     -GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE*(1.0D+GROUND_CORE_SKEW_AMPLITUDE))
-                    -GROUND_EDGE_HALF_WIDTH;
+                    -maximumEdgeHalfWidth;
                 double rightCoreEdgeGap=maximumHalfWidth*(GROUND_EDGE_OFFSET_SCALE*(1.0D-edgeOffsetSkew)
                     -GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE*(1.0D-GROUND_CORE_SKEW_AMPLITUDE))
-                    -GROUND_EDGE_HALF_WIDTH;
+                    -maximumEdgeHalfWidth;
                 double minimumCoreEdgeGap=Math.min(leftCoreEdgeGap,rightCoreEdgeGap);
                 double maximumEdgeOffsetDelta=groundEdgeMaximumOffsetDelta(maximumHalfWidth);
                 if(Math.abs(GROUND_GLOW_WIDTH_SCALE-5.75D)>1.0E-9D
@@ -1407,7 +1409,7 @@ public final class RiftClientState {
                     || Math.abs(GROUND_EDGE_OFFSET_SKEW_SCALE-.12D)>1.0E-9D
                     || !Double.isFinite(maximumEdgeOffsetDelta) || maximumEdgeOffsetDelta>.004D
                     || Math.abs(GROUND_CORE_SKEW_AMPLITUDE-.15D)>1.0E-9D
-                    || Math.abs(GROUND_EDGE_HALF_WIDTH-.026D)>1.0E-9D
+                    || Math.abs(GROUND_EDGE_HALF_WIDTH-.025D)>1.0E-9D
                     || Math.abs(maximumHalfWidth-.074D)>1.0E-9D
                     || !Float.isFinite(GROUND_EDGE_RED) || !Float.isFinite(GROUND_EDGE_GREEN)
                     || !Float.isFinite(GROUND_EDGE_BLUE)
@@ -1465,19 +1467,21 @@ public final class RiftClientState {
             double minimumCoreHalfWidth=GROUND_MIN_HALF_WIDTH*GROUND_CORE_WIDTH_SCALE*GROUND_MIN_CORE_WIDTH_SCALE
                 *(1.0D-GROUND_CORE_SKEW_AMPLITUDE);
             double edgeOffsetSkew=GROUND_CORE_SKEW_AMPLITUDE*GROUND_EDGE_OFFSET_SKEW_SCALE;
+            double minimumEdgeHalfWidth=groundEdgeHalfWidth(GROUND_MIN_HALF_WIDTH);
             double minimumEdgeInnerHalfWidth=GROUND_MIN_HALF_WIDTH*GROUND_EDGE_OFFSET_SCALE
-                *(1.0D-edgeOffsetSkew)-GROUND_EDGE_HALF_WIDTH;
+                *(1.0D-edgeOffsetSkew)-minimumEdgeHalfWidth;
             double maximumHalfWidth=GROUND_MAX_HALF_WIDTH;
             double maximumCoreHalfWidth=maximumHalfWidth*GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE
                 *(1.0D+GROUND_CORE_SKEW_AMPLITUDE);
+            double maximumEdgeHalfWidth=groundEdgeHalfWidth(maximumHalfWidth);
             double maximumEdgeInnerHalfWidth=maximumHalfWidth*GROUND_EDGE_OFFSET_SCALE
-                *(1.0D+edgeOffsetSkew)-GROUND_EDGE_HALF_WIDTH;
+                *(1.0D+edgeOffsetSkew)-maximumEdgeHalfWidth;
             double leftCoreEdgeGap=maximumHalfWidth*(GROUND_EDGE_OFFSET_SCALE*(1.0D+edgeOffsetSkew)
                 -GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE*(1.0D+GROUND_CORE_SKEW_AMPLITUDE))
-                -GROUND_EDGE_HALF_WIDTH;
+                -maximumEdgeHalfWidth;
             double rightCoreEdgeGap=maximumHalfWidth*(GROUND_EDGE_OFFSET_SCALE*(1.0D-edgeOffsetSkew)
                 -GROUND_CORE_WIDTH_SCALE*GROUND_MAX_CORE_WIDTH_SCALE*(1.0D-GROUND_CORE_SKEW_AMPLITUDE))
-                -GROUND_EDGE_HALF_WIDTH;
+                -maximumEdgeHalfWidth;
             double minimumCoreEdgeGap=Math.min(leftCoreEdgeGap,rightCoreEdgeGap);
             double maximumBevelHalfWidth=maximumCoreHalfWidth+GROUND_BEVEL_WIDTH;
             double minimumBevelLiftScale=1.0D-GROUND_BEVEL_LIFT_PULSE_RANGE;

@@ -3460,7 +3460,7 @@ def capture_test_world():
             visual_profile_match=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=([-+0-9.eE]+) coreScale=([-+0-9.eE]+) edgeOffsetScale=([-+0-9.eE]+) edgeHalfWidth=([-+0-9.eE]+) pulseMin=([-+0-9.eE]+) pulseMax=([-+0-9.eE]+) coreInsideEdgeBand=(true|false)",
                 final_log)
-            expected_visual_profile=(5.75,1.5,2.6,.026,.045,.074)
+            expected_visual_profile=(5.75,1.5,2.6,.025,.045,.074)
             if (not visual_profile_match
                     or any(not math.isclose(float(visual_profile_match.group(i)),expected_visual_profile[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
@@ -3502,11 +3502,8 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: visible cliff-end taper or non-finite input guards were not verified",flush=True)
                 return False
             edge_width_profiles = {
-                "GROUND_EDGE_HALF_WIDTH=.026D;": {
-                    "embedded": (.25875,.4255,.0447525,.088894,.155733,.1698632,.0141302,.005,.010,.011,.015),
-                },
-                "GROUND_EDGE_HALF_WIDTH=.032D;": {
-                    "embedded": (.25875,.4255,.0447525,.082894,.155733,.1638632,.0081302,.005,.010,.011,.015),
+                "GROUND_EDGE_HALF_WIDTH=.025D;": {
+                    "embedded": (.25875,.4255,.0447525,.0996912972972973,.155733,.1708632,.0151302,.005,.010,.011,.015),
                 },
             }
             edge_width_profile = next(
@@ -3725,7 +3722,9 @@ def capture_test_world():
                     or "private static final float GROUND_EDGE_BLUE=.90F;" not in camera_source
                     or edge_width_profile is None
                     or "private static void edgeRibbon(" not in camera_source
-                    or "GROUND_EDGE_HALF_WIDTH)*segment.taperA()" not in camera_source
+                    or "double edgeHalfWidth=groundEdgeHalfWidth(halfWidth);" not in camera_source
+                     or "(centerA+edgeHalfWidth)*segment.taperA()" not in camera_source
+                     or "(centerB-edgeHalfWidth)*segment.taperB()" not in camera_source
                     or "GROUND_EDGE_LIFT" not in camera_source
                     or sorted(edge_rail_sides) != ["false", "true"]):
                 print("WORLD_CAPTURE_FAIL: saturated violet palette is not bound to both endpoint-interpolated edge rails",flush=True)
