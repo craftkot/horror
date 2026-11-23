@@ -2807,27 +2807,32 @@ public final class RiftClientState {
         }
 
         // A transiently unavailable client chunk must not erase a live vertical-cull latch.
-        // Keep the skip counter until the camera returns and the already-loaded chunk can rebuild.
+        // Release stale geometry once per unavailable-anchor episode, whether or not culling is active.
         // This path only observes hasChunk(); it never requests or forces a chunk load.
         private static void clearCacheForUnavailableAnchor(int worldAnchorX,int worldAnchorZ) {
             boolean preserveVerticalCull=verticallyCulled || verticalCullResumePending;
-            if(!preserveVerticalCull) {
-                clearCache();
-                return;
-            }
-            // The unavailable-chunk episode can span many render frames. Release stale geometry
-            // and reset one-shot profile flags only on entry, not on every frame.
             if(!unavailableAnchorChunkLogged) {
-                if(cachedLevel!=null || cachedTick!=Long.MIN_VALUE || !cachedSegments.isEmpty()
-                    || !SURFACE_Y_BY_COLUMN.isEmpty()) clearGeometryCache();
-                resetCacheProfileFlags();
-                // The camera sample was already emitted before this availability check.
-                verticalCameraRangeSampleLogged=true;
+                if(!preserveVerticalCull) {
+                    // clearCache() also resets the episode latch; set it again after the full reset below.
+                    clearCache();
+                } else {
+                    if(cachedLevel!=null || cachedTick!=Long.MIN_VALUE || !cachedSegments.isEmpty()
+                        || !SURFACE_Y_BY_COLUMN.isEmpty()) clearGeometryCache();
+                    resetCacheProfileFlags();
+                    // The camera sample was already emitted before this availability check.
+                    verticalCameraRangeSampleLogged=true;
+                }
                 if(VERIFY_GROUND_MESH_PROFILES) {
                     com.mojang.logging.LogUtils.getLogger().info(
-                        "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ANCHOR_CHUNK_UNAVAILABLE_PRESERVED anchorX={} anchorZ={} verticallyCulled={} skippedFrames={} loadedOnly=true noChunkLoad=true resetOnce=true",
-                        worldAnchorX,worldAnchorZ,verticallyCulled,verticallyCulledSkippedFrames);
+                        "BLACK_FREQUENCY_TEST GROUND_MESH_ANCHOR_CHUNK_UNAVAILABLE_HANDLED anchorX={} anchorZ={} preservedCull={} loadedOnly=true noChunkLoad=true resetOnce=true",
+                        worldAnchorX,worldAnchorZ,preserveVerticalCull);
+                    if(preserveVerticalCull) {
+                        com.mojang.logging.LogUtils.getLogger().info(
+                            "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ANCHOR_CHUNK_UNAVAILABLE_PRESERVED anchorX={} anchorZ={} verticallyCulled={} skippedFrames={} loadedOnly=true noChunkLoad=true resetOnce=true",
+                            worldAnchorX,worldAnchorZ,verticallyCulled,verticallyCulledSkippedFrames);
+                    }
                 }
+                // clearCache() clears this latch as part of its full reset, so re-arm it here.
                 unavailableAnchorChunkLogged=true;
             }
         }
