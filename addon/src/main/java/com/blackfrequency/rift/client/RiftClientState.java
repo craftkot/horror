@@ -2348,6 +2348,7 @@ public final class RiftClientState {
             boolean reusableProbeSequence=hasFullFootprintTop(fullShape,1.0D)
                 && !hasFullFootprintTop(cauldronShape,1.0D)
                 && hasFullFootprintTop(partialShape,.5D);
+            boolean malformedProbeBoundsRejected=verifyMalformedSupportProbeBounds();
             boolean validSupportHeights=Math.abs(fullBlockHeight-1.0D)<1.0E-9D
                 && Math.abs(partialBlockHeight-.5D)<1.0E-9D && outlineFallback && emptyShapeRejected
                 && reusableProbeSequence && !hasFullFootprintTop(
@@ -2385,7 +2386,8 @@ public final class RiftClientState {
                 && Math.abs(overheightSnowClamp-1.5D)<1.0E-9D;
             if(!(naturalGrass && naturalStone && supportsSlabs && rejectsStructures && rejectsBlockEntities
                 && rejectsHazardousSurfaces && rejectsHazardousHeadroom && validSupportHeights
-                && cauldronTopRejected && snowSurfaceOffsets && snowSurfaceAccepted && fullSnowBlockRejected))
+                && cauldronTopRejected && malformedProbeBoundsRejected
+                && snowSurfaceOffsets && snowSurfaceAccepted && fullSnowBlockRejected))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh terrain/structure/support-shape regression");
             supportFilterLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
@@ -2405,6 +2407,8 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_SCAN_ALLOCATION_VERIFIED strategy=forAllBoxes reusableProbe=true materializedAabbs=false staleResultCleared={}",
                 reusableProbeSequence);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_PROBE_BOUNDS_VERIFIED nonFiniteRejected=true invertedYRejected=true validAccepted=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SLAB_SUPPORT_VERIFIED bottom={} top={} double={} bottomSnow={} topSnow={} stairsRejected=true shapeDerived=true",
                 bottomSlabHeight,topSlabHeight,doubleSlabHeight,bottomSlabSnowOffset,topSlabSnowOffset);
@@ -2437,13 +2441,36 @@ public final class RiftClientState {
             @Override
             public void consume(double minX,double minY,double minZ,
                     double maxX,double maxY,double maxZ) {
-                if(!found && Math.abs(maxY-expectedHeight)<=GROUND_SUPPORT_SHAPE_EPSILON
+                // Modded collision shapes are untrusted input. Infinite bounds could
+                // otherwise satisfy the full-footprint comparisons and create a false support.
+                if(found || !Double.isFinite(minX) || !Double.isFinite(minY) || !Double.isFinite(minZ)
+                    || !Double.isFinite(maxX) || !Double.isFinite(maxY) || !Double.isFinite(maxZ)
+                    || minX>maxX || minY>maxY || minZ>maxZ) return;
+                if(Math.abs(maxY-expectedHeight)<=GROUND_SUPPORT_SHAPE_EPSILON
                     && minX<=GROUND_SUPPORT_SHAPE_EPSILON
                     && maxX>=1.0D-GROUND_SUPPORT_SHAPE_EPSILON
                     && minZ<=GROUND_SUPPORT_SHAPE_EPSILON
                     && maxZ>=1.0D-GROUND_SUPPORT_SHAPE_EPSILON) found=true;
             }
         }
+        private static boolean verifyMalformedSupportProbeBounds() {
+            FullFootprintTopProbe probe=new FullFootprintTopProbe();
+            double[][] malformed={
+                {Double.NaN,0,0,1,1,1}, {0,Double.NaN,0,1,1,1}, {0,0,Double.NaN,1,1,1},
+                {0,0,0,Double.POSITIVE_INFINITY,1,1}, {0,0,0,1,Double.POSITIVE_INFINITY,1},
+                {0,0,0,1,1,Double.POSITIVE_INFINITY}, {0,2,0,1,1,1}
+            };
+            boolean rejected=true;
+            for(double[] box:malformed) {
+                probe.reset(1.0D);
+                probe.consume(box[0],box[1],box[2],box[3],box[4],box[5]);
+                rejected &= !probe.found();
+            }
+            probe.reset(1.0D);
+            probe.consume(0.0D,0.0D,0.0D,1.0D,1.0D,1.0D);
+            return rejected && probe.found();
+        }
+
         private static final FullFootprintTopProbe GROUND_SUPPORT_TOP_PROBE=
             new FullFootprintTopProbe();
 
