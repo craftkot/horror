@@ -736,7 +736,7 @@ def valid_fissure_particle_emission(counts):
     return (32<=samples<=FISSURE_PARTICLE_SAMPLES
             and 0<=accent_dust<=8
             and 0<=violet_dust==samples-accent_dust
-            and 0<=edge_dust<=4
+            and 3<=edge_dust<=4
             and total==samples+edge_dust and total<=52
             and (samples!=FISSURE_PARTICLE_SAMPLES
                  or (accent_dust==8 and violet_dust==40 and edge_dust==4)))
@@ -748,7 +748,8 @@ _fissure_fixture=(
 )
 if (parse_fissure_particle_emission(_fissure_fixture)!=(48,8,40,4,52)
         or not valid_fissure_particle_emission((48,8,40,4,52))
-        or not valid_fissure_particle_emission((32,4,28,2,34))
+        or not valid_fissure_particle_emission((36,6,30,3,39))
+        or valid_fissure_particle_emission((32,4,28,2,34))
         or valid_fissure_particle_emission((48,8,40,5,53))
         or parse_fissure_particle_emission(_fissure_fixture.replace("violetDust","reversePortal")) is not None
         or parse_fissure_particle_emission(_fissure_fixture.replace("accentDust","dragonBreath")) is not None
@@ -4357,19 +4358,22 @@ def capture_test_world():
                       fissure,flush=True)
                 return False
             edge_dust=re.search(
-                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_EMITTED count=([0-9]+) material=dust minScale=0.64 baseScale=0.7 maxScale=0.74 minCount=([0-9]+) baseCount=([0-9]+) maxCount=([0-9]+) fallbackArms=([0-9]+)",
+                r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_EMITTED count=([0-9]+) validArms=([0-9]+) material=dust minScale=0.64 baseScale=0.7 maxScale=0.74 minCount=([0-9]+) baseCount=([0-9]+) maxCount=([0-9]+) fallbackArms=([0-9]+)",
                 log_after)
-            if (not edge_dust or int(edge_dust.group(1))!=4
+            if (not edge_dust
+                    or int(edge_dust.group(1))!=int(edge_dust.group(2))
                     or int(edge_dust.group(1))!=fissure[3]
-                    or sum(int(edge_dust.group(index)) for index in (2,3,4))!=int(edge_dust.group(1))
-                    or not 0<=int(edge_dust.group(5))<=4):
+                    or not 3<=int(edge_dust.group(2))<=4
+                    or sum(int(edge_dust.group(index)) for index in (3,4,5))!=int(edge_dust.group(1))
+                    or not 0<=int(edge_dust.group(6))<=int(edge_dust.group(2))):
                 print("WORLD_CAPTURE_FAIL: one compact edge Dust mote per valid fissure arm was not emitted",
                       flush=True)
                 return False
             print("WORLD_CAPTURE: deep-violet base Dust and bright-violet accent Dust verified",fissure[0],flush=True)
             print("WORLD_CAPTURE: phase-driven violet fissure edge Dust verified",
-                  {"count":edge_dust.group(1),"small":edge_dust.group(2),
-                   "base":edge_dust.group(3),"large":edge_dust.group(4)},flush=True)
+                  {"count":edge_dust.group(1),"validArms":edge_dust.group(2),
+                   "small":edge_dust.group(3),"base":edge_dust.group(4),
+                   "large":edge_dust.group(5)},flush=True)
             if not fracture_seen:
                 print("WORLD_CAPTURE_FAIL: ground fracture never removed a block",flush=True)
                 return False
