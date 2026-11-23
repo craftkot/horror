@@ -2408,7 +2408,7 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_SCAN_ALLOCATION_VERIFIED strategy=forAllBoxes reusableProbe=true materializedAabbs=false staleResultCleared={}",
                 reusableProbeSequence);
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_PROBE_BOUNDS_VERIFIED nonFiniteRejected=true invertedYRejected=true validAccepted=true");
+                "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_PROBE_BOUNDS_VERIFIED nonFiniteRejected=true invertedBoundsRejected=true invertedYRejected=true degenerateYRejected=true validAccepted=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SLAB_SUPPORT_VERIFIED bottom={} top={} double={} bottomSnow={} topSnow={} stairsRejected=true shapeDerived=true",
                 bottomSlabHeight,topSlabHeight,doubleSlabHeight,bottomSlabSnowOffset,topSlabSnowOffset);
@@ -2445,7 +2445,7 @@ public final class RiftClientState {
                 // otherwise satisfy the full-footprint comparisons and create a false support.
                 if(found || !Double.isFinite(minX) || !Double.isFinite(minY) || !Double.isFinite(minZ)
                     || !Double.isFinite(maxX) || !Double.isFinite(maxY) || !Double.isFinite(maxZ)
-                    || minX>maxX || minY>maxY || minZ>maxZ) return;
+                    || minX>maxX || minY>=maxY || minZ>maxZ) return;
                 if(Math.abs(maxY-expectedHeight)<=GROUND_SUPPORT_SHAPE_EPSILON
                     && minX<=GROUND_SUPPORT_SHAPE_EPSILON
                     && maxX>=1.0D-GROUND_SUPPORT_SHAPE_EPSILON
@@ -2458,7 +2458,8 @@ public final class RiftClientState {
             double[][] malformed={
                 {Double.NaN,0,0,1,1,1}, {0,Double.NaN,0,1,1,1}, {0,0,Double.NaN,1,1,1},
                 {0,0,0,Double.POSITIVE_INFINITY,1,1}, {0,0,0,1,Double.POSITIVE_INFINITY,1},
-                {0,0,0,1,1,Double.POSITIVE_INFINITY}, {0,2,0,1,1,1}
+                {0,0,0,1,1,Double.POSITIVE_INFINITY}, {Double.NEGATIVE_INFINITY,0,0,1,1,1},
+                {1,0,0,0,1,1}, {0,2,0,1,1,1}, {0,0,1,1,1,0}, {0,1,0,1,1,1}
             };
             boolean rejected=true;
             for(double[] box:malformed) {
