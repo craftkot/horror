@@ -3434,7 +3434,7 @@ def capture_test_world():
             visual_profile_match=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=([-+0-9.eE]+) coreScale=([-+0-9.eE]+) edgeOffsetScale=([-+0-9.eE]+) edgeHalfWidth=([-+0-9.eE]+) pulseMin=([-+0-9.eE]+) pulseMax=([-+0-9.eE]+) coreInsideEdgeBand=(true|false)",
                 final_log)
-            expected_visual_profile=(5.75,1.85,3.0,.026,.045,.074)
+            expected_visual_profile=(5.75,1.5,2.6,.026,.045,.074)
             if (not visual_profile_match
                     or any(not math.isclose(float(visual_profile_match.group(i)),expected_visual_profile[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
@@ -3455,10 +3455,10 @@ def capture_test_world():
                 return False
             edge_width_profiles = {
                 "GROUND_EDGE_HALF_WIDTH=.026D;": {
-                    "embedded": (.25875,.4255,.05519475,.10657,.1920707,.199996,.0079253,.005,.010,.011,.015),
+                    "embedded": (.25875,.4255,.0447525,.088894,.155733,.1698632,.0141302,.005,.010,.011,.015),
                 },
                 "GROUND_EDGE_HALF_WIDTH=.032D;": {
-                    "embedded": (.25875,.4255,.0507195,.10057,.1764974,.193996,.0174986,.005,.010,.011,.015),
+                    "embedded": (.25875,.4255,.0447525,.082894,.155733,.1638632,.0081302,.005,.010,.011,.015),
                 },
             }
             edge_width_profile = next(
@@ -3467,8 +3467,8 @@ def capture_test_world():
                 None,
             )
             if ("GROUND_GLOW_WIDTH_SCALE=5.75D;" not in camera_source
-                    or "GROUND_CORE_WIDTH_SCALE=1.85D;" not in camera_source
-                    or "GROUND_EDGE_OFFSET_SCALE=3.0D;" not in camera_source
+                    or "GROUND_CORE_WIDTH_SCALE=1.5D;" not in camera_source
+                    or "GROUND_EDGE_OFFSET_SCALE=2.6D;" not in camera_source
                     or "GROUND_EDGE_OFFSET_SKEW_SCALE=.12D;" not in camera_source
                     or "GROUND_CORE_SKEW_AMPLITUDE=.15D;" not in camera_source
                     or edge_width_profile is None
@@ -3493,7 +3493,7 @@ def capture_test_world():
             bevel_profile=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_BEVEL_PROFILE_VERIFIED width=([-+0-9.eE]+) lift=([-+0-9.eE]+) innerRecess=([-+0-9.eE]+) minOuterClearance=([-+0-9.eE]+) maxOuterClearance=([-+0-9.eE]+) maxOuterHalfWidth=([-+0-9.eE]+) maxGlowHalfWidth=([-+0-9.eE]+) withinGlow=true offsets=true invalidRejected=true",
                 final_log)
-            expected_bevel=(.045,.010,.005,.019,.021,.074*1.85*1.22*1.15+.045,.074*5.75)
+            expected_bevel=(.045,.010,.005,.019,.021,.074*1.5*1.22*1.15+.045,.074*5.75)
             if (not bevel_profile
                     or any(not math.isclose(float(bevel_profile.group(i)),expected_bevel[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
