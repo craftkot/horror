@@ -78,7 +78,7 @@ public final class RiftController {
         ? Math.max(1L, Math.min(2400L, Long.getLong("blackfrequency.ciTickStep", 2400L))) : 1L;
     // Shared with the client mesh so particles and the rendered ground scar use identical bounds.
     private static final int RADIUS = RiftGeometry.RADIUS;
-    // Keep the anomaly's outer 16-block envelope, but ease force to zero with a C1-continuous curve.
+    // Keep the anomaly's outer 16-block envelope, but ease force to zero with a C2-continuous curve.
     private static final double GRAVITY_ANOMALY_FADE_WIDTH=16.0D;
     private static final double GRAVITY_ANOMALY_OUTER_RADIUS=RADIUS+GRAVITY_ANOMALY_FADE_WIDTH;
     // Quintic smoothstep at 0.125 preserves the old linear fade's particle cutoff distance.
