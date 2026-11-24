@@ -3064,10 +3064,15 @@ def capture_test_world():
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_HEIGHT_BOUND_VERIFIED "
                 "maxHeight=1.0 overheightRejected=true epsilonTolerance=true"
             )
+            support_horizontal_bounds_marker = (
+                "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_HORIZONTAL_BOUNDS_VERIFIED "
+                "overhangRejected=true epsilonTolerance=true"
+            )
             if (uniform_top_marker not in final_log
                     or support_scan_marker not in final_log
                     or support_probe_bounds_marker not in final_log
                     or support_height_bound_marker not in final_log
+                    or support_horizontal_bounds_marker not in final_log
                     or "private static boolean hasFullFootprintTop(" not in camera_source
                     or "private static final class FullFootprintTopProbe" not in camera_source
                     or "shape.forAllBoxes(GROUND_SUPPORT_TOP_PROBE);" not in camera_source
@@ -3076,12 +3081,17 @@ def capture_test_world():
                     or "minX>maxX" not in camera_source
                     or "minY>=maxY" not in camera_source
                     or "minZ>maxZ" not in camera_source
+                    or "minX < -GROUND_SUPPORT_SHAPE_EPSILON" not in camera_source
+                    or "maxX > 1.0D+GROUND_SUPPORT_SHAPE_EPSILON" not in camera_source
+                    or "minZ < -GROUND_SUPPORT_SHAPE_EPSILON" not in camera_source
+                    or "maxZ > 1.0D+GROUND_SUPPORT_SHAPE_EPSILON" not in camera_source
+                    or "verifyHorizontalSupportProbeBounds()" not in camera_source
                     or "height<=1.0D+GROUND_SUPPORT_SHAPE_EPSILON" not in camera_source
                     or "overheightSupportRejected" not in camera_source
                     or "verifyMalformedSupportProbeBounds()" not in camera_source
                     or "shape.toAabbs()" in camera_source
                     or "Blocks.CAULDRON.defaultBlockState()" not in camera_source):
-                print("WORLD_CAPTURE_FAIL: full-footprint support must stream VoxelShape boxes through the reusable allocation-bounded probe",flush=True)
+                print("WORLD_CAPTURE_FAIL: full-footprint support must reject horizontal overhangs and stream VoxelShape boxes through the reusable allocation-bounded probe",flush=True)
                 return False
             sample_start=camera_source.find("private static double sampleGroundY(")
             sample_end=camera_source.find("private static long columnKey(",sample_start+1)
