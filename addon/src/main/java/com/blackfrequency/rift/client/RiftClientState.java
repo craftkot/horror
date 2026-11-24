@@ -2356,6 +2356,7 @@ public final class RiftClientState {
                 && !hasFullFootprintTop(cauldronShape,1.0D)
                 && hasFullFootprintTop(partialShape,.5D);
             boolean malformedProbeBoundsRejected=verifyMalformedSupportProbeBounds();
+            boolean horizontalSupportBoundsRejected=verifyHorizontalSupportProbeBounds();
             boolean validSupportHeights=Math.abs(fullBlockHeight-1.0D)<1.0E-9D
                 && Math.abs(partialBlockHeight-.5D)<1.0E-9D && outlineFallback && emptyShapeRejected
                 && overheightSupportRejected && epsilonOverheightAccepted
@@ -2394,7 +2395,7 @@ public final class RiftClientState {
                 && Math.abs(overheightSnowClamp-1.5D)<1.0E-9D;
             if(!(naturalGrass && naturalStone && supportsSlabs && rejectsStructures && rejectsBlockEntities
                 && rejectsHazardousSurfaces && rejectsHazardousHeadroom && validSupportHeights
-                && cauldronTopRejected && malformedProbeBoundsRejected
+                && cauldronTopRejected && malformedProbeBoundsRejected && horizontalSupportBoundsRejected
                 && snowSurfaceOffsets && snowSurfaceAccepted && fullSnowBlockRejected))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh terrain/structure/support-shape regression");
             supportFilterLogged=true;
@@ -2420,6 +2421,8 @@ public final class RiftClientState {
                 reusableProbeSequence);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_PROBE_BOUNDS_VERIFIED nonFiniteRejected=true invertedBoundsRejected=true invertedYRejected=true degenerateYRejected=true validAccepted=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_HORIZONTAL_BOUNDS_VERIFIED overhangRejected=true epsilonTolerance=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SLAB_SUPPORT_VERIFIED bottom={} top={} double={} bottomSnow={} topSnow={} stairsRejected=true shapeDerived=true",
                 bottomSlabHeight,topSlabHeight,doubleSlabHeight,bottomSlabSnowOffset,topSlabSnowOffset);
@@ -2456,7 +2459,11 @@ public final class RiftClientState {
                 // otherwise satisfy the full-footprint comparisons and create a false support.
                 if(found || !Double.isFinite(minX) || !Double.isFinite(minY) || !Double.isFinite(minZ)
                     || !Double.isFinite(maxX) || !Double.isFinite(maxY) || !Double.isFinite(maxZ)
-                    || minX>maxX || minY>=maxY || minZ>maxZ) return;
+                    || minX>maxX || minY>=maxY || minZ>maxZ
+                    || minX < -GROUND_SUPPORT_SHAPE_EPSILON
+                    || maxX > 1.0D+GROUND_SUPPORT_SHAPE_EPSILON
+                    || minZ < -GROUND_SUPPORT_SHAPE_EPSILON
+                    || maxZ > 1.0D+GROUND_SUPPORT_SHAPE_EPSILON) return;
                 if(Math.abs(maxY-expectedHeight)<=GROUND_SUPPORT_SHAPE_EPSILON
                     && minX<=GROUND_SUPPORT_SHAPE_EPSILON
                     && maxX>=1.0D-GROUND_SUPPORT_SHAPE_EPSILON
@@ -2481,6 +2488,36 @@ public final class RiftClientState {
             probe.reset(1.0D);
             probe.consume(0.0D,0.0D,0.0D,1.0D,1.0D,1.0D);
             return rejected && probe.found();
+        }
+
+        private static boolean verifyHorizontalSupportProbeBounds() {
+            FullFootprintTopProbe probe=new FullFootprintTopProbe();
+            double[][] overhangs={
+                {-.25D,0,0,1,1,1}, {0,0,0,1.25D,1,1},
+                {0,0,-.25D,1,1,1}, {0,0,0,1,1,1.25D}
+            };
+            boolean rejected=true;
+            for(double[] box:overhangs) {
+                probe.reset(1.0D);
+                probe.consume(box[0],box[1],box[2],box[3],box[4],box[5]);
+                rejected &= !probe.found();
+            }
+            probe.reset(1.0D);
+            probe.consume(-GROUND_SUPPORT_SHAPE_EPSILON*.5D,0,0,1,1,1);
+            boolean minXTolerance=probe.found();
+            probe.reset(1.0D);
+            probe.consume(0,0,0,1.0D+GROUND_SUPPORT_SHAPE_EPSILON*.5D,1,1);
+            boolean maxXTolerance=probe.found();
+            probe.reset(1.0D);
+            probe.consume(0,0,-GROUND_SUPPORT_SHAPE_EPSILON*.5D,1,1,1);
+            boolean minZTolerance=probe.found();
+            probe.reset(1.0D);
+            probe.consume(0,0,0,1,1,1.0D+GROUND_SUPPORT_SHAPE_EPSILON*.5D);
+            boolean maxZTolerance=probe.found();
+            probe.reset(1.0D);
+            probe.consume(0,0,0,1,1,1);
+            return rejected && minXTolerance && maxXTolerance && minZTolerance
+                && maxZTolerance && probe.found();
         }
 
         private static final FullFootprintTopProbe GROUND_SUPPORT_TOP_PROBE=
