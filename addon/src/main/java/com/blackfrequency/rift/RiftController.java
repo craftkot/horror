@@ -1589,6 +1589,70 @@ public final class RiftController {
             && !state.is(net.minecraft.tags.BlockTags.TRAPDOORS);
     }
 
+    // The server particle sampler must use the same full-footprint support rule as
+    // the client mesh. A cauldron rim or modded partial collision box is not terrain.
+    private static final double FISSURE_SUPPORT_SHAPE_EPSILON=1.0E-7D;
+    private static final class FissureSupportTopProbe
+            implements net.minecraft.world.phys.shapes.Shapes.DoubleLineConsumer {
+        private double expectedHeight;
+        private boolean found;
+        private boolean invalidBounds;
+
+        private void reset(double height) {
+            expectedHeight=height;
+            found=false;
+            invalidBounds=false;
+        }
+
+        private boolean found() {
+            return found && !invalidBounds;
+        }
+
+        @Override
+        public void consume(double minX,double minY,double minZ,
+                double maxX,double maxY,double maxZ) {
+            if(!Double.isFinite(minX) || !Double.isFinite(minY) || !Double.isFinite(minZ)
+                || !Double.isFinite(maxX) || !Double.isFinite(maxY) || !Double.isFinite(maxZ)
+                || minX>maxX || minY>=maxY || minZ>maxZ
+                || minX < -FISSURE_SUPPORT_SHAPE_EPSILON
+                || minY < -FISSURE_SUPPORT_SHAPE_EPSILON
+                || minZ < -FISSURE_SUPPORT_SHAPE_EPSILON
+                || maxX > 1.0D+FISSURE_SUPPORT_SHAPE_EPSILON
+                || maxY > 1.0D+FISSURE_SUPPORT_SHAPE_EPSILON
+                || maxZ > 1.0D+FISSURE_SUPPORT_SHAPE_EPSILON) {
+                invalidBounds=true;
+                return;
+            }
+            if(Math.abs(maxY-expectedHeight)<=FISSURE_SUPPORT_SHAPE_EPSILON
+                && minX<=FISSURE_SUPPORT_SHAPE_EPSILON
+                && maxX>=1.0D-FISSURE_SUPPORT_SHAPE_EPSILON
+                && minZ<=FISSURE_SUPPORT_SHAPE_EPSILON
+                && maxZ>=1.0D-FISSURE_SUPPORT_SHAPE_EPSILON) found=true;
+        }
+    }
+
+    private static final FissureSupportTopProbe FISSURE_SUPPORT_TOP_PROBE=
+        new FissureSupportTopProbe();
+
+    private static boolean hasFullFissureSupportTop(
+            net.minecraft.world.phys.shapes.VoxelShape shape) {
+        if(shape==null || shape.isEmpty()) return false;
+        double height=shape.max(net.minecraft.core.Direction.Axis.Y);
+        if(!Double.isFinite(height) || height<=0.0D
+            || height>1.0D+FISSURE_SUPPORT_SHAPE_EPSILON) return false;
+        FISSURE_SUPPORT_TOP_PROBE.reset(height);
+        shape.forAllBoxes(FISSURE_SUPPORT_TOP_PROBE);
+        return FISSURE_SUPPORT_TOP_PROBE.found();
+    }
+
+    private static boolean isFissureGroundSupport(
+            BlockState state,net.minecraft.world.level.BlockGetter level,BlockPos pos) {
+        if(!isFissureGroundSupport(state) || level==null || pos==null) return false;
+        var collision=state.getCollisionShape(level,pos);
+        var selected=collision.isEmpty()?state.getShape(level,pos):collision;
+        return hasFullFissureSupportTop(selected);
+    }
+
     private static boolean isFissureSurfaceAvailable(BlockState state) {
         // Match the client mesh: a surface sample must be a non-solid, dry cell,
         // not a fixture, so server motes and the client ribbon cannot disagree.
@@ -1674,6 +1738,20 @@ public final class RiftController {
     private static boolean verifyFissureCanopyTraversalInWorld(ServerLevel level,State s) {
         BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();
         BlockPos policyPos=level.getSharedSpawnPos();
+        boolean fullBlockShapeAccepted=hasFullFissureSupportTop(
+            Blocks.STONE.defaultBlockState().getCollisionShape(level,policyPos));
+        boolean cauldronShapeRejected=!hasFullFissureSupportTop(
+            Blocks.CAULDRON.defaultBlockState().getCollisionShape(level,policyPos));
+        boolean overhangShapeRejected=!hasFullFissureSupportTop(
+            net.minecraft.world.phys.shapes.Shapes.box(-.25D,0.0D,0.0D,1.0D,1.0D,1.0D));
+        boolean multiBoxOverhangRejected=!hasFullFissureSupportTop(
+            net.minecraft.world.phys.shapes.Shapes.or(net.minecraft.world.phys.shapes.Shapes.block(),
+                net.minecraft.world.phys.shapes.Shapes.box(1.0D,0.0D,0.0D,1.25D,1.0D,1.0D)));
+        boolean slabPolicyPreserved=!isFissureGroundSupport(Blocks.COBBLESTONE_SLAB.defaultBlockState());
+        if(!(fullBlockShapeAccepted && cauldronShapeRejected && overhangShapeRejected
+            && multiBoxOverhangRejected && slabPolicyPreserved))
+            throw new IllegalStateException("CI fissure support collision-shape guard regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST SURFACE_FISSURE_SUPPORT_SHAPE_GUARD_VERIFIED fullBlock=true cauldronRejected=true overhangRejected=true multiBoxRejected=true slabPolicyPreserved=true");
         boolean fixtureCellPolicy=
             isFissureCanopyFixtureCellClearable(Blocks.AIR.defaultBlockState(),level,policyPos)
             && isFissureCanopyFixtureCellClearable(Blocks.OAK_LEAVES.defaultBlockState(),level,policyPos)
@@ -1700,8 +1778,9 @@ public final class RiftController {
                     int existingSurfaceY=level.getHeight(FISSURE_SURFACE_HEIGHTMAP,x,z);
                     if(existingSurfaceY>y+5) continue;
                     cursor.set(x,y-1,z);
-                    if(!level.getWorldBorder().isWithinBounds(cursor)
-                        || !isFissureGroundSupport(level.getBlockState(cursor))) continue;
+                    if(!level.getWorldBorder().isWithinBounds(cursor)) continue;
+                    BlockState candidateSupport=level.getBlockState(cursor);
+                    if(!isFissureGroundSupport(candidateSupport,level,cursor)) continue;
                     boolean clearColumn=true;
                     for(int offset=0;offset<=4;offset++) {
                         cursor.set(x,y+offset,z);
@@ -1878,7 +1957,8 @@ public final class RiftController {
             double shapeHeight=surface.isAir() ? 0.0D
                 : surface.getShape(level,cursor).max(net.minecraft.core.Direction.Axis.Y);
             cursor.set(x,y-1,z);
-            if(isFissureGroundSupport(level.getBlockState(cursor))) {
+            BlockState support=level.getBlockState(cursor);
+            if(isFissureGroundSupport(support,level,cursor)) {
                 result.surfaceY=y;
                 result.particleY=fissureSurfaceParticleY(y,shapeHeight);
                 return true;
