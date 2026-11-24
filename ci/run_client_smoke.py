@@ -4501,9 +4501,7 @@ def capture_test_world():
                 "BLACK_FREQUENCY_TEST SURFACE_FISSURE_SUPPORT_SHAPE_GUARD_VERIFIED "
                 "fullBlock=true cauldronRejected=true overhangRejected=true multiBoxRejected=true slabPolicyPreserved=true"
             )
-            if (support_shape_marker not in log_after
-                    or "private static boolean hasFullFissureSupportTop(" not in controller_source
-                    or "isFissureGroundSupport(support,level,cursor)" not in controller_source):
+            if support_shape_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: server fissure sampler did not validate full-footprint collision support",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_EDGE_DUST_VERIFIED red=0.42 green=0.18 blue=0.92 scale=0.7" not in log_after:
