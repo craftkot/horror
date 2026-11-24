@@ -562,9 +562,46 @@ public final class RiftController {
         return ((gravityAnomalyLatticeHash(cellX,cellZ)>>>11)*0x1.0p-53D)*2.0D-1.0D;
     }
 
-    private static double gravityAnomalySmoothstep(double value) {
+    // Quintic fade keeps both the first and second spatial derivatives continuous
+    // where the deterministic turbulence crosses an integer lattice cell.
+    private static double gravityAnomalyFade(double value) {
+        if(!Double.isFinite(value)) return 0.0D;
         double t=Math.max(0.0D,Math.min(1.0D,value));
-        return t*t*(3.0D-2.0D*t);
+        return t*t*t*(t*(t*6.0D-15.0D)+10.0D);
+    }
+
+    private static void verifyGravityAnomalyFadeProfile() {
+        double h=.0005D;
+        double startSlope=gravityAnomalyFade(h)/h;
+        double endSlope=(1.0D-gravityAnomalyFade(1.0D-h))/h;
+        double startSecond=(gravityAnomalyFade(2.0D*h)-2.0D*gravityAnomalyFade(h)
+            +gravityAnomalyFade(0.0D))/(h*h);
+        double endSecond=(gravityAnomalyFade(1.0D)-2.0D*gravityAnomalyFade(1.0D-h)
+            +gravityAnomalyFade(1.0D-2.0D*h))/(h*h);
+        boolean monotonic=true,bounded=true,symmetric=true;
+        double previous=-1.0D;
+        for(int sample=0;sample<=1000;sample++) {
+            double t=sample/1000.0D;
+            double value=gravityAnomalyFade(t);
+            double opposite=gravityAnomalyFade(1.0D-t);
+            monotonic &= value>=previous;
+            bounded &= Double.isFinite(value) && value>=0.0D && value<=1.0D;
+            symmetric &= Math.abs(value+opposite-1.0D)<=1.0E-12D;
+            previous=value;
+        }
+        boolean endpoints=gravityAnomalyFade(0.0D)==0.0D
+            && gravityAnomalyFade(1.0D)==1.0D
+            && gravityAnomalyFade(.5D)==.5D;
+        boolean flatDerivatives=Math.abs(startSlope)<2.0E-5D
+            && Math.abs(endSlope)<2.0E-5D
+            && Math.abs(startSecond)<.04D
+            && Math.abs(endSecond)<.04D;
+        boolean invalidFallback=gravityAnomalyFade(Double.NaN)==0.0D
+            && gravityAnomalyFade(Double.POSITIVE_INFINITY)==0.0D
+            && gravityAnomalyFade(Double.NEGATIVE_INFINITY)==0.0D;
+        if(!(endpoints && monotonic && bounded && symmetric && flatDerivatives && invalidFallback))
+            throw new IllegalStateException("CI gravity anomaly quintic interpolation regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_C2_INTERPOLATION_VERIFIED curve=quintic endpoints=true firstDerivativeZero=true secondDerivativeZero=true monotonic=true bounded=true invalidFallback=true");
     }
 
     private static double gravityAnomalyLerp(double from,double to,double progress) {
@@ -587,8 +624,8 @@ public final class RiftController {
         double floorZ=Math.floor(sampleZ);
         int cellX=(int)floorX;
         int cellZ=(int)floorZ;
-        double blendX=gravityAnomalySmoothstep(sampleX-floorX);
-        double blendZ=gravityAnomalySmoothstep(sampleZ-floorZ);
+        double blendX=gravityAnomalyFade(sampleX-floorX);
+        double blendZ=gravityAnomalyFade(sampleZ-floorZ);
         double near=gravityAnomalyLerp(
             gravityAnomalyLatticeValue(cellX,cellZ),
             gravityAnomalyLatticeValue(cellX+1,cellZ),blendX);
@@ -616,6 +653,7 @@ public final class RiftController {
     }
 
     private static void verifyGravityAnomalyField() {
+        verifyGravityAnomalyFadeProfile();
         double lift=gravityAnomalyField(-17.5D,20.5D,0);
         double sink=gravityAnomalyField(-19.5D,-3.5D,0);
         double repeated=gravityAnomalyField(-17.5D,20.5D,0);
