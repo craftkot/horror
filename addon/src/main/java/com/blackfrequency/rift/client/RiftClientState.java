@@ -137,23 +137,23 @@ public final class RiftClientState {
     // Quintic easing keeps both velocity and acceleration continuous at phase boundaries.
     private static float smootherstep01(float value) {
         if(!Float.isFinite(value)) return 0.0F;
-        float t=Math.max(0.0F,Math.min(1.0F,value));
-        float t2=t*t;
-        float t3=t2*t;
-        return t3*(t*(t*6.0F-15.0F)+10.0F);
+        double t=Math.max(0.0D,Math.min(1.0D,(double)value));
+        double t2=t*t;
+        double t3=t2*t;
+        return (float)(t3*(t*(t*6.0D-15.0D)+10.0D));
     }
 
     private static float smootherstepDerivative01(float value) {
         if(!Float.isFinite(value)) return 0.0F;
-        float t=Math.max(0.0F,Math.min(1.0F,value));
-        float oneMinusT=1.0F-t;
-        return 30.0F*t*t*oneMinusT*oneMinusT;
+        double t=Math.max(0.0D,Math.min(1.0D,(double)value));
+        double oneMinusT=1.0D-t;
+        return (float)(30.0D*t*t*oneMinusT*oneMinusT);
     }
 
     private static float smootherstepSecondDerivative01(float value) {
         if(!Float.isFinite(value)) return 0.0F;
-        float t=Math.max(0.0F,Math.min(1.0F,value));
-        return 60.0F*t*(1.0F-t)*(1.0F-2.0F*t);
+        double t=Math.max(0.0D,Math.min(1.0D,(double)value));
+        return (float)(60.0D*t*(1.0D-t)*(1.0D-2.0D*t));
     }
 
     private static void verifySmootherstepProfile() {
