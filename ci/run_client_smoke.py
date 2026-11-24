@@ -4002,7 +4002,9 @@ def capture_test_world():
                     bounded_start_ticks=max(0,min(16,start_ticks))
                     def start_scale_at(partial_tick):
                         remaining=max(0.0,min(1.0,(bounded_start_ticks-partial_tick)/16.0))
-                        fade=remaining*remaining*(3.0-2.0*remaining)
+                        # Mirror RiftClientState.smootherstep01: the production fade is quintic,
+                        # not the legacy cubic smoothstep used by the original capture check.
+                        fade=remaining*remaining*remaining*(remaining*(remaining*6.0-15.0)+10.0)
                         return .55+.45*fade
                     expected_start_scale_min=start_scale_at(1.0)
                     expected_start_scale_max=start_scale_at(0.0)
