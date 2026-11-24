@@ -1061,19 +1061,36 @@ public final class RiftClientState {
             GroundSample gapSample=new GroundSample(base.forwardX(),base.bendX(),base.forwardZ(),base.bendZ(),
                 base.phase(),base.phaseSin(),base.phaseCos(),base.flickerPhaseSin(),base.flickerPhaseCos(),
                 base.coreWidthScale(),base.coreSkew(),true,base.leftEdgeNotched(),base.rightEdgeNotched());
-            GroundPoint start=new GroundPoint(.5D,64.0D,.5D);
-            GroundPoint end=new GroundPoint(1.5D,64.0D,.5D);
-            GroundSegment gapSegment=new GroundSegment(start,end,0.0D,1.0D,gapSample,
+            GroundPoint beforeGap=new GroundPoint(-.5D,64.0D,.5D);
+            GroundPoint gapStart=new GroundPoint(.5D,64.0D,.5D);
+            GroundPoint gapEnd=new GroundPoint(1.5D,64.0D,.5D);
+            GroundPoint afterGap=new GroundPoint(2.5D,64.0D,.5D);
+            GroundSegment beforeGapSegment=new GroundSegment(beforeGap,gapStart,0.0D,1.0D,base,
+                1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
+            GroundSegment gapSegment=new GroundSegment(gapStart,gapEnd,0.0D,1.0D,gapSample,
+                1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
+            GroundSegment afterGapSegment=new GroundSegment(gapEnd,afterGap,0.0D,1.0D,base,
                 1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
             Vec3 camera=new Vec3(.5D,64.0D,.5D);
             boolean gapEnvelopeVisible=hasVisibleGroundSegment(List.of(gapSegment),camera);
+            double beforeGapFade=groundPointDistanceFade(beforeGapSegment.b(),camera);
             double gapEndFade=groundPointDistanceFade(gapSegment.b(),camera);
-            boolean fadeReuseAcrossGap=canReuseGroundPointFade(gapSegment.b(),gapSegment.b(),gapEndFade);
-            if(!(intactCoreRendered && gapCoreSuppressed && gapEnvelopeVisible && fadeReuseAcrossGap))
+            boolean fadeReuseIntoGap=canReuseGroundPointFade(
+                gapSegment.a(),beforeGapSegment.b(),beforeGapFade);
+            boolean fadeReuseOutOfGap=canReuseGroundPointFade(
+                afterGapSegment.a(),gapSegment.b(),gapEndFade);
+            GroundPoint equalButDistinct=new GroundPoint(gapEnd.x(),gapEnd.y(),gapEnd.z());
+            boolean disconnectedFallback=!canReuseGroundPointFade(
+                equalButDistinct,gapSegment.b(),gapEndFade);
+            boolean invalidFadeRejected=!canReuseGroundPointFade(gapEnd,gapEnd,Double.NaN)
+                && !canReuseGroundPointFade(gapEnd,gapEnd,-.01D)
+                && !canReuseGroundPointFade(gapEnd,gapEnd,1.01D);
+            if(!(intactCoreRendered && gapCoreSuppressed && gapEnvelopeVisible
+                && fadeReuseIntoGap && fadeReuseOutOfGap && disconnectedFallback && invalidFadeRejected))
                 throw new IllegalStateException("BLACK FREQUENCY ground core-gap layer policy regression");
             coreGapLayerPolicyLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_MESH_CORE_GAP_LAYER_POLICY_VERIFIED gapCount=2 outerHalo=true bevels=true edgePolicy=preserved coreSuppressed=true gapEnvelopeVisible=true fadeReuseAcrossGap=true");
+                "BLACK_FREQUENCY_TEST GROUND_MESH_CORE_GAP_LAYER_POLICY_VERIFIED gapCount=2 outerHalo=true bevels=true edgePolicy=preserved coreSuppressed=true gapEnvelopeVisible=true fadeReuseIntoGap=true fadeReuseOutOfGap=true disconnectedIdentityFallback=true invalidFadeRejected=true");
         }
 
         private static double groundCoreWidthScale(double phase,int arm) {
