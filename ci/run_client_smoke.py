@@ -3960,11 +3960,19 @@ def capture_test_world():
                     fade_start_marker="BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_RENDERED"
                     fade_midpoint_marker="BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_MIDPOINT_RENDERED"
                     fade_tail_marker="BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_TAIL_RENDERED"
-                    fade_deadline=time.time()+5.0
+                    # Green Phase uses llvmpipe in CI; a slow render after the midpoint
+                    # screenshot can otherwise consume the entire five-second wall-clock
+                    # window before the client reaches the visible tail. Keep the game focused
+                    # (singleplayer pauses on focus loss) and allow bounded renderer headroom.
+                    if not focus_game():
+                        print("WORLD_CAPTURE_FAIL: Minecraft lost focus before beacon fade tail capture",
+                              flush=True)
+                        return False
+                    fade_deadline=time.monotonic()+12.0
                     fade_midpoint_shot=False
                     fade_tail_shot=False
                     fade_logs=""
-                    while time.time()<fade_deadline and p.poll() is None:
+                    while time.monotonic()<fade_deadline and p.poll() is None:
                         fade_logs=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                         if fade_midpoint_marker in fade_logs and not fade_midpoint_shot:
                             snap("beacon-restoration-fade-midpoint.png")
