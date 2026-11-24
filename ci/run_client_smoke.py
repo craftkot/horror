@@ -3233,7 +3233,12 @@ def capture_test_world():
             core_gap_marker=("BLACK_FREQUENCY_GROUND_MESH_CORE_SEGMENT_GAP_PROFILE_VERIFIED "
                              "samples=96 gaps=2 adjacentGapPairs=0 gapArms=2 minGapSeparation=26 deterministic=true gapRate=1/64")
             if core_gap_marker not in final_log:
-                print("WORLD_CAPTURE_FAIL: full-section ground fissure gaps were not verified",flush=True)
+                print("WORLD_CAPTURE_FAIL: deterministic ground core gaps were not verified",flush=True)
+                return False
+            core_gap_layer_policy_marker=("BLACK_FREQUENCY_TEST GROUND_MESH_CORE_GAP_LAYER_POLICY_VERIFIED "
+                                          "gapCount=2 outerHalo=true bevels=true edgePolicy=preserved coreSuppressed=true")
+            if core_gap_layer_policy_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: core gaps did not preserve the connected violet envelope",flush=True)
                 return False
             edge_notch_marker=("BLACK_FREQUENCY_GROUND_MESH_EDGE_NOTCH_PROFILE_VERIFIED "
                                "samples=96 left=4 right=4 asymmetricSamples=6 adjacentLeftPairs=0 adjacentRightPairs=0 "
@@ -3282,9 +3287,18 @@ def capture_test_world():
             if ("boolean coreSegmentGap,\n                boolean leftEdgeNotched,boolean rightEdgeNotched" not in camera_source
                     or "private static boolean isGroundCoreSegmentGap(double phase)" not in camera_source
                     or "sample.coreSegmentGap()!=isGroundCoreSegmentGap(phase)" not in camera_source
+                    or "private static boolean shouldRenderGroundCore(boolean coreSegmentGap)" not in camera_source
+                    or "if(shouldRenderGroundCore(coreGap))" not in camera_source
+                    or "if(segment==null) continue;" not in camera_source
                     or re.search(
-                         r"if\(sample\.coreSegmentGap\(\)\)\s*\{\s*previousFadePoint=null;\s*previousFadeB=0\.0D;\s*continue;\s*\}",
+                         r"if\(coreGap\)\s*\{\s*previousFadePoint=null;\s*previousFadeB=0\.0D;\s*\}\s*else\s*\{\s*previousFadePoint=segment\.b\(\);\s*previousFadeB=segmentFadeB;\s*\}",
                          camera_source) is None
+                    or min(camera_source.find("ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_GLOW_WIDTH_SCALE"),
+                            camera_source.find("if(shouldRenderGroundCore(coreGap))"),
+                            camera_source.find("int edgeMask=groundEdgeMask(sample,segment);"))<0
+                    or not (camera_source.find("ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_GLOW_WIDTH_SCALE")
+                            < camera_source.find("if(shouldRenderGroundCore(coreGap))")
+                            < camera_source.find("int edgeMask=groundEdgeMask(sample,segment);"))
                     or "private static boolean isGroundEdgeNotched(double phase,long salt)" not in camera_source
                     or "return (groundSampleHash(phase,salt) & 31L)==0L;" not in camera_source
                     or "private static final long GROUND_CORE_SEGMENT_GAP_SALT=0x2E2AC13EF8E8D8D2L;" not in camera_source

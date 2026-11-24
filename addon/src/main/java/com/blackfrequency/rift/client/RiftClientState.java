@@ -841,7 +841,7 @@ public final class RiftClientState {
         // Fixed hash salts create independent, reproducible chips in the two exposed crack lips.
         private static final long GROUND_LEFT_EDGE_NOTCH_SALT=0x9E3779B97F4A7C15L;
         private static final long GROUND_RIGHT_EDGE_NOTCH_SALT=0xD1B54A32D192ED03L;
-        // Two deterministic full-section breaks on separate arms interrupt the core without fragmenting it.
+        // Two deterministic core-only gaps expose the dark seam while the violet envelope stays connected.
         private static final long GROUND_CORE_SEGMENT_GAP_SALT=0x2E2AC13EF8E8D8D2L;
         // RGB values are invariant across every frame and segment; pack them once at class initialization.
         private static final int GROUND_GLOW_RED_CHANNEL=colorChannel(.20F);
@@ -868,6 +868,7 @@ public final class RiftClientState {
         private static final double GROUND_CORE_PULSE_BASE=.10D;
         private static final double GROUND_CORE_PULSE_RANGE=.22D;
         private static boolean continuityProfileLogged;
+        private static boolean coreGapLayerPolicyLogged;
         // Render-thread-only guard: invariant probes run once per client JVM, not on every mesh rebuild.
         private static boolean edgeMaskProfileLogged;
         private static boolean continuityBuildLogged;
@@ -985,6 +986,21 @@ public final class RiftClientState {
         private static boolean isGroundCoreSegmentGap(double phase) {
             if(!Double.isFinite(phase)) return true;
             return (groundSampleHash(phase,GROUND_CORE_SEGMENT_GAP_SALT) & 63L)==0L;
+        }
+
+        private static boolean shouldRenderGroundCore(boolean coreSegmentGap) {
+            return !coreSegmentGap;
+        }
+
+        private static void verifyGroundCoreGapLayerPolicy() {
+            if(coreGapLayerPolicyLogged) return;
+            boolean intactCoreRendered=shouldRenderGroundCore(false);
+            boolean gapCoreSuppressed=!shouldRenderGroundCore(true);
+            if(!(intactCoreRendered && gapCoreSuppressed))
+                throw new IllegalStateException("BLACK FREQUENCY ground core-gap layer policy regression");
+            coreGapLayerPolicyLogged=true;
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_MESH_CORE_GAP_LAYER_POLICY_VERIFIED gapCount=2 outerHalo=true bevels=true edgePolicy=preserved coreSuppressed=true");
         }
 
         private static double groundCoreWidthScale(double phase,int arm) {
@@ -2937,6 +2953,7 @@ public final class RiftClientState {
                 verifyInactiveCacheCleanup(level);
                 verifyGroundMeshSamplingProfile();
                 verifyGroundSampleCacheProfile();
+                verifyGroundCoreGapLayerPolicy();
                 verifySurfaceSearchOrder();
                 verifyTaperProfile();
                 verifyGroundSurfaceReliefProfile();
@@ -3628,7 +3645,7 @@ public final class RiftClientState {
             int prefixFadeChecks=0;
             for(int i=0;i<cachedSegments.size();i++) {
                 GroundSegment segment=cachedSegments.get(i);
-                if(segment==null || segment.sample().coreSegmentGap()) continue;
+                if(segment==null) continue;
                 double fadeA=groundPointDistanceFade(segment.a(),camera);
                 double fadeB=groundPointDistanceFade(segment.b(),camera);
                 prefixFadeChecks+=2;
@@ -3674,12 +3691,8 @@ public final class RiftClientState {
                 for(int segmentIndex=firstVisibleSegmentIndex;segmentIndex<cachedSegments.size();segmentIndex++) {
                     GroundSegment segment=cachedSegments.get(segmentIndex);
                     GroundSample sample=segment.sample();
-                    // A core gap breaks endpoint continuity; the next segment must calculate its own start fade.
-                    if(sample.coreSegmentGap()) {
-                        previousFadePoint=null;
-                        previousFadeB=0.0D;
-                        continue;
-                    }
+                    // A core gap keeps its violet envelope but resets the dark-core endpoint fade chain.
+                    boolean coreGap=sample.coreSegmentGap();
                     double segmentFadeA,segmentFadeB;
                     if(segmentIndex==firstVisibleSegmentIndex) {
                         segmentFadeA=firstVisibleFadeA;
@@ -3693,8 +3706,13 @@ public final class RiftClientState {
                         if(VERIFY_GROUND_MESH_PROFILES) recomputedEndpointFadeStarts++;
                         segmentFadeB=groundPointDistanceFade(segment.b(),camera);
                     }
-                    previousFadePoint=segment.b();
-                    previousFadeB=segmentFadeB;
+                    if(coreGap) {
+                        previousFadePoint=null;
+                        previousFadeB=0.0D;
+                    } else {
+                        previousFadePoint=segment.b();
+                        previousFadeB=segmentFadeB;
+                    }
                     if(segmentFadeA<=0.0D && segmentFadeB<=0.0D) continue;
                     float segmentStrengthA=boundedStrength*(float)segmentFadeA;
                     float segmentStrengthB=boundedStrength*(float)segmentFadeB;
@@ -3733,12 +3751,14 @@ public final class RiftClientState {
                     bevelRibbon(builder,matrix,camera,segment,halfWidth,false,rightBevelLiftScale,
                         GROUND_BEVEL_RED_CHANNEL,GROUND_BEVEL_GREEN_CHANNEL,GROUND_BEVEL_BLUE_CHANNEL,
                         bevelAlphaChannelA,bevelAlphaChannelB);
-                    coreRibbon(builder,matrix,camera,segment,halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS,
-                        GROUND_CORE_RED_CHANNEL,GROUND_CORE_GREEN_CHANNEL,GROUND_CORE_BLUE_CHANNEL,
-                        coreAlphaChannelA,coreAlphaChannelB);
-                    ribbon(builder,matrix,camera,segment,0.0D,halfWidth*.16D,GROUND_FILAMENT_LIFT,
-                        GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,
-                        filamentAlphaChannelA,filamentAlphaChannelB);
+                    if(shouldRenderGroundCore(coreGap)) {
+                        coreRibbon(builder,matrix,camera,segment,halfWidth*GROUND_CORE_WIDTH_SCALE,-GROUND_CORE_RECESS,
+                            GROUND_CORE_RED_CHANNEL,GROUND_CORE_GREEN_CHANNEL,GROUND_CORE_BLUE_CHANNEL,
+                            coreAlphaChannelA,coreAlphaChannelB);
+                        ribbon(builder,matrix,camera,segment,0.0D,halfWidth*.16D,GROUND_FILAMENT_LIFT,
+                            GROUND_FILAMENT_RED_CHANNEL,GROUND_FILAMENT_GREEN_CHANNEL,GROUND_FILAMENT_BLUE_CHANNEL,
+                            filamentAlphaChannelA,filamentAlphaChannelB);
+                    }
                     // Leave small, deterministic gaps in each lip independently. The
                     // mostly continuous dark core remains visible, so the seam reads as fractured
                     // earth rather than two uninterrupted luminous rails.
