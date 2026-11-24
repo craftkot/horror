@@ -836,7 +836,7 @@ public final class RiftClientState {
         private static final Long2DoubleOpenHashMap SURFACE_Y_BY_COLUMN=createSurfaceCache();
         private static final BlockPos.MutableBlockPos SURFACE_CURSOR=
             new BlockPos.MutableBlockPos(0,0,0);
-        // A few cached violet motes rise above non-solid plants without lifting the ground ribbon.
+        // A bounded set of brighter violet motes clears short foliage without lifting the ground ribbon.
         private static final int GROUND_CANOPY_ACCENT_PARTICLE_BUDGET=8;
         // Queue candidates while sampling, then emit only when the final mesh retains a nearby segment.
         private static final int GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET=32;
@@ -845,8 +845,8 @@ public final class RiftClientState {
             GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE*GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE;
         private static final double GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA=.35D;
         // Lift and enlarge sparse motes just enough to read above short foliage.
-        private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=.72F;
-        private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.18D;
+        private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=.76F;
+        private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.22D;
         private static final int[] GROUND_CANOPY_ACCENT_X=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final int[] GROUND_CANOPY_ACCENT_Z=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final double[] GROUND_CANOPY_ACCENT_Y=new double[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
@@ -2946,11 +2946,11 @@ public final class RiftClientState {
             double invalidHeight=canopyAccentParticleY(70,Double.NaN);
             double excessiveHeight=canopyAccentParticleY(70,2.0D);
             boolean particleScaleBounded=Float.isFinite(GROUND_CANOPY_ACCENT_PARTICLE_SCALE)
-                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE>=.68F
-                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=.76F;
+                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE>=.72F
+                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=.78F;
             boolean particleOffsetBounded=Double.isFinite(GROUND_CANOPY_ACCENT_VERTICAL_OFFSET)
-                && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET>=.16D
-                && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET<=.20D;
+                && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET>=.20D
+                && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET<=.24D;
             GroundSegment fixture=new GroundSegment(new GroundPoint(0.0D,70.0D,0.0D),
                 new GroundPoint(1.0D,70.0D,0.0D),0.0D,1.0D,GROUND_SAMPLES[0],
                 1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
@@ -2971,9 +2971,9 @@ public final class RiftClientState {
             boolean meshAccepted=canopyAccentCandidateTouchesMesh(0,0,70.05D,List.of(fixture));
             if(!(selected && sparse && checkerboardPattern && deterministic && candidateBudgetRejected && negativeCounterRejected
                 && nonPlantsRejected && particleScaleBounded && particleOffsetBounded
-                && Math.abs(plantTop-70.98D)<1.0E-9D
-                && Math.abs(invalidHeight-70.18D)<1.0E-9D
-                && Math.abs(excessiveHeight-71.18D)<1.0E-9D
+                && Math.abs(plantTop-71.02D)<1.0E-9D
+                && Math.abs(invalidHeight-70.22D)<1.0E-9D
+                && Math.abs(excessiveHeight-71.22D)<1.0E-9D
                 && broadPhaseNear && broadPhaseFar && broadPhaseCorner && exactCornerRejected
                 && invalidBoundsRejected && nearSegment && farSegment && heightMismatch && invalidRejected
                 && emptyMeshRejected && meshAccepted))
