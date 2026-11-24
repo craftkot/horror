@@ -4239,11 +4239,12 @@ def capture_test_world():
                 return False
             canopy_selector_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SELECTOR_PROFILE_VERIFIED "
-                "budget=8 candidateBudget=32 selection=one-in-four plantOnly=true "
+                "budget=8 candidateBudget=32 selection=checkerboard-one-in-two plantOnly=true "
                 "invalidRejected=true heightBounded=true segmentBounded=true"
             )
-            if canopy_selector_marker not in log_after:
-                print("WORLD_CAPTURE_FAIL: deterministic plant-only canopy accent selector was not verified",flush=True)
+            if (canopy_selector_marker not in log_after
+                    or "&& ((blockX^blockZ)&1)==0;" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: bounded checkerboard plant-only canopy accent selector was not verified",flush=True)
                 return False
             canopy_segment_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED "
