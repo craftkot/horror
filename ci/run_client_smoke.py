@@ -4324,6 +4324,24 @@ def capture_test_world():
                     or "canopyAccentCandidateIndex" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: canopy accent emission window does not rotate across queued fissure candidates",flush=True)
                 return False
+            canopy_emission_throttle_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_EMISSION_THROTTLE_PROFILE_VERIFIED "
+                "intervalTicks=10 first=true sameTickBlocked=true beforeBoundaryBlocked=true "
+                "boundaryAllowed=true clockRollbackReset=true overflowSafe=true"
+            )
+            if (canopy_emission_throttle_marker not in log_after
+                    or "shouldAttemptCanopyAccentScan(gameTime,groundCanopyAccentLastAttemptTick)" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: canopy accent emission cadence was not verified in the live client",flush=True)
+                return False
+            canopy_attempt_throttle_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_ATTEMPT_THROTTLE_PROFILE_VERIFIED "
+                "intervalTicks=10 zeroEmissionScanRecorded=true emptyScanPreservesAttempt=true"
+            )
+            if (canopy_attempt_throttle_marker not in log_after
+                    or "groundCanopyAccentLastAttemptTick=nextCanopyAccentAttemptTick(" not in camera_source
+                    or "candidatesVisited>0 ? gameTime : lastAttemptTick" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: rejected canopy candidate scans were not rate-limited in the live client",flush=True)
+                return False
             canopy_particle_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED "
                 "scale=0.76 verticalOffset=0.22 scaleBounded=true heightBounded=true"
