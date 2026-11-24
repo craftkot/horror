@@ -1187,7 +1187,11 @@ public final class RiftController {
             }
             s.started=n.getBoolean("started");s.finished=n.getBoolean("finished");
             s.initialized=n.getBoolean("initialized");
-            s.restoring=n.getBoolean("restoring");s.restored=n.getBoolean("restored");
+            boolean restoringPresent=n.contains("restoring");
+            boolean restoringValidType=n.contains("restoring",Tag.TAG_BYTE);
+            boolean malformedRestoringType=restoringPresent&&!restoringValidType;
+            s.restoring=restoringValidType&&n.getBoolean("restoring");s.restored=n.getBoolean("restored");
+            if(malformedRestoringType) s.setDirty();
             boolean malformedLegacyCursorType=(cursorXPresent&&!cursorXValidType)
                 || (cursorZPresent&&!cursorZValidType) || (cursorYPresent&&!cursorYValidType);
             if(malformedLegacyCursorType && s.initialized && !s.centerOutScan
@@ -1344,6 +1348,22 @@ public final class RiftController {
                     snapshotStateRepaired=true;
                     quarantinedSnapshotPayloads++;
                 }
+            }
+            if(malformedRestoringType && !s.restored && !s.finished
+                && (s.started || s.initialized || s.edits>0 || !s.snapshots.isEmpty())) {
+                // A mistyped restoring flag defaults to false in CompoundTag. Do not let
+                // that silently resume destructive fracture scanning from a valid cursor.
+                // Keep validated snapshots so a player can restart recovery at the physical beacon.
+                LOGGER.warn("BLACK FREQUENCY: stopped fracture resumption because saved restoring flag has the wrong NBT type");
+                s.restoring=false;
+                s.finished=true;
+                if(s.centerOutScan) s.centerOutIndex=CENTER_OUT_COLUMN_COUNT;
+                else {
+                    s.cursorX=RADIUS+1;
+                    s.cursorZ=-RADIUS;
+                    s.cursorY=Integer.MIN_VALUE;
+                }
+                s.setDirty();
             }
             if(quarantinedSnapshotPayloads>0)
                 LOGGER.warn("BLACK FREQUENCY: quarantined {} recovery snapshot payloads; retained estimate {} bytes of {} byte budget",
@@ -3136,6 +3156,30 @@ public final class RiftController {
             || recoveryCursorPreserved.snapshots.size()!=1)
             throw new IllegalStateException("CI malformed legacy cursor tag interrupted active restoration");
         LOGGER.info("BLACK_FREQUENCY_TEST LEGACY_FRACTURE_CURSOR_TAG_TYPE_QUARANTINE_VERIFIED fields=3 activeScanStopped=true snapshotsPreserved=true restoringPreserved=true");
+        CompoundTag malformedRestoringLegacy=malformedLegacyCursorBase.copy();
+        malformedRestoringLegacy.putString("restoring","not-a-byte");
+        State quarantinedLegacyRestoring=State.load(malformedRestoringLegacy);
+        if(quarantinedLegacyRestoring.restoring || !quarantinedLegacyRestoring.finished
+            || quarantinedLegacyRestoring.cursorX!=RADIUS+1
+            || quarantinedLegacyRestoring.cursorZ!=-RADIUS
+            || quarantinedLegacyRestoring.cursorY!=Integer.MIN_VALUE
+            || quarantinedLegacyRestoring.snapshots.size()!=1 || !quarantinedLegacyRestoring.isDirty())
+            throw new IllegalStateException("CI malformed restoring flag resumed legacy fracture scanning");
+        CompoundTag malformedRestoringCenterOut=malformedLegacyCursorBase.copy();
+        malformedRestoringCenterOut.putBoolean("centerOutScan",true);
+        malformedRestoringCenterOut.putInt("centerOutIndex",7);
+        malformedRestoringCenterOut.putString("restoring","not-a-byte");
+        State quarantinedCenterOutRestoring=State.load(malformedRestoringCenterOut);
+        if(quarantinedCenterOutRestoring.restoring || !quarantinedCenterOutRestoring.finished
+            || quarantinedCenterOutRestoring.centerOutIndex!=CENTER_OUT_COLUMN_COUNT
+            || quarantinedCenterOutRestoring.snapshots.size()!=1)
+            throw new IllegalStateException("CI malformed restoring flag resumed center-out fracture scanning");
+        State roundTrippedRestoringQuarantine=State.load(quarantinedCenterOutRestoring.save(new CompoundTag()));
+        if(roundTrippedRestoringQuarantine.restoring || !roundTrippedRestoringQuarantine.finished
+            || roundTrippedRestoringQuarantine.centerOutIndex!=CENTER_OUT_COLUMN_COUNT
+            || roundTrippedRestoringQuarantine.snapshots.size()!=1)
+            throw new IllegalStateException("CI malformed restoring flag quarantine was not persistent");
+        LOGGER.info("BLACK_FREQUENCY_TEST MALFORMED_RESTORING_FLAG_QUARANTINE_VERIFIED scanModes=legacy,centerOut activeScanStopped=true snapshotsPreserved=true terminalCursor=true roundTrip=true");
         State modern=new State();
         modern.surfaceFirstScan=true;
         modern.centerOutScan=true;
