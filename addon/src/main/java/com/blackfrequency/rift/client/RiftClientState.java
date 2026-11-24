@@ -2848,7 +2848,7 @@ public final class RiftClientState {
             return surface!=null
                 && surface.getBlock() instanceof net.minecraft.world.level.block.BushBlock
                 && queued>=0 && queued<GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET
-                && ((blockX^blockZ)&1)==0;
+                && ((blockX&1)==0 || (blockZ&1)==0);
         }
 
         private static boolean canopyAccentCandidateInsideExpandedSegmentBounds(double x,double z,
@@ -2929,11 +2929,13 @@ public final class RiftClientState {
             if(canopyAccentSelectorProfileLogged) return;
             BlockState plant=net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState();
             boolean selected=shouldQueueCanopyAccentCandidate(plant,0,0,0);
-            boolean sparse=!shouldQueueCanopyAccentCandidate(plant,1,0,0);
-            boolean checkerboardPattern=shouldQueueCanopyAccentCandidate(plant,0,0,0)
-                && !shouldQueueCanopyAccentCandidate(plant,1,0,0)
-                && !shouldQueueCanopyAccentCandidate(plant,0,1,0)
-                && shouldQueueCanopyAccentCandidate(plant,1,1,0);
+            boolean sparse=!shouldQueueCanopyAccentCandidate(plant,1,1,0);
+            boolean threeOfFourPattern=shouldQueueCanopyAccentCandidate(plant,0,0,0)
+                && shouldQueueCanopyAccentCandidate(plant,1,0,0)
+                && shouldQueueCanopyAccentCandidate(plant,0,1,0)
+                && !shouldQueueCanopyAccentCandidate(plant,1,1,0);
+            boolean negativeCoordinatePattern=shouldQueueCanopyAccentCandidate(plant,-1,0,0)
+                && !shouldQueueCanopyAccentCandidate(plant,-1,-1,0);
             boolean deterministic=shouldQueueCanopyAccentCandidate(plant,4,0,0)
                 && shouldQueueCanopyAccentCandidate(plant,4,0,0);
             boolean candidateBudgetRejected=!shouldQueueCanopyAccentCandidate(
@@ -2969,7 +2971,7 @@ public final class RiftClientState {
             boolean invalidRejected=!canopyAccentCandidateNearSegment(Double.NaN,.2D,70.05D,fixture);
             boolean emptyMeshRejected=!canopyAccentCandidateTouchesMesh(0,0,70.0D,List.of());
             boolean meshAccepted=canopyAccentCandidateTouchesMesh(0,0,70.05D,List.of(fixture));
-            if(!(selected && sparse && checkerboardPattern && deterministic && candidateBudgetRejected && negativeCounterRejected
+            if(!(selected && sparse && threeOfFourPattern && negativeCoordinatePattern && deterministic && candidateBudgetRejected && negativeCounterRejected
                 && nonPlantsRejected && particleScaleBounded && particleOffsetBounded
                 && Math.abs(plantTop-71.02D)<1.0E-9D
                 && Math.abs(invalidHeight-70.22D)<1.0E-9D
@@ -2980,7 +2982,7 @@ public final class RiftClientState {
                 throw new IllegalStateException("BLACK FREQUENCY canopy accent particle profile regression");
             canopyAccentSelectorProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SELECTOR_PROFILE_VERIFIED budget={} candidateBudget={} selection=checkerboard-one-in-two plantOnly=true invalidRejected=true heightBounded=true segmentBounded=true",
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SELECTOR_PROFILE_VERIFIED budget={} candidateBudget={} selection=three-of-four-sparse plantOnly=true invalidRejected=true heightBounded=true segmentBounded=true",
                 GROUND_CANOPY_ACCENT_PARTICLE_BUDGET,GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED scale={} verticalOffset={} scaleBounded=true heightBounded=true",
