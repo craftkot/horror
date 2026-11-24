@@ -858,7 +858,7 @@ public final class RiftClientState {
         private static int groundCanopyAccentCandidateCount;
         // Rotate the bounded emission window so later fissure arms are not starved by insertion order.
         private static int groundCanopyAccentCandidateCursor;
-        private static long groundCanopyAccentLastEmissionTick=Long.MIN_VALUE;
+        private static long groundCanopyAccentLastAttemptTick=Long.MIN_VALUE;
         private static int groundCanopyAccentParticlesEmitted;
         private static boolean canopyAccentSelectorProfileLogged;
         private static boolean canopyAccentBuildProfileLogged;
@@ -2905,13 +2905,17 @@ public final class RiftClientState {
             return (int)Math.floorMod((long)start+(long)offset,(long)candidateCount);
         }
 
-        private static boolean shouldEmitCanopyAccentParticles(long gameTime,long lastEmissionTick) {
+        private static boolean shouldAttemptCanopyAccentScan(long gameTime,long lastEmissionTick) {
             if(lastEmissionTick==Long.MIN_VALUE || gameTime<lastEmissionTick) return true;
             try {
                 return Math.subtractExact(gameTime,lastEmissionTick)>=GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS;
             } catch(ArithmeticException elapsedOverflow) {
                 return true;
             }
+        }
+
+        private static long nextCanopyAccentAttemptTick(long gameTime,long lastAttemptTick,int candidatesVisited) {
+            return candidatesVisited>0 ? gameTime : lastAttemptTick;
         }
 
         private static void emitCanopyAccentCandidates(Level level,List<GroundSegment> segments,
@@ -2921,7 +2925,7 @@ public final class RiftClientState {
             int candidateCount=Math.min(groundCanopyAccentCandidateCount,GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET);
             if(candidateCount<=0) return;
             long gameTime=level.getGameTime();
-            if(!shouldEmitCanopyAccentParticles(gameTime,groundCanopyAccentLastEmissionTick)) return;
+            if(!shouldAttemptCanopyAccentScan(gameTime,groundCanopyAccentLastAttemptTick)) return;
             int start=canopyAccentCandidateIndex(groundCanopyAccentCandidateCursor,0,candidateCount);
             int visited=0;
             for(int offset=0;offset<candidateCount
@@ -2945,8 +2949,10 @@ public final class RiftClientState {
                 groundCanopyAccentParticlesEmitted++;
             }
             groundCanopyAccentCandidateCursor=canopyAccentCandidateIndex(start,visited,candidateCount);
-            if(groundCanopyAccentParticlesEmitted>0)
-                groundCanopyAccentLastEmissionTick=gameTime;
+            // Record the bounded scan even when every candidate is rejected; otherwise rapid mesh
+            // invalidations can repeat the same 32 distance/segment checks inside one rebuild interval.
+            groundCanopyAccentLastAttemptTick=nextCanopyAccentAttemptTick(
+                gameTime,groundCanopyAccentLastAttemptTick,visited);
         }
 
         private static double canopyAccentParticleY(int surfaceY,double shapeHeight) {
@@ -3012,14 +3018,19 @@ public final class RiftClientState {
                 && canopyAccentCandidateIndex(-1,0,rotationCandidateCount)==11
                 && canopyAccentCandidateIndex(0,0,0)==-1;
             boolean emissionThrottleProfile=GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS==10L
-                && shouldEmitCanopyAccentParticles(0L,Long.MIN_VALUE)
-                && !shouldEmitCanopyAccentParticles(100L,100L)
-                && !shouldEmitCanopyAccentParticles(109L,100L)
-                && shouldEmitCanopyAccentParticles(110L,100L)
-                && shouldEmitCanopyAccentParticles(99L,100L)
-                && shouldEmitCanopyAccentParticles(Long.MAX_VALUE,-1L);
+                && shouldAttemptCanopyAccentScan(0L,Long.MIN_VALUE)
+                && !shouldAttemptCanopyAccentScan(100L,100L)
+                && !shouldAttemptCanopyAccentScan(109L,100L)
+                && shouldAttemptCanopyAccentScan(110L,100L)
+                && shouldAttemptCanopyAccentScan(99L,100L)
+                && shouldAttemptCanopyAccentScan(Long.MAX_VALUE,-1L);
+            // Candidate scans can emit zero particles when terrain/segment guards reject every entry.
+            // Their bounded work still counts toward the ten-tick attempt interval.
+            boolean zeroEmissionScanRecorded=nextCanopyAccentAttemptTick(110L,100L,12)==110L;
+            boolean emptyScanPreservesAttempt=nextCanopyAccentAttemptTick(110L,100L,0)==100L;
             if(!(selected && sparse && threeOfFourPattern && negativeCoordinatePattern && deterministic && candidateBudgetRejected && negativeCounterRejected
                 && rotationProfile && emissionThrottleProfile
+                && zeroEmissionScanRecorded && emptyScanPreservesAttempt
                 && nonPlantsRejected && particleScaleBounded && particleOffsetBounded
                 && Math.abs(plantTop-71.02D)<1.0E-9D
                 && Math.abs(invalidHeight-70.22D)<1.0E-9D
@@ -3036,6 +3047,9 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_ROTATION_PROFILE_VERIFIED candidateCount=12 budget=8 firstWindow=0-7 secondWindow=8-11 wrap=true negativeStart=true invalidCountRejected=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_EMISSION_THROTTLE_PROFILE_VERIFIED intervalTicks={} first=true sameTickBlocked=true beforeBoundaryBlocked=true boundaryAllowed=true clockRollbackReset=true overflowSafe=true",
+                GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_ATTEMPT_THROTTLE_PROFILE_VERIFIED intervalTicks={} zeroEmissionScanRecorded=true emptyScanPreservesAttempt=true",
                 GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED scale={} verticalOffset={} scaleBounded=true heightBounded=true",
@@ -3536,7 +3550,7 @@ public final class RiftClientState {
             SURFACE_CURSOR.set(0,0,0);
             groundCanopyAccentCandidateCount=0;
             groundCanopyAccentCandidateCursor=0;
-            groundCanopyAccentLastEmissionTick=Long.MIN_VALUE;
+            groundCanopyAccentLastAttemptTick=Long.MIN_VALUE;
             groundCanopyAccentParticlesEmitted=0;
         }
 
@@ -3580,7 +3594,7 @@ public final class RiftClientState {
             canopyAccentEmissionLogged=false;
             groundCanopyAccentCandidateCount=0;
             groundCanopyAccentCandidateCursor=0;
-            groundCanopyAccentLastEmissionTick=Long.MIN_VALUE;
+            groundCanopyAccentLastAttemptTick=Long.MIN_VALUE;
             groundCanopyAccentParticlesEmitted=0;
         }
 
