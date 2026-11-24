@@ -752,12 +752,15 @@ public final class RiftClientState {
         private static final double GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE_SQR=
             GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE*GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE;
         private static final double GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA=.35D;
+        // Lift and enlarge sparse motes just enough to read above short foliage.
+        private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=.72F;
+        private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.18D;
         private static final int[] GROUND_CANOPY_ACCENT_X=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final int[] GROUND_CANOPY_ACCENT_Z=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final double[] GROUND_CANOPY_ACCENT_Y=new double[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final double[] GROUND_CANOPY_ACCENT_GROUND_Y=new double[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final DustParticleOptions GROUND_CANOPY_ACCENT_DUST=
-            new DustParticleOptions(new Vector3f(.42F,.18F,.92F),.58F);
+            new DustParticleOptions(new Vector3f(.42F,.18F,.92F),GROUND_CANOPY_ACCENT_PARTICLE_SCALE);
         private static int groundCanopyAccentCandidateCount;
         private static int groundCanopyAccentParticlesEmitted;
         private static boolean canopyAccentSelectorProfileLogged;
@@ -2762,7 +2765,7 @@ public final class RiftClientState {
         private static double canopyAccentParticleY(int surfaceY,double shapeHeight) {
             double boundedHeight=Double.isFinite(shapeHeight)
                 ? Math.max(0.0D,Math.min(1.0D,shapeHeight)) : 0.0D;
-            return surfaceY+boundedHeight+.12D;
+            return surfaceY+boundedHeight+GROUND_CANOPY_ACCENT_VERTICAL_OFFSET;
         }
 
         private static void verifyCanopyAccentProfile() {
@@ -2785,6 +2788,12 @@ public final class RiftClientState {
             double plantTop=canopyAccentParticleY(70,.8D);
             double invalidHeight=canopyAccentParticleY(70,Double.NaN);
             double excessiveHeight=canopyAccentParticleY(70,2.0D);
+            boolean particleScaleBounded=Float.isFinite(GROUND_CANOPY_ACCENT_PARTICLE_SCALE)
+                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE>=.68F
+                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=.76F;
+            boolean particleOffsetBounded=Double.isFinite(GROUND_CANOPY_ACCENT_VERTICAL_OFFSET)
+                && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET>=.16D
+                && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET<=.20D;
             GroundSegment fixture=new GroundSegment(new GroundPoint(0.0D,70.0D,0.0D),
                 new GroundPoint(1.0D,70.0D,0.0D),0.0D,1.0D,GROUND_SAMPLES[0],
                 1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
@@ -2804,9 +2813,10 @@ public final class RiftClientState {
             boolean emptyMeshRejected=!canopyAccentCandidateTouchesMesh(0,0,70.0D,List.of());
             boolean meshAccepted=canopyAccentCandidateTouchesMesh(0,0,70.05D,List.of(fixture));
             if(!(selected && sparse && checkerboardPattern && deterministic && candidateBudgetRejected && negativeCounterRejected
-                && nonPlantsRejected && Math.abs(plantTop-70.92D)<1.0E-9D
-                && Math.abs(invalidHeight-70.12D)<1.0E-9D
-                && Math.abs(excessiveHeight-71.12D)<1.0E-9D
+                && nonPlantsRejected && particleScaleBounded && particleOffsetBounded
+                && Math.abs(plantTop-70.98D)<1.0E-9D
+                && Math.abs(invalidHeight-70.18D)<1.0E-9D
+                && Math.abs(excessiveHeight-71.18D)<1.0E-9D
                 && broadPhaseNear && broadPhaseFar && broadPhaseCorner && exactCornerRejected
                 && invalidBoundsRejected && nearSegment && farSegment && heightMismatch && invalidRejected
                 && emptyMeshRejected && meshAccepted))
@@ -2815,6 +2825,9 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SELECTOR_PROFILE_VERIFIED budget={} candidateBudget={} selection=checkerboard-one-in-two plantOnly=true invalidRejected=true heightBounded=true segmentBounded=true",
                 GROUND_CANOPY_ACCENT_PARTICLE_BUDGET,GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED scale={} verticalOffset={} scaleBounded=true heightBounded=true",
+                GROUND_CANOPY_ACCENT_PARTICLE_SCALE,GROUND_CANOPY_ACCENT_VERTICAL_OFFSET);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED near=true far=false broadPhaseCorner=true exactCornerRejected=true invalidBoundsRejected=true heightBounded=true invalidRejected=true emptyMeshRejected=true");
         }

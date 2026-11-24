@@ -4246,6 +4246,15 @@ def capture_test_world():
                     or "&& ((blockX^blockZ)&1)==0;" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: bounded checkerboard plant-only canopy accent selector was not verified",flush=True)
                 return False
+            canopy_particle_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED "
+                "scale=0.72 verticalOffset=0.18 scaleBounded=true heightBounded=true"
+            )
+            if (canopy_particle_marker not in log_after
+                    or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE=.72F;" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.18D;" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: bounded canopy accent particle profile was not verified",flush=True)
+                return False
             canopy_segment_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED "
                 "near=true far=false broadPhaseCorner=true exactCornerRejected=true invalidBoundsRejected=true heightBounded=true invalidRejected=true emptyMeshRejected=true"
