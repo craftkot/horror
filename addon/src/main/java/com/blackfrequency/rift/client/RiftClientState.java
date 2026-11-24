@@ -1057,11 +1057,23 @@ public final class RiftClientState {
             if(coreGapLayerPolicyLogged) return;
             boolean intactCoreRendered=shouldRenderGroundCore(false);
             boolean gapCoreSuppressed=!shouldRenderGroundCore(true);
-            if(!(intactCoreRendered && gapCoreSuppressed))
+            GroundSample base=GROUND_SAMPLES[0];
+            GroundSample gapSample=new GroundSample(base.forwardX(),base.bendX(),base.forwardZ(),base.bendZ(),
+                base.phase(),base.phaseSin(),base.phaseCos(),base.flickerPhaseSin(),base.flickerPhaseCos(),
+                base.coreWidthScale(),base.coreSkew(),true,base.leftEdgeNotched(),base.rightEdgeNotched());
+            GroundPoint start=new GroundPoint(.5D,64.0D,.5D);
+            GroundPoint end=new GroundPoint(1.5D,64.0D,.5D);
+            GroundSegment gapSegment=new GroundSegment(start,end,0.0D,1.0D,gapSample,
+                1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
+            Vec3 camera=new Vec3(.5D,64.0D,.5D);
+            boolean gapEnvelopeVisible=hasVisibleGroundSegment(List.of(gapSegment),camera);
+            double gapEndFade=groundPointDistanceFade(gapSegment.b(),camera);
+            boolean fadeReuseAcrossGap=canReuseGroundPointFade(gapSegment.b(),gapSegment.b(),gapEndFade);
+            if(!(intactCoreRendered && gapCoreSuppressed && gapEnvelopeVisible && fadeReuseAcrossGap))
                 throw new IllegalStateException("BLACK FREQUENCY ground core-gap layer policy regression");
             coreGapLayerPolicyLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_MESH_CORE_GAP_LAYER_POLICY_VERIFIED gapCount=2 outerHalo=true bevels=true edgePolicy=preserved coreSuppressed=true");
+                "BLACK_FREQUENCY_TEST GROUND_MESH_CORE_GAP_LAYER_POLICY_VERIFIED gapCount=2 outerHalo=true bevels=true edgePolicy=preserved coreSuppressed=true gapEnvelopeVisible=true fadeReuseAcrossGap=true");
         }
 
         private static double groundCoreWidthScale(double phase,int arm) {
@@ -2071,13 +2083,12 @@ public final class RiftClientState {
                 groundPointDistanceFade(segment.b(),camera));
         }
 
-        // Retained for the deterministic fade-profile self-check. The render path
-        // now reuses the first visible segment's endpoint values instead of rescanning it.
+        // Core-only gaps still draw their violet envelope and bevels, so they remain visible segments.
+        // This helper is also used by the deterministic empty-buffer profile.
         private static boolean hasVisibleGroundSegment(List<GroundSegment> segments,Vec3 camera) {
             if(segments==null || camera==null) return false;
             for(GroundSegment segment:segments) {
-                if(segment!=null && !segment.sample().coreSegmentGap()
-                    && groundSegmentDistanceFade(segment,camera)>0.0D) return true;
+                if(segment!=null && groundSegmentDistanceFade(segment,camera)>0.0D) return true;
             }
             return false;
         }
@@ -3752,7 +3763,7 @@ public final class RiftClientState {
                 for(int segmentIndex=firstVisibleSegmentIndex;segmentIndex<cachedSegments.size();segmentIndex++) {
                     GroundSegment segment=cachedSegments.get(segmentIndex);
                     GroundSample sample=segment.sample();
-                    // A core gap keeps its violet envelope but resets the dark-core endpoint fade chain.
+                    // A core-only gap suppresses its dark center, not the shared violet-envelope fade chain.
                     boolean coreGap=sample.coreSegmentGap();
                     double segmentFadeA,segmentFadeB;
                     if(segmentIndex==firstVisibleSegmentIndex) {
@@ -3767,13 +3778,9 @@ public final class RiftClientState {
                         if(VERIFY_GROUND_MESH_PROFILES) recomputedEndpointFadeStarts++;
                         segmentFadeB=groundPointDistanceFade(segment.b(),camera);
                     }
-                    if(coreGap) {
-                        previousFadePoint=null;
-                        previousFadeB=0.0D;
-                    } else {
-                        previousFadePoint=segment.b();
-                        previousFadeB=segmentFadeB;
-                    }
+                    // The halo and bevels remain continuous across a core gap; keep the shared endpoint fade cached.
+                    previousFadePoint=segment.b();
+                    previousFadeB=segmentFadeB;
                     if(segmentFadeA<=0.0D && segmentFadeB<=0.0D) continue;
                     float segmentStrengthA=boundedStrength*(float)segmentFadeA;
                     float segmentStrengthB=boundedStrength*(float)segmentFadeB;
