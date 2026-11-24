@@ -2422,7 +2422,7 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_PROBE_BOUNDS_VERIFIED nonFiniteRejected=true invertedBoundsRejected=true invertedYRejected=true degenerateYRejected=true validAccepted=true");
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_HORIZONTAL_BOUNDS_VERIFIED overhangRejected=true epsilonTolerance=true");
+                "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_HORIZONTAL_BOUNDS_VERIFIED overhangRejected=true epsilonTolerance=true voxelShapeMultiBoxRejected=true orderIndependent=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SLAB_SUPPORT_VERIFIED bottom={} top={} double={} bottomSnow={} topSnow={} stairsRejected=true shapeDerived=true",
                 bottomSlabHeight,topSlabHeight,doubleSlabHeight,bottomSlabSnowOffset,topSlabSnowOffset);
@@ -2442,28 +2442,36 @@ public final class RiftClientState {
                 implements net.minecraft.world.phys.shapes.Shapes.DoubleLineConsumer {
             private double expectedHeight;
             private boolean found;
+            private boolean invalidBounds;
 
             private void reset(double height) {
                 expectedHeight=height;
                 found=false;
+                invalidBounds=false;
             }
 
             private boolean found() {
-                return found;
+                // Validate every streamed box: a later overhang must invalidate an
+                // earlier full-footprint box, regardless of iteration order.
+                return found && !invalidBounds;
             }
 
             @Override
             public void consume(double minX,double minY,double minZ,
                     double maxX,double maxY,double maxZ) {
-                // Modded collision shapes are untrusted input. Infinite bounds could
-                // otherwise satisfy the full-footprint comparisons and create a false support.
-                if(found || !Double.isFinite(minX) || !Double.isFinite(minY) || !Double.isFinite(minZ)
+                // Modded collision shapes are untrusted input. Do not stop after finding
+                // a valid top: a separate malformed or out-of-block box still invalidates
+                // the entire support shape.
+                if(!Double.isFinite(minX) || !Double.isFinite(minY) || !Double.isFinite(minZ)
                     || !Double.isFinite(maxX) || !Double.isFinite(maxY) || !Double.isFinite(maxZ)
                     || minX>maxX || minY>=maxY || minZ>maxZ
                     || minX < -GROUND_SUPPORT_SHAPE_EPSILON
                     || maxX > 1.0D+GROUND_SUPPORT_SHAPE_EPSILON
                     || minZ < -GROUND_SUPPORT_SHAPE_EPSILON
-                    || maxZ > 1.0D+GROUND_SUPPORT_SHAPE_EPSILON) return;
+                    || maxZ > 1.0D+GROUND_SUPPORT_SHAPE_EPSILON) {
+                    invalidBounds=true;
+                    return;
+                }
                 if(Math.abs(maxY-expectedHeight)<=GROUND_SUPPORT_SHAPE_EPSILON
                     && minX<=GROUND_SUPPORT_SHAPE_EPSILON
                     && maxX>=1.0D-GROUND_SUPPORT_SHAPE_EPSILON
@@ -2502,6 +2510,29 @@ public final class RiftClientState {
                 probe.consume(box[0],box[1],box[2],box[3],box[4],box[5]);
                 rejected &= !probe.found();
             }
+
+            // A valid full-block box must not hide a second malformed box. Check both
+            // callback orders, then exercise the same case through Minecraft VoxelShape.
+            probe.reset(1.0D);
+            probe.consume(0,0,0,1,1,1);
+            probe.consume(-.25D,0,0,1,1,1);
+            boolean validThenOverhangRejected=!probe.found();
+            probe.reset(1.0D);
+            probe.consume(-.25D,0,0,1,1,1);
+            probe.consume(0,0,0,1,1,1);
+            boolean overhangThenValidRejected=!probe.found();
+
+            var fullBlock=net.minecraft.world.phys.shapes.Shapes.block();
+            var multiBoxOverhangs=new net.minecraft.world.phys.shapes.VoxelShape[] {
+                net.minecraft.world.phys.shapes.Shapes.or(fullBlock,fullBlock.move(-1.25D,0,0)),
+                net.minecraft.world.phys.shapes.Shapes.or(fullBlock,fullBlock.move(1.25D,0,0)),
+                net.minecraft.world.phys.shapes.Shapes.or(fullBlock,fullBlock.move(0,0,-1.25D)),
+                net.minecraft.world.phys.shapes.Shapes.or(fullBlock,fullBlock.move(0,0,1.25D))
+            };
+            boolean voxelShapeMultiBoxRejected=true;
+            for(var shape:multiBoxOverhangs)
+                voxelShapeMultiBoxRejected &= !hasFullFootprintTop(shape,1.0D);
+
             probe.reset(1.0D);
             probe.consume(-GROUND_SUPPORT_SHAPE_EPSILON*.5D,0,0,1,1,1);
             boolean minXTolerance=probe.found();
@@ -2516,8 +2547,9 @@ public final class RiftClientState {
             boolean maxZTolerance=probe.found();
             probe.reset(1.0D);
             probe.consume(0,0,0,1,1,1);
-            return rejected && minXTolerance && maxXTolerance && minZTolerance
-                && maxZTolerance && probe.found();
+            return rejected && validThenOverhangRejected && overhangThenValidRejected
+                && voxelShapeMultiBoxRejected && minXTolerance && maxXTolerance
+                && minZTolerance && maxZTolerance && probe.found();
         }
 
         private static final FullFootprintTopProbe GROUND_SUPPORT_TOP_PROBE=

@@ -3066,7 +3066,7 @@ def capture_test_world():
             )
             support_horizontal_bounds_marker = (
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_HORIZONTAL_BOUNDS_VERIFIED "
-                "overhangRejected=true epsilonTolerance=true"
+                "overhangRejected=true epsilonTolerance=true voxelShapeMultiBoxRejected=true orderIndependent=true"
             )
             if (uniform_top_marker not in final_log
                     or support_scan_marker not in final_log
@@ -3086,6 +3086,9 @@ def capture_test_world():
                     or "minZ < -GROUND_SUPPORT_SHAPE_EPSILON" not in camera_source
                     or "maxZ > 1.0D+GROUND_SUPPORT_SHAPE_EPSILON" not in camera_source
                     or "verifyHorizontalSupportProbeBounds()" not in camera_source
+                    or "private boolean invalidBounds;" not in camera_source
+                    or "return found && !invalidBounds;" not in camera_source
+                    or "Shapes.or(fullBlock,fullBlock.move(-1.25D,0,0))" not in camera_source
                     or "height<=1.0D+GROUND_SUPPORT_SHAPE_EPSILON" not in camera_source
                     or "overheightSupportRejected" not in camera_source
                     or "verifyMalformedSupportProbeBounds()" not in camera_source
