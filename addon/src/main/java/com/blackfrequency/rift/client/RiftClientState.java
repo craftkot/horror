@@ -2357,6 +2357,7 @@ public final class RiftClientState {
                 && hasFullFootprintTop(partialShape,.5D);
             boolean malformedProbeBoundsRejected=verifyMalformedSupportProbeBounds();
             boolean horizontalSupportBoundsRejected=verifyHorizontalSupportProbeBounds();
+            boolean verticalSupportBoundsRejected=verifyVerticalSupportProbeBounds();
             boolean validSupportHeights=Math.abs(fullBlockHeight-1.0D)<1.0E-9D
                 && Math.abs(partialBlockHeight-.5D)<1.0E-9D && outlineFallback && emptyShapeRejected
                 && overheightSupportRejected && epsilonOverheightAccepted
@@ -2396,7 +2397,7 @@ public final class RiftClientState {
             if(!(naturalGrass && naturalStone && supportsSlabs && rejectsStructures && rejectsBlockEntities
                 && rejectsHazardousSurfaces && rejectsHazardousHeadroom && validSupportHeights
                 && cauldronTopRejected && malformedProbeBoundsRejected && horizontalSupportBoundsRejected
-                && snowSurfaceOffsets && snowSurfaceAccepted && fullSnowBlockRejected))
+                && verticalSupportBoundsRejected && snowSurfaceOffsets && snowSurfaceAccepted && fullSnowBlockRejected))
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh terrain/structure/support-shape regression");
             supportFilterLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
@@ -2423,6 +2424,8 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_PROBE_BOUNDS_VERIFIED nonFiniteRejected=true invertedBoundsRejected=true invertedYRejected=true degenerateYRejected=true validAccepted=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_HORIZONTAL_BOUNDS_VERIFIED overhangRejected=true epsilonTolerance=true voxelShapeMultiBoxRejected=true orderIndependent=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_VERTICAL_BOUNDS_VERIFIED underhangRejected=true epsilonTolerance=true voxelShapeMultiBoxRejected=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_GROUND_MESH_SLAB_SUPPORT_VERIFIED bottom={} top={} double={} bottomSnow={} topSnow={} stairsRejected=true shapeDerived=true",
                 bottomSlabHeight,topSlabHeight,doubleSlabHeight,bottomSlabSnowOffset,topSlabSnowOffset);
@@ -2465,6 +2468,7 @@ public final class RiftClientState {
                 if(!Double.isFinite(minX) || !Double.isFinite(minY) || !Double.isFinite(minZ)
                     || !Double.isFinite(maxX) || !Double.isFinite(maxY) || !Double.isFinite(maxZ)
                     || minX>maxX || minY>=maxY || minZ>maxZ
+                    || minY < -GROUND_SUPPORT_SHAPE_EPSILON
                     || minX < -GROUND_SUPPORT_SHAPE_EPSILON
                     || maxX > 1.0D+GROUND_SUPPORT_SHAPE_EPSILON
                     || minZ < -GROUND_SUPPORT_SHAPE_EPSILON
@@ -2550,6 +2554,26 @@ public final class RiftClientState {
             return rejected && validThenOverhangRejected && overhangThenValidRejected
                 && voxelShapeMultiBoxRejected && minXTolerance && maxXTolerance
                 && minZTolerance && maxZTolerance && probe.found();
+        }
+
+        private static boolean verifyVerticalSupportProbeBounds() {
+            FullFootprintTopProbe probe=new FullFootprintTopProbe();
+            probe.reset(1.0D);
+            probe.consume(0,-.25D,0,1,1,1);
+            boolean underhangRejected=!probe.found();
+            probe.reset(1.0D);
+            probe.consume(0,-GROUND_SUPPORT_SHAPE_EPSILON*.5D,0,1,1,1);
+            boolean minYTolerance=probe.found();
+
+            var fullBlock=net.minecraft.world.phys.shapes.Shapes.block();
+            var underhangShape=net.minecraft.world.phys.shapes.Shapes.or(
+                fullBlock,fullBlock.move(0,-1.25D,0));
+            boolean voxelShapeUnderhangRejected=!hasFullFootprintTop(underhangShape,1.0D);
+
+            probe.reset(1.0D);
+            probe.consume(0,0,0,1,1,1);
+            return underhangRejected && minYTolerance && voxelShapeUnderhangRejected
+                && probe.found();
         }
 
         private static final FullFootprintTopProbe GROUND_SUPPORT_TOP_PROBE=

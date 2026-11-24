@@ -3068,11 +3068,19 @@ def capture_test_world():
                 "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_HORIZONTAL_BOUNDS_VERIFIED "
                 "overhangRejected=true epsilonTolerance=true voxelShapeMultiBoxRejected=true orderIndependent=true"
             )
+            support_vertical_bounds_marker = (
+                "BLACK_FREQUENCY_GROUND_MESH_SUPPORT_VERTICAL_BOUNDS_VERIFIED "
+                "underhangRejected=true epsilonTolerance=true voxelShapeMultiBoxRejected=true"
+            )
             if (uniform_top_marker not in final_log
                     or support_scan_marker not in final_log
                     or support_probe_bounds_marker not in final_log
                     or support_height_bound_marker not in final_log
                     or support_horizontal_bounds_marker not in final_log
+                    or support_vertical_bounds_marker not in final_log
+                    or "minY < -GROUND_SUPPORT_SHAPE_EPSILON" not in camera_source
+                    or "verifyVerticalSupportProbeBounds()" not in camera_source
+                    or "fullBlock.move(0,-1.25D,0)" not in camera_source
                     or "private static boolean hasFullFootprintTop(" not in camera_source
                     or "private static final class FullFootprintTopProbe" not in camera_source
                     or "shape.forAllBoxes(GROUND_SUPPORT_TOP_PROBE);" not in camera_source
