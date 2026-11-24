@@ -3014,6 +3014,8 @@ public final class RiftController {
     }
 
     private static void verifySurfaceFirstScanMigration() {
+        // This pure NBT regression runs with every scan-mode startup, not only recovery.
+        verifyMalformedInitializedFlagQuarantine();
         if(fractureEditBudget(false)!=96 || fractureEditBudget(true)!=160
             || EDIT_BUDGET!=fractureEditBudget(CI_TEST))
             throw new IllegalStateException("CI fracture edit budget selection regression");
@@ -3461,7 +3463,6 @@ public final class RiftController {
 
     /** Verify that a pending terrain snapshot survives a SavedData round trip. */
     private static void verifyPendingSnapshotPersistence() {
-        verifyMalformedInitializedFlagQuarantine();
         verifySavedAnchorCoordinateQuarantine();
         verifyRestoreFailureCacheReuse();
         verifySnapshotListContainerQuarantine();
