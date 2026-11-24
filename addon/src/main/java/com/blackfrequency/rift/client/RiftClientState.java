@@ -377,7 +377,7 @@ public final class RiftClientState {
             ? Math.max(0.0D,Math.min(1.0D,partialTick)) : 0.0D;
         double remaining=Math.max(0.0D,Math.min(1.0D,
             (boundedTicks-partial)/BEACON_AURA_COMPLETION_FADE_TICKS));
-        return remaining*remaining*(3.0D-2.0D*remaining);
+        return smootherstep01(remaining);
     }
 
     // Contract the containment cage toward the physical beacon while its completion alpha fades.
@@ -394,7 +394,7 @@ public final class RiftClientState {
         double t=(BEACON_AURA_RENDER_DISTANCE-distance)
             /(BEACON_AURA_RENDER_DISTANCE-BEACON_AURA_FADE_START_DISTANCE);
         t=Math.max(0.0D,Math.min(1.0D,t));
-        return t*t*(3.0D-2.0D*t);
+        return smootherstep01(t);
     }
 
     private static boolean matchesCachedBeaconPosition(BlockPos pos,long packed) {
@@ -463,6 +463,12 @@ public final class RiftClientState {
         double completionFadeFull=beaconAuraCompletionFade(16,0.0D);
         double completionFadeMiddle=beaconAuraCompletionFade(8,0.0D);
         double completionFadeEnd=beaconAuraCompletionFade(0,0.0D);
+        double completionFadeQuarter=beaconAuraCompletionFade(4,0.0D);
+        double completionFadeThreeQuarter=beaconAuraCompletionFade(12,0.0D);
+        boolean completionFadeC2Endpoints=smootherstepDerivative01(0.0D)==0.0D
+            && smootherstepDerivative01(1.0D)==0.0D
+            && smootherstepSecondDerivative01(0.0D)==0.0D
+            && smootherstepSecondDerivative01(1.0D)==0.0D;
         double completionScaleFull=beaconAuraCompletionScale(1.0D);
         double completionScaleMiddle=beaconAuraCompletionScale(.5D);
         double completionScaleEnd=beaconAuraCompletionScale(0.0D);
@@ -498,7 +504,9 @@ public final class RiftClientState {
         boolean completionFadeProfile=completionFadeStarted==16 && completionFadeContinued==6
             && completionFadeCanceledByRestore==0 && completionFadeCanceledByCollapse==0
             && completionFadeCanceledByProgress==0 && completionFadeMonotonic
-            && completionFadeMilestones && completionScaleProfile
+            && Math.abs(completionFadeQuarter-.103515625D)<1.0E-12D
+            && Math.abs(completionFadeThreeQuarter-.896484375D)<1.0E-12D
+            && completionFadeC2Endpoints && completionFadeMilestones && completionScaleProfile
             && beaconAuraCompletionFade(99,Double.NaN)==1.0D
             && beaconAuraCompletionFade(-1,0.0D)==0.0D;
         boolean inactiveRejected=!shouldRenderBeaconAura(false,true,true,true,1.0D);
@@ -513,8 +521,17 @@ public final class RiftClientState {
         double fadeStart=beaconAuraDistanceFade(40.0D*40.0D);
         double fadeMiddle=beaconAuraDistanceFade(44.0D*44.0D);
         double fadeBoundary=beaconAuraDistanceFade(48.0D*48.0D);
+        double fadeQuarter=beaconAuraDistanceFade(46.0D*46.0D);
+        double fadeThreeQuarter=beaconAuraDistanceFade(42.0D*42.0D);
+        boolean fadeC2Endpoints=smootherstepDerivative01(0.0D)==0.0D
+            && smootherstepDerivative01(1.0D)==0.0D
+            && smootherstepSecondDerivative01(0.0D)==0.0D
+            && smootherstepSecondDerivative01(1.0D)==0.0D;
         boolean fadeMonotonic=fadeNear==1.0D && fadeStart==1.0D
-            && Math.abs(fadeMiddle-.5D)<1.0E-12D && fadeBoundary==0.0D;
+            && Math.abs(fadeQuarter-.103515625D)<1.0E-12D
+            && Math.abs(fadeMiddle-.5D)<1.0E-12D
+            && Math.abs(fadeThreeQuarter-.896484375D)<1.0E-12D
+            && fadeBoundary==0.0D && fadeC2Endpoints;
         double previousFade=fadeStart;
         for(int step=1;step<=8;step++) {
             double distance=BEACON_AURA_FADE_START_DISTANCE+step;
@@ -558,14 +575,16 @@ public final class RiftClientState {
         if(!beaconAuraCompletionFadeProfileLogged) {
             beaconAuraCompletionFadeProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_PROFILE_VERIFIED ticks=16 curve=smoothstep partialTick=true");
+                "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_PROFILE_VERIFIED ticks=16 curve=quintic partialTick=true quarter={} midpoint={} threeQuarter={} c2Endpoints=true",
+                completionFadeQuarter,completionFadeMiddle,completionFadeThreeQuarter);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_MILESTONES_VERIFIED midpointInRange=true tailVisible=true");
         }
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_COLLAPSE_PROFILE_VERIFIED start=1.0 midpoint=0.775 end=0.55 monotonic=true geometryScaled=true");
         com.mojang.logging.LogUtils.getLogger().info(
-            "BLACK_FREQUENCY_TEST BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true");
+            "BLACK_FREQUENCY_TEST BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=quintic quarter={} midpoint={} threeQuarter={} c2Endpoints=true monotonic=true invalidRejected=true",
+            fadeQuarter,fadeMiddle,fadeThreeQuarter);
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST BEACON_AURA_RIBBON_PROFILE_VERIFIED outerHalfWidth=0.022 innerHalfWidth=0.012 cameraFacing=true allocationFree=true");
         com.mojang.logging.LogUtils.getLogger().info(
