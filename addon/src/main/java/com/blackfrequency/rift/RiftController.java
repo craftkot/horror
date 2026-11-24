@@ -1156,7 +1156,11 @@ public final class RiftController {
             // Active fracture state is quarantined below; restoration snapshots remain usable.
             s.x=anchorCoordinatesValid?n.getInt("x"):0;
             s.z=anchorCoordinatesValid?n.getInt("z"):0;
-            s.cursorX=n.getInt("cx");s.cursorZ=n.getInt("cz");s.cursorY=n.getInt("cy");
+            boolean cursorXPresent=n.contains("cx"),cursorZPresent=n.contains("cz"),cursorYPresent=n.contains("cy");
+            boolean cursorXValidType=n.contains("cx",Tag.TAG_INT),cursorZValidType=n.contains("cz",Tag.TAG_INT),cursorYValidType=n.contains("cy",Tag.TAG_INT);
+            s.cursorX=cursorXValidType?n.getInt("cx"):0;
+            s.cursorZ=cursorZValidType?n.getInt("cz"):0;
+            s.cursorY=cursorYValidType?n.getInt("cy"):0;
             s.edits=readBoundedCounter(n,"edits",MAX_EDITS,s);
             s.finaleTicks=readBoundedCounter(n,"finaleTicks",Integer.MAX_VALUE,s);
             boolean surfaceFirstScanPresent=n.contains("surfaceFirstScan");
@@ -1184,6 +1188,20 @@ public final class RiftController {
             s.started=n.getBoolean("started");s.finished=n.getBoolean("finished");
             s.initialized=n.getBoolean("initialized");
             s.restoring=n.getBoolean("restoring");s.restored=n.getBoolean("restored");
+            boolean malformedLegacyCursorType=(cursorXPresent&&!cursorXValidType)
+                || (cursorZPresent&&!cursorZValidType) || (cursorYPresent&&!cursorYValidType);
+            if(malformedLegacyCursorType && s.initialized && !s.centerOutScan
+                && !s.restoring && !s.restored && !s.finished) {
+                LOGGER.warn("BLACK FREQUENCY: quarantined malformed legacy fracture cursor tag type");
+                // Do not let a wrong NBT type silently become zero and resume a
+                // destructive legacy scan from an invented column. Keep snapshots
+                // intact so a later beacon can still restore already removed blocks.
+                s.cursorX=RADIUS+1;
+                s.cursorZ=-RADIUS;
+                s.cursorY=Integer.MIN_VALUE;
+                s.finished=true;
+                s.setDirty();
+            }
             if(malformedFractureScanMode) {
                 LOGGER.warn("BLACK FREQUENCY: quarantined malformed fracture scan mode flags");
                 // Do not guess a scan order from a mistyped flag: a fallback could resume
@@ -3085,6 +3103,39 @@ public final class RiftController {
             || !corruptLegacyY.finished)
             throw new IllegalStateException("CI corrupt legacy fracture height cursor was not quarantined");
         LOGGER.info("BLACK_FREQUENCY_TEST CORRUPT_LEGACY_FRACTURE_CURSOR_QUARANTINED");
+        CompoundTag malformedLegacyCursorBase=new CompoundTag();
+        malformedLegacyCursorBase.putInt("x",123);
+        malformedLegacyCursorBase.putInt("z",-456);
+        malformedLegacyCursorBase.putBoolean("initialized",true);
+        malformedLegacyCursorBase.putBoolean("started",true);
+        malformedLegacyCursorBase.putBoolean("surfaceFirstScan",true);
+        malformedLegacyCursorBase.putInt("cx",0);
+        malformedLegacyCursorBase.putInt("cz",0);
+        malformedLegacyCursorBase.putInt("cy",12);
+        malformedLegacyCursorBase.putInt("edits",1);
+        CompoundTag retainedCursorSnapshot=new CompoundTag();
+        retainedCursorSnapshot.putLong("pos",new BlockPos(124,64,-456).asLong());
+        retainedCursorSnapshot.put("state",NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
+        ListTag retainedCursorSnapshots=new ListTag();
+        retainedCursorSnapshots.add(retainedCursorSnapshot);
+        malformedLegacyCursorBase.put("snapshots",retainedCursorSnapshots);
+        for(String cursorKey:new String[]{"cx","cz","cy"}) {
+            CompoundTag malformedCursorTag=malformedLegacyCursorBase.copy();
+            malformedCursorTag.putString(cursorKey,"not-an-int");
+            State quarantinedTag=State.load(malformedCursorTag);
+            if(!quarantinedTag.finished || !quarantinedTag.isDirty()
+                || quarantinedTag.cursorX!=RADIUS+1 || quarantinedTag.cursorZ!=-RADIUS
+                || quarantinedTag.snapshots.size()!=1)
+                throw new IllegalStateException("CI malformed legacy cursor tag type was not quarantined: "+cursorKey);
+        }
+        CompoundTag malformedCursorDuringRecovery=malformedLegacyCursorBase.copy();
+        malformedCursorDuringRecovery.putBoolean("restoring",true);
+        malformedCursorDuringRecovery.putString("cx","not-an-int");
+        State recoveryCursorPreserved=State.load(malformedCursorDuringRecovery);
+        if(!recoveryCursorPreserved.restoring || recoveryCursorPreserved.finished
+            || recoveryCursorPreserved.snapshots.size()!=1)
+            throw new IllegalStateException("CI malformed legacy cursor tag interrupted active restoration");
+        LOGGER.info("BLACK_FREQUENCY_TEST LEGACY_FRACTURE_CURSOR_TAG_TYPE_QUARANTINE_VERIFIED fields=3 activeScanStopped=true snapshotsPreserved=true restoringPreserved=true");
         State modern=new State();
         modern.surfaceFirstScan=true;
         modern.centerOutScan=true;
