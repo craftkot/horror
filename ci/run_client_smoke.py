@@ -3786,10 +3786,25 @@ def capture_test_world():
                                         rel_tol=0.0,abs_tol=1.0e-9)):
                 print("WORLD_CAPTURE_FAIL: violet edge rails do not interpolate their skew continuously at segment endpoints",flush=True)
                 return False
+            distance_fade_profile=re.search(
+                r"BLACK_FREQUENCY_TEST GROUND_MESH_DISTANCE_FADE_VERIFIED start=48 end=64 curve=quintic quarter=([-+0-9.eE]+) midpoint=([-+0-9.eE]+) threeQuarter=([-+0-9.eE]+) c2Endpoints=true monotonic=true invalidRejected=true",
+                final_log)
+            expected_distance_fade=(.896484375,.5,.103515625)
+            distance_fade_start=camera_source.find("private static double groundDistanceFade(double distanceSquared)")
+            distance_fade_end=camera_source.find("private static double groundPointDistanceFade",distance_fade_start)
+            distance_fade_source=(camera_source[distance_fade_start:distance_fade_end]
+                                  if distance_fade_start>=0 and distance_fade_end>distance_fade_start else "")
+            if (not distance_fade_profile
+                    or any(not math.isclose(float(distance_fade_profile.group(i)),expected_distance_fade[i-1],
+                                             rel_tol=0.0,abs_tol=1.0e-9)
+                           for i in range(1,4))
+                    or "return 1.0D-smootherstep01(t);" not in distance_fade_source):
+                print("WORLD_CAPTURE_FAIL: ground render-envelope fade is not C2 quintic or its profile changed",flush=True)
+                return False
             endpoint_distance_fade=re.search(
                 r"BLACK_FREQUENCY_TEST GROUND_MESH_ENDPOINT_DISTANCE_FADE_VERIFIED metric=per-endpoint start=48 end=64 near=([-+0-9.eE]+) mid=([-+0-9.eE]+) crossing=([-+0-9.eE]+) crossingEnd=([-+0-9.eE]+) far=([-+0-9.eE]+) invalidRejected=true monotonic=true",
                 final_log)
-            expected_endpoint_fade=(1.0,.644621729850769,.014355985138228555,0.0,0.0)
+            expected_endpoint_fade=(1.0,.6785021465821046,.0031918912249969678,0.0,0.0)
             if (not endpoint_distance_fade
                     or any(not math.isclose(float(endpoint_distance_fade.group(i)),expected_endpoint_fade[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)

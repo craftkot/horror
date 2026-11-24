@@ -136,24 +136,36 @@ public final class RiftClientState {
 
     // Quintic easing keeps both velocity and acceleration continuous at phase boundaries.
     private static float smootherstep01(float value) {
-        if(!Float.isFinite(value)) return 0.0F;
-        double t=Math.max(0.0D,Math.min(1.0D,(double)value));
+        return (float)smootherstep01((double)value);
+    }
+
+    private static double smootherstep01(double value) {
+        if(!Double.isFinite(value)) return 0.0D;
+        double t=Math.max(0.0D,Math.min(1.0D,value));
         double t2=t*t;
         double t3=t2*t;
-        return (float)(t3*(t*(t*6.0D-15.0D)+10.0D));
+        return t3*(t*(t*6.0D-15.0D)+10.0D);
     }
 
     private static float smootherstepDerivative01(float value) {
-        if(!Float.isFinite(value)) return 0.0F;
-        double t=Math.max(0.0D,Math.min(1.0D,(double)value));
+        return (float)smootherstepDerivative01((double)value);
+    }
+
+    private static double smootherstepDerivative01(double value) {
+        if(!Double.isFinite(value)) return 0.0D;
+        double t=Math.max(0.0D,Math.min(1.0D,value));
         double oneMinusT=1.0D-t;
-        return (float)(30.0D*t*t*oneMinusT*oneMinusT);
+        return 30.0D*t*t*oneMinusT*oneMinusT;
     }
 
     private static float smootherstepSecondDerivative01(float value) {
-        if(!Float.isFinite(value)) return 0.0F;
-        double t=Math.max(0.0D,Math.min(1.0D,(double)value));
-        return (float)(60.0D*t*(1.0D-t)*(1.0D-2.0D*t));
+        return (float)smootherstepSecondDerivative01((double)value);
+    }
+
+    private static double smootherstepSecondDerivative01(double value) {
+        if(!Double.isFinite(value)) return 0.0D;
+        double t=Math.max(0.0D,Math.min(1.0D,value));
+        return 60.0D*t*(1.0D-t)*(1.0D-2.0D*t);
     }
 
     private static void verifySmootherstepProfile() {
@@ -2045,8 +2057,8 @@ public final class RiftClientState {
             if(distanceSquared<=startSquared) return 1.0D;
             if(distanceSquared>=endSquared) return 0.0D;
             double t=(distanceSquared-startSquared)/(endSquared-startSquared);
-            double smooth=t*t*(3.0D-2.0D*t);
-            return 1.0D-smooth;
+            // Keep alpha velocity and acceleration continuous at both render-envelope boundaries.
+            return 1.0D-smootherstep01(t);
         }
 
         // Evaluate the 3D fade at each endpoint so a short quad can taper across the
@@ -2241,23 +2253,44 @@ public final class RiftClientState {
             if(!(finiteCameraAccepted && nanCameraRejected && infiniteCameraRejected
                 && outOfWorldCameraRejected && cameraOutsideWhilePlayerNear && cameraInsideWhilePlayerOutside))
                 throw new IllegalStateException("BLACK FREQUENCY camera-based ground mesh culling regression");
-            double fadeStart=groundDistanceFade(48.0D*48.0D);
-            double fadeMid=groundDistanceFade((48.0D*48.0D+64.0D*64.0D)*.5D);
-            double fadeEnd=groundDistanceFade(64.0D*64.0D);
+            double fadeStartSquared=48.0D*48.0D;
+            double fadeEndSquared=64.0D*64.0D;
+            double fadeSpanSquared=fadeEndSquared-fadeStartSquared;
+            double fadeStart=groundDistanceFade(fadeStartSquared);
+            double fadeQuarter=groundDistanceFade(fadeStartSquared+fadeSpanSquared*.25D);
+            double fadeMid=groundDistanceFade((fadeStartSquared+fadeEndSquared)*.5D);
+            double fadeThreeQuarter=groundDistanceFade(fadeStartSquared+fadeSpanSquared*.75D);
+            double fadeEnd=groundDistanceFade(fadeEndSquared);
             double fadeNear=groundDistanceFade(40.0D*40.0D);
             double fadeFar=groundDistanceFade(65.0D*65.0D);
             double fadeNaN=groundDistanceFade(Double.NaN);
             double fadeNegative=groundDistanceFade(-1.0D);
+            double fadeInfinity=groundDistanceFade(Double.POSITIVE_INFINITY);
             double fadeAt56=groundDistanceFade(56.0D*56.0D);
             double fadeAt60=groundDistanceFade(60.0D*60.0D);
-            if(Math.abs(fadeStart-1.0D)>1.0E-9D
-                || Math.abs(fadeMid-.5D)>1.0E-9D
+            boolean fadeC2Endpoints=smootherstepDerivative01(0.0D)==0.0D
+                && smootherstepDerivative01(1.0D)==0.0D
+                && smootherstepSecondDerivative01(0.0D)==0.0D
+                && smootherstepSecondDerivative01(1.0D)==0.0D;
+            boolean fadeMonotonic=true;
+            double previousFade=1.0D;
+            for(int sample=1;sample<=1000;sample++) {
+                double t=sample/1000.0D;
+                double currentFade=groundDistanceFade(fadeStartSquared+fadeSpanSquared*t);
+                fadeMonotonic &= Double.isFinite(currentFade) && currentFade>=0.0D
+                    && currentFade<=1.0D && currentFade<=previousFade+1.0E-12D;
+                previousFade=currentFade;
+            }
+            if(fadeStart!=1.0D || Math.abs(fadeQuarter-.896484375D)>1.0E-12D
+                || Math.abs(fadeMid-.5D)>1.0E-12D
+                || Math.abs(fadeThreeQuarter-.103515625D)>1.0E-12D
                 || fadeEnd!=0.0D || fadeNear!=1.0D || fadeFar!=0.0D
-                || fadeNaN!=0.0D || fadeNegative!=0.0D
-                || !(fadeAt56>fadeAt60))
+                || fadeNaN!=0.0D || fadeNegative!=0.0D || fadeInfinity!=0.0D
+                || !(fadeAt56>fadeAt60) || !fadeC2Endpoints || !fadeMonotonic)
                 throw new IllegalStateException("BLACK FREQUENCY ground mesh distance fade regression");
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_MESH_DISTANCE_FADE_VERIFIED start=48 end=64 midpoint=0.5 monotonic=true invalidRejected=true");
+                "BLACK_FREQUENCY_TEST GROUND_MESH_DISTANCE_FADE_VERIFIED start=48 end=64 curve=quintic quarter={} midpoint={} threeQuarter={} c2Endpoints=true monotonic=true invalidRejected=true",
+                fadeQuarter,fadeMid,fadeThreeQuarter);
             GroundSample fadeSample=null;
             for(GroundSample candidate:GROUND_SAMPLES) {
                 if(!candidate.coreSegmentGap()) { fadeSample=candidate; break; }
