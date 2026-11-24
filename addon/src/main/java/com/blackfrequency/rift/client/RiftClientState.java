@@ -134,26 +134,79 @@ public final class RiftClientState {
         return greenPhase(collapse,finaleTicks);
     }
 
-    private static float smoothstep01(float value) {
+    // Quintic easing keeps both velocity and acceleration continuous at phase boundaries.
+    private static float smootherstep01(float value) {
+        if(!Float.isFinite(value)) return 0.0F;
         float t=Math.max(0.0F,Math.min(1.0F,value));
-        return t*t*(3.0F-2.0F*t);
+        float t2=t*t;
+        float t3=t2*t;
+        return t3*(t*(t*6.0F-15.0F)+10.0F);
+    }
+
+    private static float smootherstepDerivative01(float value) {
+        if(!Float.isFinite(value)) return 0.0F;
+        float t=Math.max(0.0F,Math.min(1.0F,value));
+        float oneMinusT=1.0F-t;
+        return 30.0F*t*t*oneMinusT*oneMinusT;
+    }
+
+    private static float smootherstepSecondDerivative01(float value) {
+        if(!Float.isFinite(value)) return 0.0F;
+        float t=Math.max(0.0F,Math.min(1.0F,value));
+        return 60.0F*t*(1.0F-t)*(1.0F-2.0F*t);
+    }
+
+    private static void verifySmootherstepProfile() {
+        float start=smootherstep01(0.0F);
+        float quarter=smootherstep01(.25F);
+        float midpoint=smootherstep01(.5F);
+        float threeQuarter=smootherstep01(.75F);
+        float end=smootherstep01(1.0F);
+        boolean monotonic=true;
+        float previous=start;
+        for(int sample=1;sample<=1000;sample++) {
+            float current=smootherstep01(sample/1000.0F);
+            monotonic &= Float.isFinite(current) && current>=previous
+                && current>=0.0F && current<=1.0F;
+            previous=current;
+        }
+        boolean firstDerivativeZero=smootherstepDerivative01(0.0F)==0.0F
+            && smootherstepDerivative01(1.0F)==0.0F;
+        boolean secondDerivativeZero=smootherstepSecondDerivative01(0.0F)==0.0F
+            && smootherstepSecondDerivative01(1.0F)==0.0F;
+        boolean invalidFallback=smootherstep01(Float.NaN)==0.0F
+            && smootherstep01(Float.POSITIVE_INFINITY)==0.0F
+            && smootherstep01(Float.NEGATIVE_INFINITY)==0.0F;
+        boolean boundedClamp=smootherstep01(-1.0F)==0.0F && smootherstep01(2.0F)==1.0F;
+        if(start!=0.0F || Math.abs(quarter-.103515625F)>1.0E-6F
+            || midpoint!=.5F || Math.abs(threeQuarter-.896484375F)>1.0E-6F
+            || end!=1.0F || !firstDerivativeZero || !secondDerivativeZero
+            || !monotonic || !invalidFallback || !boundedClamp)
+            throw new IllegalStateException("BLACK FREQUENCY smootherstep profile regression");
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_SMOOTHERSTEP_PROFILE_VERIFIED curve=quintic quarter={} midpoint={} threeQuarter={} endpoints=true firstDerivativeZero=true secondDerivativeZero=true monotonic=true bounded=true invalidFallback=true",
+            quarter,midpoint,threeQuarter);
     }
 
     private static float greenPhase(boolean collapsing,int ticks) {
         if(!collapsing || ticks<GREEN_PHASE_START_TICK || ticks>GREEN_PHASE_END_TICK) return 0.0F;
-        float fadeIn=smoothstep01((ticks-GREEN_PHASE_START_TICK)/(float)GREEN_PHASE_FADE_TICKS);
-        float fadeOut=smoothstep01((GREEN_PHASE_END_TICK-ticks)/(float)GREEN_PHASE_FADE_TICKS);
+        float fadeIn=smootherstep01((ticks-GREEN_PHASE_START_TICK)/(float)GREEN_PHASE_FADE_TICKS);
+        float fadeOut=smootherstep01((GREEN_PHASE_END_TICK-ticks)/(float)GREEN_PHASE_FADE_TICKS);
         return Math.min(fadeIn,fadeOut);
     }
 
     private static void verifyGreenPhaseProfile() {
         float before=greenPhase(true,GREEN_PHASE_START_TICK-1);
         float start=greenPhase(true,GREEN_PHASE_START_TICK);
+        float fadeInQuarter=greenPhase(true,GREEN_PHASE_START_TICK+GREEN_PHASE_FADE_TICKS/4);
         float fadeInMidpoint=greenPhase(true,GREEN_PHASE_START_TICK+GREEN_PHASE_FADE_TICKS/2);
+        float fadeInThreeQuarter=greenPhase(true,GREEN_PHASE_START_TICK+3*GREEN_PHASE_FADE_TICKS/4);
         float peak=greenPhase(true,GREEN_PHASE_START_TICK+GREEN_PHASE_FADE_TICKS);
         float plateau=greenPhase(true,(GREEN_PHASE_START_TICK+GREEN_PHASE_END_TICK)/2);
         float plateauEnd=greenPhase(true,GREEN_PHASE_END_TICK-GREEN_PHASE_FADE_TICKS);
+        float fadeOutThreeQuarter=greenPhase(true,GREEN_PHASE_END_TICK-3*GREEN_PHASE_FADE_TICKS/4);
         float fadeOutMidpoint=greenPhase(true,GREEN_PHASE_END_TICK-GREEN_PHASE_FADE_TICKS/2);
+        float fadeOutQuarter=greenPhase(true,GREEN_PHASE_END_TICK-GREEN_PHASE_FADE_TICKS/4);
         float end=greenPhase(true,GREEN_PHASE_END_TICK);
         float after=greenPhase(true,GREEN_PHASE_END_TICK+1);
         boolean bounded=true;
@@ -175,27 +228,35 @@ public final class RiftClientState {
             falling &= current<=previous;
             previous=current;
         }
-        if(before!=0.0F || start!=0.0F || Math.abs(fadeInMidpoint-.5F)>1.0E-6F
+        if(before!=0.0F || start!=0.0F
+            || Math.abs(fadeInQuarter-.103515625F)>1.0E-6F
+            || Math.abs(fadeInMidpoint-.5F)>1.0E-6F
+            || Math.abs(fadeInThreeQuarter-.896484375F)>1.0E-6F
             || peak!=1.0F || plateau!=1.0F || plateauEnd!=1.0F
-            || Math.abs(fadeOutMidpoint-.5F)>1.0E-6F || end!=0.0F || after!=0.0F
+            || Math.abs(fadeOutThreeQuarter-.896484375F)>1.0E-6F
+            || Math.abs(fadeOutMidpoint-.5F)>1.0E-6F
+            || Math.abs(fadeOutQuarter-.103515625F)>1.0E-6F
+            || end!=0.0F || after!=0.0F
             || greenPhase(false,(GREEN_PHASE_START_TICK+GREEN_PHASE_END_TICK)/2)!=0.0F
             || !bounded || !rising || !falling)
             throw new IllegalStateException("BLACK FREQUENCY green corruption phase easing regression");
-        com.mojang.logging.LogUtils.getLogger().info("BLACK_FREQUENCY_GREEN_PHASE_EASING_VERIFIED start={} fadeTicks={} peak={} plateauEnd={} end={} fadeInMidpoint={} fadeOutMidpoint={} bounded=true monotonic=true",
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_GREEN_PHASE_EASING_VERIFIED curve=quintic start={} fadeTicks={} peak={} plateauEnd={} end={} fadeInQuarter={} fadeInMidpoint={} fadeInThreeQuarter={} fadeOutThreeQuarter={} fadeOutMidpoint={} fadeOutQuarter={} bounded=true monotonic=true c2Endpoints=true",
             GREEN_PHASE_START_TICK,GREEN_PHASE_FADE_TICKS,
             GREEN_PHASE_START_TICK+GREEN_PHASE_FADE_TICKS,
             GREEN_PHASE_END_TICK-GREEN_PHASE_FADE_TICKS,GREEN_PHASE_END_TICK,
-            fadeInMidpoint,fadeOutMidpoint);
+            fadeInQuarter,fadeInMidpoint,fadeInThreeQuarter,
+            fadeOutThreeQuarter,fadeOutMidpoint,fadeOutQuarter);
     }
 
     // Ease the first three seconds of the rift in without changing its final strength.
     private static float riftOpeningRamp(int ticks) {
-        float t=Math.max(0.0F,Math.min(1.0F,ticks/(float)RIFT_OPENING_RAMP_TICKS));
-        return t*t*(3.0F-2.0F*t);
+        return smootherstep01(ticks/(float)RIFT_OPENING_RAMP_TICKS);
     }
 
     private static void verifyRiftOpeningRampProfile() {
         if(riftOpeningRampProfileLogged) return;
+        verifySmootherstepProfile();
         float start=riftOpeningRamp(0);
         float quarter=riftOpeningRamp(15);
         float midpoint=riftOpeningRamp(30);
@@ -222,9 +283,9 @@ public final class RiftClientState {
             packetMonotonic &= current>=previousPacketTick;
             previousPacketTick=current;
         }
-        if(start!=0.0F || Math.abs(quarter-.15625F)>1.0E-6F
+        if(start!=0.0F || Math.abs(quarter-.103515625F)>1.0E-6F
             || Math.abs(midpoint-.5F)>1.0E-6F
-            || Math.abs(threeQuarter-.84375F)>1.0E-6F
+            || Math.abs(threeQuarter-.896484375F)>1.0E-6F
             || end!=1.0F || riftOpeningRamp(-1)!=0.0F
             || riftOpeningRamp(RIFT_OPENING_RAMP_TICKS+1)!=1.0F || !monotonic)
             throw new IllegalStateException("BLACK FREQUENCY rift opening ramp regression");
@@ -235,7 +296,7 @@ public final class RiftClientState {
         verifyGreenPhaseProfile();
         riftOpeningRampProfileLogged=true;
         com.mojang.logging.LogUtils.getLogger().info(
-            "BLACK_FREQUENCY_RIFT_OPENING_RAMP_PROFILE_VERIFIED ticks={} curve=smoothstep quarter={} midpoint={} threeQuarter={} endpoints=true monotonic=true",
+            "BLACK_FREQUENCY_RIFT_OPENING_RAMP_PROFILE_VERIFIED ticks={} curve=quintic quarter={} midpoint={} threeQuarter={} endpoints=true monotonic=true",
             RIFT_OPENING_RAMP_TICKS,quarter,midpoint,threeQuarter);
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_RIFT_PACKET_INTERPOLATION_VERIFIED intervalTicks={} cap={} monotonic=true overflowSafe=true negativeSafe=true",

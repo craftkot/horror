@@ -119,7 +119,7 @@ def verify_green_corruption_shader_source():
     client_state_path=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"client"/"RiftClientState.java")
     client_state=client_state_path.read_text(encoding="utf-8")
     preview_start=client_state.find("public static float greenPhase()")
-    preview_end=client_state.find("\n    private static float smoothstep01",preview_start)
+    preview_end=client_state.find("\n    private static float smootherstep01",preview_start)
     preview_body=client_state[preview_start:preview_end] if preview_start>=0 and preview_end>preview_start else ""
     if ("VERIFY_RIFT_CLIENT_PROFILES && Boolean.getBoolean(\"blackfrequency.ciGreenPhasePreview\")" not in client_state
             or "if(CI_GREEN_PHASE_PREVIEW && progress>0.0F)" not in preview_body
@@ -127,6 +127,9 @@ def verify_green_corruption_shader_source():
             or "return 1.0F;" not in preview_body
             or "return greenPhase(collapse,finaleTicks);" not in preview_body):
         raise RuntimeError("BLACK FREQUENCY green-phase preview must be client-only, profile-gated, and inactive without an active rift")
+    if ("float fadeIn=smootherstep01((ticks-GREEN_PHASE_START_TICK)/(float)GREEN_PHASE_FADE_TICKS);" not in client_state
+            or "float fadeOut=smootherstep01((GREEN_PHASE_END_TICK-ticks)/(float)GREEN_PHASE_FADE_TICKS);" not in client_state):
+        raise RuntimeError("BLACK FREQUENCY green corruption phase must use the verified quintic easing")
     print("WORLD_CAPTURE: green-phase preview is gated behind the disposable client profile")
     required=(
         "float greenOutsideCore=1.0-clamp(fractureCoverage,0.0,1.0);",
@@ -2983,10 +2986,21 @@ def capture_test_world():
                 return False
             opening_ramp_marker = (
                 "BLACK_FREQUENCY_RIFT_OPENING_RAMP_PROFILE_VERIFIED "
-                "ticks=60 curve=smoothstep quarter=0.15625 midpoint=0.5 threeQuarter=0.84375 endpoints=true monotonic=true"
+                "ticks=60 curve=quintic quarter=0.103515625 midpoint=0.5 threeQuarter=0.896484375 endpoints=true monotonic=true"
             )
             if opening_ramp_marker not in final_log:
-                print("WORLD_CAPTURE_FAIL: sky-rift opening ramp did not pass its monotonic smoothstep profile",flush=True)
+                print("WORLD_CAPTURE_FAIL: sky-rift opening ramp did not pass its monotonic quintic profile",flush=True)
+                return False
+            smootherstep_marker = (
+                "BLACK_FREQUENCY_SMOOTHERSTEP_PROFILE_VERIFIED "
+                "curve=quintic quarter=0.103515625 midpoint=0.5 threeQuarter=0.896484375 "
+                "endpoints=true firstDerivativeZero=true secondDerivativeZero=true monotonic=true bounded=true invalidFallback=true"
+            )
+            if smootherstep_marker not in final_log:
+                print("WORLD_CAPTURE_FAIL: quintic easing profile did not pass its C2 boundary checks",flush=True)
+                return False
+            if "BLACK_FREQUENCY_GREEN_PHASE_EASING_VERIFIED curve=quintic" not in final_log:
+                print("WORLD_CAPTURE_FAIL: green corruption phase did not use the verified quintic easing",flush=True)
                 return False
             packet_interpolation_marker = (
                 "BLACK_FREQUENCY_RIFT_PACKET_INTERPOLATION_VERIFIED "
@@ -2996,7 +3010,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: client did not interpolate finale ticks between authoritative state packets",flush=True)
                 return False
             if ("private static float riftOpeningRamp(int ticks)" not in camera_source
-                    or "return t*t*(3.0F-2.0F*t);" not in camera_source
+                    or "return smootherstep01(ticks/(float)RIFT_OPENING_RAMP_TICKS);" not in camera_source
                     or "return collapse ? strength()*riftOpeningRamp(finaleTicks) : strength();" not in camera_source
                     or "private static int serverFinaleTicks;" not in camera_source
                     or "private static final int RIFT_STATE_PACKET_INTERVAL_TICKS=10;" not in camera_source
