@@ -196,7 +196,10 @@ def verify_beacon_aura_source():
             or "BEACON_AURA_STALE_PACKET_EXPIRY_VERIFIED restorationOnly=true idle=false timeoutTicks=100" not in client
             or "nextBeaconAuraCompletionFadeTicks(" not in client
             or "beaconAuraCompletionFadeTicks,wasRestoring,worldRestorationActive,collapsing,safeProgress)" not in client
-            or "BEACON_AURA_COMPLETION_FADE_PROFILE_VERIFIED ticks=16 curve=smoothstep partialTick=true" not in client
+            or "BEACON_AURA_COMPLETION_FADE_PROFILE_VERIFIED ticks=16 curve=quintic partialTick=true quarter={} midpoint={} threeQuarter={} c2Endpoints=true" not in client
+            or "return smootherstep01(remaining);" not in client
+            or "return smootherstep01(t);" not in client
+            or "smootherstepSecondDerivative01(0.0D)==0.0D" not in client
             or "beaconAuraCompletionScale(" not in client
             or "BEACON_AURA_COMPLETION_COLLAPSE_PROFILE_VERIFIED start=1.0 midpoint=0.775 end=0.55 monotonic=true geometryScaled=true" not in client
             or "BEACON_AURA_COMPLETION_FADE_RENDERED" not in client
@@ -204,7 +207,7 @@ def verify_beacon_aura_source():
             or "BEACON_AURA_COMPLETION_FADE_TAIL_RENDERED" not in client
             or "BEACON_AURA_COMPLETION_FADE_MILESTONES_VERIFIED midpointInRange=true tailVisible=true" not in client
             or "BEACON_AURA_RESTORATION_ACTIVE_RENDERED progressZero=true loadedOnly=true" not in client
-            or "BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true" not in client
+            or "BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=quintic quarter={} midpoint={} threeQuarter={} c2Endpoints=true monotonic=true invalidRejected=true" not in client
             or "beaconAuraDistanceFade(distanceSquared)" not in client
             or "distanceSquared<=BEACON_AURA_FADE_START_DISTANCE_SQR" not in client
             or "BEACON_AURA_RIBBON_PROFILE_VERIFIED outerHalfWidth=0.022 innerHalfWidth=0.012 cameraFacing=true allocationFree=true" not in client
@@ -4653,8 +4656,19 @@ def capture_test_world():
                 if "BLACK_FREQUENCY_TEST BEACON_AURA_ROTATION_PROFILE_VERIFIED periodTicks=1200 outerTurns=1 innerTurns=-2 wrapContinuous=true partialBounded=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: beacon aura rotation profile was not verified",flush=True)
                     return False
-                if "BLACK_FREQUENCY_TEST BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=smoothstep monotonic=true invalidRejected=true" not in log_after:
-                    print("WORLD_CAPTURE_FAIL: beacon aura distance fade profile was not verified",flush=True)
+                completion_fade_profile=re.search(
+                    r"BLACK_FREQUENCY_TEST BEACON_AURA_COMPLETION_FADE_PROFILE_VERIFIED ticks=16 curve=quintic partialTick=true quarter=([-+0-9.eE]+) midpoint=([-+0-9.eE]+) threeQuarter=([-+0-9.eE]+) c2Endpoints=true",
+                    log_after)
+                distance_fade_profile=re.search(
+                    r"BLACK_FREQUENCY_TEST BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=quintic quarter=([-+0-9.eE]+) midpoint=([-+0-9.eE]+) threeQuarter=([-+0-9.eE]+) c2Endpoints=true monotonic=true invalidRejected=true",
+                    log_after)
+                expected_fade_values=(.103515625,.5,.896484375)
+                if (not completion_fade_profile or not distance_fade_profile
+                        or any(not math.isclose(float(completion_fade_profile.group(i)),expected_fade_values[i-1],
+                                                rel_tol=0.0,abs_tol=1.0e-9) for i in range(1,4))
+                        or any(not math.isclose(float(distance_fade_profile.group(i)),expected_fade_values[i-1],
+                                                rel_tol=0.0,abs_tol=1.0e-9) for i in range(1,4))):
+                    print("WORLD_CAPTURE_FAIL: beacon aura C2 fade profiles were not verified",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST BEACON_AURA_RENDERED cages=2 edgeRibbons=24 rotation=counterphase loadedOnly=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: rotating violet physical beacon containment aura was not drawn from the loaded beacon block",flush=True)
