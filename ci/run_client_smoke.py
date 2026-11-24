@@ -3251,7 +3251,8 @@ def capture_test_world():
                 return False
             core_gap_layer_policy_marker=("BLACK_FREQUENCY_TEST GROUND_MESH_CORE_GAP_LAYER_POLICY_VERIFIED "
                                           "gapCount=2 outerHalo=true bevels=true edgePolicy=preserved coreSuppressed=true "
-                                          "gapEnvelopeVisible=true fadeReuseAcrossGap=true")
+                                          "gapEnvelopeVisible=true fadeReuseIntoGap=true fadeReuseOutOfGap=true "
+                                          "disconnectedIdentityFallback=true invalidFadeRejected=true")
             if core_gap_layer_policy_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: core gaps did not preserve the connected violet envelope",flush=True)
                 return False
