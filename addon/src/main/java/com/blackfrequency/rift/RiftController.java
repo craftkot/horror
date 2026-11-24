@@ -1186,7 +1186,10 @@ public final class RiftController {
                 s.setDirty();
             }
             s.started=n.getBoolean("started");s.finished=n.getBoolean("finished");
-            s.initialized=n.getBoolean("initialized");
+            boolean initializedPresent=n.contains("initialized");
+            boolean initializedValidType=n.contains("initialized",Tag.TAG_BYTE);
+            boolean malformedInitializedType=initializedPresent&&!initializedValidType;
+            s.initialized=initializedValidType&&n.getBoolean("initialized");
             boolean restoringPresent=n.contains("restoring");
             boolean restoringValidType=n.contains("restoring",Tag.TAG_BYTE);
             boolean malformedRestoringType=restoringPresent&&!restoringValidType;
@@ -1347,6 +1350,26 @@ public final class RiftController {
                     s.snapshots.add(new CompoundTag());
                     snapshotStateRepaired=true;
                     quarantinedSnapshotPayloads++;
+                }
+            }
+            if(malformedInitializedType) {
+                // A wrong NBT type reads as false. Reinitializing this state would reset
+                // its anchor and cursor to the current spawn, potentially fracturing a
+                // second area while the original recovery snapshots still belong elsewhere.
+                s.setDirty();
+                if(!s.restoring && !s.restored
+                    && (s.started || s.edits>0 || !s.snapshots.isEmpty())) {
+                    LOGGER.warn("BLACK FREQUENCY: stopped fracture resumption because saved initialized flag has the wrong NBT type");
+                    s.initialized=true;
+                    s.started=true;
+                    s.finished=true;
+                    if(s.centerOutScan) s.centerOutIndex=CENTER_OUT_COLUMN_COUNT;
+                    else {
+                        s.cursorX=RADIUS+1;
+                        s.cursorZ=-RADIUS;
+                        s.cursorY=Integer.MIN_VALUE;
+                    }
+                    s.setDirty();
                 }
             }
             if(malformedRestoringType && !s.restored && !s.finished
@@ -3398,8 +3421,47 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST FRACTURE_ANCHOR_COORDINATE_QUARANTINE_VERIFIED missing=true wrongType=true activeFractureStopped=true emptyFractureReinitialized=true restoringPreserved=true validUnchanged=true fallbackBeacon=true");
     }
 
+    private static void verifyMalformedInitializedFlagQuarantine() {
+        BlockPos pos=new BlockPos(12,64,-7);
+        CompoundTag snapshot=new CompoundTag();
+        snapshot.putLong("pos",pos.asLong());
+        snapshot.put("state",NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
+        ListTag snapshots=new ListTag();
+        snapshots.add(snapshot);
+
+        CompoundTag damaged=new CompoundTag();
+        damaged.putInt("x",12);
+        damaged.putInt("z",-7);
+        damaged.putString("initialized","corrupted");
+        damaged.putBoolean("started",true);
+        damaged.putBoolean("surfaceFirstScan",true);
+        damaged.putBoolean("centerOutScan",true);
+        damaged.putInt("centerOutIndex",17);
+        damaged.putInt("edits",1);
+        damaged.put("snapshots",snapshots);
+
+        State quarantined=State.load(damaged);
+        boolean stopped=quarantined.initialized && quarantined.started && quarantined.finished
+            && quarantined.centerOutIndex==CENTER_OUT_COLUMN_COUNT
+            && quarantined.x==12 && quarantined.z==-7
+            && quarantined.snapshots.size()==1
+            && quarantined.snapshots.get(0).getLong("pos")==pos.asLong()
+            && quarantined.isDirty();
+        State roundTrip=State.load(quarantined.save(new CompoundTag()));
+        boolean stable=roundTrip.initialized && roundTrip.started && roundTrip.finished
+            && roundTrip.centerOutIndex==CENTER_OUT_COLUMN_COUNT
+            && roundTrip.x==12 && roundTrip.z==-7
+            && roundTrip.snapshots.size()==1
+            && roundTrip.snapshots.get(0).getLong("pos")==pos.asLong();
+        if(!stopped || !stable)
+            throw new IllegalStateException("CI malformed initialized flag quarantine regression"
+                +" stopped="+stopped+" stable="+stable);
+        LOGGER.info("BLACK_FREQUENCY_TEST MALFORMED_INITIALIZED_FLAG_QUARANTINE_VERIFIED activeScanStopped=true anchorPreserved=true snapshotsPreserved=true roundTrip=true");
+    }
+
     /** Verify that a pending terrain snapshot survives a SavedData round trip. */
     private static void verifyPendingSnapshotPersistence() {
+        verifyMalformedInitializedFlagQuarantine();
         verifySavedAnchorCoordinateQuarantine();
         verifyRestoreFailureCacheReuse();
         verifySnapshotListContainerQuarantine();
