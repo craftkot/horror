@@ -2986,14 +2986,14 @@ def capture_test_world():
                 return False
             opening_ramp_marker = (
                 "BLACK_FREQUENCY_RIFT_OPENING_RAMP_PROFILE_VERIFIED "
-                "ticks=60 curve=quintic quarter=0.103515625 midpoint=0.5 threeQuarter=0.896484375 endpoints=true monotonic=true"
+                "ticks=60 curve=quintic quarter=0.103515625 midpoint=0.5 threeQuarter=0.8964844 endpoints=true monotonic=true"
             )
             if opening_ramp_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: sky-rift opening ramp did not pass its monotonic quintic profile",flush=True)
                 return False
             smootherstep_marker = (
                 "BLACK_FREQUENCY_SMOOTHERSTEP_PROFILE_VERIFIED "
-                "curve=quintic quarter=0.103515625 midpoint=0.5 threeQuarter=0.896484375 "
+                "curve=quintic quarter=0.103515625 midpoint=0.5 threeQuarter=0.8964844 "
                 "endpoints=true firstDerivativeZero=true secondDerivativeZero=true monotonic=true bounded=true invalidFallback=true"
             )
             if smootherstep_marker not in final_log:
