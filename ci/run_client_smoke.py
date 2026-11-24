@@ -1121,7 +1121,7 @@ def capture_test_world():
         if log_text is None:
             log_text=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
         matches=list(re.finditer(
-            r"BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY x=(-?[0-9]+) y=(-?[0-9]+) z=(-?[0-9]+)",
+            r"BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY(?:_FOR_REAL_PLAYER)? x=(-?[0-9]+) y=(-?[0-9]+) z=(-?[0-9]+)",
             log_text))
         if not matches:
             return None
@@ -1275,7 +1275,7 @@ def capture_test_world():
         if log_text is None:
             log_text=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
         post_restore_marker=re.search(
-            r"BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY x=(-?[0-9]+) y=(-?[0-9]+) z=(-?[0-9]+)",
+            r"BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY(?:_FOR_REAL_PLAYER)? x=(-?[0-9]+) y=(-?[0-9]+) z=(-?[0-9]+)",
             log_text)
         target=read_post_restore_beacon_aim(log_text)
         if post_restore_marker is not None:
@@ -1338,14 +1338,20 @@ def capture_test_world():
         raise RuntimeError("BLACK FREQUENCY camera pose telemetry stopped before the invisible-rift guard")
     post_restore_aim_sample="\n".join((
         "BLACK_FREQUENCY_TEST BEACON_AIM_SET yaw=-7.6293945E-6 pitch=54.20249",
-        "BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY x=6 y=65 z=-4",
+        "BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY_FOR_REAL_PLAYER x=6 y=65 z=-4",
         camera_pose_sample))
     recomputed_post_restore_aim=read_post_restore_beacon_aim(post_restore_aim_sample)
     if (recomputed_post_restore_aim is None
             or abs(wrapped_angle_delta(recomputed_post_restore_aim[0],90.0))>1.0E-6
             or abs(recomputed_post_restore_aim[1]-35.24757505834628)>1.0E-6):
         raise RuntimeError("BLACK FREQUENCY post-restoration live beacon aim regression")
-    if read_post_restore_beacon_aim("BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY x=6 y=65 z=-4") is not None:
+    legacy_post_restore_sample=post_restore_aim_sample.replace("_FOR_REAL_PLAYER","")
+    legacy_post_restore_aim=read_post_restore_beacon_aim(legacy_post_restore_sample)
+    if (legacy_post_restore_aim is None
+            or abs(wrapped_angle_delta(legacy_post_restore_aim[0],recomputed_post_restore_aim[0]))>1.0E-9
+            or abs(legacy_post_restore_aim[1]-recomputed_post_restore_aim[1])>1.0E-9):
+        raise RuntimeError("BLACK FREQUENCY legacy post-restoration beacon marker regression")
+    if read_post_restore_beacon_aim("BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY_FOR_REAL_PLAYER x=6 y=65 z=-4") is not None:
         raise RuntimeError("BLACK FREQUENCY post-restoration aim accepted a missing camera pose")
     try:
         beacon_aim_from_camera_pose((float("nan"),67.0,-3.5,0.0,0.0),(6,65,-4))
