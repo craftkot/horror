@@ -4314,6 +4314,16 @@ def capture_test_world():
                     or "&& ((blockX&1)==0 || (blockZ&1)==0);" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: bounded three-of-four plant-only canopy accent selector was not verified",flush=True)
                 return False
+            canopy_rotation_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_ROTATION_PROFILE_VERIFIED "
+                "candidateCount=12 budget=8 firstWindow=0-7 secondWindow=8-11 wrap=true "
+                "negativeStart=true invalidCountRejected=true"
+            )
+            if (canopy_rotation_marker not in log_after
+                    or "groundCanopyAccentCandidateCursor" not in camera_source
+                    or "canopyAccentCandidateIndex" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: canopy accent emission window does not rotate across queued fissure candidates",flush=True)
+                return False
             canopy_particle_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED "
                 "scale=0.76 verticalOffset=0.22 scaleBounded=true heightBounded=true"

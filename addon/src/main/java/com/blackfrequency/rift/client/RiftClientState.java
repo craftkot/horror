@@ -854,6 +854,8 @@ public final class RiftClientState {
         private static final DustParticleOptions GROUND_CANOPY_ACCENT_DUST=
             new DustParticleOptions(new Vector3f(.42F,.18F,.92F),GROUND_CANOPY_ACCENT_PARTICLE_SCALE);
         private static int groundCanopyAccentCandidateCount;
+        // Rotate the bounded emission window so later fissure arms are not starved by insertion order.
+        private static int groundCanopyAccentCandidateCursor;
         private static int groundCanopyAccentParticlesEmitted;
         private static boolean canopyAccentSelectorProfileLogged;
         private static boolean canopyAccentBuildProfileLogged;
@@ -2895,12 +2897,23 @@ public final class RiftClientState {
             return false;
         }
 
+        private static int canopyAccentCandidateIndex(int start,int offset,int candidateCount) {
+            if(candidateCount<=0 || offset<0) return -1;
+            return (int)Math.floorMod((long)start+(long)offset,(long)candidateCount);
+        }
+
         private static void emitCanopyAccentCandidates(Level level,List<GroundSegment> segments,
                 int worldAnchorX,int worldAnchorZ) {
             groundCanopyAccentParticlesEmitted=0;
             if(level==null || segments==null || segments.isEmpty()) return;
-            for(int i=0;i<groundCanopyAccentCandidateCount
-                && groundCanopyAccentParticlesEmitted<GROUND_CANOPY_ACCENT_PARTICLE_BUDGET;i++) {
+            int candidateCount=Math.min(groundCanopyAccentCandidateCount,GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET);
+            if(candidateCount<=0) return;
+            int start=canopyAccentCandidateIndex(groundCanopyAccentCandidateCursor,0,candidateCount);
+            int visited=0;
+            for(int offset=0;offset<candidateCount
+                && groundCanopyAccentParticlesEmitted<GROUND_CANOPY_ACCENT_PARTICLE_BUDGET;offset++) {
+                int i=canopyAccentCandidateIndex(start,offset,candidateCount);
+                visited=offset+1;
                 int x=GROUND_CANOPY_ACCENT_X[i],z=GROUND_CANOPY_ACCENT_Z[i];
                 long dx=(long)x-worldAnchorX,dz=(long)z-worldAnchorZ;
                 if(Math.abs(dx)>RADIUS || Math.abs(dz)>RADIUS || dx*dx+dz*dz>(long)RADIUS*RADIUS)
@@ -2917,6 +2930,7 @@ public final class RiftClientState {
                 level.addParticle(GROUND_CANOPY_ACCENT_DUST,x+.5D,accentY,z+.5D,0.0D,.006D,0.0D);
                 groundCanopyAccentParticlesEmitted++;
             }
+            groundCanopyAccentCandidateCursor=canopyAccentCandidateIndex(start,visited,candidateCount);
         }
 
         private static double canopyAccentParticleY(int surfaceY,double shapeHeight) {
@@ -2971,7 +2985,18 @@ public final class RiftClientState {
             boolean invalidRejected=!canopyAccentCandidateNearSegment(Double.NaN,.2D,70.05D,fixture);
             boolean emptyMeshRejected=!canopyAccentCandidateTouchesMesh(0,0,70.0D,List.of());
             boolean meshAccepted=canopyAccentCandidateTouchesMesh(0,0,70.05D,List.of(fixture));
+            int rotationCandidateCount=12;
+            int firstWindowStart=canopyAccentCandidateIndex(0,0,rotationCandidateCount);
+            int firstWindowEnd=canopyAccentCandidateIndex(firstWindowStart,GROUND_CANOPY_ACCENT_PARTICLE_BUDGET-1,rotationCandidateCount);
+            int secondWindowStart=canopyAccentCandidateIndex(firstWindowStart,GROUND_CANOPY_ACCENT_PARTICLE_BUDGET,rotationCandidateCount);
+            int secondWindowEnd=canopyAccentCandidateIndex(secondWindowStart,3,rotationCandidateCount);
+            int wrappedWindow=canopyAccentCandidateIndex(secondWindowStart,4,rotationCandidateCount);
+            boolean rotationProfile=firstWindowStart==0 && firstWindowEnd==7
+                && secondWindowStart==8 && secondWindowEnd==11 && wrappedWindow==0
+                && canopyAccentCandidateIndex(-1,0,rotationCandidateCount)==11
+                && canopyAccentCandidateIndex(0,0,0)==-1;
             if(!(selected && sparse && threeOfFourPattern && negativeCoordinatePattern && deterministic && candidateBudgetRejected && negativeCounterRejected
+                && rotationProfile
                 && nonPlantsRejected && particleScaleBounded && particleOffsetBounded
                 && Math.abs(plantTop-71.02D)<1.0E-9D
                 && Math.abs(invalidHeight-70.22D)<1.0E-9D
@@ -2984,6 +3009,8 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SELECTOR_PROFILE_VERIFIED budget={} candidateBudget={} selection=three-of-four-sparse plantOnly=true invalidRejected=true heightBounded=true segmentBounded=true",
                 GROUND_CANOPY_ACCENT_PARTICLE_BUDGET,GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_ROTATION_PROFILE_VERIFIED candidateCount=12 budget=8 firstWindow=0-7 secondWindow=8-11 wrap=true negativeStart=true invalidCountRejected=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED scale={} verticalOffset={} scaleBounded=true heightBounded=true",
                 GROUND_CANOPY_ACCENT_PARTICLE_SCALE,GROUND_CANOPY_ACCENT_VERTICAL_OFFSET);
@@ -3481,6 +3508,9 @@ public final class RiftClientState {
             cachedSteepStepBreaks=0;
             SURFACE_Y_BY_COLUMN.clear();
             SURFACE_CURSOR.set(0,0,0);
+            groundCanopyAccentCandidateCount=0;
+            groundCanopyAccentCandidateCursor=0;
+            groundCanopyAccentParticlesEmitted=0;
         }
 
         private static void clearGeometryCacheIfPresent() {
@@ -3522,6 +3552,7 @@ public final class RiftClientState {
             canopyAccentBuildProfileLogged=false;
             canopyAccentEmissionLogged=false;
             groundCanopyAccentCandidateCount=0;
+            groundCanopyAccentCandidateCursor=0;
             groundCanopyAccentParticlesEmitted=0;
         }
 
