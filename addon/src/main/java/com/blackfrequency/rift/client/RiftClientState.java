@@ -840,6 +840,8 @@ public final class RiftClientState {
         private static final int GROUND_CANOPY_ACCENT_PARTICLE_BUDGET=8;
         // Queue candidates while sampling, then emit only when the final mesh retains a nearby segment.
         private static final int GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET=32;
+        // Mesh invalidation can happen more often than the normal rebuild cadence while moving.
+        private static final long GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS=REBUILD_INTERVAL;
         private static final double GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE=.85D;
         private static final double GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE_SQR=
             GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE*GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE;
@@ -856,6 +858,7 @@ public final class RiftClientState {
         private static int groundCanopyAccentCandidateCount;
         // Rotate the bounded emission window so later fissure arms are not starved by insertion order.
         private static int groundCanopyAccentCandidateCursor;
+        private static long groundCanopyAccentLastEmissionTick=Long.MIN_VALUE;
         private static int groundCanopyAccentParticlesEmitted;
         private static boolean canopyAccentSelectorProfileLogged;
         private static boolean canopyAccentBuildProfileLogged;
@@ -2902,12 +2905,23 @@ public final class RiftClientState {
             return (int)Math.floorMod((long)start+(long)offset,(long)candidateCount);
         }
 
+        private static boolean shouldEmitCanopyAccentParticles(long gameTime,long lastEmissionTick) {
+            if(lastEmissionTick==Long.MIN_VALUE || gameTime<lastEmissionTick) return true;
+            try {
+                return Math.subtractExact(gameTime,lastEmissionTick)>=GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS;
+            } catch(ArithmeticException elapsedOverflow) {
+                return true;
+            }
+        }
+
         private static void emitCanopyAccentCandidates(Level level,List<GroundSegment> segments,
                 int worldAnchorX,int worldAnchorZ) {
             groundCanopyAccentParticlesEmitted=0;
             if(level==null || segments==null || segments.isEmpty()) return;
             int candidateCount=Math.min(groundCanopyAccentCandidateCount,GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET);
             if(candidateCount<=0) return;
+            long gameTime=level.getGameTime();
+            if(!shouldEmitCanopyAccentParticles(gameTime,groundCanopyAccentLastEmissionTick)) return;
             int start=canopyAccentCandidateIndex(groundCanopyAccentCandidateCursor,0,candidateCount);
             int visited=0;
             for(int offset=0;offset<candidateCount
@@ -2931,6 +2945,8 @@ public final class RiftClientState {
                 groundCanopyAccentParticlesEmitted++;
             }
             groundCanopyAccentCandidateCursor=canopyAccentCandidateIndex(start,visited,candidateCount);
+            if(groundCanopyAccentParticlesEmitted>0)
+                groundCanopyAccentLastEmissionTick=gameTime;
         }
 
         private static double canopyAccentParticleY(int surfaceY,double shapeHeight) {
@@ -2995,8 +3011,15 @@ public final class RiftClientState {
                 && secondWindowStart==8 && secondWindowEnd==11 && wrappedWindow==0
                 && canopyAccentCandidateIndex(-1,0,rotationCandidateCount)==11
                 && canopyAccentCandidateIndex(0,0,0)==-1;
+            boolean emissionThrottleProfile=GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS==10L
+                && shouldEmitCanopyAccentParticles(0L,Long.MIN_VALUE)
+                && !shouldEmitCanopyAccentParticles(100L,100L)
+                && !shouldEmitCanopyAccentParticles(109L,100L)
+                && shouldEmitCanopyAccentParticles(110L,100L)
+                && shouldEmitCanopyAccentParticles(99L,100L)
+                && shouldEmitCanopyAccentParticles(Long.MAX_VALUE,-1L);
             if(!(selected && sparse && threeOfFourPattern && negativeCoordinatePattern && deterministic && candidateBudgetRejected && negativeCounterRejected
-                && rotationProfile
+                && rotationProfile && emissionThrottleProfile
                 && nonPlantsRejected && particleScaleBounded && particleOffsetBounded
                 && Math.abs(plantTop-71.02D)<1.0E-9D
                 && Math.abs(invalidHeight-70.22D)<1.0E-9D
@@ -3011,6 +3034,9 @@ public final class RiftClientState {
                 GROUND_CANOPY_ACCENT_PARTICLE_BUDGET,GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_ROTATION_PROFILE_VERIFIED candidateCount=12 budget=8 firstWindow=0-7 secondWindow=8-11 wrap=true negativeStart=true invalidCountRejected=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_EMISSION_THROTTLE_PROFILE_VERIFIED intervalTicks={} first=true sameTickBlocked=true beforeBoundaryBlocked=true boundaryAllowed=true clockRollbackReset=true overflowSafe=true",
+                GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED scale={} verticalOffset={} scaleBounded=true heightBounded=true",
                 GROUND_CANOPY_ACCENT_PARTICLE_SCALE,GROUND_CANOPY_ACCENT_VERTICAL_OFFSET);
@@ -3510,6 +3536,7 @@ public final class RiftClientState {
             SURFACE_CURSOR.set(0,0,0);
             groundCanopyAccentCandidateCount=0;
             groundCanopyAccentCandidateCursor=0;
+            groundCanopyAccentLastEmissionTick=Long.MIN_VALUE;
             groundCanopyAccentParticlesEmitted=0;
         }
 
@@ -3553,6 +3580,7 @@ public final class RiftClientState {
             canopyAccentEmissionLogged=false;
             groundCanopyAccentCandidateCount=0;
             groundCanopyAccentCandidateCursor=0;
+            groundCanopyAccentLastEmissionTick=Long.MIN_VALUE;
             groundCanopyAccentParticlesEmitted=0;
         }
 
