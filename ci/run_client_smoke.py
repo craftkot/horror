@@ -315,7 +315,10 @@ def verify_restoration_particle_source():
     border_guard=ground_sampler.find("isFissureColumnInsideWorldBorder(level.getWorldBorder(),x,z,level.getMinBuildHeight(),cursor)")
     chunk_guard=ground_sampler.find("!level.hasChunk(x>>4,z>>4)")
     if ("if(result==null) return false;\n        result.clear();\n        if(level==null || cursor==null) return false;" not in ground_sampler
-            or "if(isFissureGroundSupport(level.getBlockState(cursor))) {" not in ground_sampler
+            or "BlockState support=level.getBlockState(cursor);" not in ground_sampler
+            or "if(isFissureGroundSupport(support,level,cursor)) {" not in ground_sampler
+            or "private static boolean hasFullFissureSupportTop(" not in source
+            or "private static boolean isFissureGroundSupport(\n            BlockState state,net.minecraft.world.level.BlockGetter level,BlockPos pos)" not in source
             or border_guard<0 or chunk_guard<0 or border_guard>chunk_guard
             or "BlockState surface=level.getBlockState(cursor);" not in ground_sampler
             or "double shapeHeight=surface.isAir() ? 0.0D" not in ground_sampler
