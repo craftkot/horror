@@ -51,6 +51,9 @@ public final class RiftController {
     private static final double GRAVITY_APERIODIC_TURBULENCE_TIME_X=.00073D;
     private static final double GRAVITY_APERIODIC_TURBULENCE_TIME_Z=.00091D;
     private static final double GRAVITY_LIFT_ZONE_THRESHOLD=.42D;
+    private static final double GRAVITY_SINK_ZONE_THRESHOLD=.68D;
+    // Fade lift/sink activation over a narrow field band to avoid a force step at either threshold.
+    private static final double GRAVITY_ZONE_ACTIVATION_WIDTH=.16D;
     private static final double GRAVITY_LIFT_BASE_DRIFT=.035D;
     private static final double GRAVITY_LIFT_CROSS_SHEAR_SCALE=.008D;
     // The legacy dark-purple formatting code is magenta; use the actual deep-violet brand color.
@@ -570,6 +573,13 @@ public final class RiftController {
         return t*t*t*(t*(t*6.0D-15.0D)+10.0D);
     }
 
+    /** C2 activation envelope for lift/sink bands; zero at threshold, full strength after the ramp. */
+    private static double gravityAnomalyZoneActivation(double magnitude,double threshold) {
+        if(!Double.isFinite(magnitude) || !Double.isFinite(threshold)
+            || threshold<0.0D || threshold>=1.0D) return 0.0D;
+        return gravityAnomalyFade((magnitude-threshold)/GRAVITY_ZONE_ACTIVATION_WIDTH);
+    }
+
     private static void verifyGravityAnomalyFadeProfile() {
         double h=.0005D;
         double startSlope=gravityAnomalyFade(h)/h;
@@ -652,8 +662,43 @@ public final class RiftController {
         return Math.max(-1.0D,Math.min(1.0D,field));
     }
 
+    private static void verifyGravityAnomalyZoneActivation() {
+        double[] thresholds={GRAVITY_LIFT_ZONE_THRESHOLD,GRAVITY_SINK_ZONE_THRESHOLD};
+        double[] offsets={-.25D,0.0D,.25D,.5D,.75D,1.0D,1.25D};
+        double[] expected={0.0D,0.0D,.103515625D,.5D,.896484375D,1.0D,1.0D};
+        boolean monotonic=true,bounded=true,invalidNeutral=true;
+        for(double threshold:thresholds) {
+            for(int i=0;i<offsets.length;i++) {
+                double actual=gravityAnomalyZoneActivation(
+                    threshold+GRAVITY_ZONE_ACTIVATION_WIDTH*offsets[i],threshold);
+                if(!Double.isFinite(actual) || Math.abs(actual-expected[i])>1.0E-12D)
+                    throw new IllegalStateException("CI gravity zone activation profile regression");
+            }
+            double previous=0.0D;
+            for(int sample=0;sample<=256;sample++) {
+                double magnitude=threshold-GRAVITY_ZONE_ACTIVATION_WIDTH
+                    +2.0D*GRAVITY_ZONE_ACTIVATION_WIDTH*sample/256.0D;
+                double actual=gravityAnomalyZoneActivation(magnitude,threshold);
+                bounded &= Double.isFinite(actual) && actual>=0.0D && actual<=1.0D;
+                monotonic &= actual>=previous-1.0E-12D;
+                previous=actual;
+            }
+            invalidNeutral &= gravityAnomalyZoneActivation(Double.NaN,threshold)==0.0D
+                && gravityAnomalyZoneActivation(Double.POSITIVE_INFINITY,threshold)==0.0D
+                && gravityAnomalyZoneActivation(.9D,Double.NaN)==0.0D
+                && gravityAnomalyZoneActivation(.9D,-.01D)==0.0D
+                && gravityAnomalyZoneActivation(.9D,1.0D)==0.0D;
+        }
+        if(!(monotonic && bounded && invalidNeutral))
+            throw new IllegalStateException("CI gravity zone activation bounds/monotonicity regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_ZONE_ACTIVATION_VERIFIED liftThreshold={} sinkThreshold={} rampWidth={} quarter={} midpoint={} threeQuarter={} sharedQuintic=true monotonic=true bounded=true invalidNeutral=true",
+            GRAVITY_LIFT_ZONE_THRESHOLD,GRAVITY_SINK_ZONE_THRESHOLD,GRAVITY_ZONE_ACTIVATION_WIDTH,
+            expected[2],expected[3],expected[4]);
+    }
+
     private static void verifyGravityAnomalyField() {
         verifyGravityAnomalyFadeProfile();
+        verifyGravityAnomalyZoneActivation();
         double lift=gravityAnomalyField(-17.5D,20.5D,0);
         double sink=gravityAnomalyField(-19.5D,-3.5D,0);
         double repeated=gravityAnomalyField(-17.5D,20.5D,0);
@@ -661,7 +706,7 @@ public final class RiftController {
         boolean bounded=Double.isFinite(lift) && Double.isFinite(sink)
             && lift>=-1.0D && lift<=1.0D && sink>=-1.0D && sink<=1.0D;
         boolean deterministic=Math.abs(lift-repeated)<=1.0E-12D;
-        boolean pockets=lift>GRAVITY_LIFT_ZONE_THRESHOLD && sink<-.68D;
+        boolean pockets=lift>GRAVITY_LIFT_ZONE_THRESHOLD && sink< -GRAVITY_SINK_ZONE_THRESHOLD;
         boolean drifting=Math.abs(later-lift)>.05D;
         boolean invalidRejected=gravityAnomalyField(Double.NaN,0.0D,0)==0.0D
             && gravityAnomalyField(30_000_001.0D,0.0D,0)==0.0D;
@@ -932,27 +977,32 @@ public final class RiftController {
         if(fade<=0.0D) return false;
         double zone=gravityAnomalyField(px,pz,s.finaleTicks);
         if(zone>GRAVITY_LIFT_ZONE_THRESHOLD) {
+            double activation=gravityAnomalyZoneActivation(zone,GRAVITY_LIFT_ZONE_THRESHOLD);
+            if(activation<=0.0D) return false;
             var v=player.getDeltaMovement();
-            double lift=Math.max(.045,Math.min(.19,.11+zone*.07))*fade*impulseStrength;
+            double lift=Math.max(.045,Math.min(.19,.11+zone*.07))
+                *fade*impulseStrength*activation;
             double crossShear=gravityAnomalyCrossShear(zone);
             double dx=(Math.sin(pz*.14+s.finaleTicks*.022)*GRAVITY_LIFT_BASE_DRIFT+crossShear)
-                *fade*impulseStrength;
+                *fade*impulseStrength*activation;
             double dz=(Math.cos(px*.13-s.finaleTicks*.018)*GRAVITY_LIFT_BASE_DRIFT-crossShear)
-                *fade*impulseStrength;
+                *fade*impulseStrength*activation;
             // Limit only the anomaly's additional drift. Never clamp
             // existing sprint, knockback or mod-provided velocity.
             double nextX=boundedAnomalyVelocity(v.x,dx);
             double nextZ=boundedAnomalyVelocity(v.z,dz);
             player.setDeltaMovement(nextX,boundedLiftVelocity(v.y,lift),nextZ);
             player.hurtMarked=true;
-            if(fade*impulseStrength>.25) player.fallDistance=0;
+            if(fade*impulseStrength*activation>.25) player.fallDistance=0;
             return true;
         }
-        if(zone<-.68) {
+        if(zone< -GRAVITY_SINK_ZONE_THRESHOLD) {
+            double activation=gravityAnomalyZoneActivation(-zone,GRAVITY_SINK_ZONE_THRESHOLD);
+            if(activation<=0.0D) return false;
             var v=player.getDeltaMovement();
-            double drag=1.0-.06*fade*impulseStrength;
+            double drag=1.0-.06*fade*impulseStrength*activation;
             player.setDeltaMovement(boundedSinkDrag(v.x,drag),
-                boundedSinkVelocity(v.y,-.09*fade*impulseStrength),boundedSinkDrag(v.z,drag));
+                boundedSinkVelocity(v.y,-.09*fade*impulseStrength*activation),boundedSinkDrag(v.z,drag));
             player.hurtMarked=true;
             return true;
         }
