@@ -3250,7 +3250,8 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: deterministic ground core gaps were not verified",flush=True)
                 return False
             core_gap_layer_policy_marker=("BLACK_FREQUENCY_TEST GROUND_MESH_CORE_GAP_LAYER_POLICY_VERIFIED "
-                                          "gapCount=2 outerHalo=true bevels=true edgePolicy=preserved coreSuppressed=true")
+                                          "gapCount=2 outerHalo=true bevels=true edgePolicy=preserved coreSuppressed=true "
+                                          "gapEnvelopeVisible=true fadeReuseAcrossGap=true")
             if core_gap_layer_policy_marker not in final_log:
                 print("WORLD_CAPTURE_FAIL: core gaps did not preserve the connected violet envelope",flush=True)
                 return False
@@ -3304,9 +3305,10 @@ def capture_test_world():
                     or "private static boolean shouldRenderGroundCore(boolean coreSegmentGap)" not in camera_source
                     or "if(shouldRenderGroundCore(coreGap))" not in camera_source
                     or "if(segment==null) continue;" not in camera_source
-                    or re.search(
-                         r"if\(coreGap\)\s*\{\s*previousFadePoint=null;\s*previousFadeB=0\.0D;\s*\}\s*else\s*\{\s*previousFadePoint=segment\.b\(\);\s*previousFadeB=segmentFadeB;\s*\}",
-                         camera_source) is None
+                    or "previousFadePoint=segment.b();" not in camera_source
+                    or "previousFadeB=segmentFadeB;" not in camera_source
+                    or re.search(r"if\(coreGap\)\s*\{[^}]*previousFadePoint=null;",camera_source) is not None
+                    or "if(segment!=null && groundSegmentDistanceFade(segment,camera)>0.0D) return true;" not in camera_source
                     or min(camera_source.find("ribbon(builder,matrix,camera,segment,0.0D,halfWidth*GROUND_GLOW_WIDTH_SCALE"),
                             camera_source.find("if(shouldRenderGroundCore(coreGap))"),
                             camera_source.find("int edgeMask=groundEdgeMask(sample,segment);"))<0
