@@ -81,8 +81,8 @@ public final class RiftController {
     // Keep the anomaly's outer 16-block envelope, but ease force to zero with a C1-continuous curve.
     private static final double GRAVITY_ANOMALY_FADE_WIDTH=16.0D;
     private static final double GRAVITY_ANOMALY_OUTER_RADIUS=RADIUS+GRAVITY_ANOMALY_FADE_WIDTH;
-    // Smoothstep(0.125) preserves the old linear fade's particle cutoff distance.
-    private static final double GRAVITY_ANOMALY_PARTICLE_MIN_FADE=0.04296875D;
+    // Quintic smoothstep at 0.125 preserves the old linear fade's particle cutoff distance.
+    private static final double GRAVITY_ANOMALY_PARTICLE_MIN_FADE=0.01605224609375D;
     private static final String NATURAL_BEACON_ID_TAG = "blackfrequency:natural_recovery_beacon";
     private static final int FISSURE_ARM_COUNT = RiftGeometry.FISSURE_ARM_COUNT;
     private static final int FISSURE_SEGMENTS_PER_ARM = RiftGeometry.FISSURE_SEGMENTS_PER_ARM;
@@ -916,7 +916,8 @@ public final class RiftController {
         double distance=Math.sqrt(distanceSquared);
         double progress=(GRAVITY_ANOMALY_OUTER_RADIUS-distance)/GRAVITY_ANOMALY_FADE_WIDTH;
         double t=Math.max(0.0D,Math.min(1.0D,progress));
-        return t*t*(3.0D-2.0D*t);
+        // Reuse the C2 quintic curve so acceleration does not kink at either radial boundary.
+        return gravityAnomalyFade(t);
     }
 
     private static boolean applyRiftGravityImpulse(
@@ -4203,7 +4204,7 @@ public final class RiftController {
     private static void verifyGravityAnomalyRadialFade() {
         double[] radii={0.0D,RADIUS,RADIUS+4.0D,RADIUS+8.0D,
             RADIUS+12.0D,RADIUS+14.0D,GRAVITY_ANOMALY_OUTER_RADIUS};
-        double[] expected={1.0D,1.0D,.84375D,.5D,.15625D,.04296875D,0.0D};
+        double[] expected={1.0D,1.0D,.896484375D,.5D,.103515625D,.01605224609375D,0.0D};
         for(int i=0;i<radii.length;i++) {
             double actual=gravityAnomalyRadialFade(radii[i]*radii[i]);
             if(!Double.isFinite(actual) || Math.abs(actual-expected[i])>1.0E-12D)
@@ -4219,8 +4220,7 @@ public final class RiftController {
             previous=actual;
         }
         double linearParticleCutoff=.125D;
-        double smoothParticleCutoff=linearParticleCutoff*linearParticleCutoff
-            *(3.0D-2.0D*linearParticleCutoff);
+        double smoothParticleCutoff=gravityAnomalyFade(linearParticleCutoff);
         boolean invalidNeutral=gravityAnomalyRadialFade(-1.0D)==0.0D
             && gravityAnomalyRadialFade(Double.NaN)==0.0D
             && gravityAnomalyRadialFade(Double.POSITIVE_INFINITY)==0.0D
@@ -4230,7 +4230,7 @@ public final class RiftController {
             || gravityAnomalyRadialFade(Math.nextUp(GRAVITY_ANOMALY_OUTER_RADIUS
                 *GRAVITY_ANOMALY_OUTER_RADIUS))!=0.0D)
             throw new IllegalStateException("CI gravity anomaly radial falloff boundary/particle regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_RADIAL_FALLOFF_VERIFIED innerRadius={} outerRadius={} width={} curve=smoothstep midpoint=0.5 monotonic=true invalidNeutral=true particleThreshold={}",
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_RADIAL_FALLOFF_VERIFIED innerRadius={} outerRadius={} width={} curve=quintic c2Endpoints=true midpoint=0.5 monotonic=true invalidNeutral=true particleThreshold={}",
             (double)RADIUS,GRAVITY_ANOMALY_OUTER_RADIUS,GRAVITY_ANOMALY_FADE_WIDTH,
             GRAVITY_ANOMALY_PARTICLE_MIN_FADE);
     }
