@@ -1029,7 +1029,7 @@ if option_values.get("pauseOnLostFocus")!="false":
 if deferred_chunk_probe and (
         option_values.get("renderDistance")!=str(DEFERRED_RENDER_DISTANCE)
         or option_values.get("simulationDistance")!=str(DEFERRED_SIMULATION_DISTANCE)):
-    raise SystemExit("Could not constrain the isolated deferred-chunk probe to two chunks")
+    raise SystemExit("Could not apply the isolated deferred-chunk render/simulation distance profile")
 print("WORLD_CAPTURE: raw mouse input disabled for deterministic X11 camera control",flush=True)
 print("WORLD_CAPTURE: pauseOnLostFocus=false to keep restoration ticking during capture",flush=True)
 if deferred_chunk_probe:
