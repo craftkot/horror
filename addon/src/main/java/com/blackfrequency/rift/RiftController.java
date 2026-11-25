@@ -732,9 +732,22 @@ public final class RiftController {
             negativeBoundaryX-1.0E-4D,z,ticks,firstWorldSeed);
         double negativeBoundaryRight=gravityAnomalyAperiodicNoise(
             negativeBoundaryX+1.0E-4D,z,ticks,firstWorldSeed);
-        boolean negativeBoundaryContinuous=negativeBoundaryX<0.0D
+        // The Z axis has the opposite time-drift sign. Use a tick where its -1
+        // lattice seam is also at a negative world coordinate.
+        int negativeZBoundaryTicks=600;
+        double negativeBoundaryZ=(-1.0D+negativeZBoundaryTicks*GRAVITY_APERIODIC_TURBULENCE_TIME_Z)
+            /GRAVITY_APERIODIC_TURBULENCE_SPATIAL_SCALE;
+        double negativeZBoundaryLeft=gravityAnomalyAperiodicNoise(
+            x,negativeBoundaryZ-1.0E-4D,negativeZBoundaryTicks,firstWorldSeed);
+        double negativeZBoundaryRight=gravityAnomalyAperiodicNoise(
+            x,negativeBoundaryZ+1.0E-4D,negativeZBoundaryTicks,firstWorldSeed);
+        boolean negativeXBoundaryContinuous=negativeBoundaryX<0.0D
             && Double.isFinite(negativeBoundaryLeft) && Double.isFinite(negativeBoundaryRight)
             && Math.abs(negativeBoundaryLeft-negativeBoundaryRight)<1.0E-5D;
+        boolean negativeZBoundaryContinuous=negativeBoundaryZ<0.0D
+            && Double.isFinite(negativeZBoundaryLeft) && Double.isFinite(negativeZBoundaryRight)
+            && Math.abs(negativeZBoundaryLeft-negativeZBoundaryRight)<1.0E-5D;
+        boolean negativeBoundaryContinuous=negativeXBoundaryContinuous && negativeZBoundaryContinuous;
         if(!Double.isFinite(firstNoise) || !Double.isFinite(secondNoise)
             || Math.abs(firstNoise-repeatedNoise)>1.0E-12D
             || Math.abs(firstNoise-secondNoise)<.1D
@@ -746,7 +759,7 @@ public final class RiftController {
             || !negativeBoundaryContinuous)
             throw new IllegalStateException("CI world-seeded gravity anomaly profile regression");
         LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_WORLD_SEED_PROFILE_VERIFIED worldSeedScoped=true deterministic=true distinctWorlds=true bounded=true noRandomAllocation=true");
-        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_NEGATIVE_LATTICE_BOUNDARY_VERIFIED worldSeedScoped=true negativeCoordinates=true continuous=true deterministic=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_NEGATIVE_LATTICE_BOUNDARY_VERIFIED worldSeedScoped=true negativeCoordinates=true continuous=true deterministic=true negativeX=true negativeZ=true");
     }
 
     private static void verifyGravityAnomalyField() {
