@@ -4142,14 +4142,14 @@ def capture_test_world():
                             processed_events=deferred_restore_deferred_counts.get(chunk_key,0)
                             if processed_events>=total_events:
                                 continue
-                            deferred_restore_deferred_counts[chunk_key]=processed_events+1
+                            event_number=processed_events+1
+                            deferred_restore_deferred_counts[chunk_key]=event_number
                             chunk_x,chunk_z=chunk_key
                             reentered_marker=(
                                 "BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_REENTERED "
                                 f"chunkX={chunk_x} chunkZ={chunk_z} loadedOnly=true")
-                            previous_reentries=deferred_restore_reentry_counts.get(chunk_key,0)
                             observed_reentries=current.count(reentered_marker)
-                            if observed_reentries>previous_reentries:
+                            if observed_reentries>=event_number:
                                 deferred_restore_chunks_seen.add(chunk_key)
                                 deferred_restore_chunks_reentered.add(chunk_key)
                                 deferred_restore_reentry_counts[chunk_key]=observed_reentries
@@ -4167,7 +4167,7 @@ def capture_test_world():
                             while time.monotonic()<reentry_deadline and p.poll() is None:
                                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else current
                                 observed_reentries=current.count(reentered_marker)
-                                if observed_reentries>previous_reentries:
+                                if observed_reentries>=event_number:
                                     deferred_restore_chunks_reentered.add(chunk_key)
                                     deferred_restore_reentry_counts[chunk_key]=observed_reentries
                                     reentered=True
