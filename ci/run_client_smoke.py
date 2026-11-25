@@ -3117,7 +3117,7 @@ def capture_test_world():
                 snap(f"world-stage-{stage:02d}.png")
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                 if (deferred_chunk_probe and not deferred_spawn_relocated
-                        and "BLACK_FREQUENCY_TEST FINALE_STARTED" in current):
+                        and "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" in current):
                     if not send_isolated_chat_command(
                             "/setworldspawn 512 64 512",
                             DEFERRED_SPAWN_ACK_RE,
@@ -3155,7 +3155,7 @@ def capture_test_world():
             while time.time()<fracture_deadline and p.poll() is None:
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                 if (deferred_chunk_probe and not deferred_spawn_relocated
-                        and "BLACK_FREQUENCY_TEST FINALE_STARTED" in current):
+                        and "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" in current):
                     if not send_isolated_chat_command(
                             "/setworldspawn 512 64 512",
                             DEFERRED_SPAWN_ACK_RE,

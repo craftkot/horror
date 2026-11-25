@@ -222,7 +222,9 @@ jobs:
             grep -q 'BLACK_FREQUENCY_TEST ANOMALY_FIELD_RADIAL_FALLOFF_VERIFIED innerRadius=48.0 outerRadius=64.0 width=16.0 curve=quintic c2Endpoints=true midpoint=0.5 monotonic=true invalidNeutral=true particleThreshold=0.01605224609375' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST ANOMALY_FIELD_TIME_PHASE_CACHE_VERIFIED cachedOffsets=8 sameTickReuse=true tickRewind=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_UI_PALETTE_VERIFIED rgb=5714c7 legacyFormatting=false' world-test.log
-            grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_LIST_OVERFLOW_ACCOUNTING_VERIFIED cap=95000 excess=12 persisted=true partialStatus=true bounded=true' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_LIST_OVERFLOW_ACCOUNTING_VERIFIED cap=95000 excess=12 retained=95000 total=95012 malformedTailIgnored=true persisted=true partialStatus=true bounded=true' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_MISSING_ENTRIES_VERIFIED edits=160 retained=159 missing=1 persisted=true partialStatus=true' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_COMBINED_LOSS_VERIFIED overflow=12 missing=1 totalSkipped=13' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_PROFILE_VERIFIED ticks=40 start=1.0 midpoint=0.5 end=0.0 monotonic=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_SAVE_ROUNDTRIP_VERIFIED elapsed=20 scale=0.5' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RESTORATION_GRAVITY_FADE_RUNTIME_STARTED ticks=40' world-test.log

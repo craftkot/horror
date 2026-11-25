@@ -1524,8 +1524,9 @@ public final class RiftController {
         // Transient: legacy saves may have a valid cursor but predate persisted x/z.
         boolean anchorCoordinatesNeedInitialization;
         int restoreIndex, restoreScan, restoreTicks, restoredBlocks, skippedOccupied, skippedInvalid;
-        // Persist excess NBT list entries that were deliberately not retained at the MAX_EDITS cap.
+        // Persist excess NBT list entries and missing records inferred from a damaged edit/snapshot count.
         int snapshotOverflowEntries;
+        int snapshotMissingEntries;
         long beaconPos;
         // Distinguish an absent/corrupt NBT field from a legitimate beacon at BlockPos.ZERO.
         boolean beaconPosPresent;
@@ -1714,6 +1715,7 @@ public final class RiftController {
             s.skippedOccupied=readBoundedCounter(n,"skippedOccupied",MAX_EDITS,s);
             s.skippedInvalid=readBoundedCounter(n,"skippedInvalid",MAX_EDITS,s);
             s.snapshotOverflowEntries=readBoundedCounter(n,"snapshotOverflowEntries",MAX_EDITS,s);
+            s.snapshotMissingEntries=readBoundedCounter(n,"snapshotMissingEntries",MAX_EDITS,s);
             s.invalidSnapshotWarningLogged=n.contains("invalidSnapshotWarningLogged",Tag.TAG_BYTE)
                 && n.getBoolean("invalidSnapshotWarningLogged");
             boolean beaconPositionPresent=n.contains("beaconPos");
@@ -1772,7 +1774,9 @@ public final class RiftController {
                 // If terrain was already damaged, record the lost container as an incomplete
                 // recovery item so the completion action bar cannot claim full stabilization.
                 if(s.restoring || s.edits>0) {
-                    s.skippedInvalid=boundedCounter(s.skippedInvalid+1,MAX_EDITS);
+                    // When edits are recorded, the missing-entry counter below accounts for every
+                    // lost snapshot. Count a standalone malformed container only when no edits exist.
+                    if(s.edits<=0) s.skippedInvalid=boundedCounter(s.skippedInvalid+1,MAX_EDITS);
                     // The warning is one-shot, but every newly quarantined container must persist.
                     // A previous warning must not suppress the dirty flag for this new counter value.
                     s.setDirty();
@@ -1790,6 +1794,15 @@ public final class RiftController {
                 snapshotStateRepaired=true;
                 LOGGER.warn("BLACK FREQUENCY: quarantined {} excess recovery snapshot entries beyond the {} entry retention cap",
                     overflowSnapshotEntries,MAX_EDITS);
+            }
+            // A larger edit count than the saved list means original block states are missing.
+            // Persist that gap separately from an over-cap list tail so later truncation cannot hide it.
+            int missingSnapshotEntries=s.restored?0:Math.max(0,s.edits-snapshotCount);
+            if(missingSnapshotEntries>s.snapshotMissingEntries) {
+                s.snapshotMissingEntries=missingSnapshotEntries;
+                snapshotStateRepaired=true;
+                LOGGER.warn("BLACK FREQUENCY: edit counter {} exceeds {} retained snapshots; marking {} missing entries as unrecoverable",
+                    s.edits,snapshotCount,missingSnapshotEntries);
             }
             int quarantinedSnapshotPayloads=0;
             int duplicateSnapshotPositions=0;
@@ -2072,7 +2085,7 @@ public final class RiftController {
             n.putBoolean("centerOutScan",centerOutScan);n.putInt("centerOutIndex",centerOutIndex);
             n.putBoolean("finished",finished);n.putBoolean("initialized",initialized);
             n.putBoolean("restoring",restoring);n.putBoolean("restored",restored);
-            n.putInt("restoreIndex",restoreIndex);n.putInt("restoreScan",restoreScan);n.putInt("restoreTicks",restoreTicks);n.putInt("restoredBlocks",restoredBlocks);n.putInt("skippedOccupied",skippedOccupied);n.putInt("skippedInvalid",skippedInvalid);n.putInt("snapshotOverflowEntries",snapshotOverflowEntries);
+            n.putInt("restoreIndex",restoreIndex);n.putInt("restoreScan",restoreScan);n.putInt("restoreTicks",restoreTicks);n.putInt("restoredBlocks",restoredBlocks);n.putInt("skippedOccupied",skippedOccupied);n.putInt("skippedInvalid",skippedInvalid);n.putInt("snapshotOverflowEntries",snapshotOverflowEntries);n.putInt("snapshotMissingEntries",snapshotMissingEntries);
             n.putBoolean("invalidSnapshotWarningLogged",invalidSnapshotWarningLogged);
             if(beaconPosPresent) n.putLong("beaconPos",beaconPos);
             else n.remove("beaconPos");
@@ -3871,7 +3884,7 @@ public final class RiftController {
         State activeElementLoaded=State.load(activeElementType);
         Component partial=restorationCompletionMessage(
             activeOuterLoaded.restoredBlocks,activeOuterLoaded.skippedOccupied,activeOuterLoaded.skippedInvalid,
-            activeOuterLoaded.snapshotOverflowEntries);
+            activeOuterLoaded.snapshotOverflowEntries,activeOuterLoaded.snapshotMissingEntries);
 
         if(!outerTypeLoaded.isDirty() || !outerTypeLoaded.snapshots.isEmpty()
             || !outerTypeSaved.contains("snapshots",Tag.TAG_LIST)
@@ -5292,10 +5305,12 @@ public final class RiftController {
     }
 
     private static Component restorationCompletionMessage(int restoredBlocks,int skippedOccupied,int skippedInvalid,
-            int snapshotOverflowEntries) {
-        if(restoredBlocks<0 || skippedOccupied<0 || skippedInvalid<0 || snapshotOverflowEntries<0)
+            int snapshotOverflowEntries,int snapshotMissingEntries) {
+        if(restoredBlocks<0 || skippedOccupied<0 || skippedInvalid<0
+            || snapshotOverflowEntries<0 || snapshotMissingEntries<0)
             throw new IllegalArgumentException("Recovery completion counters cannot be negative");
-        long skipped=(long)skippedOccupied+(long)skippedInvalid+(long)snapshotOverflowEntries;
+        long skipped=(long)skippedOccupied+(long)skippedInvalid
+            +(long)snapshotOverflowEntries+(long)snapshotMissingEntries;
         String status=skipped==0L ? "✦ МИР СТАБИЛИЗИРОВАН" : "✦ ВОССТАНОВЛЕНИЕ НЕПОЛНО";
         Component details=Component.literal(" — восстановлено "+restoredBlocks+" блоков; пропущено "+skipped)
             .withStyle(style -> style.withColor(TextColor.fromRgb(0xC8C2D4)));
@@ -5304,18 +5319,81 @@ public final class RiftController {
             .append(details);
     }
 
+    private static ListTag buildCiRecoverySnapshotList(int count) {
+        if(count<0 || count>MAX_EDITS)
+            throw new IllegalArgumentException("CI recovery snapshot fixture count is outside the retention cap");
+        ListTag snapshots=new ListTag();
+        CompoundTag stoneState=new CompoundTag();
+        stoneState.putString("Name","minecraft:stone");
+        int added=0;
+        for(int y=64;y<320 && added<count;y++) {
+            for(int x=-RADIUS;x<=RADIUS && added<count;x++) {
+                for(int z=-RADIUS;z<=RADIUS && added<count;z++) {
+                    if(x*x+z*z>RADIUS*RADIUS) continue;
+                    CompoundTag entry=new CompoundTag();
+                    entry.putLong("pos",new BlockPos(x,y,z).asLong());
+                    entry.put("state",stoneState.copy());
+                    snapshots.add(entry);
+                    added++;
+                }
+            }
+        }
+        if(added!=count)
+            throw new IllegalStateException("CI recovery snapshot fixture could not produce unique in-radius positions");
+        return snapshots;
+    }
+
     private static void verifyRecoveryUiPalette() {
-        Component success=restorationCompletionMessage(160,0,0,0);
-        Component partial=restorationCompletionMessage(159,2,1,0);
-        int overflowFixture=boundedSnapshotOverflowEntries(MAX_EDITS+12,MAX_EDITS);
+        Component success=restorationCompletionMessage(160,0,0,0,0);
+        Component partial=restorationCompletionMessage(159,2,1,0,0);
+
+        // Exercise the real NBT retention path: 95,000 valid snapshots are retained,
+        // while the malformed 12-entry tail is counted but never parsed or applied.
+        ListTag overflowSnapshots=buildCiRecoverySnapshotList(MAX_EDITS);
+        for(int i=0;i<12;i++) overflowSnapshots.add(new CompoundTag());
         CompoundTag overflowStateTag=new CompoundTag();
-        overflowStateTag.putInt("snapshotOverflowEntries",overflowFixture);
+        overflowStateTag.putInt("x",0);
+        overflowStateTag.putInt("z",0);
+        overflowStateTag.putBoolean("started",true);
+        overflowStateTag.putBoolean("initialized",true);
+        overflowStateTag.putBoolean("restoring",true);
+        overflowStateTag.putInt("edits",MAX_EDITS);
+        overflowStateTag.putInt("restoreIndex",MAX_EDITS-1);
+        overflowStateTag.putInt("restoreScan",MAX_EDITS-1);
+        overflowStateTag.put("snapshots",overflowSnapshots);
         State overflowLoaded=State.load(overflowStateTag);
         State overflowReloaded=State.load(overflowLoaded.save(new CompoundTag()));
-        Component overflowPartial=restorationCompletionMessage(160,0,0,overflowReloaded.snapshotOverflowEntries);
+        int overflowFixture=overflowSnapshots.size()-MAX_EDITS;
+        Component overflowPartial=restorationCompletionMessage(160,0,0,
+            overflowReloaded.snapshotOverflowEntries,overflowReloaded.snapshotMissingEntries);
+
+        // A truncated list can be smaller than the persisted edit counter even when it
+        // never reaches MAX_EDITS. Keep that missing count across a second NBT load too.
+        CompoundTag missingStateTag=new CompoundTag();
+        missingStateTag.putInt("x",0);
+        missingStateTag.putInt("z",0);
+        missingStateTag.putBoolean("started",true);
+        missingStateTag.putBoolean("initialized",true);
+        missingStateTag.putBoolean("restoring",true);
+        missingStateTag.putInt("edits",160);
+        missingStateTag.putInt("restoreIndex",158);
+        missingStateTag.putInt("restoreScan",158);
+        missingStateTag.put("snapshots",buildCiRecoverySnapshotList(159));
+        State missingLoaded=State.load(missingStateTag);
+        State missingReloaded=State.load(missingLoaded.save(new CompoundTag()));
+        Component missingPartial=restorationCompletionMessage(159,0,0,
+            missingReloaded.snapshotOverflowEntries,missingReloaded.snapshotMissingEntries);
+
+        CompoundTag combinedStateTag=missingStateTag.copy();
+        combinedStateTag.putInt("snapshotOverflowEntries",12);
+        State combinedLoaded=State.load(combinedStateTag);
+        State combinedReloaded=State.load(combinedLoaded.save(new CompoundTag()));
+        Component combinedPartial=restorationCompletionMessage(159,0,0,
+            combinedReloaded.snapshotOverflowEntries,combinedReloaded.snapshotMissingEntries);
+
         boolean invalidRejected=false;
         try {
-            restorationCompletionMessage(-1,0,0,0);
+            restorationCompletionMessage(-1,0,0,0,0);
         } catch(IllegalArgumentException expected) {
             invalidRejected=true;
         }
@@ -5326,15 +5404,36 @@ public final class RiftController {
             || !hasRecoveryViolet(overflowPartial)
             || !overflowPartial.getString().contains("ВОССТАНОВЛЕНИЕ НЕПОЛНО")
             || !overflowPartial.getString().contains("пропущено 12")
-            || overflowFixture!=12 || overflowReloaded.snapshotOverflowEntries!=12
+            || overflowFixture!=12 || !overflowLoaded.isDirty()
+            || overflowLoaded.snapshots.size()!=MAX_EDITS
+            || overflowLoaded.snapshotOverflowEntries!=12
+            || overflowLoaded.snapshotMissingEntries!=0
+            || overflowLoaded.skippedInvalid!=0
+            || overflowReloaded.snapshots.size()!=MAX_EDITS
+            || overflowReloaded.snapshotOverflowEntries!=12
+            || !hasRecoveryViolet(missingPartial)
+            || !missingPartial.getString().contains("ВОССТАНОВЛЕНИЕ НЕПОЛНО")
+            || !missingPartial.getString().contains("пропущено 1")
+            || !missingLoaded.isDirty()
+            || missingLoaded.edits!=160 || missingLoaded.snapshots.size()!=159
+            || missingLoaded.snapshotMissingEntries!=1
+            || missingReloaded.snapshotMissingEntries!=1
+            || !hasRecoveryViolet(combinedPartial)
+            || !combinedPartial.getString().contains("пропущено 13")
+            || combinedReloaded.snapshotOverflowEntries!=12
+            || combinedReloaded.snapshotMissingEntries!=1
             || boundedSnapshotOverflowEntries(Integer.MAX_VALUE,0)!=MAX_EDITS
             || boundedSnapshotOverflowEntries(-1,0)!=0
             || boundedSnapshotOverflowEntries(4,5)!=0
             || !invalidRejected)
-            throw new IllegalStateException("CI recovery completion action bar must be violet, accurate and reject invalid counters");
+            throw new IllegalStateException("CI recovery completion accounting must preserve overflow, missing snapshots and reject invalid counters");
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_UI_PALETTE_VERIFIED rgb=5714c7 legacyFormatting=false");
-        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_LIST_OVERFLOW_ACCOUNTING_VERIFIED cap={} excess={} persisted=true partialStatus=true bounded=true",
-            MAX_EDITS,overflowReloaded.snapshotOverflowEntries);
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_LIST_OVERFLOW_ACCOUNTING_VERIFIED cap={} excess={} retained={} total={} malformedTailIgnored=true persisted=true partialStatus=true bounded=true",
+            MAX_EDITS,overflowReloaded.snapshotOverflowEntries,overflowReloaded.snapshots.size(),overflowSnapshots.size());
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_MISSING_ENTRIES_VERIFIED edits={} retained={} missing={} persisted=true partialStatus=true",
+            missingReloaded.edits,missingReloaded.snapshots.size(),missingReloaded.snapshotMissingEntries);
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_COMBINED_LOSS_VERIFIED overflow={} missing={} totalSkipped=13",
+            combinedReloaded.snapshotOverflowEntries,combinedReloaded.snapshotMissingEntries);
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_ACTIONBAR_ONLY_VERIFIED success=true partial=true titlePackets=false");
     }
 
@@ -6537,7 +6636,13 @@ public final class RiftController {
                     s.skippedInvalid);
             }
             for(var player:level.players()) RiftNetwork.send(player,0f,false,0,s.x,s.z,s.naturalBeaconPos,false);
-            if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored={} destroyed={} skippedOccupied={} skippedInvalid={} flowingReplaced={}",s.restoredBlocks,s.edits,s.skippedOccupied,s.skippedInvalid,s.ciFlowingReplaced);
+            if(CI_TEST) {
+                LOGGER.info("BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED restored={} destroyed={} skippedOccupied={} skippedInvalid={} flowingReplaced={}",
+                    s.restoredBlocks,s.edits,s.skippedOccupied,s.skippedInvalid,s.ciFlowingReplaced);
+                LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_COMPLETION_LOSS_COUNTERS overflow={} missing={} totalSkipped={}",
+                    s.snapshotOverflowEntries,s.snapshotMissingEntries,
+                    (long)s.skippedOccupied+(long)s.skippedInvalid+(long)s.snapshotOverflowEntries+(long)s.snapshotMissingEntries);
+            }
             // A protection mod's earlier cancellation must preserve the physical beacon.
             // Actual mining is exercised by the client with a held left mouse button.
             if(CI_TEST && Boolean.getBoolean("blackfrequency.ciPostRestoreBeaconBreakTest")) {
@@ -6580,7 +6685,8 @@ public final class RiftController {
                 if(!player.isAlive() || player.isRemoved() || player.isSpectator()
                     || !withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z)) continue;
                 player.displayClientMessage(restorationCompletionMessage(
-                    s.restoredBlocks,s.skippedOccupied,s.skippedInvalid,s.snapshotOverflowEntries),true);
+                    s.restoredBlocks,s.skippedOccupied,s.skippedInvalid,
+                    s.snapshotOverflowEntries,s.snapshotMissingEntries),true);
                 if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_ACTIONBAR_SENT restored={} skippedOccupied={} skippedInvalid={} player=true",
                     s.restoredBlocks,s.skippedOccupied,s.skippedInvalid);
             }
