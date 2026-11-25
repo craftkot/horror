@@ -39,6 +39,13 @@ def verify_camera_input_profile():
           "expectedCameraDelta",round(expected_delta,3),
           "telemetryThreshold",CAMERA_ROTATION_LOG_THRESHOLD_DEGREES,flush=True)
 
+GRAVITY_TRAJECTORY_HORIZONTAL_CAP=.35
+GRAVITY_TRAJECTORY_LIFT_VERTICAL_CAP=.43
+GRAVITY_TRAJECTORY_SINK_VERTICAL_CAP=.55
+GRAVITY_TRAJECTORY_MODE_RE=re.compile(
+    r"BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_TRAJECTORY_MODE_VERIFIED mode=(lift|sink) steps=(\d+) .*?maxHorizontalVelocity=([0-9.eE+-]+) maxVerticalVelocity=([0-9.eE+-]+) horizontalCap=([0-9.eE+-]+) verticalCap=([0-9.eE+-]+) loadedChunksOnly=true"
+)
+
 FISSURE_PARTICLE_EMISSION_RE=re.compile(
     r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) accentDust=(\d+) violetDust=(\d+) edgeDust=(\d+) total=(\d+) heightmap=motion-blocking(?=\s|$)"
 )
@@ -266,7 +273,7 @@ def verify_restoration_particle_source():
     source_path=ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftController.java"
     source=source_path.read_text(encoding="utf-8")
     geometry_contract=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftGeometry.java").read_text(encoding="utf-8")
-    if ("double zone=gravityAnomalyField(testX,testZ,tick);" not in source
+    if ("fieldSamples[tick]=gravityAnomalyField(testX,testZ,tick);" not in source
             or "double zone=gravityAnomalyField(px,pz,s.finaleTicks);" not in source
             or "double zone=gravityAnomalyField(player.getX(),player.getZ(),s.finaleTicks);" not in source
             or "double base=Math.sin(x*.115D+gravityFieldBasePhase)" not in source
@@ -4757,6 +4764,24 @@ def capture_test_world():
                     return False
                 if "BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_TRAJECTORY_VERIFIED liftSteps=8 sinkSteps=8 integratedPosition=true loadedChunksOnly=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: integrated real ServerPlayer lift/sink trajectories were not verified",flush=True)
+                    return False
+                trajectory_modes={}
+                for match in GRAVITY_TRAJECTORY_MODE_RE.finditer(log_after):
+                    mode,steps,max_horizontal,max_vertical,horizontal_cap,vertical_cap=match.groups()
+                    measured=(float(max_horizontal),float(max_vertical),float(horizontal_cap),float(vertical_cap))
+                    expected_vertical=(GRAVITY_TRAJECTORY_LIFT_VERTICAL_CAP if mode=="lift"
+                        else GRAVITY_TRAJECTORY_SINK_VERTICAL_CAP)
+                    if (mode in trajectory_modes or int(steps)!=8
+                            or not all(math.isfinite(value) for value in measured)
+                            or abs(measured[2]-GRAVITY_TRAJECTORY_HORIZONTAL_CAP)>1.0e-9
+                            or abs(measured[3]-expected_vertical)>1.0e-9
+                            or measured[0]>GRAVITY_TRAJECTORY_HORIZONTAL_CAP+1.0e-9
+                            or measured[1]>expected_vertical+1.0e-9):
+                        print(f"WORLD_CAPTURE_FAIL: {mode} gravity trajectory exceeded its bounded velocity contract: {measured}",flush=True)
+                        return False
+                    trajectory_modes[mode]=measured
+                if set(trajectory_modes)!={"lift","sink"}:
+                    print("WORLD_CAPTURE_FAIL: bounded velocity telemetry is missing for lift or sink trajectory",flush=True)
                     return False
             if "BLACK_FREQUENCY_TEST CLIENT_CAMERA_ROTATION" not in log_after:
                 print("WORLD_CAPTURE_FAIL: actual client camera rotation telemetry was not recorded",flush=True)

@@ -54,6 +54,10 @@ public final class RiftController {
     private static final double GRAVITY_SINK_ZONE_THRESHOLD=.68D;
     // Fade lift/sink activation over a narrow field band to avoid a force step at either threshold.
     private static final double GRAVITY_ZONE_ACTIVATION_WIDTH=.16D;
+    // Keep anomaly drift and vertical terminal speeds explicit so runtime guards and CI probes share one contract.
+    private static final double GRAVITY_ANOMALY_HORIZONTAL_DRIFT_CAP=.35D;
+    private static final double GRAVITY_LIFT_VERTICAL_VELOCITY_CAP=.43D;
+    private static final double GRAVITY_SINK_VERTICAL_VELOCITY_CAP=.55D;
     private static final double GRAVITY_LIFT_BASE_DRIFT=.035D;
     private static final double GRAVITY_LIFT_CROSS_SHEAR_SCALE=.008D;
     // The legacy dark-purple formatting code is magenta; use the actual deep-violet brand color.
@@ -463,7 +467,7 @@ public final class RiftController {
     // Outside the drift cap, an anomaly may slow existing motion but cannot
     // accelerate it farther outward. Preserve external movement unchanged.
     private static double boundedAnomalyVelocity(double current, double impulse) {
-        final double cap=.35D;
+        final double cap=GRAVITY_ANOMALY_HORIZONTAL_DRIFT_CAP;
         // Malformed motion from another mod must not spread NaN/Infinity into
         // player physics; ignore an invalid impulse or reset invalid motion.
         if(!Double.isFinite(current)) return 0.0D;
@@ -484,10 +488,11 @@ public final class RiftController {
         if(!Double.isFinite(lift)) lift=0.0D;
         // Saturate before adding: two finite doubles can overflow to Infinity.
         // Do not erase externally supplied upward knockback above the lift cap.
-        if(lift>0.0D && current>Double.MAX_VALUE-lift) return Math.max(.43D,current);
+        if(lift>0.0D && current>Double.MAX_VALUE-lift) return Math.max(GRAVITY_LIFT_VERTICAL_VELOCITY_CAP,current);
         if(lift<0.0D && current< -Double.MAX_VALUE-lift) return -Double.MAX_VALUE;
         double next=current+lift;
-        return current>.43D ? Math.min(current,next) : Math.min(.43D,next);
+        return current>GRAVITY_LIFT_VERTICAL_VELOCITY_CAP
+            ? Math.min(current,next) : Math.min(GRAVITY_LIFT_VERTICAL_VELOCITY_CAP,next);
     }
 
     /** Downward anomaly drag must not propagate invalid motion from other mods. */
@@ -498,7 +503,8 @@ public final class RiftController {
         // pre-existing faster falls rather than artificially braking them.
         if(impulse<0.0D && current< -Double.MAX_VALUE-impulse) return -Double.MAX_VALUE;
         double next=current+impulse;
-        return current<-.55D ? Math.min(current,next) : Math.max(-.55D,next);
+        return current< -GRAVITY_SINK_VERTICAL_VELOCITY_CAP
+            ? Math.min(current,next) : Math.max(-GRAVITY_SINK_VERTICAL_VELOCITY_CAP,next);
     }
 
     /** Apply sink-zone horizontal drag without propagating invalid motion. */
@@ -1061,6 +1067,7 @@ public final class RiftController {
         net.minecraft.world.phys.Vec3 movement=net.minecraft.world.phys.Vec3.ZERO;
         double firstVelocityY=Double.NaN,lastVelocityY=Double.NaN;
         double firstActivation=Double.NaN,lastActivation=Double.NaN,maximumActivationStep=0.0D;
+        double maximumHorizontalVelocity=0.0D,maximumVerticalVelocity=0.0D;
         double previousActivation=Double.NaN;
         double threshold=lift?GRAVITY_LIFT_ZONE_THRESHOLD:GRAVITY_SINK_ZONE_THRESHOLD;
         try {
@@ -1095,6 +1102,14 @@ public final class RiftController {
                     || !Double.isFinite(nextMovement.z)
                     || (lift?impulseY<=0.0D:impulseY>=0.0D))
                     throw new IllegalStateException("CI actual ServerPlayer gravity trajectory impulse regression");
+                double horizontalVelocity=Math.max(Math.abs(nextMovement.x),Math.abs(nextMovement.z));
+                double verticalVelocity=Math.abs(nextMovement.y);
+                double verticalCap=lift?GRAVITY_LIFT_VERTICAL_VELOCITY_CAP:GRAVITY_SINK_VERTICAL_VELOCITY_CAP;
+                if(horizontalVelocity>GRAVITY_ANOMALY_HORIZONTAL_DRIFT_CAP+1.0E-9D
+                    || verticalVelocity>verticalCap+1.0E-9D)
+                    throw new IllegalStateException("CI actual ServerPlayer gravity trajectory exceeded a velocity cap");
+                maximumHorizontalVelocity=Math.max(maximumHorizontalVelocity,horizontalVelocity);
+                maximumVerticalVelocity=Math.max(maximumVerticalVelocity,verticalVelocity);
                 if(step==0) {
                     firstVelocityY=nextMovement.y;
                     firstActivation=activation;
@@ -1112,9 +1127,10 @@ public final class RiftController {
                 :!(lastVelocityY<firstVelocityY && lastActivation>=.45D
                     && lastActivation-firstActivation>=.25D))
                 throw new IllegalStateException("CI actual ServerPlayer trajectory did not cross the gravity ramp");
-            LOGGER.info("BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_TRAJECTORY_MODE_VERIFIED mode={} steps={} startTick={} firstActivation={} lastActivation={} maxActivationStep={} firstVelocityY={} finalVelocityY={} loadedChunksOnly=true",
+            LOGGER.info("BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_TRAJECTORY_MODE_VERIFIED mode={} steps={} startTick={} firstActivation={} lastActivation={} maxActivationStep={} firstVelocityY={} finalVelocityY={} maxHorizontalVelocity={} maxVerticalVelocity={} horizontalCap={} verticalCap={} loadedChunksOnly=true",
                 lift?"lift":"sink",CI_GRAVITY_TRAJECTORY_STEPS,startTick,
-                firstActivation,lastActivation,maximumActivationStep,firstVelocityY,lastVelocityY);
+                firstActivation,lastActivation,maximumActivationStep,firstVelocityY,lastVelocityY,
+                maximumHorizontalVelocity,maximumVerticalVelocity,GRAVITY_ANOMALY_HORIZONTAL_DRIFT_CAP,verticalCap);
         } finally {
             player.setPos(originalPosition.x,originalPosition.y,originalPosition.z);
             player.setDeltaMovement(originalMovement);
