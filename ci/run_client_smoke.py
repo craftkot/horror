@@ -15,6 +15,10 @@ FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE=3.0
 FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE=12.0
 
 DEFERRED_RESTORE_RADIUS=48
+DEFERRED_RENDER_DISTANCE=2
+# Minecraft 1.20.1 clamps Simulation Distance to [5, 33]; 2 is rejected by Options.
+DEFERRED_SIMULATION_DISTANCE=5
+DEFERRED_SPAWN_ACK_RE=r"Set (?:the )?world spawn(?: point)? to "
 DEFERRED_RESTORE_CHUNK_RE=re.compile(
     r"BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_DEFERRED "
     r"x=(-?\d+) y=(-?\d+) z=(-?\d+) "
@@ -1008,7 +1012,8 @@ option_overrides=[
     ("pauseOnLostFocus","false"),
 ]
 if deferred_chunk_probe:
-    option_overrides.extend((("renderDistance","2"),("simulationDistance","2")))
+    option_overrides.extend((("renderDistance",str(DEFERRED_RENDER_DISTANCE)),
+                             ("simulationDistance",str(DEFERRED_SIMULATION_DISTANCE))))
 for option,value in option_overrides:
     prefix=option+":"
     for index,line in enumerate(option_lines):
@@ -1022,13 +1027,18 @@ option_values={line.split(":",1)[0]:line.split(":",1)[1] for line in option_line
 if option_values.get("pauseOnLostFocus")!="false":
     raise SystemExit("Could not disable Minecraft pauseOnLostFocus for deterministic integrated-server ticks")
 if deferred_chunk_probe and (
-        option_values.get("renderDistance")!="2"
-        or option_values.get("simulationDistance")!="2"):
+        option_values.get("renderDistance")!=str(DEFERRED_RENDER_DISTANCE)
+        or option_values.get("simulationDistance")!=str(DEFERRED_SIMULATION_DISTANCE)):
     raise SystemExit("Could not constrain the isolated deferred-chunk probe to two chunks")
 print("WORLD_CAPTURE: raw mouse input disabled for deterministic X11 camera control",flush=True)
 print("WORLD_CAPTURE: pauseOnLostFocus=false to keep restoration ticking during capture",flush=True)
 if deferred_chunk_probe:
-    print("WORLD_CAPTURE: real deferred-chunk probe enabled renderDistance=2 simulationDistance=2",flush=True)
+    spawn_ack_fixture="[System] [CHAT] Set the world spawn point to 512, 64, 512 [0.0]"
+    if not re.search(DEFERRED_SPAWN_ACK_RE,spawn_ack_fixture):
+        raise SystemExit("Deferred probe spawn acknowledgement regex does not match Minecraft 1.20.1 output")
+    print("WORLD_CAPTURE: real deferred-chunk probe enabled",
+          f"renderDistance={DEFERRED_RENDER_DISTANCE}",
+          f"simulationDistance={DEFERRED_SIMULATION_DISTANCE}",flush=True)
 # Xvfb pointer acceleration makes inverse relative moves drift away from the
 # server-aimed beacon. Disable acceleration so the same pixel delta is reversible.
 xset_path=shutil.which("xset")
@@ -3110,7 +3120,7 @@ def capture_test_world():
                         and "BLACK_FREQUENCY_TEST FINALE_STARTED" in current):
                     if not send_isolated_chat_command(
                             "/setworldspawn 512 64 512",
-                            r"Set (?:the )?world spawn to ",
+                            DEFERRED_SPAWN_ACK_RE,
                             "move spawn ticket away from the disposable fracture"):
                         return False
                     deferred_spawn_relocated=True
@@ -3148,7 +3158,7 @@ def capture_test_world():
                         and "BLACK_FREQUENCY_TEST FINALE_STARTED" in current):
                     if not send_isolated_chat_command(
                             "/setworldspawn 512 64 512",
-                            r"Set (?:the )?world spawn to ",
+                            DEFERRED_SPAWN_ACK_RE,
                             "move spawn ticket away from the disposable fracture"):
                         return False
                     deferred_spawn_relocated=True
