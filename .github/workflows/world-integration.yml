@@ -65,6 +65,8 @@ jobs:
           grep -q 'BLACK_FREQUENCY_TEST LEGACY_FRACTURE_CURSOR_TAG_TYPE_QUARANTINE_VERIFIED fields=3 activeScanStopped=true snapshotsPreserved=true restoringPreserved=true' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST MALFORMED_RESTORING_FLAG_QUARANTINE_VERIFIED scanModes=legacy,centerOut activeScanStopped=true snapshotsPreserved=true terminalCursor=true roundTrip=true' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST MALFORMED_INITIALIZED_FLAG_QUARANTINE_VERIFIED activeScanStopped=true anchorPreserved=true snapshotsPreserved=true roundTrip=true' world-test.log
+          grep -q 'BLACK_FREQUENCY_TEST MALFORMED_FINISHED_FLAG_QUARANTINE_VERIFIED activeScanStopped=true anchorPreserved=true snapshotsPreserved=true roundTrip=true freshCountdownPreserved=true' world-test.log
+          grep -q 'BLACK_FREQUENCY_TEST MALFORMED_RESTORED_FLAG_QUARANTINE_VERIFIED activeRestoreStopped=true snapshotsPreserved=true beaconRestartAllowed=true distantBeaconRejected=true lifecycleGatesRejected=true terminalCursor=true roundTrip=true freshStatePreserved=true' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST CORRUPT_CENTER_OUT_CURSOR_TERMINAL_SENTINEL_VERIFIED isolated=true combinedMissingCompanion=true' world-test.log
           if [ "$BF_TEST_MODE" = "restoration" ] || [ "$BF_TEST_MODE" = "deferred" ]; then
             # This activation-guard suite runs when restoration starts; fracture/sparse modes have no player.

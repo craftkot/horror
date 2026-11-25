@@ -3012,6 +3012,16 @@ public final class RiftController {
     }
 
     /**
+     * Share the exact lifecycle and radius gate between real beacon clicks and recovery tests.
+     * A quarantined save may restart only through a nearby physical beacon with pending snapshots.
+     */
+    private static boolean canStartBeaconRestoration(State state,BlockPos beacon) {
+        return state!=null && beacon!=null && state.started && !state.restoring && !state.restored
+            && state.snapshots!=null && !state.snapshots.isEmpty()
+            && beaconWithinAnchor(beacon.getX(),beacon.getZ(),state.x,state.z);
+    }
+
+    /**
      * Disposable-client regression: prove that a loaded obstruction between the player
      * and the physical beacon is rejected by the same server ray used for activation.
      * The original air state is restored in a finally block before the real mouse click.
@@ -3998,19 +4008,37 @@ public final class RiftController {
             && restoredRoundTrip.centerOutIndex==CENTER_OUT_COLUMN_COUNT
             && restoredRoundTrip.snapshots.size()==1
             && restoredRoundTrip.snapshots.get(0).getLong("pos")==pos.asLong();
-        boolean beaconRestartAllowed=restoredStable && !restoredRoundTrip.snapshots.isEmpty()
-            && !restoredRoundTrip.restoring && !restoredRoundTrip.restored;
+        BlockPos restartBeacon=new BlockPos(12,64,-7);
+        boolean beaconRestartAllowed=restoredStable
+            && canStartBeaconRestoration(restoredRoundTrip,restartBeacon);
+        boolean distantBeaconRejected=!canStartBeaconRestoration(
+            restoredRoundTrip,new BlockPos(141,64,-7));
+        State activeRestoreGate=State.load(restoredQuarantine.save(new CompoundTag()));
+        activeRestoreGate.restoring=true;
+        State completedRestoreGate=State.load(restoredQuarantine.save(new CompoundTag()));
+        completedRestoreGate.restored=true;
+        State emptySnapshotGate=State.load(restoredQuarantine.save(new CompoundTag()));
+        emptySnapshotGate.snapshots.clear();
+        State unstartedGate=State.load(restoredQuarantine.save(new CompoundTag()));
+        unstartedGate.started=false;
+        boolean lifecycleGatesRejected=!canStartBeaconRestoration(activeRestoreGate,restartBeacon)
+            && !canStartBeaconRestoration(completedRestoreGate,restartBeacon)
+            && !canStartBeaconRestoration(emptySnapshotGate,restartBeacon)
+            && !canStartBeaconRestoration(unstartedGate,restartBeacon);
         CompoundTag freshRestoredTag=new CompoundTag();
         freshRestoredTag.putString("restored","corrupted");
         State freshRestored=State.load(freshRestoredTag);
         boolean freshStatePreserved=!freshRestored.started && !freshRestored.finished
             && !freshRestored.restoring && !freshRestored.restored && freshRestored.isDirty();
-        if(!restoredStopped || !restoredStable || !beaconRestartAllowed || !freshStatePreserved)
+        if(!restoredStopped || !restoredStable || !beaconRestartAllowed
+            || !distantBeaconRejected || !lifecycleGatesRejected || !freshStatePreserved)
             throw new IllegalStateException("CI malformed restored flag quarantine regression"
                 +" stopped="+restoredStopped+" stable="+restoredStable
                 +" beaconRestartAllowed="+beaconRestartAllowed
+                +" distantBeaconRejected="+distantBeaconRejected
+                +" lifecycleGatesRejected="+lifecycleGatesRejected
                 +" freshStatePreserved="+freshStatePreserved);
-        LOGGER.info("BLACK_FREQUENCY_TEST MALFORMED_RESTORED_FLAG_QUARANTINE_VERIFIED activeRestoreStopped=true snapshotsPreserved=true beaconRestartAllowed=true terminalCursor=true roundTrip=true freshStatePreserved=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST MALFORMED_RESTORED_FLAG_QUARANTINE_VERIFIED activeRestoreStopped=true snapshotsPreserved=true beaconRestartAllowed=true distantBeaconRejected=true lifecycleGatesRejected=true terminalCursor=true roundTrip=true freshStatePreserved=true");
     }
 
     /** Verify that a pending terrain snapshot survives a SavedData round trip. */
@@ -5511,8 +5539,7 @@ public final class RiftController {
                 pos.getX(),pos.getY(),pos.getZ());
             return;
         }
-        if(!s.started || s.restored || s.restoring || s.snapshots.isEmpty()) return;
-        if(!beaconWithinAnchor(pos.getX(),pos.getZ(),s.x,s.z)) return;
+        if(!canStartBeaconRestoration(s,pos)) return;
         // Log only accepted player interactions; rejected distant beacons must
         // never count as successful activation in the real-client CI test.
         if(CI_TEST) LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION x={} y={} z={} natural={}",pos.getX(),pos.getY(),pos.getZ(),pos.asLong()==s.naturalBeaconPos);
