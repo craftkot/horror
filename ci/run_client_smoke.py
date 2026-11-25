@@ -4958,6 +4958,9 @@ def capture_test_world():
                 if "BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_RAMP_VERIFIED" not in log_after:
                     print("WORLD_CAPTURE_FAIL: real ServerPlayer lift/sink activation ramps were not verified",flush=True)
                     return False
+                if "BLACK_FREQUENCY_TEST GRAVITY_TRAJECTORY_PROBE_POSITION_VERIFIED" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: trajectory probe did not stay inside an already-loaded chunk",flush=True)
+                    return False
                 if "BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_TRAJECTORY_VERIFIED liftSteps=8 sinkSteps=8 integratedPosition=true loadedChunksOnly=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: integrated real ServerPlayer lift/sink trajectories were not verified",flush=True)
                     return False

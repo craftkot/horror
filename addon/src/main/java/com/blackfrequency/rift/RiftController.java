@@ -951,8 +951,50 @@ public final class RiftController {
         double nearSinkMin=GRAVITY_SINK_ZONE_THRESHOLD+GRAVITY_ZONE_ACTIVATION_WIDTH*.20D;
         double nearSinkMax=GRAVITY_SINK_ZONE_THRESHOLD+GRAVITY_ZONE_ACTIVATION_WIDTH*.30D;
         double[] fieldSamples=new double[CI_GRAVITY_TRAJECTORY_SEARCH_TICKS+CI_GRAVITY_TRAJECTORY_STEPS];
-        for(int tick=0;tick<fieldSamples.length;tick++)
-            fieldSamples[tick]=gravityAnomalyField(testX,testZ,tick,level.getSeed());
+        int loadedChunkX=probe.x>>4,loadedChunkZ=probe.z>>4;
+        if(!level.hasChunk(loadedChunkX,loadedChunkZ))
+            throw new IllegalStateException("CI gravity probe escaped the player's already-loaded chunk");
+        var probeWorldBorder=level.getWorldBorder();
+        double probeHalfWidth=player.getBbWidth()*.5D;
+        long worldSeed=level.getSeed();
+        int trajectoryCandidatesChecked=0;
+        int liftTrajectoryStart=-1,sinkTrajectoryStart=-1;
+        boolean trajectoryPositionFound=false;
+        // Seeded turbulence can leave one column without both eight-tick ramps.
+        // Search a small deterministic grid inside the same loaded chunk; never request a neighboring chunk.
+        for(int offsetX=4;offsetX<=12 && !trajectoryPositionFound;offsetX+=4) {
+            for(int offsetZ=4;offsetZ<=12;offsetZ+=4) {
+                double candidateX=(((long)loadedChunkX)<<4)+offsetX+.5D;
+                double candidateZ=(((long)loadedChunkZ)<<4)+offsetZ+.5D;
+                if(candidateX-probeHalfWidth<probeWorldBorder.getMinX()
+                    || candidateX+probeHalfWidth>probeWorldBorder.getMaxX()
+                    || candidateZ-probeHalfWidth<probeWorldBorder.getMinZ()
+                    || candidateZ+probeHalfWidth>probeWorldBorder.getMaxZ()) continue;
+                int minChunkX=((int)Math.floor(candidateX-probeHalfWidth))>>4;
+                int maxChunkX=((int)Math.floor(Math.nextDown(candidateX+probeHalfWidth)))>>4;
+                int minChunkZ=((int)Math.floor(candidateZ-probeHalfWidth))>>4;
+                int maxChunkZ=((int)Math.floor(Math.nextDown(candidateZ+probeHalfWidth)))>>4;
+                if(minChunkX!=loadedChunkX || maxChunkX!=loadedChunkX
+                    || minChunkZ!=loadedChunkZ || maxChunkZ!=loadedChunkZ) continue;
+                trajectoryCandidatesChecked++;
+                for(int tick=0;tick<fieldSamples.length;tick++)
+                    fieldSamples[tick]=gravityAnomalyField(candidateX,candidateZ,tick,worldSeed);
+                int candidateLiftStart=findGravityActivationTrajectoryStart(fieldSamples,true);
+                int candidateSinkStart=findGravityActivationTrajectoryStart(fieldSamples,false);
+                if(candidateLiftStart>=0 && candidateSinkStart>=0) {
+                    testX=candidateX;
+                    testZ=candidateZ;
+                    liftTrajectoryStart=candidateLiftStart;
+                    sinkTrajectoryStart=candidateSinkStart;
+                    trajectoryPositionFound=true;
+                    break;
+                }
+            }
+        }
+        if(!trajectoryPositionFound)
+            throw new IllegalStateException("CI could not find bounded lift/sink trajectories in the already-loaded chunk");
+        LOGGER.info("BLACK_FREQUENCY_TEST GRAVITY_TRAJECTORY_PROBE_POSITION_VERIFIED candidatesChecked={} x={} z={} chunkX={} chunkZ={} sameLoadedChunk=true playerBoxInsideChunk=true noChunkLoad=true",
+            trajectoryCandidatesChecked,testX,testZ,loadedChunkX,loadedChunkZ);
         for(int tick=0;tick<CI_GRAVITY_TRAJECTORY_SEARCH_TICKS && (nearLiftTick<0 || fullLiftTick<0
                 || nearSinkTick<0 || fullSinkTick<0);tick++) {
             double zone=fieldSamples[tick];
@@ -987,7 +1029,9 @@ public final class RiftController {
             throw new IllegalStateException("CI could not create passenger probe mount");
         try {
             player.setPos(testX,testY,testZ);
-            if(!level.hasChunk(probe.x>>4,probe.z>>4))
+            if((player.blockPosition().getX()>>4)!=loadedChunkX
+                || (player.blockPosition().getZ()>>4)!=loadedChunkZ
+                || !level.hasChunk(loadedChunkX,loadedChunkZ))
                 throw new IllegalStateException("CI gravity probe escaped the player's already-loaded chunk");
             verifyGravityProbeWorldBorderGuard(level,player);
             player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
@@ -1024,10 +1068,6 @@ public final class RiftController {
                 nearLiftZone,fullLiftZone,nearLiftImpulse,fullLiftImpulse,
                 nearSinkMagnitude,fullSinkMagnitude,nearSinkImpulse,fullSinkImpulse);
 
-            int liftTrajectoryStart=findGravityActivationTrajectoryStart(fieldSamples,true);
-            int sinkTrajectoryStart=findGravityActivationTrajectoryStart(fieldSamples,false);
-            if(liftTrajectoryStart<0 || sinkTrajectoryStart<0)
-                throw new IllegalStateException("CI could not find a bounded multi-tick lift/sink trajectory");
             verifyActualGravityRampTrajectory(level,probe,player,testX,testY,testZ,liftTrajectoryStart,true);
             verifyActualGravityRampTrajectory(level,probe,player,testX,testY,testZ,sinkTrajectoryStart,false);
             LOGGER.info("BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_TRAJECTORY_VERIFIED liftSteps={} sinkSteps={} integratedPosition=true loadedChunksOnly=true",
