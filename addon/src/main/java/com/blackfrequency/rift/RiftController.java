@@ -397,6 +397,12 @@ public final class RiftController {
         return deferredClientProbe?2:1;
     }
 
+    // Let the integrated server retire stale player/spawn tickets before the
+    // disposable client probe checks snapshot availability. Production is immediate.
+    private static int restoreSnapshotScanWarmupTicks(boolean deferredClientProbe) {
+        return deferredClientProbe?200:0;
+    }
+
     // A terminal cursor is trustworthy only when every retained snapshot has
     // an outcome. A torn/corrupt save must not report recovery complete while
     // snapshots remain unaccounted for.
@@ -5444,6 +5450,8 @@ public final class RiftController {
             || restoreSnapshotScanBudget(true)!=1
             || restoreSnapshotScanInterval(false)!=1
             || restoreSnapshotScanInterval(true)!=2
+            || restoreSnapshotScanWarmupTicks(false)!=0
+            || restoreSnapshotScanWarmupTicks(true)!=200
             || boundedSnapshotOverflowEntries(Integer.MAX_VALUE,0)!=MAX_EDITS
             || boundedSnapshotOverflowEntries(-1,0)!=0
             || boundedSnapshotOverflowEntries(4,5)!=0
@@ -5458,6 +5466,7 @@ public final class RiftController {
             combinedReloaded.snapshotOverflowEntries,combinedReloaded.snapshotMissingEntries);
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_BUDGET_PROFILE production=48 deferredClient=1");
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_INTERVAL_PROFILE production=1 deferredClient=2");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_WARMUP_PROFILE production=0 deferredClient=200");
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_ACTIONBAR_ONLY_VERIFIED success=true partial=true titlePackets=false");
     }
 
@@ -6390,10 +6399,16 @@ public final class RiftController {
         boolean deferredClientProbe=CI_TEST && Boolean.getBoolean("blackfrequency.ciDeferredChunkProbe");
         int configuredScanBudget=restoreSnapshotScanBudget(deferredClientProbe);
         int scanInterval=restoreSnapshotScanInterval(deferredClientProbe);
-        if(CI_TEST && s.restoreTicks==1)
+        int scanWarmupTicks=restoreSnapshotScanWarmupTicks(deferredClientProbe);
+        if(CI_TEST && s.restoreTicks==1) {
             LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_BUDGET_SELECTED value={} deferredClient={}",
                 configuredScanBudget,deferredClientProbe);
-        boolean scanThisTick=!deferredClientProbe || s.restoreTicks%scanInterval==0;
+            LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_WARMUP_SELECTED ticks={} deferredClient={}",
+                scanWarmupTicks,deferredClientProbe);
+        }
+        boolean scanWarmupComplete=!deferredClientProbe || s.restoreTicks>scanWarmupTicks;
+        boolean scanThisTick=scanWarmupComplete
+            && (!deferredClientProbe || s.restoreTicks%scanInterval==0);
         int scanBudget=scanThisTick
             ? Math.min(configuredScanBudget,Math.max(0,s.restoreIndex+1)) : 0;
         // A failed block write must not be attempted repeatedly in one tick.
@@ -6681,32 +6696,39 @@ public final class RiftController {
                 if(s.naturalBeaconPos==Long.MIN_VALUE || level.players().isEmpty())
                     throw new IllegalStateException("CI recovery beacon missing after restoration");
                 BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
-                if(!isOwnedNaturalBeaconAtLoadedPosition(level,s,beacon))
-                    throw new IllegalStateException("CI recovery beacon ownership marker missing after restoration");
-                var miner=level.players().get(0);
-                boolean previousMayBuild=miner.getAbilities().mayBuild;
-                try {
-                    miner.getAbilities().mayBuild=false;
-                    var adventureEvent=new net.minecraftforge.event.level.BlockEvent.BreakEvent(
-                        level,beacon,level.getBlockState(beacon),miner);
-                    new RiftController().onRecoveryBeaconBreak(adventureEvent);
-                    if(level.getBlockState(beacon).isAir()
+                if(!level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)) {
+                    // The deferred client probe deliberately leaves this chunk unloaded.
+                    // Its real player click runs after the harness returns to the safe pad.
+                    LOGGER.info("BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_SYNTHETIC_SKIPPED_UNLOADED loadedOnly=true");
+                } else {
+    
+                    if(!isOwnedNaturalBeaconAtLoadedPosition(level,s,beacon))
+                        throw new IllegalStateException("CI recovery beacon ownership marker missing after restoration");
+                    var miner=level.players().get(0);
+                    boolean previousMayBuild=miner.getAbilities().mayBuild;
+                    try {
+                        miner.getAbilities().mayBuild=false;
+                        var adventureEvent=new net.minecraftforge.event.level.BlockEvent.BreakEvent(
+                            level,beacon,level.getBlockState(beacon),miner);
+                        new RiftController().onRecoveryBeaconBreak(adventureEvent);
+                        if(level.getBlockState(beacon).isAir()
+                            || s.naturalBeaconPos!=beacon.asLong() || s.naturalBeaconId==null)
+                            throw new IllegalStateException("CI adventure-mode synthetic break consumed recovery beacon");
+                        LOGGER.info("BLACK_FREQUENCY_TEST REAL_PLAYER_ADVENTURE_BEACON_BREAK_REJECTED mayBuild=false blockPreserved=true ownershipPreserved=true");
+                    } finally {
+                        miner.getAbilities().mayBuild=previousMayBuild;
+                    }
+                    var deniedEvent=new net.minecraftforge.event.level.BlockEvent.BreakEvent(
+                        level,beacon,level.getBlockState(beacon),level.players().get(0));
+                    deniedEvent.setCanceled(true);
+                    new RiftController().onRecoveryBeaconBreak(deniedEvent);
+                    if(!deniedEvent.isCanceled() || !level.getBlockState(beacon).is(Blocks.BEACON)
                         || s.naturalBeaconPos!=beacon.asLong() || s.naturalBeaconId==null)
-                        throw new IllegalStateException("CI adventure-mode synthetic break consumed recovery beacon");
-                    LOGGER.info("BLACK_FREQUENCY_TEST REAL_PLAYER_ADVENTURE_BEACON_BREAK_REJECTED mayBuild=false blockPreserved=true ownershipPreserved=true");
-                } finally {
-                    miner.getAbilities().mayBuild=previousMayBuild;
+                        throw new IllegalStateException("CI canceled beacon break mutated recovery fixture");
+                    LOGGER.info("BLACK_FREQUENCY_TEST CANCELED_BEACON_OWNERSHIP_PRESERVED");
+                    LOGGER.info("BLACK_FREQUENCY_TEST CANCELED_BEACON_BREAK_PRESERVED x={} y={} z={}",
+                        beacon.getX(),beacon.getY(),beacon.getZ());
                 }
-                var deniedEvent=new net.minecraftforge.event.level.BlockEvent.BreakEvent(
-                    level,beacon,level.getBlockState(beacon),level.players().get(0));
-                deniedEvent.setCanceled(true);
-                new RiftController().onRecoveryBeaconBreak(deniedEvent);
-                if(!deniedEvent.isCanceled() || !level.getBlockState(beacon).is(Blocks.BEACON)
-                    || s.naturalBeaconPos!=beacon.asLong() || s.naturalBeaconId==null)
-                    throw new IllegalStateException("CI canceled beacon break mutated recovery fixture");
-                LOGGER.info("BLACK_FREQUENCY_TEST CANCELED_BEACON_OWNERSHIP_PRESERVED");
-                LOGGER.info("BLACK_FREQUENCY_TEST CANCELED_BEACON_BREAK_PRESERVED x={} y={} z={}",
-                    beacon.getX(),beacon.getY(),beacon.getZ());
                 LOGGER.info("BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY_FOR_REAL_PLAYER x={} y={} z={}",
                     beacon.getX(),beacon.getY(),beacon.getZ());
             }
