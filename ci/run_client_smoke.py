@@ -14,6 +14,57 @@ FISSURE_PARTICLE_SAMPLES=48
 FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE=3.0
 FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE=12.0
 
+DEFERRED_RESTORE_RADIUS=48
+DEFERRED_RESTORE_CHUNK_RE=re.compile(
+    r"BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_DEFERRED "
+    r"x=(-?\d+) y=(-?\d+) z=(-?\d+) "
+    r"chunkX=(-?\d+) chunkZ=(-?\d+) loadedOnly=true")
+FINALE_ANCHOR_RE=re.compile(
+    r"BLACK_FREQUENCY_TEST FINALE_ANCHOR_VALID x=(-?\d+) z=(-?\d+)")
+
+def is_valid_deferred_restore_chunk_event(x,z,chunk_x,chunk_z,anchor_x,anchor_z,radius):
+    values=(x,z,chunk_x,chunk_z,anchor_x,anchor_z,radius)
+    if any(type(value) is not int for value in values):
+        return False
+    int_min=-(1<<31)
+    int_max=(1<<31)-1
+    if any(value<int_min or value>int_max for value in (x,z,anchor_x,anchor_z)):
+        return False
+    if radius<=0 or radius>128:
+        return False
+    # Java BlockPos chunk coordinates use arithmetic signed shifts, matching Python here.
+    if (x>>4)!=chunk_x or (z>>4)!=chunk_z:
+        return False
+    dx=x-anchor_x
+    dz=z-anchor_z
+    return (abs(dx)<=radius and abs(dz)<=radius
+            and dx*dx+dz*dz<=radius*radius)
+
+def verify_deferred_restore_chunk_bounds_profile():
+    controller_source_path=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftController.java")
+    controller_source=controller_source_path.read_text(encoding="utf-8")
+    radius_match=re.search(r"private static final int RADIUS\s*=\s*(\d+)\s*;",controller_source)
+    if not radius_match or int(radius_match.group(1))!=DEFERRED_RESTORE_RADIUS:
+        raise RuntimeError("BLACK FREQUENCY deferred restore radius must match the server fracture radius")
+    fixtures=(
+        (48,0,3,0,0,0,48,True),
+        (-48,0,-3,0,0,0,48,True),
+        (33,33,2,2,0,0,48,True),
+        (34,34,2,2,0,0,48,False),
+        (49,0,3,0,0,0,48,False),
+        (15,0,1,0,0,0,48,False),
+        (-17,0,-2,0,-1,0,48,True),
+        (0,0,0,0,0,0,-1,False),
+        (1<<31,0,1<<27,0,0,0,48,False),
+    )
+    for fixture in fixtures:
+        *values,expected=fixture
+        actual=is_valid_deferred_restore_chunk_event(*values)
+        if actual is not expected:
+            raise RuntimeError("BLACK FREQUENCY deferred snapshot coordinate/radius fixture regression")
+    print("WORLD_CAPTURE: deferred snapshot chunk coordinates and circular fracture bounds verified",
+          "radius",DEFERRED_RESTORE_RADIUS,"negativeCoordinates=true","boundary=true","loadedOnly=true",flush=True)
+
 def is_fissure_target_horizontal_distance(horizontal_squared):
     try:
         value=float(horizontal_squared)
@@ -770,6 +821,7 @@ def verify_beacon_interaction_reach_geometry():
     print("WORLD_CAPTURE: eye-to-block AABB reach geometry verified pad=8.8744 boundary=20.25 outsideRejected=true invalidRejected=true",flush=True)
 
 verify_fissure_target_view_score_profile()
+verify_deferred_restore_chunk_bounds_profile()
 verify_restoration_particle_source()
 verify_beacon_aura_source()
 verify_green_corruption_shader_source()
@@ -4108,10 +4160,7 @@ def capture_test_world():
                 deferred_restore_deferred_counts={}
                 deferred_restore_reentry_counts={}
                 deferred_probe_player_moved=False
-                deferred_restore_chunk_re=re.compile(
-                    r"BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_DEFERRED "
-                    r"x=(-?\d+) y=(-?\d+) z=(-?\d+) "
-                    r"chunkX=(-?\d+) chunkZ=(-?\d+) loadedOnly=true")
+                deferred_restore_chunk_re=DEFERRED_RESTORE_CHUNK_RE
                 while time.time()<deadline_restore and p.poll() is None:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     try_beacon_click(current)
@@ -4134,8 +4183,21 @@ def capture_test_world():
                         current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else current
                     if os.environ.get("BF_ISOLATED_TEST")=="1":
                         deferred_events={}
+                        anchor_match=FINALE_ANCHOR_RE.search(current)
                         for deferred in deferred_restore_chunk_re.finditer(current):
-                            chunk_x,chunk_z=int(deferred.group(4)),int(deferred.group(5))
+                            x,y,z,chunk_x,chunk_z=map(int,deferred.groups())
+                            if anchor_match is None:
+                                print("WORLD_CAPTURE_FAIL: deferred snapshot has no verified fracture anchor",
+                                      flush=True)
+                                return False
+                            anchor_x,anchor_z=map(int,anchor_match.groups())
+                            if not is_valid_deferred_restore_chunk_event(
+                                    x,z,chunk_x,chunk_z,anchor_x,anchor_z,DEFERRED_RESTORE_RADIUS):
+                                print("WORLD_CAPTURE_FAIL: deferred snapshot escaped the original circular fracture",
+                                      {"x":x,"y":y,"z":z,"chunkX":chunk_x,"chunkZ":chunk_z,
+                                       "anchorX":anchor_x,"anchorZ":anchor_z},
+                                      flush=True)
+                                return False
                             chunk_key=(chunk_x,chunk_z)
                             deferred_events[chunk_key]=deferred_events.get(chunk_key,0)+1
                         for chunk_key,total_events in deferred_events.items():
