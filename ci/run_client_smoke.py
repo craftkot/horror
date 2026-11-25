@@ -4400,11 +4400,14 @@ def capture_test_world():
                 return False
             canopy_particle_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED "
-                "scale=0.81 verticalOffset=0.26 scaleBounded=true heightBounded=true"
+                "scale=0.81 verticalOffset=0.26 verticalSpeed=0.003 "
+                "scaleBounded=true heightBounded=true speedBounded=true"
             )
             if (canopy_particle_marker not in log_after
                     or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE=.81F;" not in camera_source
-                    or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.26D;" not in camera_source):
+                    or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.26D;" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_VERTICAL_SPEED=.003D;" not in camera_source
+                    or "0.0D,GROUND_CANOPY_ACCENT_VERTICAL_SPEED,0.0D" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: bounded canopy accent particle profile was not verified",flush=True)
                 return False
             canopy_clearance_marker=(
