@@ -856,6 +856,8 @@ public final class RiftClientState {
         // Lift and enlarge sparse motes just enough to read above short foliage.
         private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=.81F;
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.26D;
+        // Keep canopy accents close to the fissure instead of letting them drift above the foliage.
+        private static final double GROUND_CANOPY_ACCENT_VERTICAL_SPEED=.003D;
         private static final int[] GROUND_CANOPY_ACCENT_X=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final int[] GROUND_CANOPY_ACCENT_Z=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final double[] GROUND_CANOPY_ACCENT_Y=new double[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
@@ -2958,7 +2960,8 @@ public final class RiftClientState {
                 if(!level.getWorldBorder().isWithinBounds(SURFACE_CURSOR)
                     || !level.hasChunk(x>>4,z>>4)
                     || !canopyAccentCandidateTouchesMesh(x,z,groundY,segments)) continue;
-                level.addParticle(GROUND_CANOPY_ACCENT_DUST,x+.5D,accentY,z+.5D,0.0D,.006D,0.0D);
+                level.addParticle(GROUND_CANOPY_ACCENT_DUST,x+.5D,accentY,z+.5D,
+                    0.0D,GROUND_CANOPY_ACCENT_VERTICAL_SPEED,0.0D);
                 groundCanopyAccentParticlesEmitted++;
             }
             groundCanopyAccentCandidateCursor=canopyAccentCandidateIndex(start,visited,candidateCount);
@@ -3002,6 +3005,9 @@ public final class RiftClientState {
             boolean particleOffsetBounded=Double.isFinite(GROUND_CANOPY_ACCENT_VERTICAL_OFFSET)
                 && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET>=.20D
                 && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET<=.28D;
+            boolean particleVelocityBounded=Double.isFinite(GROUND_CANOPY_ACCENT_VERTICAL_SPEED)
+                && GROUND_CANOPY_ACCENT_VERTICAL_SPEED>=.002D
+                && GROUND_CANOPY_ACCENT_VERTICAL_SPEED<=.004D;
             boolean foliageClearanceProfile=particleOffsetBounded
                 && Math.abs((plantTop-70.8D)-GROUND_CANOPY_ACCENT_VERTICAL_OFFSET)<1.0E-9D
                 && Math.abs(groundSurfaceOffset(1.0D,Double.NaN)-1.0D)<1.0E-9D
@@ -3055,7 +3061,7 @@ public final class RiftClientState {
                 && rotationProfile && emissionThrottleProfile
                 && zeroEmissionScanRecorded && emptyScanPreservesAttempt
                 && nonPlantsRejected && particleScaleBounded && particleOffsetBounded
-                && foliageClearanceProfile && canopyAccentHeadroomProfile
+                && particleVelocityBounded && foliageClearanceProfile && canopyAccentHeadroomProfile
                 && Math.abs(plantTop-71.06D)<1.0E-9D
                 && Math.abs(invalidHeight-70.26D)<1.0E-9D
                 && Math.abs(excessiveHeight-71.26D)<1.0E-9D
@@ -3076,8 +3082,9 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_ATTEMPT_THROTTLE_PROFILE_VERIFIED intervalTicks={} zeroEmissionScanRecorded=true emptyScanPreservesAttempt=true",
                 GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS);
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED scale={} verticalOffset={} scaleBounded=true heightBounded=true",
-                GROUND_CANOPY_ACCENT_PARTICLE_SCALE,GROUND_CANOPY_ACCENT_VERTICAL_OFFSET);
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED scale={} verticalOffset={} verticalSpeed={} scaleBounded=true heightBounded=true speedBounded=true",
+                GROUND_CANOPY_ACCENT_PARTICLE_SCALE,GROUND_CANOPY_ACCENT_VERTICAL_OFFSET,
+                GROUND_CANOPY_ACCENT_VERTICAL_SPEED);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FOLIAGE_CLEARANCE_VERIFIED offset={} particleScale={} baseRibbonUnchanged=true bounded=true",
                 GROUND_CANOPY_ACCENT_VERTICAL_OFFSET,GROUND_CANOPY_ACCENT_PARTICLE_SCALE);
