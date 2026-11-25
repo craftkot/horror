@@ -1491,6 +1491,9 @@ public final class RiftController {
         int surfaceCueCooldownTicks;
         boolean ciRestoredGravityGuardLogged;
         boolean ciRestoreUiAudiencePassLogged;
+        // Transient recovery status: never serialized; rebuilt from loaded-chunk checks after restart.
+        boolean unloadedSnapshotsPending;
+        final java.util.Set<Long> deferredRestoreChunks=new java.util.HashSet<>();
         // CI-only one-shot beacon removal: exercise recovery after a lost beacon.
         boolean ciNaturalBeaconRemoved, ciNaturalBeaconReplaced;
         boolean ciSparseRecoveryEligibilityLogged;
@@ -6131,8 +6134,12 @@ public final class RiftController {
                 if(CI_TEST) audiencePlayersVisited++;
                 if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
                 if(!withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z)) continue;
-                if(sendProgress)
-                    player.displayClientMessage(recoveryViolet("✦ СТАБИЛИЗАЦИЯ §f"+percent+"% §7— восстановлено "+s.restoredBlocks+" блоков"),true);
+                if(sendProgress) {
+                    Component progressMessage=s.unloadedSnapshotsPending
+                        ? recoveryViolet("✦ ОЖИДАНИЕ ЗАГРУЗКИ ОБЛАСТИ §7— подойдите ближе к оставшемуся разлому")
+                        : recoveryViolet("✦ СТАБИЛИЗАЦИЯ §f"+percent+"% §7— восстановлено "+s.restoredBlocks+" блоков");
+                    player.displayClientMessage(progressMessage,true);
+                }
                 if(sendOverlay)
                     RiftNetwork.send(player,remaining,false,0,s.x,s.z,s.naturalBeaconPos,true);
             }
@@ -6237,13 +6244,23 @@ public final class RiftController {
                 s.restoreScan--;
                 continue;
             }
-            if(!level.hasChunk(pos.getX()>>4,pos.getZ()>>4)) {
+            int restoreChunkX=pos.getX()>>4;
+            int restoreChunkZ=pos.getZ()>>4;
+            long restoreChunkKey=(((long)restoreChunkX)<<32)^(restoreChunkZ&0xffffffffL);
+            if(!level.hasChunk(restoreChunkX,restoreChunkZ)) {
+                if(s.deferredRestoreChunks.add(restoreChunkKey) && CI_TEST)
+                    LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_DEFERRED x={} y={} z={} chunkX={} chunkZ={} loadedOnly=true",
+                        pos.getX(),pos.getY(),pos.getZ(),restoreChunkX,restoreChunkZ);
+                s.unloadedSnapshotsPending=true;
                 if(CI_TEST && Boolean.getBoolean("blackfrequency.ciDeferredChunkTest")
                     && s.restoreTicks==1)
                     LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_CHUNK_SKIPPED x={} z={}",pos.getX(),pos.getZ());
                 s.restoreScan--;
                 continue;
             }
+            if(s.deferredRestoreChunks.remove(restoreChunkKey) && CI_TEST)
+                LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_REENTERED chunkX={} chunkZ={} loadedOnly=true",
+                    restoreChunkX,restoreChunkZ);
             // Only retire a snapshot after a successful write or a deliberate
             // preservation decision. A failed setBlock must remain pending so
             // another tick (or a server restart) can retry without data loss.
@@ -6301,6 +6318,21 @@ public final class RiftController {
             s.restoreIndex--;
             if(s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
         }
+        boolean wasWaitingForUnloadedChunks=s.unloadedSnapshotsPending;
+        s.unloadedSnapshotsPending=!s.deferredRestoreChunks.isEmpty() && s.restoreIndex>=0;
+        if(s.unloadedSnapshotsPending && !wasWaitingForUnloadedChunks) {
+            int notifiedPlayers=0;
+            for(var player:level.players()) {
+                if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
+                if(!withinRecoveryAudience(player.blockPosition(),s.x,activatedBeacon.getY(),s.z)) continue;
+                player.displayClientMessage(recoveryViolet(
+                    "✦ ОЖИДАНИЕ ЗАГРУЗКИ ОБЛАСТИ §7— подойдите ближе к оставшемуся разлому"),true);
+                notifiedPlayers++;
+            }
+            if(CI_TEST)
+                LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_HINT_SENT players={} loadedOnly=true",
+                    notifiedPlayers);
+        }
         // Avoid phantom rift rings after a beacon is removed, and never
         // query or generate an unloaded chunk just for cosmetic particles.
         // Skip cosmetic work when nobody can see the recovery beacon.
@@ -6353,6 +6385,8 @@ public final class RiftController {
         }
         // Hold the final stabilization glow long enough to be visible in-game.
         if(s.restoreIndex<0 && s.restoreTicks>=100) {
+            s.deferredRestoreChunks.clear();
+            s.unloadedSnapshotsPending=false;
             if(CI_TEST && Boolean.getBoolean("blackfrequency.ciRestoreWriteFailureTest") && s.skippedInvalid!=3)
                 throw new IllegalStateException("CI malformed/out-of-bounds/duplicate snapshot quarantine failed: "+s.skippedInvalid);
             s.restoring=false;s.restored=true;s.finished=true;s.snapshots.clear();
