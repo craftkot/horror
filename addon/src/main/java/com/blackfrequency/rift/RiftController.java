@@ -930,6 +930,7 @@ public final class RiftController {
             player.setPos(testX,testY,testZ);
             if(!level.hasChunk(probe.x>>4,probe.z>>4))
                 throw new IllegalStateException("CI gravity probe escaped the player's already-loaded chunk");
+            verifyGravityProbeWorldBorderGuard(level,player);
             player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
             probe.finaleTicks=nearLiftTick;
             boolean nearLiftApplied=applyRiftGravityImpulse(level,probe,player);
@@ -1061,7 +1062,9 @@ public final class RiftController {
         if(level==null || player==null || box==null
             || !Double.isFinite(box.minX) || !Double.isFinite(box.minY) || !Double.isFinite(box.minZ)
             || !Double.isFinite(box.maxX) || !Double.isFinite(box.maxY) || !Double.isFinite(box.maxZ)
-            || box.minY<level.getMinBuildHeight() || box.maxY>level.getMaxBuildHeight()) return false;
+            || box.minY<level.getMinBuildHeight() || box.maxY>level.getMaxBuildHeight()
+            // Reject impossible paths before consulting chunk state or collision shapes.
+            || !level.getWorldBorder().isWithinBounds(box)) return false;
         int minChunkX=((int)Math.floor(box.minX))>>4;
         int maxChunkX=((int)Math.floor(Math.nextDown(box.maxX)))>>4;
         int minChunkZ=((int)Math.floor(box.minZ))>>4;
@@ -1071,6 +1074,27 @@ public final class RiftController {
             for(int chunkZ=minChunkZ;chunkZ<=maxChunkZ;chunkZ++)
                 if(!level.hasChunk(chunkX,chunkZ)) return false;
         return level.noCollision(player,box);
+    }
+
+    /** Exercise whole-box and edge-crossing world-border rejection without changing the border. */
+    private static void verifyGravityProbeWorldBorderGuard(
+            ServerLevel level,net.minecraft.server.level.ServerPlayer player) {
+        var border=level.getWorldBorder();
+        net.minecraft.world.phys.AABB playerBox=player.getBoundingBox();
+        double width=playerBox.maxX-playerBox.minX;
+        double outsideX=border.getMaxX()+1.0D;
+        net.minecraft.world.phys.AABB outsideBox=new net.minecraft.world.phys.AABB(
+            outsideX,playerBox.minY,playerBox.minZ,
+            outsideX+width,playerBox.maxY,playerBox.maxZ);
+        net.minecraft.world.phys.AABB straddlingBox=new net.minecraft.world.phys.AABB(
+            border.getMaxX()-Math.min(.25D,width*.25D),playerBox.minY,playerBox.minZ,
+            border.getMaxX()+.01D,playerBox.maxY,playerBox.maxZ);
+        if(!border.isWithinBounds(playerBox) || border.isWithinBounds(outsideBox)
+            || border.isWithinBounds(straddlingBox)
+            || gravityProbeCollisionFree(level,player,outsideBox)
+            || gravityProbeCollisionFree(level,player,straddlingBox))
+            throw new IllegalStateException("CI gravity probe world-border guard regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST GRAVITY_PROBE_WORLD_BORDER_GUARD_VERIFIED insideAccepted=true outsideRejected=true straddlingRejected=true loadedChunksOnly=true");
     }
 
     /**
