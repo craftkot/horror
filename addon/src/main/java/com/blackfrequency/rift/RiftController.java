@@ -724,6 +724,17 @@ public final class RiftController {
         double firstField=gravityAnomalyField(x,z,ticks,firstWorldSeed);
         double repeatedField=gravityAnomalyField(x,z,ticks,firstWorldSeed);
         double secondField=gravityAnomalyField(x,z,ticks,secondWorldSeed);
+        // Negative coordinates cross a different integer lattice boundary than
+        // positive coordinates. Verify the seeded field stays continuous there.
+        double negativeBoundaryX=(-1.0D-ticks*GRAVITY_APERIODIC_TURBULENCE_TIME_X)
+            /GRAVITY_APERIODIC_TURBULENCE_SPATIAL_SCALE;
+        double negativeBoundaryLeft=gravityAnomalyAperiodicNoise(
+            negativeBoundaryX-1.0E-4D,z,ticks,firstWorldSeed);
+        double negativeBoundaryRight=gravityAnomalyAperiodicNoise(
+            negativeBoundaryX+1.0E-4D,z,ticks,firstWorldSeed);
+        boolean negativeBoundaryContinuous=negativeBoundaryX<0.0D
+            && Double.isFinite(negativeBoundaryLeft) && Double.isFinite(negativeBoundaryRight)
+            && Math.abs(negativeBoundaryLeft-negativeBoundaryRight)<1.0E-5D;
         if(!Double.isFinite(firstNoise) || !Double.isFinite(secondNoise)
             || Math.abs(firstNoise-repeatedNoise)>1.0E-12D
             || Math.abs(firstNoise-secondNoise)<.1D
@@ -731,9 +742,11 @@ public final class RiftController {
             || Math.abs(firstField-repeatedField)>1.0E-12D
             || Math.abs(firstField-secondField)<.001D
             || firstField< -1.0D || firstField>1.0D
-            || secondField< -1.0D || secondField>1.0D)
+            || secondField< -1.0D || secondField>1.0D
+            || !negativeBoundaryContinuous)
             throw new IllegalStateException("CI world-seeded gravity anomaly profile regression");
         LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_WORLD_SEED_PROFILE_VERIFIED worldSeedScoped=true deterministic=true distinctWorlds=true bounded=true noRandomAllocation=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_NEGATIVE_LATTICE_BOUNDARY_VERIFIED worldSeedScoped=true negativeCoordinates=true continuous=true deterministic=true");
     }
 
     private static void verifyGravityAnomalyField() {
