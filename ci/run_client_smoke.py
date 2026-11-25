@@ -43,9 +43,12 @@ def is_valid_deferred_restore_chunk_event(x,z,chunk_x,chunk_z,anchor_x,anchor_z,
 def verify_deferred_restore_chunk_bounds_profile():
     controller_source_path=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftController.java")
     controller_source=controller_source_path.read_text(encoding="utf-8")
-    radius_match=re.search(r"private static final int RADIUS\s*=\s*(\d+)\s*;",controller_source)
-    if not radius_match or int(radius_match.group(1))!=DEFERRED_RESTORE_RADIUS:
-        raise RuntimeError("BLACK FREQUENCY deferred restore radius must match the server fracture radius")
+    geometry_source_path=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftGeometry.java")
+    geometry_source=geometry_source_path.read_text(encoding="utf-8")
+    radius_match=re.search(r"public static final int RADIUS\s*=\s*(\d+)\s*;",geometry_source)
+    if (not radius_match or int(radius_match.group(1))!=DEFERRED_RESTORE_RADIUS
+            or "private static final int RADIUS = RiftGeometry.RADIUS;" not in controller_source):
+        raise RuntimeError("BLACK FREQUENCY deferred restore radius must match the shared server fracture radius")
     fixtures=(
         (48,0,3,0,0,0,48,True),
         (-48,0,-3,0,0,0,48,True),
