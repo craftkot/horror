@@ -6150,6 +6150,7 @@ public final class RiftController {
             }
         }
         int restoredThisTick=0,checks=0;
+        boolean wasWaitingForUnloadedChunks=s.unloadedSnapshotsPending;
         // Never revisit a small pending set dozens of times in one tick.
         // In particular, a single snapshot in an unloaded chunk costs one
         // hasChunk check, not the full 48-check scan budget.
@@ -6318,7 +6319,6 @@ public final class RiftController {
             s.restoreIndex--;
             if(s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
         }
-        boolean wasWaitingForUnloadedChunks=s.unloadedSnapshotsPending;
         s.unloadedSnapshotsPending=!s.deferredRestoreChunks.isEmpty() && s.restoreIndex>=0;
         if(s.unloadedSnapshotsPending && !wasWaitingForUnloadedChunks) {
             int notifiedPlayers=0;
