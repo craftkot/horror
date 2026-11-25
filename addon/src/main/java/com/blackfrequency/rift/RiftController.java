@@ -1,5 +1,6 @@
 package com.blackfrequency.rift;
 
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -1494,6 +1495,9 @@ public final class RiftController {
         // Transient recovery status: never serialized; rebuilt from loaded-chunk checks after restart.
         boolean unloadedSnapshotsPending;
         final java.util.Set<Long> deferredRestoreChunks=new java.util.HashSet<>();
+        // Chunk availability is stable during one server-thread restore scan; cache it without boxing.
+        final LongOpenHashSet restoreChunksCheckedThisTick=new LongOpenHashSet();
+        final LongOpenHashSet restoreChunksLoadedThisTick=new LongOpenHashSet();
         // CI-only one-shot beacon removal: exercise recovery after a lost beacon.
         boolean ciNaturalBeaconRemoved, ciNaturalBeaconReplaced;
         boolean ciSparseRecoveryEligibilityLogged;
@@ -6009,6 +6013,9 @@ public final class RiftController {
     }
 
     private static void restore(ServerLevel level,State s) {
+        // Reuse primitive per-tick caches: a chunk cannot load or unload halfway through this server-thread scan.
+        s.restoreChunksCheckedThisTick.clear();
+        s.restoreChunksLoadedThisTick.clear();
         BlockPos activatedBeacon=recoveryVisualAnchor(s,level.getSeaLevel());
         // Resolve the physical beacon once per restoration tick using loaded-only access.
         boolean beaconPositionValid=s.beaconPosPresent
@@ -6155,6 +6162,7 @@ public final class RiftController {
         // In particular, a single snapshot in an unloaded chunk costs one
         // hasChunk check, not the full 48-check scan budget.
         int scanBudget=Math.min(48,Math.max(0,s.restoreIndex+1));
+        int chunkAvailabilityCandidates=0,chunkAvailabilityProbes=0,chunkAvailabilityCacheHits=0;
         // A failed block write must not be attempted repeatedly in one tick.
         // Other loaded snapshots can still recover; retry this position next tick.
         java.util.Set<Long> failedWritesThisTick=beginRestoreTick(s);
@@ -6248,7 +6256,19 @@ public final class RiftController {
             int restoreChunkX=pos.getX()>>4;
             int restoreChunkZ=pos.getZ()>>4;
             long restoreChunkKey=(((long)restoreChunkX)<<32)^(restoreChunkZ&0xffffffffL);
-            if(!level.hasChunk(restoreChunkX,restoreChunkZ)) {
+            // The server thread is single-threaded here, so all snapshots in one chunk
+            // share the same availability result for this tick. Avoid repeating hasChunk.
+            chunkAvailabilityCandidates++;
+            boolean restoreChunkLoaded;
+            if(s.restoreChunksCheckedThisTick.add(restoreChunkKey)) {
+                chunkAvailabilityProbes++;
+                restoreChunkLoaded=level.hasChunk(restoreChunkX,restoreChunkZ);
+                if(restoreChunkLoaded) s.restoreChunksLoadedThisTick.add(restoreChunkKey);
+            } else {
+                chunkAvailabilityCacheHits++;
+                restoreChunkLoaded=s.restoreChunksLoadedThisTick.contains(restoreChunkKey);
+            }
+            if(!restoreChunkLoaded) {
                 if(s.deferredRestoreChunks.add(restoreChunkKey) && CI_TEST)
                     LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_DEFERRED x={} y={} z={} chunkX={} chunkZ={} loadedOnly=true",
                         pos.getX(),pos.getY(),pos.getZ(),restoreChunkX,restoreChunkZ);
@@ -6318,6 +6338,20 @@ public final class RiftController {
             }
             s.restoreIndex--;
             if(s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
+        }
+        if(CI_TEST && s.restoreTicks==1) {
+            int uniqueChunks=s.restoreChunksCheckedThisTick.size();
+            boolean cacheConsistent=chunkAvailabilityCandidates==chunkAvailabilityProbes+chunkAvailabilityCacheHits
+                && chunkAvailabilityProbes==uniqueChunks
+                && s.restoreChunksLoadedThisTick.size()<=uniqueChunks;
+            if(!cacheConsistent)
+                throw new IllegalStateException("CI restore chunk-availability cache accounting failed");
+            if(Boolean.getBoolean("blackfrequency.ciRestoreWriteFailureTest")
+                && chunkAvailabilityCacheHits<=0)
+                throw new IllegalStateException("CI restore did not reuse a chunk-availability result");
+            LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_CHUNK_AVAILABILITY_CACHE_VERIFIED candidates={} probes={} cacheHits={} uniqueChunks={} loadedChunks={} transient=true loadedOnly=true",
+                chunkAvailabilityCandidates,chunkAvailabilityProbes,chunkAvailabilityCacheHits,uniqueChunks,
+                s.restoreChunksLoadedThisTick.size());
         }
         s.unloadedSnapshotsPending=!s.deferredRestoreChunks.isEmpty() && s.restoreIndex>=0;
         if(s.unloadedSnapshotsPending && !wasWaitingForUnloadedChunks) {

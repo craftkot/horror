@@ -177,6 +177,17 @@ jobs:
           if [ "$BF_TEST_MODE" = "restoration" ]; then
             grep -q 'BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED' world-test.log
+            python3 - <<'PY'
+          import pathlib,re
+          log=pathlib.Path("world-test.log").read_text(errors="replace")
+          match=re.search(r"BLACK_FREQUENCY_TEST RESTORE_CHUNK_AVAILABILITY_CACHE_VERIFIED candidates=(\\d+) probes=(\\d+) cacheHits=(\\d+) uniqueChunks=(\\d+) loadedChunks=(\\d+) transient=true loadedOnly=true",log)
+          assert match, "Restore chunk-availability cache was not exercised"
+          candidates,probes,hits,unique,loaded=map(int,match.groups())
+          assert candidates==probes+hits, f"Unaccounted chunk lookups: {candidates=} {probes=} {hits=}"
+          assert probes==unique and loaded<=unique, f"Invalid per-tick cache accounting: {probes=} {unique=} {loaded=}"
+          assert hits>0, "No repeated snapshot chunk reused its cached availability result"
+          print(f"RESTORE_CHUNK_AVAILABILITY_CACHE_VERIFIED candidates={candidates} probes={probes} cacheHits={hits} uniqueChunks={unique} loadedChunks={loaded}")
+          PY
             grep -q 'BLACK_FREQUENCY_TEST FLOWING_FLUID_INJECTED' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST FLOWING_FLUID_REPLACED' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RESTORE_WRITE_DEFERRED' world-test.log
