@@ -1002,7 +1002,6 @@ deferred_chunk_probe=(
     and os.environ.get("BF_TEST_SPARSE_RECOVERY")!="1"
     and os.environ.get("BF_TEST_GREEN_PHASE_PREVIEW")!="1"
 )
-deferred_spawn_relocated=False
 option_overrides=[
     ("rawMouseInput","false"),
     ("mouseSensitivity",str(MOUSE_SENSITIVITY)),
@@ -1059,6 +1058,7 @@ threading.Thread(target=tee,daemon=True).start()
 
 def capture_test_world():
     """Best-effort UI automation; confirm world entrance from the actual client log."""
+    deferred_spawn_relocated=False
     game_window=None
     def find_game_window():
         named=subprocess.run(["xdotool","search","--onlyvisible","--name","Minecraft"],
