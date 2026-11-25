@@ -1520,7 +1520,11 @@ public final class RiftController {
                 LOGGER.warn("BLACK FREQUENCY: quarantined malformed center-out fracture cursor type");
                 s.setDirty();
             }
-            s.started=n.getBoolean("started");s.finished=n.getBoolean("finished");
+            boolean startedPresent=n.contains("started");
+            boolean startedValidType=n.contains("started",Tag.TAG_BYTE);
+            boolean malformedStartedType=startedPresent&&!startedValidType;
+            s.started=startedValidType&&n.getBoolean("started");
+            s.finished=n.getBoolean("finished");
             boolean initializedPresent=n.contains("initialized");
             boolean initializedValidType=n.contains("initialized",Tag.TAG_BYTE);
             boolean malformedInitializedType=initializedPresent&&!initializedValidType;
@@ -1722,6 +1726,28 @@ public final class RiftController {
                     s.cursorY=Integer.MIN_VALUE;
                 }
                 s.setDirty();
+            }
+            if(malformedStartedType) {
+                // A mistyped started flag reads as false. If the save already contains
+                // fracture progress, the next countdown completion would choose a new
+                // player anchor while retaining the old cursor and recovery snapshots.
+                // Stop further edits at the original anchor instead of guessing that state.
+                s.setDirty();
+                if(!s.restoring && !s.restored
+                    && (s.edits>0 || s.finaleTicks>0 || s.finished || !s.snapshots.isEmpty())) {
+                    LOGGER.warn("BLACK FREQUENCY: stopped fracture resumption because saved started flag has the wrong NBT type");
+                    s.started=true;
+                    s.finished=true;
+                    if(s.centerOutScan) s.centerOutIndex=CENTER_OUT_COLUMN_COUNT;
+                    else {
+                        s.cursorX=RADIUS+1;
+                        s.cursorZ=-RADIUS;
+                        s.cursorY=Integer.MIN_VALUE;
+                    }
+                    s.setDirty();
+                } else {
+                    LOGGER.warn("BLACK FREQUENCY: normalized malformed started flag before destructive progress");
+                }
             }
             if(quarantinedSnapshotPayloads>0)
                 LOGGER.warn("BLACK FREQUENCY: quarantined {} recovery snapshot payloads; retained estimate {} bytes of {} byte budget",
@@ -3351,6 +3377,7 @@ public final class RiftController {
     private static void verifySurfaceFirstScanMigration() {
         // This pure NBT regression runs with every scan-mode startup, not only recovery.
         verifyMalformedInitializedFlagQuarantine();
+        verifyMalformedStartedFlagQuarantine();
         if(fractureEditBudget(false)!=96 || fractureEditBudget(true)!=160
             || EDIT_BUDGET!=fractureEditBudget(CI_TEST))
             throw new IllegalStateException("CI fracture edit budget selection regression");
@@ -3794,6 +3821,52 @@ public final class RiftController {
             throw new IllegalStateException("CI malformed initialized flag quarantine regression"
                 +" stopped="+stopped+" stable="+stable);
         LOGGER.info("BLACK_FREQUENCY_TEST MALFORMED_INITIALIZED_FLAG_QUARANTINE_VERIFIED activeScanStopped=true anchorPreserved=true snapshotsPreserved=true roundTrip=true");
+    }
+
+    /** A corrupt started flag must not restart the countdown at a different anchor after edits. */
+    private static void verifyMalformedStartedFlagQuarantine() {
+        BlockPos pos=new BlockPos(12,64,-7);
+        CompoundTag snapshot=new CompoundTag();
+        snapshot.putLong("pos",pos.asLong());
+        snapshot.put("state",NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
+        ListTag snapshots=new ListTag();
+        snapshots.add(snapshot);
+
+        CompoundTag damaged=new CompoundTag();
+        damaged.putInt("x",12);
+        damaged.putInt("z",-7);
+        damaged.putBoolean("initialized",true);
+        damaged.putString("started","corrupted");
+        damaged.putBoolean("surfaceFirstScan",true);
+        damaged.putBoolean("centerOutScan",true);
+        damaged.putInt("centerOutIndex",17);
+        damaged.putInt("edits",1);
+        damaged.putInt("finaleTicks",12);
+        damaged.put("snapshots",snapshots);
+
+        State quarantined=State.load(damaged);
+        boolean stopped=quarantined.started && quarantined.finished
+            && quarantined.centerOutIndex==CENTER_OUT_COLUMN_COUNT
+            && quarantined.x==12 && quarantined.z==-7
+            && quarantined.snapshots.size()==1
+            && quarantined.snapshots.get(0).getLong("pos")==pos.asLong()
+            && quarantined.isDirty();
+        State roundTrip=State.load(quarantined.save(new CompoundTag()));
+        boolean stable=roundTrip.started && roundTrip.finished
+            && roundTrip.centerOutIndex==CENTER_OUT_COLUMN_COUNT
+            && roundTrip.x==12 && roundTrip.z==-7
+            && roundTrip.snapshots.size()==1
+            && roundTrip.snapshots.get(0).getLong("pos")==pos.asLong();
+
+        CompoundTag freshMalformed=new CompoundTag();
+        freshMalformed.putString("started","corrupted");
+        State fresh=State.load(freshMalformed);
+        boolean freshCountdownPreserved=!fresh.started && !fresh.finished && fresh.isDirty();
+        if(!stopped || !stable || !freshCountdownPreserved)
+            throw new IllegalStateException("CI malformed started flag quarantine regression"
+                +" stopped="+stopped+" stable="+stable
+                +" freshCountdownPreserved="+freshCountdownPreserved);
+        LOGGER.info("BLACK_FREQUENCY_TEST MALFORMED_STARTED_FLAG_QUARANTINE_VERIFIED activeScanStopped=true anchorPreserved=true snapshotsPreserved=true roundTrip=true freshCountdownPreserved=true");
     }
 
     /** Verify that a pending terrain snapshot survives a SavedData round trip. */
