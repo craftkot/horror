@@ -563,15 +563,15 @@ public final class RiftController {
             *GRAVITY_LIFT_CROSS_SHEAR_SCALE;
     }
 
-    private static long gravityAnomalyLatticeHash(int cellX,int cellZ) {
-        long value=(((long)cellX)<<32)^(cellZ&0xffffffffL)^0xD1B54A32D192ED03L;
+    private static long gravityAnomalyLatticeHash(int cellX,int cellZ,long worldSeed) {
+        long value=(((long)cellX)<<32)^(cellZ&0xffffffffL)^worldSeed^0xD1B54A32D192ED03L;
         value=(value^(value>>>30))*0xBF58476D1CE4E5B9L;
         value=(value^(value>>>27))*0x94D049BB133111EBL;
         return value^(value>>>31);
     }
 
-    private static double gravityAnomalyLatticeValue(int cellX,int cellZ) {
-        return ((gravityAnomalyLatticeHash(cellX,cellZ)>>>11)*0x1.0p-53D)*2.0D-1.0D;
+    private static double gravityAnomalyLatticeValue(int cellX,int cellZ,long worldSeed) {
+        return ((gravityAnomalyLatticeHash(cellX,cellZ,worldSeed)>>>11)*0x1.0p-53D)*2.0D-1.0D;
     }
 
     // Quintic fade keeps both the first and second spatial derivatives continuous
@@ -632,6 +632,10 @@ public final class RiftController {
      * Integer lattice hashing avoids Random allocations and extra trigonometric calls.
      */
     private static double gravityAnomalyAperiodicNoise(double x,double z,int ticks) {
+        return gravityAnomalyAperiodicNoise(x,z,ticks,0L);
+    }
+
+    private static double gravityAnomalyAperiodicNoise(double x,double z,int ticks,long worldSeed) {
         if(!Double.isFinite(x) || !Double.isFinite(z)
             || Math.abs(x)>30_000_000.0D || Math.abs(z)>30_000_000.0D) return 0.0D;
         int time=Math.max(0,ticks);
@@ -646,15 +650,19 @@ public final class RiftController {
         double blendX=gravityAnomalyFade(sampleX-floorX);
         double blendZ=gravityAnomalyFade(sampleZ-floorZ);
         double near=gravityAnomalyLerp(
-            gravityAnomalyLatticeValue(cellX,cellZ),
-            gravityAnomalyLatticeValue(cellX+1,cellZ),blendX);
+            gravityAnomalyLatticeValue(cellX,cellZ,worldSeed),
+            gravityAnomalyLatticeValue(cellX+1,cellZ,worldSeed),blendX);
         double far=gravityAnomalyLerp(
-            gravityAnomalyLatticeValue(cellX,cellZ+1),
-            gravityAnomalyLatticeValue(cellX+1,cellZ+1),blendX);
+            gravityAnomalyLatticeValue(cellX,cellZ+1,worldSeed),
+            gravityAnomalyLatticeValue(cellX+1,cellZ+1,worldSeed),blendX);
         return gravityAnomalyLerp(near,far,blendZ);
     }
 
     private static double gravityAnomalyField(double x,double z,int ticks) {
+        return gravityAnomalyField(x,z,ticks,0L);
+    }
+
+    private static double gravityAnomalyField(double x,double z,int ticks,long worldSeed) {
         if(!Double.isFinite(x) || !Double.isFinite(z)
             || Math.abs(x)>30_000_000.0D || Math.abs(z)>30_000_000.0D) return 0.0D;
         updateGravityFieldPhaseCache(ticks);
@@ -665,7 +673,7 @@ public final class RiftController {
         double microTurbulence=Math.sin((x*.17D+z*.13D)
             +gravityFieldMicroPhase+gravityFieldMicroTimeOffset
             +cross*GRAVITY_MICRO_PHASE_WARP_AMPLITUDE);
-        double aperiodicTurbulence=gravityAnomalyAperiodicNoise(x,z,ticks);
+        double aperiodicTurbulence=gravityAnomalyAperiodicNoise(x,z,ticks,worldSeed);
         double field=base+.12D*cross+.06D*turbulence+.035D*microTurbulence
             +GRAVITY_APERIODIC_TURBULENCE_AMPLITUDE*aperiodicTurbulence;
         return Math.max(-1.0D,Math.min(1.0D,field));
@@ -705,9 +713,33 @@ public final class RiftController {
             expected[2],expected[3],expected[4]);
     }
 
+    private static void verifyGravityAnomalyWorldSeedProfile() {
+        long firstWorldSeed=0x13579BDF2468ACE0L;
+        long secondWorldSeed=0x02468ACE13579BDFL;
+        double x=-17.5D,z=20.5D;
+        int ticks=2400;
+        double firstNoise=gravityAnomalyAperiodicNoise(x,z,ticks,firstWorldSeed);
+        double repeatedNoise=gravityAnomalyAperiodicNoise(x,z,ticks,firstWorldSeed);
+        double secondNoise=gravityAnomalyAperiodicNoise(x,z,ticks,secondWorldSeed);
+        double firstField=gravityAnomalyField(x,z,ticks,firstWorldSeed);
+        double repeatedField=gravityAnomalyField(x,z,ticks,firstWorldSeed);
+        double secondField=gravityAnomalyField(x,z,ticks,secondWorldSeed);
+        if(!Double.isFinite(firstNoise) || !Double.isFinite(secondNoise)
+            || Math.abs(firstNoise-repeatedNoise)>1.0E-12D
+            || Math.abs(firstNoise-secondNoise)<.1D
+            || !Double.isFinite(firstField) || !Double.isFinite(secondField)
+            || Math.abs(firstField-repeatedField)>1.0E-12D
+            || Math.abs(firstField-secondField)<.001D
+            || firstField< -1.0D || firstField>1.0D
+            || secondField< -1.0D || secondField>1.0D)
+            throw new IllegalStateException("CI world-seeded gravity anomaly profile regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST ANOMALY_FIELD_WORLD_SEED_PROFILE_VERIFIED worldSeedScoped=true deterministic=true distinctWorlds=true bounded=true noRandomAllocation=true");
+    }
+
     private static void verifyGravityAnomalyField() {
         verifyGravityAnomalyFadeProfile();
         verifyGravityAnomalyZoneActivation();
+        verifyGravityAnomalyWorldSeedProfile();
         double lift=gravityAnomalyField(-17.5D,20.5D,0);
         double sink=gravityAnomalyField(-19.5D,-3.5D,0);
         double repeated=gravityAnomalyField(-17.5D,20.5D,0);
@@ -893,7 +925,7 @@ public final class RiftController {
         double nearSinkMax=GRAVITY_SINK_ZONE_THRESHOLD+GRAVITY_ZONE_ACTIVATION_WIDTH*.30D;
         double[] fieldSamples=new double[CI_GRAVITY_TRAJECTORY_SEARCH_TICKS+CI_GRAVITY_TRAJECTORY_STEPS];
         for(int tick=0;tick<fieldSamples.length;tick++)
-            fieldSamples[tick]=gravityAnomalyField(testX,testZ,tick);
+            fieldSamples[tick]=gravityAnomalyField(testX,testZ,tick,level.getSeed());
         for(int tick=0;tick<CI_GRAVITY_TRAJECTORY_SEARCH_TICKS && (nearLiftTick<0 || fullLiftTick<0
                 || nearSinkTick<0 || fullSinkTick<0);tick++) {
             double zone=fieldSamples[tick];
@@ -1148,7 +1180,7 @@ public final class RiftController {
                 if(!level.hasChunk(chunkX,chunkZ))
                     throw new IllegalStateException("CI gravity trajectory would enter an unloaded chunk");
                 int tick=startTick+step;
-                double zone=gravityAnomalyField(currentX,currentZ,tick);
+                double zone=gravityAnomalyField(currentX,currentZ,tick,level.getSeed());
                 double magnitude=lift?zone:-zone;
                 double activation=gravityAnomalyZoneActivation(magnitude,threshold);
                 if(!Double.isFinite(activation) || activation<=.005D)
@@ -1257,7 +1289,7 @@ public final class RiftController {
         if(distanceSquared>=GRAVITY_ANOMALY_OUTER_RADIUS*GRAVITY_ANOMALY_OUTER_RADIUS) return false;
         double fade=gravityAnomalyRadialFade(distanceSquared);
         if(fade<=0.0D) return false;
-        double zone=gravityAnomalyField(px,pz,s.finaleTicks);
+        double zone=gravityAnomalyField(px,pz,s.finaleTicks,level.getSeed());
         if(zone>GRAVITY_LIFT_ZONE_THRESHOLD) {
             double activation=gravityAnomalyZoneActivation(zone,GRAVITY_LIFT_ZONE_THRESHOLD);
             if(activation<=0.0D) return false;
@@ -6691,7 +6723,7 @@ public final class RiftController {
                 if(fade<GRAVITY_ANOMALY_PARTICLE_MIN_FADE) continue;
                 // Match the server-side gravity field so particles mark actual
                 // lift/sink zones instead of an unrelated moving pattern.
-                double zone=gravityAnomalyField(player.getX(),player.getZ(),s.finaleTicks);
+                double zone=gravityAnomalyField(player.getX(),player.getZ(),s.finaleTicks,level.getSeed());
                 if(zone>GRAVITY_LIFT_ZONE_THRESHOLD) {
                     // Deep-violet motes mark lift; smaller bright-violet sparks define the edge.
                     level.sendParticles(ANOMALY_VIOLET_DUST,
