@@ -1070,6 +1070,7 @@ public final class RiftController {
         double maximumHorizontalVelocity=0.0D,maximumVerticalVelocity=0.0D;
         double previousActivation=Double.NaN;
         double threshold=lift?GRAVITY_LIFT_ZONE_THRESHOLD:GRAVITY_SINK_ZONE_THRESHOLD;
+        double verticalCap=lift?GRAVITY_LIFT_VERTICAL_VELOCITY_CAP:GRAVITY_SINK_VERTICAL_VELOCITY_CAP;
         try {
             player.setPos(startX,startY,startZ);
             player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
@@ -1104,7 +1105,6 @@ public final class RiftController {
                     throw new IllegalStateException("CI actual ServerPlayer gravity trajectory impulse regression");
                 double horizontalVelocity=Math.max(Math.abs(nextMovement.x),Math.abs(nextMovement.z));
                 double verticalVelocity=Math.abs(nextMovement.y);
-                double verticalCap=lift?GRAVITY_LIFT_VERTICAL_VELOCITY_CAP:GRAVITY_SINK_VERTICAL_VELOCITY_CAP;
                 if(horizontalVelocity>GRAVITY_ANOMALY_HORIZONTAL_DRIFT_CAP+1.0E-9D
                     || verticalVelocity>verticalCap+1.0E-9D)
                     throw new IllegalStateException("CI actual ServerPlayer gravity trajectory exceeded a velocity cap");
