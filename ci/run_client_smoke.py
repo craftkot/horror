@@ -62,6 +62,9 @@ def verify_deferred_restore_chunk_bounds_profile():
             or "return deferredClientProbe?200:0;" not in controller_source
             or "s.restoreTicks>scanWarmupTicks" not in controller_source):
         raise RuntimeError("BLACK FREQUENCY deferred probe must wait for natural chunk-ticket expiry before scanning")
+    if ('if(Boolean.getBoolean("blackfrequency.ciDeferredChunkProbe")' not in controller_source
+            or "&& !level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4))" not in controller_source):
+        raise RuntimeError("BLACK FREQUENCY may skip the synthetic beacon guard only in the deferred client probe")
     fixtures=(
         (48,0,3,0,0,0,48,True),
         (-48,0,-3,0,0,0,48,True),
