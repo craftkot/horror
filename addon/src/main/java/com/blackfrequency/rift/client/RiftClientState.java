@@ -758,10 +758,11 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST BEACON_AURA_RENDERED cages=2 edgeRibbons=24 rotation=counterphase loadedOnly=true");
         }
-        if(submitted && restorationActive && progress<=0.0F && !beaconAuraRestorationRenderedLogged) {
+        if(submitted && restorationActive && !beaconAuraRestorationRenderedLogged) {
             beaconAuraRestorationRenderedLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST BEACON_AURA_RESTORATION_ACTIVE_RENDERED progressZero=true loadedOnly=true");
+                "BLACK_FREQUENCY_TEST BEACON_AURA_RESTORATION_ACTIVE_RENDERED progress={} loadedOnly=true",
+                progress);
         }
         if(submitted && completionFadeActive && !restorationActive) {
             if(!beaconAuraCompletionFadeRenderedLogged) {

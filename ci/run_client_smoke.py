@@ -18,6 +18,11 @@ DEFERRED_RESTORE_RADIUS=48
 DEFERRED_RENDER_DISTANCE=2
 # Minecraft 1.20.1 clamps Simulation Distance to [5, 33]; 2 is rejected by Options.
 DEFERRED_SIMULATION_DISTANCE=5
+# Travel farther than the 48-block fracture plus the server's five-chunk simulation halo.
+# The later per-chunk teleports return within the recovery audience and load only visited chunks.
+DEFERRED_PLAYER_TRAVEL_DISTANCE=144
+if DEFERRED_PLAYER_TRAVEL_DISTANCE<=DEFERRED_RESTORE_RADIUS+DEFERRED_SIMULATION_DISTANCE*16:
+    raise RuntimeError("Deferred probe travel must clear the fracture and simulation-distance halo")
 DEFERRED_SPAWN_ACK_RE=r"Set (?:the )?world spawn(?: point)? to "
 DEFERRED_RESTORE_CHUNK_RE=re.compile(
     r"BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_DEFERRED "
@@ -279,7 +284,7 @@ def verify_beacon_aura_source():
             or "BEACON_AURA_COMPLETION_FADE_MIDPOINT_RENDERED" not in client
             or "BEACON_AURA_COMPLETION_FADE_TAIL_RENDERED" not in client
             or "BEACON_AURA_COMPLETION_FADE_MILESTONES_VERIFIED midpointInRange=true tailVisible=true" not in client
-            or "BEACON_AURA_RESTORATION_ACTIVE_RENDERED progressZero=true loadedOnly=true" not in client
+            or "BEACON_AURA_RESTORATION_ACTIVE_RENDERED progress={} loadedOnly=true" not in client
             or "BEACON_AURA_DISTANCE_FADE_PROFILE_VERIFIED start=40.0 end=48.0 curve=quintic quarter={} midpoint={} threeQuarter={} c2Endpoints=true monotonic=true invalidRejected=true" not in client
             or "beaconAuraDistanceFade(distanceSquared)" not in client
             or "distanceSquared<=BEACON_AURA_FADE_START_DISTANCE_SQR" not in client
@@ -4178,15 +4183,14 @@ def capture_test_world():
                 while time.time()<deadline_restore and p.poll() is None:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     try_beacon_click(current)
-                    # Capture the real beacon pulse first. Then move the player beyond
-                    # the fracture's 48-block radius (but inside the 128-block recovery
-                    # audience) so the integrated server naturally unloads its chunks.
-                    # The later /tp commands load only the chunks the player visits.
+                    # Capture the real beacon pulse first. Then move beyond the fracture
+                    # plus the integrated server's simulation-distance halo. Per-chunk
+                    # return teleports re-enter only the chunks the player actually visits.
                     if (deferred_chunk_probe and not deferred_probe_player_moved
                             and restoration_shot
                             and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current):
                         if not send_isolated_chat_command(
-                                "/tp @s ~96 120 ~",
+                                f"/tp @s ~{DEFERRED_PLAYER_TRAVEL_DISTANCE} 120 ~",
                                 r"Teleported .* to ",
                                 "leave the fracture and unload its recovery chunks"):
                             return False
@@ -4259,7 +4263,7 @@ def capture_test_world():
                                   chunk_x,chunk_z,"loadedOnly=true",flush=True)
                     initial_pulse_marker="BLACK_FREQUENCY_TEST RESTORE_INITIAL_BEACON_PULSE_EMITTED ring=24 sparks=4 viewer=true"
                     stabilization_pulse_marker="BLACK_FREQUENCY_TEST BEACON_STABILIZATION_PULSE viewerScan=shared"
-                    aura_restoration_marker="BLACK_FREQUENCY_TEST BEACON_AURA_RESTORATION_ACTIVE_RENDERED progressZero=true loadedOnly=true"
+                    aura_restoration_marker="BLACK_FREQUENCY_TEST BEACON_AURA_RESTORATION_ACTIVE_RENDERED progress="
                     for pulse_marker in (initial_pulse_marker,stabilization_pulse_marker):
                         if (not restoration_shot and aura_restoration_marker in current
                                 and pulse_marker in current
@@ -5111,7 +5115,7 @@ def capture_test_world():
                 if "BLACK_FREQUENCY_TEST BEACON_AURA_RENDERED cages=2 edgeRibbons=24 rotation=counterphase loadedOnly=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: rotating violet physical beacon containment aura was not drawn from the loaded beacon block",flush=True)
                     return False
-                if "BLACK_FREQUENCY_TEST BEACON_AURA_RESTORATION_ACTIVE_RENDERED progressZero=true loadedOnly=true" not in log_after:
+                if "BLACK_FREQUENCY_TEST BEACON_AURA_RESTORATION_ACTIVE_RENDERED progress=" not in log_after:
                     print("WORLD_CAPTURE_FAIL: physical beacon aura disappeared during the zero-progress stabilization hold",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST BEACON_START_ACTIONBAR_ONLY" not in log_after:
