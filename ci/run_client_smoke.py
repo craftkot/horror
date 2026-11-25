@@ -4400,12 +4400,19 @@ def capture_test_world():
                 return False
             canopy_particle_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED "
-                "scale=0.76 verticalOffset=0.22 scaleBounded=true heightBounded=true"
+                "scale=0.81 verticalOffset=0.26 scaleBounded=true heightBounded=true"
             )
             if (canopy_particle_marker not in log_after
-                    or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE=.76F;" not in camera_source
-                    or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.22D;" not in camera_source):
+                    or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE=.81F;" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.26D;" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: bounded canopy accent particle profile was not verified",flush=True)
+                return False
+            canopy_clearance_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FOLIAGE_CLEARANCE_VERIFIED "
+                "offset=0.26 particleScale=0.81 baseRibbonUnchanged=true bounded=true"
+            )
+            if canopy_clearance_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: canopy accent clearance above short foliage was not verified",flush=True)
                 return False
             canopy_segment_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED "

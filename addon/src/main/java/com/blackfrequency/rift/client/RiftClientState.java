@@ -854,8 +854,8 @@ public final class RiftClientState {
             GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE*GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE;
         private static final double GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA=.35D;
         // Lift and enlarge sparse motes just enough to read above short foliage.
-        private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=.76F;
-        private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.22D;
+        private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=.81F;
+        private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.26D;
         private static final int[] GROUND_CANOPY_ACCENT_X=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final int[] GROUND_CANOPY_ACCENT_Z=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final double[] GROUND_CANOPY_ACCENT_Y=new double[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
@@ -2992,10 +2992,14 @@ public final class RiftClientState {
             double excessiveHeight=canopyAccentParticleY(70,2.0D);
             boolean particleScaleBounded=Float.isFinite(GROUND_CANOPY_ACCENT_PARTICLE_SCALE)
                 && GROUND_CANOPY_ACCENT_PARTICLE_SCALE>=.72F
-                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=.78F;
+                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=.82F;
             boolean particleOffsetBounded=Double.isFinite(GROUND_CANOPY_ACCENT_VERTICAL_OFFSET)
                 && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET>=.20D
-                && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET<=.24D;
+                && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET<=.28D;
+            boolean foliageClearanceProfile=particleOffsetBounded
+                && Math.abs((plantTop-70.8D)-GROUND_CANOPY_ACCENT_VERTICAL_OFFSET)<1.0E-9D
+                && Math.abs(groundSurfaceOffset(1.0D,Double.NaN)-1.0D)<1.0E-9D
+                && Math.abs(groundSurfaceOffset(.5D,Double.NaN)-.5D)<1.0E-9D;
             GroundSegment fixture=new GroundSegment(new GroundPoint(0.0D,70.0D,0.0D),
                 new GroundPoint(1.0D,70.0D,0.0D),0.0D,1.0D,GROUND_SAMPLES[0],
                 1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
@@ -3038,10 +3042,10 @@ public final class RiftClientState {
             if(!(selected && sparse && threeOfFourPattern && negativeCoordinatePattern && deterministic && candidateBudgetRejected && negativeCounterRejected
                 && rotationProfile && emissionThrottleProfile
                 && zeroEmissionScanRecorded && emptyScanPreservesAttempt
-                && nonPlantsRejected && particleScaleBounded && particleOffsetBounded
-                && Math.abs(plantTop-71.02D)<1.0E-9D
-                && Math.abs(invalidHeight-70.22D)<1.0E-9D
-                && Math.abs(excessiveHeight-71.22D)<1.0E-9D
+                && nonPlantsRejected && particleScaleBounded && particleOffsetBounded && foliageClearanceProfile
+                && Math.abs(plantTop-71.06D)<1.0E-9D
+                && Math.abs(invalidHeight-70.26D)<1.0E-9D
+                && Math.abs(excessiveHeight-71.26D)<1.0E-9D
                 && broadPhaseNear && broadPhaseFar && broadPhaseCorner && exactCornerRejected
                 && invalidBoundsRejected && nearSegment && farSegment && heightMismatch && invalidRejected
                 && emptyMeshRejected && meshAccepted))
@@ -3061,6 +3065,9 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED scale={} verticalOffset={} scaleBounded=true heightBounded=true",
                 GROUND_CANOPY_ACCENT_PARTICLE_SCALE,GROUND_CANOPY_ACCENT_VERTICAL_OFFSET);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FOLIAGE_CLEARANCE_VERIFIED offset={} particleScale={} baseRibbonUnchanged=true bounded=true",
+                GROUND_CANOPY_ACCENT_VERTICAL_OFFSET,GROUND_CANOPY_ACCENT_PARTICLE_SCALE);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED near=true far=false broadPhaseCorner=true exactCornerRejected=true invalidBoundsRejected=true heightBounded=true invalidRejected=true emptyMeshRejected=true");
         }
