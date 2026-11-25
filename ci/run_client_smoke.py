@@ -58,6 +58,10 @@ def verify_deferred_restore_chunk_bounds_profile():
     if (not radius_match or int(radius_match.group(1))!=DEFERRED_RESTORE_RADIUS
             or "private static final int RADIUS = RiftGeometry.RADIUS;" not in controller_source):
         raise RuntimeError("BLACK FREQUENCY deferred restore radius must match the shared server fracture radius")
+    if ("private static int restoreSnapshotScanWarmupTicks(boolean deferredClientProbe)" not in controller_source
+            or "return deferredClientProbe?200:0;" not in controller_source
+            or "s.restoreTicks>scanWarmupTicks" not in controller_source):
+        raise RuntimeError("BLACK FREQUENCY deferred probe must wait for natural chunk-ticket expiry before scanning")
     fixtures=(
         (48,0,3,0,0,0,48,True),
         (-48,0,-3,0,0,0,48,True),
@@ -76,6 +80,7 @@ def verify_deferred_restore_chunk_bounds_profile():
             raise RuntimeError("BLACK FREQUENCY deferred snapshot coordinate/radius fixture regression")
     print("WORLD_CAPTURE: deferred snapshot chunk coordinates and circular fracture bounds verified",
           "radius",DEFERRED_RESTORE_RADIUS,"negativeCoordinates=true","boundary=true","loadedOnly=true",flush=True)
+    print("WORLD_CAPTURE: deferred scan waits 200 server ticks for natural chunk-ticket expiry",flush=True)
 
 def is_fissure_target_horizontal_distance(horizontal_squared):
     try:
@@ -4293,8 +4298,33 @@ def capture_test_world():
                 if restored:
                     if deferred_chunk_probe:
                         final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                        safe_pad=re.search(
+                            r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT "
+                            r"x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
+                            final_log)
+                        if not safe_pad:
+                            print("WORLD_CAPTURE_FAIL: safe recovery pad coordinates are missing after deferred probe",
+                                  flush=True)
+                            return False
+                        pad_x,pad_y,pad_z=map(int,safe_pad.groups())
+                        if not send_isolated_chat_command(
+                                f"/tp @s {pad_x} {pad_y} {pad_z}",
+                                r"Teleported .* to ",
+                                "return to physical recovery beacon pad before final validation"):
+                            return False
+                        print("WORLD_CAPTURE: returned to physical beacon pad before deferred-probe validation",
+                              pad_x,pad_y,pad_z,flush=True)
+                        time.sleep(0.25)
+                        final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else final_log
+                        if "BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY_FOR_REAL_PLAYER" not in final_log:
+                            print("WORLD_CAPTURE_FAIL: post-restoration beacon was not exposed for the real player test",
+                                  flush=True)
+                            return False
                         if "BLACK_FREQUENCY_TEST RESTORE_SCAN_BUDGET_SELECTED value=1 deferredClient=true" not in final_log:
                             print("WORLD_CAPTURE_FAIL: deferred recovery did not use the slow client-only scan budget",flush=True)
+                            return False
+                        if "BLACK_FREQUENCY_TEST RESTORE_SCAN_WARMUP_SELECTED ticks=200 deferredClient=true" not in final_log:
+                            print("WORLD_CAPTURE_FAIL: deferred recovery did not wait for natural chunk-ticket expiry",flush=True)
                             return False
                         unresolved_deferred_chunks={
                             key:(count,deferred_restore_reentry_counts.get(key,0))
@@ -4315,30 +4345,6 @@ def capture_test_world():
                             return False
                         print("WORLD_CAPTURE: valid unloaded recovery chunks re-entered by player travel",
                               len(deferred_restore_chunks_reentered),"loadedOnly=true",flush=True)
-                    if deferred_restore_chunks_seen:
-                        final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-                        safe_pad=re.search(
-                            r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT "
-                            r"x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
-                            final_log)
-                        if not safe_pad:
-                            print("WORLD_CAPTURE_FAIL: safe recovery pad coordinates are missing after deferred-chunk traversal",
-                                  flush=True)
-                            return False
-                        pad_x,pad_y,pad_z=map(int,safe_pad.groups())
-                        if not send_isolated_chat_command(
-                                f"/tp @s {pad_x} {pad_y} {pad_z}",
-                                r"Teleported .* to ",
-                                "return to physical recovery beacon pad"):
-                            return False
-                        print("WORLD_CAPTURE: returned to physical beacon pad after loaded-only recovery",
-                              pad_x,pad_y,pad_z,flush=True)
-                        time.sleep(0.25)
-                        final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else final_log
-                        if "BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_HINT_SENT" not in final_log:
-                            print("WORLD_CAPTURE_FAIL: deferred-chunk recovery did not send the player-facing wait hint",
-                                  flush=True)
-                            return False
                     # The server sends the inactive state before the completion overlay.
                     # Require one real client render from the short aura fade, even if
                     # the server consumes the physical beacon immediately afterward.
@@ -4573,8 +4579,10 @@ def capture_test_world():
                     return False
                 build_permission_marker=("BLACK_FREQUENCY_TEST REAL_PLAYER_ADVENTURE_BEACON_BREAK_REJECTED "
                     "mayBuild=false blockPreserved=true ownershipPreserved=true")
-                if build_permission_marker not in log_after:
-                    print("WORLD_CAPTURE_FAIL: adventure-mode synthetic break mutated the recovery beacon",flush=True)
+                synthetic_skip_marker="BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_SYNTHETIC_SKIPPED_UNLOADED loadedOnly=true"
+                if (build_permission_marker not in log_after
+                        and not (deferred_chunk_probe and synthetic_skip_marker in log_after)):
+                    print("WORLD_CAPTURE_FAIL: adventure-mode synthetic break was neither verified nor safely deferred",flush=True)
                     return False
                 initial_pulse=re.search(
                     r"BLACK_FREQUENCY_TEST RESTORE_INITIAL_BEACON_PULSE_EMITTED ring=(\d+) sparks=(\d+) viewer=true",
@@ -4648,7 +4656,11 @@ def capture_test_world():
                 mined=log_after.find("BLACK_FREQUENCY_TEST NATURAL_BEACON_MINED_NO_DROP")
                 consumed=log_after.find("BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_CONSUMED")
                 no_drop=log_after.find("BLACK_FREQUENCY_TEST REAL_PLAYER_BEACON_BREAK_NO_DROP_VERIFIED")
-                if not (0<=preserved<mined<consumed<no_drop):
+                if deferred_chunk_probe and synthetic_skip_marker in log_after:
+                    if not (0<=mined<consumed<no_drop):
+                        print("WORLD_CAPTURE_FAIL: deferred-mode real player break did not verify no drops",flush=True)
+                        return False
+                elif not (0<=preserved<mined<consumed<no_drop):
                     print("WORLD_CAPTURE_FAIL: real player break must follow protection cancellation and verify no drops",flush=True)
                     return False
                 if "BLACK_FREQUENCY_TEST NATURAL_BEACON_ID_CLEARED_AFTER_BREAK" not in log_after:
