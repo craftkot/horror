@@ -1052,6 +1052,28 @@ public final class RiftController {
     }
 
     /**
+     * Check a predicted player box without asking the server to load any of its chunks.
+     * The chunk guard covers every horizontal chunk touched by the AABB before collision queries.
+     */
+    private static boolean gravityProbeCollisionFree(
+            ServerLevel level,net.minecraft.server.level.ServerPlayer player,
+            net.minecraft.world.phys.AABB box) {
+        if(level==null || player==null || box==null
+            || !Double.isFinite(box.minX) || !Double.isFinite(box.minY) || !Double.isFinite(box.minZ)
+            || !Double.isFinite(box.maxX) || !Double.isFinite(box.maxY) || !Double.isFinite(box.maxZ)
+            || box.minY<level.getMinBuildHeight() || box.maxY>level.getMaxBuildHeight()) return false;
+        int minChunkX=((int)Math.floor(box.minX))>>4;
+        int maxChunkX=((int)Math.floor(Math.nextDown(box.maxX)))>>4;
+        int minChunkZ=((int)Math.floor(box.minZ))>>4;
+        int maxChunkZ=((int)Math.floor(Math.nextDown(box.maxZ)))>>4;
+        if(maxChunkX<minChunkX || maxChunkZ<minChunkZ) return false;
+        for(int chunkX=minChunkX;chunkX<=maxChunkX;chunkX++)
+            for(int chunkZ=minChunkZ;chunkZ<=maxChunkZ;chunkZ++)
+                if(!level.hasChunk(chunkX,chunkZ)) return false;
+        return level.noCollision(player,box);
+    }
+
+    /**
      * Integrate eight consecutive impulses on a real ServerPlayer. The probe advances its
      * position by the resulting velocity, but every position is checked before use so this
      * diagnostic never requests an unloaded chunk or edits world blocks.
@@ -1069,11 +1091,15 @@ public final class RiftController {
         double firstActivation=Double.NaN,lastActivation=Double.NaN,maximumActivationStep=0.0D;
         double maximumHorizontalVelocity=0.0D,maximumVerticalVelocity=0.0D;
         double previousActivation=Double.NaN;
+        int collisionSamples=0;
         double threshold=lift?GRAVITY_LIFT_ZONE_THRESHOLD:GRAVITY_SINK_ZONE_THRESHOLD;
         double verticalCap=lift?GRAVITY_LIFT_VERTICAL_VELOCITY_CAP:GRAVITY_SINK_VERTICAL_VELOCITY_CAP;
         try {
             player.setPos(startX,startY,startZ);
             player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            if(!gravityProbeCollisionFree(level,player,player.getBoundingBox()))
+                throw new IllegalStateException("CI gravity trajectory starts inside a collision or unloaded chunk");
+            collisionSamples++;
             for(int step=0;step<CI_GRAVITY_TRAJECTORY_STEPS;step++) {
                 if(!Double.isFinite(currentX) || !Double.isFinite(currentY) || !Double.isFinite(currentZ)
                     || currentY<level.getMinBuildHeight()+1.0D || currentY>level.getMaxBuildHeight()-2.0D)
@@ -1116,12 +1142,24 @@ public final class RiftController {
                 }
                 lastVelocityY=nextMovement.y;
                 lastActivation=activation;
-                currentX+=nextMovement.x;
-                currentY+=nextMovement.y;
-                currentZ+=nextMovement.z;
+                double nextX=currentX+nextMovement.x;
+                double nextY=currentY+nextMovement.y;
+                double nextZ=currentZ+nextMovement.z;
+                net.minecraft.world.phys.AABB nextBox=player.getBoundingBox().move(
+                    nextMovement.x,nextMovement.y,nextMovement.z);
+                if(!gravityProbeCollisionFree(level,player,nextBox))
+                    throw new IllegalStateException("CI gravity trajectory entered a collision or unloaded chunk");
+                collisionSamples++;
+                currentX=nextX;
+                currentY=nextY;
+                currentZ=nextZ;
                 movement=nextMovement;
                 previousActivation=activation;
             }
+            if(collisionSamples!=CI_GRAVITY_TRAJECTORY_STEPS+1)
+                throw new IllegalStateException("CI gravity trajectory collision sample count regression");
+            LOGGER.info("BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_COLLISION_PATH_VERIFIED mode={} steps={} collisionSamples={} collisionFree=true loadedChunksOnly=true",
+                lift?"lift":"sink",CI_GRAVITY_TRAJECTORY_STEPS,collisionSamples);
             if(lift?!(lastVelocityY>firstVelocityY && lastActivation>=.45D
                     && lastActivation-firstActivation>=.25D)
                 :!(lastVelocityY<firstVelocityY && lastActivation>=.45D
