@@ -980,13 +980,20 @@ if not cands:
 version_id=cands[0]
 print("Launching version:",version_id,flush=True)
 
+deferred_chunk_probe=(
+    os.environ.get("BF_ISOLATED_TEST")=="1"
+    and os.environ.get("BF_TEST_RESTORATION")=="1"
+    and os.environ.get("BF_TEST_SPARSE_RECOVERY")!="1"
+    and os.environ.get("BF_TEST_GREEN_PHASE_PREVIEW")!="1"
+)
+
 opts=minecraft_launcher_lib.utils.generate_test_options()
 opts.update({
     "username":"EHTID_CI",
     "executablePath":"java",
     "defaultExecutablePath":"java",
     "gameDirectory":str(MC),
-    "jvmArguments":["-Xms1G","-Xmx6G","-Djava.awt.headless=false","-Dblackfrequency.ciTestMode=true","-Dblackfrequency.verifyGroundMeshProfiles=true","-Dblackfrequency.ciTickStep=2400"] + (["-Dblackfrequency.ciGreenPhasePreview=true"] if os.environ.get("BF_TEST_GREEN_PHASE_PREVIEW")=="1" else []) + (["-Dblackfrequency.ciClientSmokeTest=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []) + (["-Dblackfrequency.ciExerciseRestoration=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []) + (["-Dblackfrequency.ciPlayerBeaconTest=true"] if os.environ.get("BF_TEST_PLAYER_BEACON")=="1" else []) + (["-Dblackfrequency.ciNaturalBeaconTest=true"] if os.environ.get("BF_TEST_NATURAL_BEACON")=="1" else []) + (["-Dblackfrequency.ciPostRestoreBeaconBreakTest=true"] if os.environ.get("BF_TEST_NATURAL_BEACON")=="1" else []) + (["-Dblackfrequency.ciSparseRecoveryTest=true"] if os.environ.get("BF_TEST_SPARSE_RECOVERY")=="1" else []) + (["-Dblackfrequency.ciSnowBeaconTest=true"] if os.environ.get("BF_TEST_SNOW_BEACON")=="1" else []),
+    "jvmArguments":["-Xms1G","-Xmx6G","-Djava.awt.headless=false","-Dblackfrequency.ciTestMode=true","-Dblackfrequency.verifyGroundMeshProfiles=true","-Dblackfrequency.ciTickStep=2400"] + (["-Dblackfrequency.ciGreenPhasePreview=true"] if os.environ.get("BF_TEST_GREEN_PHASE_PREVIEW")=="1" else []) + (["-Dblackfrequency.ciClientSmokeTest=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []) + (["-Dblackfrequency.ciDeferredChunkProbe=true"] if deferred_chunk_probe else []) + (["-Dblackfrequency.ciExerciseRestoration=true"] if os.environ.get("BF_TEST_RESTORATION")=="1" else []) + (["-Dblackfrequency.ciPlayerBeaconTest=true"] if os.environ.get("BF_TEST_PLAYER_BEACON")=="1" else []) + (["-Dblackfrequency.ciNaturalBeaconTest=true"] if os.environ.get("BF_TEST_NATURAL_BEACON")=="1" else []) + (["-Dblackfrequency.ciPostRestoreBeaconBreakTest=true"] if os.environ.get("BF_TEST_NATURAL_BEACON")=="1" else []) + (["-Dblackfrequency.ciSparseRecoveryTest=true"] if os.environ.get("BF_TEST_SPARSE_RECOVERY")=="1" else []) + (["-Dblackfrequency.ciSnowBeaconTest=true"] if os.environ.get("BF_TEST_SNOW_BEACON")=="1" else []),
     "customResolution":True,
     "resolutionWidth":"1280",
     "resolutionHeight":"720",
@@ -1000,12 +1007,6 @@ option_lines=options_file.read_text(encoding="utf-8",errors="replace").splitline
 # The normal isolated run deliberately uses a two-chunk view/simulation window.
 # Outer fracture snapshots must become genuinely unavailable before recovery, so
 # the client can travel to them and prove deferred restoration without force-loading.
-deferred_chunk_probe=(
-    os.environ.get("BF_ISOLATED_TEST")=="1"
-    and os.environ.get("BF_TEST_RESTORATION")=="1"
-    and os.environ.get("BF_TEST_SPARSE_RECOVERY")!="1"
-    and os.environ.get("BF_TEST_GREEN_PHASE_PREVIEW")!="1"
-)
 option_overrides=[
     ("rawMouseInput","false"),
     ("mouseSensitivity",str(MOUSE_SENSITIVITY)),
@@ -4288,6 +4289,9 @@ def capture_test_world():
                 if restored:
                     if deferred_chunk_probe:
                         final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                        if "BLACK_FREQUENCY_TEST RESTORE_SCAN_BUDGET_SELECTED value=1 deferredClient=true" not in final_log:
+                            print("WORLD_CAPTURE_FAIL: deferred recovery did not use the slow client-only scan budget",flush=True)
+                            return False
                         unresolved_deferred_chunks={
                             key:(count,deferred_restore_reentry_counts.get(key,0))
                             for key,count in deferred_restore_deferred_counts.items()

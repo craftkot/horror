@@ -385,6 +385,12 @@ public final class RiftController {
         return Math.min(MAX_EDITS,savedCount-retainedCount);
     }
 
+    // The disposable low-distance client probe needs enough time for natural chunk
+    // unloading; production and server integration keep the normal 48-check budget.
+    private static int restoreSnapshotScanBudget(boolean deferredClientProbe) {
+        return deferredClientProbe?1:48;
+    }
+
     // A terminal cursor is trustworthy only when every retained snapshot has
     // an outcome. A torn/corrupt save must not report recovery complete while
     // snapshots remain unaccounted for.
@@ -5428,6 +5434,8 @@ public final class RiftController {
             || !combinedPartial.getString().contains("пропущено 13")
             || combinedReloaded.snapshotOverflowEntries!=12
             || combinedReloaded.snapshotMissingEntries!=1
+            || restoreSnapshotScanBudget(false)!=48
+            || restoreSnapshotScanBudget(true)!=1
             || boundedSnapshotOverflowEntries(Integer.MAX_VALUE,0)!=MAX_EDITS
             || boundedSnapshotOverflowEntries(-1,0)!=0
             || boundedSnapshotOverflowEntries(4,5)!=0
@@ -5440,6 +5448,7 @@ public final class RiftController {
             missingReloaded.edits,missingReloaded.snapshots.size(),missingReloaded.snapshotMissingEntries);
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_COMBINED_LOSS_VERIFIED overflow={} missing={} totalSkipped=13",
             combinedReloaded.snapshotOverflowEntries,combinedReloaded.snapshotMissingEntries);
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_BUDGET_PROFILE production=48 deferredClient=1");
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_ACTIONBAR_ONLY_VERIFIED success=true partial=true titlePackets=false");
     }
 
@@ -6367,9 +6376,14 @@ public final class RiftController {
         int restoredThisTick=0,checks=0;
         boolean wasWaitingForUnloadedChunks=s.unloadedSnapshotsPending;
         // Never revisit a small pending set dozens of times in one tick.
-        // In particular, a single snapshot in an unloaded chunk costs one
-        // hasChunk check, not the full 48-check scan budget.
-        int scanBudget=Math.min(48,Math.max(0,s.restoreIndex+1));
+        // The isolated low-distance client probe scans one snapshot per tick so
+        // chunk unloading can occur before the bounded recovery queue is exhausted.
+        boolean deferredClientProbe=CI_TEST && Boolean.getBoolean("blackfrequency.ciDeferredChunkProbe");
+        int configuredScanBudget=restoreSnapshotScanBudget(deferredClientProbe);
+        if(CI_TEST && s.restoreTicks==1)
+            LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_BUDGET_SELECTED value={} deferredClient={}",
+                configuredScanBudget,deferredClientProbe);
+        int scanBudget=Math.min(configuredScanBudget,Math.max(0,s.restoreIndex+1));
         // A failed block write must not be attempted repeatedly in one tick.
         // Other loaded snapshots can still recover; retry this position next tick.
         LongOpenHashSet failedWritesThisTick=beginRestoreTick(s);
