@@ -281,15 +281,20 @@ def verify_restoration_particle_source():
     source_path=ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftController.java"
     source=source_path.read_text(encoding="utf-8")
     geometry_contract=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftGeometry.java").read_text(encoding="utf-8")
-    if ("fieldSamples[tick]=gravityAnomalyField(testX,testZ,tick);" not in source
-            or "double zone=gravityAnomalyField(px,pz,s.finaleTicks);" not in source
-            or "double zone=gravityAnomalyField(player.getX(),player.getZ(),s.finaleTicks);" not in source
+    if ("fieldSamples[tick]=gravityAnomalyField(testX,testZ,tick,level.getSeed());" not in source
+            or "double zone=gravityAnomalyField(px,pz,s.finaleTicks,level.getSeed());" not in source
+            or "double zone=gravityAnomalyField(player.getX(),player.getZ(),s.finaleTicks,level.getSeed());" not in source
             or "double base=Math.sin(x*.115D+gravityFieldBasePhase)" not in source
             or "double cross=Math.sin((x+z)*.047D+gravityFieldCrossPhase-gravityFieldCrossTimeOffset);" not in source
             or "double turbulence=Math.sin((x-z)*.083D+gravityFieldTurbulencePhase+gravityFieldTurbulenceTimeOffset);" not in source
             or "double microTurbulence=Math.sin((x*.17D+z*.13D)" not in source
-            or "private static double gravityAnomalyAperiodicNoise(double x,double z,int ticks)" not in source
-            or "double aperiodicTurbulence=gravityAnomalyAperiodicNoise(x,z,ticks);" not in source
+            or "private static double gravityAnomalyAperiodicNoise(double x,double z,int ticks,long worldSeed)" not in source
+            or "double aperiodicTurbulence=gravityAnomalyAperiodicNoise(x,z,ticks,worldSeed);" not in source
+            or "private static double gravityAnomalyField(double x,double z,int ticks,long worldSeed)" not in source
+            or "private static void verifyGravityAnomalyWorldSeedProfile()" not in source
+            or "gravityAnomalyLatticeHash(int cellX,int cellZ,long worldSeed)" not in source
+            or "worldSeed^0xD1B54A32D192ED03L" not in source
+            or "ANOMALY_FIELD_WORLD_SEED_PROFILE_VERIFIED worldSeedScoped=true deterministic=true distinctWorlds=true bounded=true noRandomAllocation=true" not in source
             or "GRAVITY_APERIODIC_TURBULENCE_AMPLITUDE=.045D;" not in source
             or "double field=base+.12D*cross+.06D*turbulence+.035D*microTurbulence\n            +GRAVITY_APERIODIC_TURBULENCE_AMPLITUDE*aperiodicTurbulence;" not in source
             or "private static void updateGravityFieldPhaseCache(int ticks)" not in source
