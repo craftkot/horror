@@ -543,7 +543,7 @@ def verify_restoration_particle_source():
     cadence_derive=body.find("int cadenceTick=restorationCadenceTick(s.restoreTicks,level.getGameTime())")
     scan_gate=body.find("if(shouldScanRestorePlayers(cadenceTick,beaconPresent))")
     beacon_anchor_guard=body.find("boolean beaconPositionValid=s.beaconPosPresent")
-    beacon_chunk_lookup=body.find("&& level.hasChunkAt(activatedBeacon)",beacon_anchor_guard)
+    beacon_chunk_lookup=body.find("if(beaconPositionValid) {",beacon_anchor_guard)
     cadence_policy_start=source.find("private static int restorationCadenceTick")
     cadence_policy_end=source.find("private static long restorationAnimationTick",cadence_policy_start)
     cadence_policy=source[cadence_policy_start:cadence_policy_end] if cadence_policy_start>=0 and cadence_policy_end>cadence_policy_start else ""
@@ -555,6 +555,12 @@ def verify_restoration_particle_source():
             or not (0<=tick_advance<cadence_derive<scan_gate<player_loop<=menu_guard)
             or "private static boolean isRecoveryBeaconVisualAnchorValid(" not in source
             or not (0<=beacon_anchor_guard<beacon_chunk_lookup)
+            or "beaconChunkLoaded=level.hasChunk(beaconChunkX,beaconChunkZ);" not in body
+            or "beaconChunkLoaded=s.restoreChunksLoadedThisTick.contains(beaconChunkKey);" not in body
+            or "boolean beaconPresent=beaconChunkLoaded" not in body
+            or "if(restoreChunkKey==beaconChunkKey) beaconChunkSnapshotCacheHit=true;" not in body
+            or "RESTORE_BEACON_CHUNK_CACHE_PROFILE" not in body
+            or "level.hasChunkAt(activatedBeacon)" in body
             or "boolean beaconPosPresent;" not in state_fields
             or 'boolean beaconPositionPresent=n.contains("beaconPos");' not in snapshot_load
             or 'boolean beaconPositionValid=n.contains("beaconPos",Tag.TAG_LONG);' not in snapshot_load
