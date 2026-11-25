@@ -2863,6 +2863,12 @@ public final class RiftClientState {
                 && ((blockX&1)==0 || (blockZ&1)==0);
         }
 
+        // Accent motes must not spawn inside a second foliage layer above the sampled plant.
+        // The ground ribbon still renders beneath leaves; only the optional particle is suppressed.
+        private static boolean isCanopyAccentHeadroomAvailable(BlockState head) {
+            return head!=null && head.isAir() && head.getFluidState().isEmpty();
+        }
+
         private static boolean canopyAccentCandidateInsideExpandedSegmentBounds(double x,double z,
                 GroundPoint a,GroundPoint b) {
             if(a==null || b==null || !Double.isFinite(x) || !Double.isFinite(z)
@@ -3000,6 +3006,12 @@ public final class RiftClientState {
                 && Math.abs((plantTop-70.8D)-GROUND_CANOPY_ACCENT_VERTICAL_OFFSET)<1.0E-9D
                 && Math.abs(groundSurfaceOffset(1.0D,Double.NaN)-1.0D)<1.0E-9D
                 && Math.abs(groundSurfaceOffset(.5D,Double.NaN)-.5D)<1.0E-9D;
+            boolean canopyAccentHeadroomProfile=
+                isCanopyAccentHeadroomAvailable(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState())
+                && !isCanopyAccentHeadroomAvailable(net.minecraft.world.level.block.Blocks.OAK_LEAVES.defaultBlockState())
+                && !isCanopyAccentHeadroomAvailable(net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState())
+                && !isCanopyAccentHeadroomAvailable(net.minecraft.world.level.block.Blocks.WATER.defaultBlockState())
+                && isGroundHeadClear(net.minecraft.world.level.block.Blocks.OAK_LEAVES.defaultBlockState());
             GroundSegment fixture=new GroundSegment(new GroundPoint(0.0D,70.0D,0.0D),
                 new GroundPoint(1.0D,70.0D,0.0D),0.0D,1.0D,GROUND_SAMPLES[0],
                 1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
@@ -3042,7 +3054,8 @@ public final class RiftClientState {
             if(!(selected && sparse && threeOfFourPattern && negativeCoordinatePattern && deterministic && candidateBudgetRejected && negativeCounterRejected
                 && rotationProfile && emissionThrottleProfile
                 && zeroEmissionScanRecorded && emptyScanPreservesAttempt
-                && nonPlantsRejected && particleScaleBounded && particleOffsetBounded && foliageClearanceProfile
+                && nonPlantsRejected && particleScaleBounded && particleOffsetBounded
+                && foliageClearanceProfile && canopyAccentHeadroomProfile
                 && Math.abs(plantTop-71.06D)<1.0E-9D
                 && Math.abs(invalidHeight-70.26D)<1.0E-9D
                 && Math.abs(excessiveHeight-71.26D)<1.0E-9D
@@ -3068,6 +3081,8 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FOLIAGE_CLEARANCE_VERIFIED offset={} particleScale={} baseRibbonUnchanged=true bounded=true",
                 GROUND_CANOPY_ACCENT_VERTICAL_OFFSET,GROUND_CANOPY_ACCENT_PARTICLE_SCALE);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_HEADROOM_POLICY_VERIFIED airOnly=true leavesRejected=true plantsRejected=true fluidsRejected=true ribbonStillAllowed=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED near=true far=false broadPhaseCorner=true exactCornerRejected=true invalidBoundsRejected=true heightBounded=true invalidRejected=true emptyMeshRejected=true");
         }
@@ -3119,8 +3134,8 @@ public final class RiftClientState {
 
                 double surfaceOffset=groundSurfaceOffset(supportHeight,snowLayerHeight);
                 double groundY=candidateY-1+surfaceOffset+GROUND_SURFACE_CLEARANCE;
-                if(emitCanopyAccent && plantSurface && Double.isFinite(plantShapeHeight)
-                    && plantShapeHeight>0.0D
+                if(emitCanopyAccent && plantSurface && isCanopyAccentHeadroomAvailable(head)
+                    && Double.isFinite(plantShapeHeight) && plantShapeHeight>0.0D
                     && shouldQueueCanopyAccentCandidate(surface,blockX,blockZ,groundCanopyAccentCandidateCount)) {
                     double accentY=canopyAccentParticleY(candidateY,plantShapeHeight);
                     if(Double.isFinite(accentY) && accentY>=level.getMinBuildHeight()

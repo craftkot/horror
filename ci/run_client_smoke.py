@@ -4414,6 +4414,15 @@ def capture_test_world():
             if canopy_clearance_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: canopy accent clearance above short foliage was not verified",flush=True)
                 return False
+            canopy_headroom_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_HEADROOM_POLICY_VERIFIED "
+                "airOnly=true leavesRejected=true plantsRejected=true fluidsRejected=true ribbonStillAllowed=true"
+            )
+            if (canopy_headroom_marker not in log_after
+                    or "isCanopyAccentHeadroomAvailable(head)" not in camera_source
+                    or "return head!=null && head.isAir() && head.getFluidState().isEmpty();" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: canopy accent particles were not restricted to clear headroom",flush=True)
+                return False
             canopy_segment_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED "
                 "near=true far=false broadPhaseCorner=true exactCornerRejected=true invalidBoundsRejected=true heightBounded=true invalidRejected=true emptyMeshRejected=true"
