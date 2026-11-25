@@ -1020,6 +1020,42 @@ def capture_test_world():
         if focus:
             focus_game()
         return subprocess.run(["xdotool","key","--clearmodifiers",k],check=False)
+    def send_isolated_chat_command(command,confirmation,description,timeout=8.0):
+        # This helper is used only in the disposable isolated client world.
+        # A player teleport loads chunks through normal player movement; it never
+        # calls setChunkForced or any server-side chunk-loading API.
+        if not focus_game():
+            print("WORLD_CAPTURE_FAIL: Minecraft focus was not confirmed for",description,flush=True)
+            return False
+        log_offset=latest.stat().st_size if latest.exists() else 0
+        opened=key("t",focus=False)
+        time.sleep(0.35)
+        typed=subprocess.run(
+            ["xdotool","type","--clearmodifiers","--delay","5",command],
+            check=False)
+        time.sleep(0.12)
+        submitted=key("Return",focus=False)
+        if opened.returncode!=0 or typed.returncode!=0 or submitted.returncode!=0:
+            print("WORLD_CAPTURE_FAIL: could not submit isolated command for",description,flush=True)
+            return False
+        deadline=time.monotonic()+timeout
+        while time.monotonic()<deadline and p.poll() is None:
+            try:
+                with latest.open("rb") as stream:
+                    size=stream.seek(0,os.SEEK_END)
+                    if size<log_offset:
+                        fresh=""
+                    else:
+                        stream.seek(log_offset)
+                        fresh=stream.read().decode("utf-8",errors="replace")
+            except OSError:
+                fresh=""
+            if re.search(confirmation,fresh):
+                print("WORLD_CAPTURE: server acknowledged",description,flush=True)
+                return True
+            time.sleep(0.1)
+        print("WORLD_CAPTURE_FAIL: no server acknowledgement for",description,flush=True)
+        return False
     def click(x,y,focus=True):
         # Hold/release explicitly: some GLFW clients ignore xdotool's fast click.
         if focus:
@@ -4002,9 +4038,52 @@ def capture_test_world():
                 deadline_restore=time.time()+480
                 restored=False
                 restoration_capture_attempted_markers=set()
+                deferred_restore_chunks_seen=set()
+                deferred_restore_chunk_re=re.compile(
+                    r"BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_DEFERRED "
+                    r"x=(-?\d+) y=(-?\d+) z=(-?\d+) "
+                    r"chunkX=(-?\d+) chunkZ=(-?\d+) loadedOnly=true")
                 while time.time()<deadline_restore and p.poll() is None:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     try_beacon_click(current)
+                    if os.environ.get("BF_ISOLATED_TEST")=="1":
+                        for deferred in deferred_restore_chunk_re.finditer(current):
+                            chunk_x,chunk_z=int(deferred.group(4)),int(deferred.group(5))
+                            chunk_key=(chunk_x,chunk_z)
+                            if chunk_key in deferred_restore_chunks_seen:
+                                continue
+                            reentered_marker=(
+                                "BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_REENTERED "
+                                f"chunkX={chunk_x} chunkZ={chunk_z} loadedOnly=true")
+                            if reentered_marker in current:
+                                deferred_restore_chunks_seen.add(chunk_key)
+                                continue
+                            previous_reentries=current.count(reentered_marker)
+                            target_x=chunk_x*16+8
+                            target_z=chunk_z*16+8
+                            if not send_isolated_chat_command(
+                                    f"/tp @s {target_x} 120 {target_z}",
+                                    r"Teleported .* to ",
+                                    f"load deferred recovery chunk {chunk_x},{chunk_z}"):
+                                return False
+                            deferred_restore_chunks_seen.add(chunk_key)
+                            reentry_deadline=time.monotonic()+12.0
+                            reentered=False
+                            while time.monotonic()<reentry_deadline and p.poll() is None:
+                                current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else current
+                                if current.count(reentered_marker)>previous_reentries:
+                                    reentered=True
+                                    break
+                                if "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" in current:
+                                    reentered=True
+                                    break
+                                time.sleep(0.1)
+                            if not reentered:
+                                print("WORLD_CAPTURE_FAIL: deferred recovery chunk did not re-enter loaded state",
+                                      chunk_x,chunk_z,flush=True)
+                                return False
+                            print("WORLD_CAPTURE: player movement loaded deferred recovery chunk",
+                                  chunk_x,chunk_z,"loadedOnly=true",flush=True)
                     initial_pulse_marker="BLACK_FREQUENCY_TEST RESTORE_INITIAL_BEACON_PULSE_EMITTED ring=24 sparks=4 viewer=true"
                     stabilization_pulse_marker="BLACK_FREQUENCY_TEST BEACON_STABILIZATION_PULSE viewerScan=shared"
                     aura_restoration_marker="BLACK_FREQUENCY_TEST BEACON_AURA_RESTORATION_ACTIVE_RENDERED progressZero=true loadedOnly=true"
@@ -4035,6 +4114,30 @@ def capture_test_world():
                     capture_sky_before_beacon()
                     time.sleep(.1)
                 if restored:
+                    if deferred_restore_chunks_seen:
+                        final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                        safe_pad=re.search(
+                            r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT "
+                            r"x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
+                            final_log)
+                        if not safe_pad:
+                            print("WORLD_CAPTURE_FAIL: safe recovery pad coordinates are missing after deferred-chunk traversal",
+                                  flush=True)
+                            return False
+                        pad_x,pad_y,pad_z=map(int,safe_pad.groups())
+                        if not send_isolated_chat_command(
+                                f"/tp @s {pad_x} {pad_y} {pad_z}",
+                                r"Teleported .* to ",
+                                "return to physical recovery beacon pad"):
+                            return False
+                        print("WORLD_CAPTURE: returned to physical beacon pad after loaded-only recovery",
+                              pad_x,pad_y,pad_z,flush=True)
+                        time.sleep(0.25)
+                        final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else final_log
+                        if "BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_HINT_SENT" not in final_log:
+                            print("WORLD_CAPTURE_FAIL: deferred-chunk recovery did not send the player-facing wait hint",
+                                  flush=True)
+                            return False
                     # The server sends the inactive state before the completion overlay.
                     # Require one real client render from the short aura fade, even if
                     # the server consumes the physical beacon immediately afterward.
