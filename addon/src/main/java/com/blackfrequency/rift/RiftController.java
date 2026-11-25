@@ -1092,6 +1092,7 @@ public final class RiftController {
         double maximumHorizontalVelocity=0.0D,maximumVerticalVelocity=0.0D;
         double previousActivation=Double.NaN;
         int collisionSamples=0;
+        int terminalVelocityNoopSteps=0;
         double threshold=lift?GRAVITY_LIFT_ZONE_THRESHOLD:GRAVITY_SINK_ZONE_THRESHOLD;
         double verticalCap=lift?GRAVITY_LIFT_VERTICAL_VELOCITY_CAP:GRAVITY_SINK_VERTICAL_VELOCITY_CAP;
         try {
@@ -1125,10 +1126,20 @@ public final class RiftController {
                 boolean applied=applyRiftGravityImpulse(level,probe,player);
                 net.minecraft.world.phys.Vec3 nextMovement=player.getDeltaMovement();
                 double impulseY=nextMovement.y-beforeVelocityY;
+                // Reaching a terminal cap legitimately turns later acceleration into a no-op.
+                // Treat that as saturation, not as a failed impulse, while rejecting any reversal.
+                boolean atVerticalLimit=lift
+                    ? beforeVelocityY>=verticalCap-1.0E-9D
+                    : beforeVelocityY<=-verticalCap+1.0E-9D;
+                boolean verticalDirectionPreserved=lift
+                    ? nextMovement.y>=beforeVelocityY-1.0E-9D
+                        && (atVerticalLimit || nextMovement.y>beforeVelocityY+1.0E-9D)
+                    : nextMovement.y<=beforeVelocityY+1.0E-9D
+                        && (atVerticalLimit || nextMovement.y<beforeVelocityY-1.0E-9D);
                 if(!applied || !Double.isFinite(nextMovement.x) || !Double.isFinite(nextMovement.y)
-                    || !Double.isFinite(nextMovement.z)
-                    || (lift?impulseY<=0.0D:impulseY>=0.0D))
+                    || !Double.isFinite(nextMovement.z) || !verticalDirectionPreserved)
                     throw new IllegalStateException("CI actual ServerPlayer gravity trajectory impulse regression");
+                if(atVerticalLimit && Math.abs(impulseY)<=1.0E-9D) terminalVelocityNoopSteps++;
                 double horizontalVelocity=Math.max(Math.abs(nextMovement.x),Math.abs(nextMovement.z));
                 double verticalVelocity=Math.abs(nextMovement.y);
                 if(horizontalVelocity>GRAVITY_ANOMALY_HORIZONTAL_DRIFT_CAP+1.0E-9D
@@ -1165,10 +1176,11 @@ public final class RiftController {
                 :!(lastVelocityY<firstVelocityY && lastActivation>=.45D
                     && lastActivation-firstActivation>=.25D))
                 throw new IllegalStateException("CI actual ServerPlayer trajectory did not cross the gravity ramp");
-            LOGGER.info("BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_TRAJECTORY_MODE_VERIFIED mode={} steps={} startTick={} firstActivation={} lastActivation={} maxActivationStep={} firstVelocityY={} finalVelocityY={} maxHorizontalVelocity={} maxVerticalVelocity={} horizontalCap={} verticalCap={} loadedChunksOnly=true",
+            LOGGER.info("BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_TRAJECTORY_MODE_VERIFIED mode={} steps={} startTick={} firstActivation={} lastActivation={} maxActivationStep={} firstVelocityY={} finalVelocityY={} terminalVelocityNoopSteps={} maxHorizontalVelocity={} maxVerticalVelocity={} horizontalCap={} verticalCap={} loadedChunksOnly=true",
                 lift?"lift":"sink",CI_GRAVITY_TRAJECTORY_STEPS,startTick,
                 firstActivation,lastActivation,maximumActivationStep,firstVelocityY,lastVelocityY,
-                maximumHorizontalVelocity,maximumVerticalVelocity,GRAVITY_ANOMALY_HORIZONTAL_DRIFT_CAP,verticalCap);
+                terminalVelocityNoopSteps,maximumHorizontalVelocity,maximumVerticalVelocity,
+                GRAVITY_ANOMALY_HORIZONTAL_DRIFT_CAP,verticalCap);
         } finally {
             player.setPos(originalPosition.x,originalPosition.y,originalPosition.z);
             player.setDeltaMovement(originalMovement);
@@ -1282,6 +1294,7 @@ public final class RiftController {
             {0.0D,-0.09D,-0.09D},
             {-0.53D,-0.09D,-0.55D},
             {-0.8D,-0.09D,-0.89D},
+            {-GRAVITY_SINK_VERTICAL_VELOCITY_CAP,-0.09D,-GRAVITY_SINK_VERTICAL_VELOCITY_CAP},
             {0.2D,-0.09D,0.11D},
             {Double.NaN,-0.09D,-0.09D},
             {Double.NEGATIVE_INFINITY,-0.09D,-0.09D},
@@ -1305,6 +1318,7 @@ public final class RiftController {
             {Double.POSITIVE_INFINITY,0.05D,0.05D},
             {0.2D,Double.NEGATIVE_INFINITY,0.2D},
             {0.8D,0.05D,0.8D},
+            {GRAVITY_LIFT_VERTICAL_VELOCITY_CAP,0.19D,GRAVITY_LIFT_VERTICAL_VELOCITY_CAP},
             {0.8D,-0.05D,0.75D},
             {Double.MAX_VALUE,Double.MAX_VALUE,Double.MAX_VALUE},
             {-Double.MAX_VALUE,-Double.MAX_VALUE,-Double.MAX_VALUE}
