@@ -180,7 +180,7 @@ jobs:
             python3 - <<'PY'
           import pathlib,re
           log=pathlib.Path("world-test.log").read_text(errors="replace")
-          match=re.search(r"BLACK_FREQUENCY_TEST RESTORE_CHUNK_AVAILABILITY_CACHE_VERIFIED candidates=(\\d+) probes=(\\d+) cacheHits=(\\d+) uniqueChunks=(\\d+) loadedChunks=(\\d+) transient=true loadedOnly=true",log)
+          match=re.search(r"BLACK_FREQUENCY_TEST RESTORE_CHUNK_AVAILABILITY_CACHE_VERIFIED candidates=(\d+) probes=(\d+) cacheHits=(\d+) uniqueChunks=(\d+) loadedChunks=(\d+) transient=true loadedOnly=true",log)
           assert match, "Restore chunk-availability cache was not exercised"
           candidates,probes,hits,unique,loaded=map(int,match.groups())
           assert candidates==probes+hits, f"Unaccounted chunk lookups: {candidates=} {probes=} {hits=}"
