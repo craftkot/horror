@@ -875,18 +875,39 @@ public final class RiftController {
         probe.x=(int)Math.floor(previousPosition.x);
         probe.z=(int)Math.floor(previousPosition.z);
         double testX=probe.x+.5D,testZ=probe.z+.5D;
-        int probeTicks=-1;
-        double probeZone=Double.NaN;
-        for(int tick=0;tick<10000;tick++) {
+        int nearLiftTick=-1,fullLiftTick=-1,nearSinkTick=-1,fullSinkTick=-1;
+        double nearLiftZone=Double.NaN,fullLiftZone=Double.NaN;
+        double nearSinkMagnitude=Double.NaN,fullSinkMagnitude=Double.NaN;
+        double nearLiftMin=GRAVITY_LIFT_ZONE_THRESHOLD+GRAVITY_ZONE_ACTIVATION_WIDTH*.20D;
+        double nearLiftMax=GRAVITY_LIFT_ZONE_THRESHOLD+GRAVITY_ZONE_ACTIVATION_WIDTH*.30D;
+        double nearSinkMin=GRAVITY_SINK_ZONE_THRESHOLD+GRAVITY_ZONE_ACTIVATION_WIDTH*.20D;
+        double nearSinkMax=GRAVITY_SINK_ZONE_THRESHOLD+GRAVITY_ZONE_ACTIVATION_WIDTH*.30D;
+        for(int tick=0;tick<10000 && (nearLiftTick<0 || fullLiftTick<0
+                || nearSinkTick<0 || fullSinkTick<0);tick++) {
             double zone=gravityAnomalyField(testX,testZ,tick);
-            if(zone>GRAVITY_LIFT_ZONE_THRESHOLD) {
-                probeTicks=tick;
-                probeZone=zone;
-                break;
+            if(!Double.isFinite(zone)) continue;
+            if(nearLiftTick<0 && zone>=nearLiftMin && zone<=nearLiftMax) {
+                nearLiftTick=tick;
+                nearLiftZone=zone;
+            }
+            if(fullLiftTick<0 && zone>=GRAVITY_LIFT_ZONE_THRESHOLD+GRAVITY_ZONE_ACTIVATION_WIDTH) {
+                fullLiftTick=tick;
+                fullLiftZone=zone;
+            }
+            double sinkMagnitude=-zone;
+            if(nearSinkTick<0 && sinkMagnitude>=nearSinkMin && sinkMagnitude<=nearSinkMax) {
+                nearSinkTick=tick;
+                nearSinkMagnitude=sinkMagnitude;
+            }
+            if(fullSinkTick<0 && sinkMagnitude>=GRAVITY_SINK_ZONE_THRESHOLD+GRAVITY_ZONE_ACTIVATION_WIDTH) {
+                fullSinkTick=tick;
+                fullSinkMagnitude=sinkMagnitude;
             }
         }
-        if(probeTicks<0)
-            throw new IllegalStateException("CI could not place passenger probe inside a lift zone");
+        if(nearLiftTick<0 || fullLiftTick<0 || nearSinkTick<0 || fullSinkTick<0)
+            throw new IllegalStateException("CI could not sample both gravity activation ramps");
+        int probeTicks=fullLiftTick;
+        double probeZone=fullLiftZone;
         probe.finaleTicks=probeTicks;
         double testY=Math.max(level.getMinBuildHeight()+2.0D,
             Math.min(level.getMaxBuildHeight()-3.0D,level.getSeaLevel()+10.0D));
@@ -895,10 +916,48 @@ public final class RiftController {
             throw new IllegalStateException("CI could not create passenger probe mount");
         try {
             player.setPos(testX,testY,testZ);
+            if(!level.hasChunk(probe.x>>4,probe.z>>4))
+                throw new IllegalStateException("CI gravity probe escaped the player's already-loaded chunk");
             player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
-            boolean controlImpulseApplied=applyRiftGravityImpulse(level,probe,player);
-            if(!controlImpulseApplied
-                || net.minecraft.world.phys.Vec3.ZERO.equals(player.getDeltaMovement()))
+            probe.finaleTicks=nearLiftTick;
+            boolean nearLiftApplied=applyRiftGravityImpulse(level,probe,player);
+            double nearLiftImpulse=player.getDeltaMovement().y;
+            player.fallDistance=previousFallDistance;
+            player.hurtMarked=previousHurtMarked;
+
+            player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            probe.finaleTicks=fullLiftTick;
+            boolean fullLiftApplied=applyRiftGravityImpulse(level,probe,player);
+            double fullLiftImpulse=player.getDeltaMovement().y;
+            player.fallDistance=previousFallDistance;
+            player.hurtMarked=previousHurtMarked;
+
+            player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            probe.finaleTicks=nearSinkTick;
+            boolean nearSinkApplied=applyRiftGravityImpulse(level,probe,player);
+            double nearSinkImpulse=player.getDeltaMovement().y;
+            player.fallDistance=previousFallDistance;
+            player.hurtMarked=previousHurtMarked;
+
+            player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            probe.finaleTicks=fullSinkTick;
+            boolean fullSinkApplied=applyRiftGravityImpulse(level,probe,player);
+            double fullSinkImpulse=player.getDeltaMovement().y;
+            if(!nearLiftApplied || !fullLiftApplied || !nearSinkApplied || !fullSinkApplied
+                || !(nearLiftImpulse>0.0D) || !(fullLiftImpulse>nearLiftImpulse)
+                || !(nearSinkImpulse<0.0D) || !(fullSinkImpulse<nearSinkImpulse)
+                || !(nearLiftZone<fullLiftZone) || !(nearSinkMagnitude<fullSinkMagnitude))
+                throw new IllegalStateException("CI actual ServerPlayer gravity activation ramp regression");
+            LOGGER.info("BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_RAMP_VERIFIED liftNearZone={} liftFullZone={} liftNearY={} liftFullY={} sinkNearMagnitude={} sinkFullMagnitude={} sinkNearY={} sinkFullY={} sameLoadedChunk=true",
+                nearLiftZone,fullLiftZone,nearLiftImpulse,fullLiftImpulse,
+                nearSinkMagnitude,fullSinkMagnitude,nearSinkImpulse,fullSinkImpulse);
+
+            probe.finaleTicks=fullLiftTick;
+            player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            player.fallDistance=previousFallDistance;
+            player.hurtMarked=previousHurtMarked;
+            boolean controlImpulseApplied=fullLiftApplied;
+            if(!controlImpulseApplied || !(fullLiftImpulse>0.0D))
                 throw new IllegalStateException("CI lift-zone control probe did not apply an impulse");
             double halfStrength=restorationGravityScale(RESTORE_GRAVITY_FADE_TICKS/2);
             player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);

@@ -4752,6 +4752,9 @@ def capture_test_world():
                 if "BLACK_FREQUENCY_TEST PASSENGER_RIFT_IMPULSE_SUPPRESSED_VERIFIED controlImpulse=true" not in log_after:
                     print("WORLD_CAPTURE_FAIL: mounted player was not proven immune inside an active lift zone",flush=True)
                     return False
+                if "BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_RAMP_VERIFIED" not in log_after:
+                    print("WORLD_CAPTURE_FAIL: real ServerPlayer lift/sink activation ramps were not verified",flush=True)
+                    return False
             if "BLACK_FREQUENCY_TEST CLIENT_CAMERA_ROTATION" not in log_after:
                 print("WORLD_CAPTURE_FAIL: actual client camera rotation telemetry was not recorded",flush=True)
                 return False
