@@ -6696,7 +6696,8 @@ public final class RiftController {
                 if(s.naturalBeaconPos==Long.MIN_VALUE || level.players().isEmpty())
                     throw new IllegalStateException("CI recovery beacon missing after restoration");
                 BlockPos beacon=BlockPos.of(s.naturalBeaconPos);
-                if(!level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)) {
+                if(Boolean.getBoolean("blackfrequency.ciDeferredChunkProbe")
+                        && !level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4)) {
                     // The deferred client probe deliberately leaves this chunk unloaded.
                     // Its real player click runs after the harness returns to the safe pad.
                     LOGGER.info("BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_SYNTHETIC_SKIPPED_UNLOADED loadedOnly=true");
