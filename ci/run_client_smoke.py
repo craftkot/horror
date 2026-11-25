@@ -281,7 +281,20 @@ def verify_restoration_particle_source():
     source_path=ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftController.java"
     source=source_path.read_text(encoding="utf-8")
     geometry_contract=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftGeometry.java").read_text(encoding="utf-8")
-    if ("fieldSamples[tick]=gravityAnomalyField(testX,testZ,tick,level.getSeed());" not in source
+    gravity_probe_start=source.find("private static void verifyActualPassengerGravityImmunity(")
+    gravity_probe_end=source.find("\n    private static",gravity_probe_start+1)
+    gravity_probe_body=source[gravity_probe_start:gravity_probe_end] if gravity_probe_start>=0 and gravity_probe_end>gravity_probe_start else ""
+    if ("fieldSamples[tick]=gravityAnomalyField(candidateX,candidateZ,tick,worldSeed);" not in source
+            or "int loadedChunkX=probe.x>>4,loadedChunkZ=probe.z>>4;" not in gravity_probe_body
+            or "if(!level.hasChunk(loadedChunkX,loadedChunkZ))" not in gravity_probe_body
+            or "for(int offsetX=4;offsetX<=12 && !trajectoryPositionFound;offsetX+=4)" not in gravity_probe_body
+            or "for(int offsetZ=4;offsetZ<=12;offsetZ+=4)" not in gravity_probe_body
+            or "minChunkX!=loadedChunkX || maxChunkX!=loadedChunkX" not in gravity_probe_body
+            or "minChunkZ!=loadedChunkZ || maxChunkZ!=loadedChunkZ" not in gravity_probe_body
+            or "if((player.blockPosition().getX()>>4)!=loadedChunkX" not in gravity_probe_body
+            or "BLACK_FREQUENCY_TEST GRAVITY_TRAJECTORY_PROBE_POSITION_VERIFIED" not in gravity_probe_body
+            or "sameLoadedChunk=true playerBoxInsideChunk=true noChunkLoad=true" not in gravity_probe_body
+            or "level.getChunk(" in gravity_probe_body
             or "double zone=gravityAnomalyField(px,pz,s.finaleTicks,level.getSeed());" not in source
             or "double zone=gravityAnomalyField(player.getX(),player.getZ(),s.finaleTicks,level.getSeed());" not in source
             or "double base=Math.sin(x*.115D+gravityFieldBasePhase)" not in source
