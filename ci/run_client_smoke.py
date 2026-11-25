@@ -4080,6 +4080,9 @@ def capture_test_world():
                 restoration_capture_attempted_markers=set()
                 deferred_restore_chunks_seen=set()
                 deferred_restore_chunks_reentered=set()
+                deferred_restore_deferred_counts={}
+                deferred_restore_reentry_counts={}
+                deferred_probe_player_moved=False
                 deferred_restore_chunk_re=re.compile(
                     r"BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_DEFERRED "
                     r"x=(-?\d+) y=(-?\d+) z=(-?\d+) "
@@ -4087,20 +4090,45 @@ def capture_test_world():
                 while time.time()<deadline_restore and p.poll() is None:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     try_beacon_click(current)
+                    # Capture the real beacon pulse first. Then move the player beyond
+                    # the fracture's 48-block radius (but inside the 128-block recovery
+                    # audience) so the integrated server naturally unloads its chunks.
+                    # The later /tp commands load only the chunks the player visits.
+                    if (deferred_chunk_probe and not deferred_probe_player_moved
+                            and restoration_shot
+                            and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current):
+                        if not send_isolated_chat_command(
+                                "/tp @s ~96 120 ~",
+                                r"Teleported .* to ",
+                                "leave the fracture and unload its recovery chunks"):
+                            return False
+                        deferred_probe_player_moved=True
+                        print("WORLD_CAPTURE: player left the fracture to trigger natural chunk unload",
+                              "loadedOnly=true",flush=True)
+                        time.sleep(.25)
+                        current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else current
                     if os.environ.get("BF_ISOLATED_TEST")=="1":
+                        deferred_events={}
                         for deferred in deferred_restore_chunk_re.finditer(current):
                             chunk_x,chunk_z=int(deferred.group(4)),int(deferred.group(5))
                             chunk_key=(chunk_x,chunk_z)
-                            if chunk_key in deferred_restore_chunks_seen:
+                            deferred_events[chunk_key]=deferred_events.get(chunk_key,0)+1
+                        for chunk_key,total_events in deferred_events.items():
+                            processed_events=deferred_restore_deferred_counts.get(chunk_key,0)
+                            if processed_events>=total_events:
                                 continue
+                            deferred_restore_deferred_counts[chunk_key]=processed_events+1
+                            chunk_x,chunk_z=chunk_key
                             reentered_marker=(
                                 "BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_REENTERED "
                                 f"chunkX={chunk_x} chunkZ={chunk_z} loadedOnly=true")
-                            if reentered_marker in current:
+                            previous_reentries=deferred_restore_reentry_counts.get(chunk_key,0)
+                            observed_reentries=current.count(reentered_marker)
+                            if observed_reentries>previous_reentries:
                                 deferred_restore_chunks_seen.add(chunk_key)
                                 deferred_restore_chunks_reentered.add(chunk_key)
+                                deferred_restore_reentry_counts[chunk_key]=observed_reentries
                                 continue
-                            previous_reentries=current.count(reentered_marker)
                             target_x=chunk_x*16+8
                             target_z=chunk_z*16+8
                             if not send_isolated_chat_command(
@@ -4113,16 +4141,17 @@ def capture_test_world():
                             reentered=False
                             while time.monotonic()<reentry_deadline and p.poll() is None:
                                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else current
-                                if current.count(reentered_marker)>previous_reentries:
+                                observed_reentries=current.count(reentered_marker)
+                                if observed_reentries>previous_reentries:
                                     deferred_restore_chunks_reentered.add(chunk_key)
+                                    deferred_restore_reentry_counts[chunk_key]=observed_reentries
                                     reentered=True
                                     break
                                 if "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" in current:
-                                    reentered=True
                                     break
                                 time.sleep(0.1)
                             if not reentered:
-                                print("WORLD_CAPTURE_FAIL: deferred recovery chunk did not re-enter loaded state",
+                                print("WORLD_CAPTURE_FAIL: deferred recovery chunk did not emit a loaded-only re-entry",
                                       chunk_x,chunk_z,flush=True)
                                 return False
                             print("WORLD_CAPTURE: player movement loaded deferred recovery chunk",
@@ -4159,9 +4188,17 @@ def capture_test_world():
                 if restored:
                     if deferred_chunk_probe:
                         final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-                        if not deferred_restore_chunks_seen or not deferred_restore_chunks_reentered:
-                            print("WORLD_CAPTURE_FAIL: low-distance probe did not defer and then re-enter a valid recovery snapshot chunk",
-                                  flush=True)
+                        unresolved_deferred_chunks={
+                            key:(count,deferred_restore_reentry_counts.get(key,0))
+                            for key,count in deferred_restore_deferred_counts.items()
+                            if deferred_restore_reentry_counts.get(key,0)<count
+                        }
+                        if (not deferred_probe_player_moved
+                                or not deferred_restore_chunks_seen
+                                or not deferred_restore_chunks_reentered
+                                or unresolved_deferred_chunks):
+                            print("WORLD_CAPTURE_FAIL: low-distance probe did not re-enter every deferred valid snapshot chunk",
+                                  unresolved_deferred_chunks,flush=True)
                             return False
                         if "BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_HINT_SENT" not in final_log:
                             print("WORLD_CAPTURE_FAIL: deferred recovery did not send the player-facing wait hint",
