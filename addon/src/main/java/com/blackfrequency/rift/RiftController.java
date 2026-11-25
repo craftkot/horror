@@ -205,6 +205,9 @@ public final class RiftController {
     private static final int CI_BEACON_PAD_LATERAL_RADIUS=0;
     // Vanilla survival reach, measured from the player's eyes to the target block AABB.
     private static final double CI_BEACON_INTERACTION_MAX_DISTANCE=4.5D;
+    // CI-only integrated ServerPlayer probe; each step moves within an already-loaded chunk.
+    private static final int CI_GRAVITY_TRAJECTORY_STEPS=8;
+    private static final int CI_GRAVITY_TRAJECTORY_SEARCH_TICKS=10000;
 
     private static double fissurePulseWave(double phase,int segment,int arm) {
         if(!Double.isFinite(phase)) return 0.0D;
@@ -882,9 +885,12 @@ public final class RiftController {
         double nearLiftMax=GRAVITY_LIFT_ZONE_THRESHOLD+GRAVITY_ZONE_ACTIVATION_WIDTH*.30D;
         double nearSinkMin=GRAVITY_SINK_ZONE_THRESHOLD+GRAVITY_ZONE_ACTIVATION_WIDTH*.20D;
         double nearSinkMax=GRAVITY_SINK_ZONE_THRESHOLD+GRAVITY_ZONE_ACTIVATION_WIDTH*.30D;
-        for(int tick=0;tick<10000 && (nearLiftTick<0 || fullLiftTick<0
+        double[] fieldSamples=new double[CI_GRAVITY_TRAJECTORY_SEARCH_TICKS+CI_GRAVITY_TRAJECTORY_STEPS];
+        for(int tick=0;tick<fieldSamples.length;tick++)
+            fieldSamples[tick]=gravityAnomalyField(testX,testZ,tick);
+        for(int tick=0;tick<CI_GRAVITY_TRAJECTORY_SEARCH_TICKS && (nearLiftTick<0 || fullLiftTick<0
                 || nearSinkTick<0 || fullSinkTick<0);tick++) {
-            double zone=gravityAnomalyField(testX,testZ,tick);
+            double zone=fieldSamples[tick];
             if(!Double.isFinite(zone)) continue;
             if(nearLiftTick<0 && zone>=nearLiftMin && zone<=nearLiftMax) {
                 nearLiftTick=tick;
@@ -952,6 +958,15 @@ public final class RiftController {
                 nearLiftZone,fullLiftZone,nearLiftImpulse,fullLiftImpulse,
                 nearSinkMagnitude,fullSinkMagnitude,nearSinkImpulse,fullSinkImpulse);
 
+            int liftTrajectoryStart=findGravityActivationTrajectoryStart(fieldSamples,true);
+            int sinkTrajectoryStart=findGravityActivationTrajectoryStart(fieldSamples,false);
+            if(liftTrajectoryStart<0 || sinkTrajectoryStart<0)
+                throw new IllegalStateException("CI could not find a bounded multi-tick lift/sink trajectory");
+            verifyActualGravityRampTrajectory(level,probe,player,testX,testY,testZ,liftTrajectoryStart,true);
+            verifyActualGravityRampTrajectory(level,probe,player,testX,testY,testZ,sinkTrajectoryStart,false);
+            LOGGER.info("BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_TRAJECTORY_VERIFIED liftSteps={} sinkSteps={} integratedPosition=true loadedChunksOnly=true",
+                CI_GRAVITY_TRAJECTORY_STEPS,CI_GRAVITY_TRAJECTORY_STEPS);
+
             probe.finaleTicks=fullLiftTick;
             player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
             player.fallDistance=previousFallDistance;
@@ -1001,6 +1016,108 @@ public final class RiftController {
             player.setDeltaMovement(previousMovement);
             player.fallDistance=previousFallDistance;
             player.hurtMarked=previousHurtMarked;
+        }
+    }
+
+    /** Find a short, bounded activation ramp in the real time-varying field at the probe position. */
+    private static int findGravityActivationTrajectoryStart(double[] fieldSamples,boolean lift) {
+        if(fieldSamples==null || fieldSamples.length<CI_GRAVITY_TRAJECTORY_STEPS) return -1;
+        double threshold=lift?GRAVITY_LIFT_ZONE_THRESHOLD:GRAVITY_SINK_ZONE_THRESHOLD;
+        for(int start=0;start<=fieldSamples.length-CI_GRAVITY_TRAJECTORY_STEPS;start++) {
+            double firstMagnitude=lift?fieldSamples[start]:-fieldSamples[start];
+            double previous=gravityAnomalyZoneActivation(firstMagnitude,threshold);
+            if(previous<.02D || previous>.20D) continue;
+            boolean valid=true;
+            double maximumStep=0.0D;
+            for(int step=1;step<CI_GRAVITY_TRAJECTORY_STEPS;step++) {
+                double zone=fieldSamples[start+step];
+                double magnitude=lift?zone:-zone;
+                double activation=gravityAnomalyZoneActivation(magnitude,threshold);
+                if(!Double.isFinite(activation) || activation<=.005D) {
+                    valid=false;
+                    break;
+                }
+                maximumStep=Math.max(maximumStep,Math.abs(activation-previous));
+                previous=activation;
+            }
+            if(valid && previous>=.80D && maximumStep<=.45D) return start;
+        }
+        return -1;
+    }
+
+    /**
+     * Integrate eight consecutive impulses on a real ServerPlayer. The probe advances its
+     * position by the resulting velocity, but every position is checked before use so this
+     * diagnostic never requests an unloaded chunk or edits world blocks.
+     */
+    private static void verifyActualGravityRampTrajectory(
+            ServerLevel level,State probe,net.minecraft.server.level.ServerPlayer player,
+            double startX,double startY,double startZ,int startTick,boolean lift) {
+        net.minecraft.world.phys.Vec3 originalPosition=player.position();
+        net.minecraft.world.phys.Vec3 originalMovement=player.getDeltaMovement();
+        float originalFallDistance=player.fallDistance;
+        boolean originalHurtMarked=player.hurtMarked;
+        double currentX=startX,currentY=startY,currentZ=startZ;
+        net.minecraft.world.phys.Vec3 movement=net.minecraft.world.phys.Vec3.ZERO;
+        double firstVelocityY=Double.NaN,lastVelocityY=Double.NaN;
+        double firstActivation=Double.NaN,lastActivation=Double.NaN,maximumActivationStep=0.0D;
+        double previousActivation=Double.NaN;
+        double threshold=lift?GRAVITY_LIFT_ZONE_THRESHOLD:GRAVITY_SINK_ZONE_THRESHOLD;
+        try {
+            player.setPos(startX,startY,startZ);
+            player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            for(int step=0;step<CI_GRAVITY_TRAJECTORY_STEPS;step++) {
+                if(!Double.isFinite(currentX) || !Double.isFinite(currentY) || !Double.isFinite(currentZ)
+                    || currentY<level.getMinBuildHeight()+1.0D || currentY>level.getMaxBuildHeight()-2.0D)
+                    throw new IllegalStateException("CI gravity trajectory left valid world coordinates");
+                int chunkX=((int)Math.floor(currentX))>>4;
+                int chunkZ=((int)Math.floor(currentZ))>>4;
+                if(!level.hasChunk(chunkX,chunkZ))
+                    throw new IllegalStateException("CI gravity trajectory would enter an unloaded chunk");
+                int tick=startTick+step;
+                double zone=gravityAnomalyField(currentX,currentZ,tick);
+                double magnitude=lift?zone:-zone;
+                double activation=gravityAnomalyZoneActivation(magnitude,threshold);
+                if(!Double.isFinite(activation) || activation<=.005D)
+                    throw new IllegalStateException("CI actual ServerPlayer left its active gravity ramp");
+                if(step>0) maximumActivationStep=Math.max(maximumActivationStep,
+                    Math.abs(activation-previousActivation));
+                if(maximumActivationStep>.50D)
+                    throw new IllegalStateException("CI actual ServerPlayer gravity activation changed too abruptly");
+                player.setPos(currentX,currentY,currentZ);
+                player.setDeltaMovement(movement);
+                probe.finaleTicks=tick;
+                double beforeVelocityY=movement.y;
+                boolean applied=applyRiftGravityImpulse(level,probe,player);
+                net.minecraft.world.phys.Vec3 nextMovement=player.getDeltaMovement();
+                double impulseY=nextMovement.y-beforeVelocityY;
+                if(!applied || !Double.isFinite(nextMovement.x) || !Double.isFinite(nextMovement.y)
+                    || !Double.isFinite(nextMovement.z)
+                    || (lift?impulseY<=0.0D:impulseY>=0.0D))
+                    throw new IllegalStateException("CI actual ServerPlayer gravity trajectory impulse regression");
+                if(step==0) {
+                    firstVelocityY=nextMovement.y;
+                    firstActivation=activation;
+                }
+                lastVelocityY=nextMovement.y;
+                lastActivation=activation;
+                currentX+=nextMovement.x;
+                currentY+=nextMovement.y;
+                currentZ+=nextMovement.z;
+                movement=nextMovement;
+                previousActivation=activation;
+            }
+            if(lift?!(lastVelocityY>firstVelocityY && lastActivation>firstActivation && lastActivation>=.65D)
+                :!(lastVelocityY<firstVelocityY && lastActivation>firstActivation && lastActivation>=.65D))
+                throw new IllegalStateException("CI actual ServerPlayer trajectory did not cross the gravity ramp");
+            LOGGER.info("BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_TRAJECTORY_MODE_VERIFIED mode={} steps={} startTick={} firstActivation={} lastActivation={} maxActivationStep={} firstVelocityY={} finalVelocityY={} loadedChunksOnly=true",
+                lift?"lift":"sink",CI_GRAVITY_TRAJECTORY_STEPS,startTick,
+                firstActivation,lastActivation,maximumActivationStep,firstVelocityY,lastVelocityY);
+        } finally {
+            player.setPos(originalPosition.x,originalPosition.y,originalPosition.z);
+            player.setDeltaMovement(originalMovement);
+            player.fallDistance=originalFallDistance;
+            player.hurtMarked=originalHurtMarked;
         }
     }
 
