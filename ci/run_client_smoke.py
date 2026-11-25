@@ -18,10 +18,10 @@ DEFERRED_RESTORE_RADIUS=48
 DEFERRED_RENDER_DISTANCE=2
 # Minecraft 1.20.1 clamps Simulation Distance to [5, 33]; 2 is rejected by Options.
 DEFERRED_SIMULATION_DISTANCE=5
-# Travel farther than the 48-block fracture plus the server's five-chunk simulation halo.
-# The later per-chunk teleports return within the recovery audience and load only visited chunks.
-DEFERRED_PLAYER_TRAVEL_DISTANCE=144
-if DEFERRED_PLAYER_TRAVEL_DISTANCE<=DEFERRED_RESTORE_RADIUS+DEFERRED_SIMULATION_DISTANCE*16:
+# Add a four-chunk margin beyond the fracture and the server's simulation-distance halo.
+# Per-chunk return teleports then load only visited chunks within the recovery audience.
+DEFERRED_PLAYER_TRAVEL_DISTANCE=224
+if DEFERRED_PLAYER_TRAVEL_DISTANCE<=DEFERRED_RESTORE_RADIUS+DEFERRED_SIMULATION_DISTANCE*16+64:
     raise RuntimeError("Deferred probe travel must clear the fracture and simulation-distance halo")
 DEFERRED_SPAWN_ACK_RE=r"Set (?:the )?world spawn(?: point)? to "
 DEFERRED_RESTORE_CHUNK_RE=re.compile(

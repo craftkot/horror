@@ -391,6 +391,12 @@ public final class RiftController {
         return deferredClientProbe?1:48;
     }
 
+    // The disposable client probe leaves two ticks between snapshot checks so
+    // the integrated server can retire stale chunk tickets before the queue ends.
+    private static int restoreSnapshotScanInterval(boolean deferredClientProbe) {
+        return deferredClientProbe?2:1;
+    }
+
     // A terminal cursor is trustworthy only when every retained snapshot has
     // an outcome. A torn/corrupt save must not report recovery complete while
     // snapshots remain unaccounted for.
@@ -5436,6 +5442,8 @@ public final class RiftController {
             || combinedReloaded.snapshotMissingEntries!=1
             || restoreSnapshotScanBudget(false)!=48
             || restoreSnapshotScanBudget(true)!=1
+            || restoreSnapshotScanInterval(false)!=1
+            || restoreSnapshotScanInterval(true)!=2
             || boundedSnapshotOverflowEntries(Integer.MAX_VALUE,0)!=MAX_EDITS
             || boundedSnapshotOverflowEntries(-1,0)!=0
             || boundedSnapshotOverflowEntries(4,5)!=0
@@ -5449,6 +5457,7 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_COMBINED_LOSS_VERIFIED overflow={} missing={} totalSkipped=13",
             combinedReloaded.snapshotOverflowEntries,combinedReloaded.snapshotMissingEntries);
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_BUDGET_PROFILE production=48 deferredClient=1");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_INTERVAL_PROFILE production=1 deferredClient=2");
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_ACTIONBAR_ONLY_VERIFIED success=true partial=true titlePackets=false");
     }
 
@@ -6376,14 +6385,17 @@ public final class RiftController {
         int restoredThisTick=0,checks=0;
         boolean wasWaitingForUnloadedChunks=s.unloadedSnapshotsPending;
         // Never revisit a small pending set dozens of times in one tick.
-        // The isolated low-distance client probe scans one snapshot per tick so
-        // chunk unloading can occur before the bounded recovery queue is exhausted.
+        // The isolated low-distance client probe scans one snapshot every two ticks
+        // so natural chunk unloading can settle before the bounded queue is exhausted.
         boolean deferredClientProbe=CI_TEST && Boolean.getBoolean("blackfrequency.ciDeferredChunkProbe");
         int configuredScanBudget=restoreSnapshotScanBudget(deferredClientProbe);
+        int scanInterval=restoreSnapshotScanInterval(deferredClientProbe);
         if(CI_TEST && s.restoreTicks==1)
             LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_BUDGET_SELECTED value={} deferredClient={}",
                 configuredScanBudget,deferredClientProbe);
-        int scanBudget=Math.min(configuredScanBudget,Math.max(0,s.restoreIndex+1));
+        boolean scanThisTick=!deferredClientProbe || s.restoreTicks%scanInterval==0;
+        int scanBudget=scanThisTick
+            ? Math.min(configuredScanBudget,Math.max(0,s.restoreIndex+1)) : 0;
         // A failed block write must not be attempted repeatedly in one tick.
         // Other loaded snapshots can still recover; retry this position next tick.
         LongOpenHashSet failedWritesThisTick=beginRestoreTick(s);
