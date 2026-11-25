@@ -947,6 +947,7 @@ deferred_chunk_probe=(
     and os.environ.get("BF_TEST_SPARSE_RECOVERY")!="1"
     and os.environ.get("BF_TEST_GREEN_PHASE_PREVIEW")!="1"
 )
+deferred_spawn_relocated=False
 option_overrides=[
     ("rawMouseInput","false"),
     ("mouseSensitivity",str(MOUSE_SENSITIVITY)),
@@ -3049,9 +3050,21 @@ def capture_test_world():
                 if p.poll() is not None:
                     break
                 snap(f"world-stage-{stage:02d}.png")
+                current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                if (deferred_chunk_probe and not deferred_spawn_relocated
+                        and "BLACK_FREQUENCY_TEST FINALE_STARTED" in current):
+                    if not send_isolated_chat_command(
+                            "/setworldspawn 512 64 512",
+                            r"Set (?:the )?world spawn to ",
+                            "move spawn ticket away from the disposable fracture"):
+                        return False
+                    deferred_spawn_relocated=True
+                    print("WORLD_CAPTURE: moved spawn ticket away from the fracture before chunk-unload probe",
+                          "loadedOnly=true",flush=True)
+                    time.sleep(.25)
+                    current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else current
                 if (os.environ.get("BF_ISOLATED_TEST")=="1"
                         and not vertical_cull_probe_verified):
-                    current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                     if ("BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT" in current
                             and "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in current):
                         if run_vertical_ground_cull_probe():
@@ -3076,6 +3089,18 @@ def capture_test_world():
             sparse_test=os.environ.get("BF_TEST_SPARSE_RECOVERY")=="1"
             while time.time()<fracture_deadline and p.poll() is None:
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                if (deferred_chunk_probe and not deferred_spawn_relocated
+                        and "BLACK_FREQUENCY_TEST FINALE_STARTED" in current):
+                    if not send_isolated_chat_command(
+                            "/setworldspawn 512 64 512",
+                            r"Set (?:the )?world spawn to ",
+                            "move spawn ticket away from the disposable fracture"):
+                        return False
+                    deferred_spawn_relocated=True
+                    print("WORLD_CAPTURE: moved spawn ticket away from the fracture before chunk-unload probe",
+                          "loadedOnly=true",flush=True)
+                    time.sleep(.25)
+                    current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else current
                 # Run the live camera-cull probe as soon as its safe-pad and first-edit
                 # fixtures exist. The client intentionally expires an inactive state packet
                 # after 100 ticks; the later terrain camera sweep can consume that lease and
@@ -4193,7 +4218,8 @@ def capture_test_world():
                             for key,count in deferred_restore_deferred_counts.items()
                             if deferred_restore_reentry_counts.get(key,0)<count
                         }
-                        if (not deferred_probe_player_moved
+                        if (not deferred_spawn_relocated
+                                or not deferred_probe_player_moved
                                 or not deferred_restore_chunks_seen
                                 or not deferred_restore_chunks_reentered
                                 or unresolved_deferred_chunks):
