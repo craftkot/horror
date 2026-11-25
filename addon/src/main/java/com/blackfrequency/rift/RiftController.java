@@ -6062,13 +6062,32 @@ public final class RiftController {
         // Reuse primitive per-tick caches: a chunk cannot load or unload halfway through this server-thread scan.
         s.restoreChunksCheckedThisTick.clear();
         s.restoreChunksLoadedThisTick.clear();
+        int chunkAvailabilityCandidates=0,chunkAvailabilityProbes=0,chunkAvailabilityCacheHits=0;
+        boolean beaconChunkSnapshotCacheHit=false;
         BlockPos activatedBeacon=recoveryVisualAnchor(s,level.getSeaLevel());
-        // Resolve the physical beacon once per restoration tick using loaded-only access.
+        // Resolve the physical beacon through the same per-tick loaded-chunk cache
+        // used by snapshots. This avoids a second availability probe when the
+        // beacon and the next recovery edits occupy the same chunk.
         boolean beaconPositionValid=s.beaconPosPresent
             && isRecoveryBeaconVisualAnchorValid(activatedBeacon,s.x,s.z,
             level.getMinBuildHeight(),level.getMaxBuildHeight(),
             level.getWorldBorder().isWithinBounds(activatedBeacon));
-        boolean beaconPresent=beaconPositionValid && level.hasChunkAt(activatedBeacon)
+        int beaconChunkX=activatedBeacon.getX()>>4;
+        int beaconChunkZ=activatedBeacon.getZ()>>4;
+        long beaconChunkKey=(((long)beaconChunkX)<<32)^(beaconChunkZ&0xffffffffL);
+        boolean beaconChunkLoaded=false;
+        if(beaconPositionValid) {
+            chunkAvailabilityCandidates++;
+            if(s.restoreChunksCheckedThisTick.add(beaconChunkKey)) {
+                chunkAvailabilityProbes++;
+                beaconChunkLoaded=level.hasChunk(beaconChunkX,beaconChunkZ);
+                if(beaconChunkLoaded) s.restoreChunksLoadedThisTick.add(beaconChunkKey);
+            } else {
+                chunkAvailabilityCacheHits++;
+                beaconChunkLoaded=s.restoreChunksLoadedThisTick.contains(beaconChunkKey);
+            }
+        }
+        boolean beaconPresent=beaconChunkLoaded
             && level.getBlockState(activatedBeacon).is(Blocks.BEACON);
         double beaconX=activatedBeacon.getX()+0.5D;
         double beaconY=activatedBeacon.getY()+0.5D;
@@ -6076,8 +6095,13 @@ public final class RiftController {
         s.restoreTicks=nextNonNegativeTick(s.restoreTicks);
         long animationTick=restorationAnimationTick(s.restoreTicks,level.getGameTime());
         int cadenceTick=restorationCadenceTick(s.restoreTicks,level.getGameTime());
-        if(CI_TEST && s.restoreTicks==1)
+        if(CI_TEST && s.restoreTicks==1) {
             LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_BEACON_PRESENCE_CACHED present={}",beaconPresent);
+            LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_BEACON_CHUNK_CACHE_PROFILE positionValid={} loaded={} checked={} loadedCached={} loadedOnly=true",
+                beaconPositionValid,beaconChunkLoaded,
+                s.restoreChunksCheckedThisTick.contains(beaconChunkKey),
+                s.restoreChunksLoadedThisTick.contains(beaconChunkKey));
+        }
         // Close only this recovery beacon's vanilla menu during the same bounded
         // player pass used by the visual audience checks. A newly opened menu
         // may remain visible for at most four ticks; no extra per-tick player scan.
@@ -6208,7 +6232,6 @@ public final class RiftController {
         // In particular, a single snapshot in an unloaded chunk costs one
         // hasChunk check, not the full 48-check scan budget.
         int scanBudget=Math.min(48,Math.max(0,s.restoreIndex+1));
-        int chunkAvailabilityCandidates=0,chunkAvailabilityProbes=0,chunkAvailabilityCacheHits=0;
         // A failed block write must not be attempted repeatedly in one tick.
         // Other loaded snapshots can still recover; retry this position next tick.
         LongOpenHashSet failedWritesThisTick=beginRestoreTick(s);
@@ -6313,6 +6336,7 @@ public final class RiftController {
             } else {
                 chunkAvailabilityCacheHits++;
                 restoreChunkLoaded=s.restoreChunksLoadedThisTick.contains(restoreChunkKey);
+                if(restoreChunkKey==beaconChunkKey) beaconChunkSnapshotCacheHit=true;
             }
             if(!restoreChunkLoaded) {
                 if(s.deferredRestoreChunks.add(restoreChunkKey) && CI_TEST)
@@ -6386,6 +6410,8 @@ public final class RiftController {
             if(s.restoreScan>s.restoreIndex) s.restoreScan=s.restoreIndex;
         }
         if(CI_TEST && s.restoreTicks==1) {
+            LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_BEACON_CHUNK_SNAPSHOT_REUSE sameTick=true reused={}",
+                beaconChunkSnapshotCacheHit);
             int uniqueChunks=s.restoreChunksCheckedThisTick.size();
             boolean cacheConsistent=chunkAvailabilityCandidates==chunkAvailabilityProbes+chunkAvailabilityCacheHits
                 && chunkAvailabilityProbes==uniqueChunks
