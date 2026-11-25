@@ -49,6 +49,11 @@ GRAVITY_COLLISION_PATH_RE=re.compile(
     r"BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_COLLISION_PATH_VERIFIED mode=(lift|sink) steps=(\d+) collisionSamples=(\d+) collisionFree=true loadedChunksOnly=true"
 )
 
+GRAVITY_WORLD_BORDER_RE=re.compile(
+    r"BLACK_FREQUENCY_TEST GRAVITY_PROBE_WORLD_BORDER_GUARD_VERIFIED insideAccepted=true outsideRejected=true straddlingRejected=true loadedChunksOnly=true"
+)
+
+
 FISSURE_PARTICLE_EMISSION_RE=re.compile(
     r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) accentDust=(\d+) violetDust=(\d+) edgeDust=(\d+) total=(\d+) heightmap=motion-blocking(?=\s|$)"
 )
@@ -4795,6 +4800,9 @@ def capture_test_world():
                     collision_modes[mode]=(int(steps),int(samples))
                 if set(collision_modes)!={"lift","sink"}:
                     print("WORLD_CAPTURE_FAIL: loaded-only collision checks are missing for lift or sink trajectory",flush=True)
+                    return False
+                if not GRAVITY_WORLD_BORDER_RE.search(log_after):
+                    print("WORLD_CAPTURE_FAIL: gravity probe did not reject outside and border-straddling player boxes",flush=True)
                     return False
             if "BLACK_FREQUENCY_TEST CLIENT_CAMERA_ROTATION" not in log_after:
                 print("WORLD_CAPTURE_FAIL: actual client camera rotation telemetry was not recorded",flush=True)
