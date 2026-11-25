@@ -2995,6 +2995,26 @@ def capture_test_world():
             sparse_test=os.environ.get("BF_TEST_SPARSE_RECOVERY")=="1"
             while time.time()<fracture_deadline and p.poll() is None:
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                # Run the live camera-cull probe as soon as its safe-pad and first-edit
+                # fixtures exist. The client intentionally expires an inactive state packet
+                # after 100 ticks; the later terrain camera sweep can consume that lease and
+                # reset the mesh cache before three real skipped render passes are observed.
+                if (os.environ.get("BF_ISOLATED_TEST")=="1"
+                        and not vertical_cull_probe_verified
+                        and "BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT" in current
+                        and "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in current):
+                    probe_ready_deadline=time.monotonic()+4.0
+                    while (not vertical_cull_probe_verified and not vertical_cull_probe_attempted
+                            and time.monotonic()<probe_ready_deadline and p.poll() is None):
+                        if run_vertical_ground_cull_probe():
+                            print("WORLD_CAPTURE: live vertical cull probe completed before terrain camera sweep and packet expiry",
+                                  flush=True)
+                            break
+                        time.sleep(0.1)
+                    if vertical_cull_probe_attempted and not vertical_cull_probe_verified:
+                        print("WORLD_CAPTURE_FAIL: early live vertical cull probe was attempted but did not complete",
+                              flush=True)
+                        return False
                 capture_terrain_fracture(current)
                 if terrain_capture_failed:
                     break
