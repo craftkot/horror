@@ -938,8 +938,23 @@ opts.update({
 # disposable CI client, so use the regular cursor path for deterministic camera capture.
 options_file=MC/"options.txt"
 option_lines=options_file.read_text(encoding="utf-8",errors="replace").splitlines() if options_file.exists() else []
-for option,value in (("rawMouseInput","false"),("mouseSensitivity",str(MOUSE_SENSITIVITY)),
-                     ("pauseOnLostFocus","false")):
+# The normal isolated run deliberately uses a two-chunk view/simulation window.
+# Outer fracture snapshots must become genuinely unavailable before recovery, so
+# the client can travel to them and prove deferred restoration without force-loading.
+deferred_chunk_probe=(
+    os.environ.get("BF_ISOLATED_TEST")=="1"
+    and os.environ.get("BF_TEST_RESTORATION")=="1"
+    and os.environ.get("BF_TEST_SPARSE_RECOVERY")!="1"
+    and os.environ.get("BF_TEST_GREEN_PHASE_PREVIEW")!="1"
+)
+option_overrides=[
+    ("rawMouseInput","false"),
+    ("mouseSensitivity",str(MOUSE_SENSITIVITY)),
+    ("pauseOnLostFocus","false"),
+]
+if deferred_chunk_probe:
+    option_overrides.extend((("renderDistance","2"),("simulationDistance","2")))
+for option,value in option_overrides:
     prefix=option+":"
     for index,line in enumerate(option_lines):
         if line.startswith(prefix):
@@ -951,8 +966,14 @@ options_file.write_text("\n".join(option_lines)+"\n",encoding="utf-8")
 option_values={line.split(":",1)[0]:line.split(":",1)[1] for line in option_lines if ":" in line}
 if option_values.get("pauseOnLostFocus")!="false":
     raise SystemExit("Could not disable Minecraft pauseOnLostFocus for deterministic integrated-server ticks")
+if deferred_chunk_probe and (
+        option_values.get("renderDistance")!="2"
+        or option_values.get("simulationDistance")!="2"):
+    raise SystemExit("Could not constrain the isolated deferred-chunk probe to two chunks")
 print("WORLD_CAPTURE: raw mouse input disabled for deterministic X11 camera control",flush=True)
 print("WORLD_CAPTURE: pauseOnLostFocus=false to keep restoration ticking during capture",flush=True)
+if deferred_chunk_probe:
+    print("WORLD_CAPTURE: real deferred-chunk probe enabled renderDistance=2 simulationDistance=2",flush=True)
 # Xvfb pointer acceleration makes inverse relative moves drift away from the
 # server-aimed beacon. Disable acceleration so the same pixel delta is reversible.
 xset_path=shutil.which("xset")
@@ -4058,6 +4079,7 @@ def capture_test_world():
                 restored=False
                 restoration_capture_attempted_markers=set()
                 deferred_restore_chunks_seen=set()
+                deferred_restore_chunks_reentered=set()
                 deferred_restore_chunk_re=re.compile(
                     r"BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_DEFERRED "
                     r"x=(-?\d+) y=(-?\d+) z=(-?\d+) "
@@ -4076,6 +4098,7 @@ def capture_test_world():
                                 f"chunkX={chunk_x} chunkZ={chunk_z} loadedOnly=true")
                             if reentered_marker in current:
                                 deferred_restore_chunks_seen.add(chunk_key)
+                                deferred_restore_chunks_reentered.add(chunk_key)
                                 continue
                             previous_reentries=current.count(reentered_marker)
                             target_x=chunk_x*16+8
@@ -4091,6 +4114,7 @@ def capture_test_world():
                             while time.monotonic()<reentry_deadline and p.poll() is None:
                                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else current
                                 if current.count(reentered_marker)>previous_reentries:
+                                    deferred_restore_chunks_reentered.add(chunk_key)
                                     reentered=True
                                     break
                                 if "BLACK_FREQUENCY_TEST BEACON_RESTORATION_FINISHED" in current:
@@ -4133,6 +4157,18 @@ def capture_test_world():
                     capture_sky_before_beacon()
                     time.sleep(.1)
                 if restored:
+                    if deferred_chunk_probe:
+                        final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                        if not deferred_restore_chunks_seen or not deferred_restore_chunks_reentered:
+                            print("WORLD_CAPTURE_FAIL: low-distance probe did not defer and then re-enter a valid recovery snapshot chunk",
+                                  flush=True)
+                            return False
+                        if "BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_HINT_SENT" not in final_log:
+                            print("WORLD_CAPTURE_FAIL: deferred recovery did not send the player-facing wait hint",
+                                  flush=True)
+                            return False
+                        print("WORLD_CAPTURE: valid unloaded recovery chunks re-entered by player travel",
+                              len(deferred_restore_chunks_reentered),"loadedOnly=true",flush=True)
                     if deferred_restore_chunks_seen:
                         final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
                         safe_pad=re.search(
