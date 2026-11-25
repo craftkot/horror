@@ -45,6 +45,9 @@ GRAVITY_TRAJECTORY_SINK_VERTICAL_CAP=.55
 GRAVITY_TRAJECTORY_MODE_RE=re.compile(
     r"BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_TRAJECTORY_MODE_VERIFIED mode=(lift|sink) steps=(\d+) .*?maxHorizontalVelocity=([0-9.eE+-]+) maxVerticalVelocity=([0-9.eE+-]+) horizontalCap=([0-9.eE+-]+) verticalCap=([0-9.eE+-]+) loadedChunksOnly=true"
 )
+GRAVITY_COLLISION_PATH_RE=re.compile(
+    r"BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_COLLISION_PATH_VERIFIED mode=(lift|sink) steps=(\d+) collisionSamples=(\d+) collisionFree=true loadedChunksOnly=true"
+)
 
 FISSURE_PARTICLE_EMISSION_RE=re.compile(
     r"BLACK_FREQUENCY_TEST SURFACE_FISSURE_PARTICLES_EMITTED samples=(\d+) accentDust=(\d+) violetDust=(\d+) edgeDust=(\d+) total=(\d+) heightmap=motion-blocking(?=\s|$)"
@@ -4782,6 +4785,16 @@ def capture_test_world():
                     trajectory_modes[mode]=measured
                 if set(trajectory_modes)!={"lift","sink"}:
                     print("WORLD_CAPTURE_FAIL: bounded velocity telemetry is missing for lift or sink trajectory",flush=True)
+                    return False
+                collision_modes={}
+                for match in GRAVITY_COLLISION_PATH_RE.finditer(log_after):
+                    mode,steps,samples=match.groups()
+                    if mode in collision_modes or int(steps)!=8 or int(samples)!=9:
+                        print(f"WORLD_CAPTURE_FAIL: {mode} gravity collision path was not checked at all nine positions",flush=True)
+                        return False
+                    collision_modes[mode]=(int(steps),int(samples))
+                if set(collision_modes)!={"lift","sink"}:
+                    print("WORLD_CAPTURE_FAIL: loaded-only collision checks are missing for lift or sink trajectory",flush=True)
                     return False
             if "BLACK_FREQUENCY_TEST CLIENT_CAMERA_ROTATION" not in log_after:
                 print("WORLD_CAPTURE_FAIL: actual client camera rotation telemetry was not recorded",flush=True)
