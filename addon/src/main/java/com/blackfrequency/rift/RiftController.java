@@ -1063,8 +1063,9 @@ public final class RiftController {
             || !Double.isFinite(box.minX) || !Double.isFinite(box.minY) || !Double.isFinite(box.minZ)
             || !Double.isFinite(box.maxX) || !Double.isFinite(box.maxY) || !Double.isFinite(box.maxZ)
             || box.minY<level.getMinBuildHeight() || box.maxY>level.getMaxBuildHeight()
-            // Reject impossible paths before consulting chunk state or collision shapes.
-            || !level.getWorldBorder().isWithinBounds(box)) return false;
+            // isWithinBounds(AABB) accepts any overlap; a player probe must be fully contained.
+            // Reject edge-crossing boxes before consulting chunk state or collision shapes.
+            || !gravityProbeInsideWorldBorder(level,box)) return false;
         int minChunkX=((int)Math.floor(box.minX))>>4;
         int maxChunkX=((int)Math.floor(Math.nextDown(box.maxX)))>>4;
         int minChunkZ=((int)Math.floor(box.minZ))>>4;
@@ -1074,6 +1075,17 @@ public final class RiftController {
             for(int chunkZ=minChunkZ;chunkZ<=maxChunkZ;chunkZ++)
                 if(!level.hasChunk(chunkX,chunkZ)) return false;
         return level.noCollision(player,box);
+    }
+
+    /** Require the complete player box to remain inside the border, not merely overlap it. */
+    private static boolean gravityProbeInsideWorldBorder(
+            ServerLevel level,net.minecraft.world.phys.AABB box) {
+        if(level==null || box==null
+            || !Double.isFinite(box.minX) || !Double.isFinite(box.maxX)
+            || !Double.isFinite(box.minZ) || !Double.isFinite(box.maxZ)) return false;
+        var border=level.getWorldBorder();
+        return box.minX>=border.getMinX() && box.maxX<=border.getMaxX()
+            && box.minZ>=border.getMinZ() && box.maxZ<=border.getMaxZ();
     }
 
     /** Exercise whole-box and edge-crossing world-border rejection without changing the border. */
@@ -1089,8 +1101,10 @@ public final class RiftController {
         net.minecraft.world.phys.AABB straddlingBox=new net.minecraft.world.phys.AABB(
             border.getMaxX()-Math.min(.25D,width*.25D),playerBox.minY,playerBox.minZ,
             border.getMaxX()+.01D,playerBox.maxY,playerBox.maxZ);
-        if(!border.isWithinBounds(playerBox) || border.isWithinBounds(outsideBox)
-            || border.isWithinBounds(straddlingBox)
+        boolean insideAccepted=gravityProbeInsideWorldBorder(level,playerBox);
+        boolean outsideRejected=!gravityProbeInsideWorldBorder(level,outsideBox);
+        boolean straddlingRejected=!gravityProbeInsideWorldBorder(level,straddlingBox);
+        if(!insideAccepted || !outsideRejected || !straddlingRejected
             || gravityProbeCollisionFree(level,player,outsideBox)
             || gravityProbeCollisionFree(level,player,straddlingBox))
             throw new IllegalStateException("CI gravity probe world-border guard regression");
