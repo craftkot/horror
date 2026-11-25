@@ -3861,7 +3861,7 @@ public final class RiftController {
         State activeOuterReloaded=State.load(activeOuterLoaded.save(new CompoundTag()));
 
         // Once the one-shot warning has already fired, a later corrupt container
-        // must still dirty SavedData so its newly incremented count reaches disk.
+        // must still persist its newly inferred missing-snapshot count.
         CompoundTag previouslyWarnedType=new CompoundTag();
         previouslyWarnedType.putBoolean("restoring",true);
         previouslyWarnedType.putInt("edits",160);
@@ -3893,16 +3893,22 @@ public final class RiftController {
             || !elementTypeSaved.contains("snapshots",Tag.TAG_LIST)
             || !elementTypeSaved.getList("snapshots",Tag.TAG_COMPOUND).isEmpty()
             || legacyWithoutSnapshots.isDirty()
-            || activeOuterLoaded.skippedInvalid!=1 || activeElementLoaded.skippedInvalid!=1
+            || activeOuterLoaded.skippedInvalid!=0 || activeElementLoaded.skippedInvalid!=0
+            || activeOuterLoaded.snapshotMissingEntries!=160 || activeElementLoaded.snapshotMissingEntries!=160
             || activeOuterLoaded.restoreIndex!=-1 || activeOuterLoaded.restoreScan!=-1
-            || activeOuterReloaded.skippedInvalid!=1 || !activeOuterReloaded.restoring
-            || !previouslyWarnedLoaded.isDirty() || previouslyWarnedLoaded.skippedInvalid!=5
+            || activeOuterReloaded.skippedInvalid!=0 || activeOuterReloaded.snapshotMissingEntries!=160
+            || !activeOuterReloaded.restoring
+            || !previouslyWarnedLoaded.isDirty() || previouslyWarnedLoaded.skippedInvalid!=4
+            || previouslyWarnedLoaded.snapshotMissingEntries!=160
             || !previouslyWarnedLoaded.invalidSnapshotWarningLogged
-            || previouslyWarnedReloaded.skippedInvalid!=5 || !previouslyWarnedReloaded.restoring
+            || previouslyWarnedReloaded.skippedInvalid!=4
+            || previouslyWarnedReloaded.snapshotMissingEntries!=160 || !previouslyWarnedReloaded.restoring
             || !partial.getString().contains("ВОССТАНОВЛЕНИЕ НЕПОЛНО")
-            || !partial.getString().contains("пропущено 1"))
+            || !partial.getString().contains("пропущено 160"))
             throw new IllegalStateException("CI malformed recovery snapshot list quarantine/partial-status regression");
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_LIST_CORRUPTION_PARTIAL_STATUS_VERIFIED activeRecovery=true invalidContainers=2 restored=0 partialMessage=true persisted=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_CONTAINER_MISSING_ENTRIES_VERIFIED missing={} persisted=true partialStatus=true",
+            activeOuterReloaded.snapshotMissingEntries);
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_CORRUPTION_COUNTER_PERSISTENCE_VERIFIED previousWarning=true incremented=true dirty=true roundTrip=true");
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_LIST_CONTAINER_QUARANTINE_VERIFIED wrongTagType=true wrongElementType=true normalized=true legacyMissingAllowed=true");
     }

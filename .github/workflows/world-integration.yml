@@ -79,6 +79,7 @@ jobs:
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_RESOURCE_LOCATION_QUARANTINE_VERIFIED invalidRejected=true validNamespaced=true quarantined=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_BLOCK_STATE_CANONICAL_ROUNDTRIP_VERIFIED valid=true invalidPropertyValue=true unknownProperty=true unknownBlock=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_LIST_CORRUPTION_PARTIAL_STATUS_VERIFIED activeRecovery=true invalidContainers=2 restored=0 partialMessage=true persisted=true' world-test.log
+            grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_CONTAINER_MISSING_ENTRIES_VERIFIED missing=160 persisted=true partialStatus=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_CORRUPTION_COUNTER_PERSISTENCE_VERIFIED previousWarning=true incremented=true dirty=true roundTrip=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST CORRUPT_STATE_COUNTERS_PERSISTED negative=true excessive=true wrongType=true legacyMissingAllowed=true' world-test.log
             grep -q 'BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_RETENTION_BUDGET_VERIFIED' world-test.log
