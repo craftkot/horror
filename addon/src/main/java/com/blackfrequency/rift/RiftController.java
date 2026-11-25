@@ -1524,7 +1524,10 @@ public final class RiftController {
             boolean startedValidType=n.contains("started",Tag.TAG_BYTE);
             boolean malformedStartedType=startedPresent&&!startedValidType;
             s.started=startedValidType&&n.getBoolean("started");
-            s.finished=n.getBoolean("finished");
+            boolean finishedPresent=n.contains("finished");
+            boolean finishedValidType=n.contains("finished",Tag.TAG_BYTE);
+            boolean malformedFinishedType=finishedPresent&&!finishedValidType;
+            s.finished=finishedValidType&&n.getBoolean("finished");
             boolean initializedPresent=n.contains("initialized");
             boolean initializedValidType=n.contains("initialized",Tag.TAG_BYTE);
             boolean malformedInitializedType=initializedPresent&&!initializedValidType;
@@ -1532,8 +1535,12 @@ public final class RiftController {
             boolean restoringPresent=n.contains("restoring");
             boolean restoringValidType=n.contains("restoring",Tag.TAG_BYTE);
             boolean malformedRestoringType=restoringPresent&&!restoringValidType;
-            s.restoring=restoringValidType&&n.getBoolean("restoring");s.restored=n.getBoolean("restored");
-            if(malformedRestoringType) s.setDirty();
+            s.restoring=restoringValidType&&n.getBoolean("restoring");
+            boolean restoredPresent=n.contains("restored");
+            boolean restoredValidType=n.contains("restored",Tag.TAG_BYTE);
+            boolean malformedRestoredType=restoredPresent&&!restoredValidType;
+            s.restored=restoredValidType&&n.getBoolean("restored");
+            if(malformedRestoringType || malformedFinishedType || malformedRestoredType) s.setDirty();
             boolean malformedLegacyCursorType=(cursorXPresent&&!cursorXValidType)
                 || (cursorZPresent&&!cursorZValidType) || (cursorYPresent&&!cursorYValidType);
             if(malformedLegacyCursorType && s.initialized && !s.centerOutScan
@@ -1747,6 +1754,53 @@ public final class RiftController {
                     s.setDirty();
                 } else {
                     LOGGER.warn("BLACK FREQUENCY: normalized malformed started flag before destructive progress");
+                }
+            }
+            if(malformedFinishedType) {
+                if(s.restoring || s.restored) {
+                    // Restoration/terminal state already owns the lifecycle; repair the
+                    // companion flag without restarting a fracture scan.
+                    s.finished=true;
+                    s.setDirty();
+                } else if(s.started || s.edits>0 || s.finaleTicks>0 || !s.snapshots.isEmpty()) {
+                    LOGGER.warn("BLACK FREQUENCY: stopped fracture resumption because saved finished flag has the wrong NBT type");
+                    s.started=true;
+                    s.finished=true;
+                    if(s.centerOutScan) s.centerOutIndex=CENTER_OUT_COLUMN_COUNT;
+                    else {
+                        s.cursorX=RADIUS+1;
+                        s.cursorZ=-RADIUS;
+                        s.cursorY=Integer.MIN_VALUE;
+                    }
+                    s.setDirty();
+                } else {
+                    LOGGER.warn("BLACK FREQUENCY: normalized malformed finished flag before destructive progress");
+                }
+            }
+            if(malformedRestoredType) {
+                boolean lifecycleEvidence=s.restoring || s.started || s.edits>0 || s.finaleTicks>0
+                    || s.finished || !s.snapshots.isEmpty();
+                if(lifecycleEvidence) {
+                    // A false default could replay snapshots after an already completed
+                    // recovery. Pause automatic writes, retain the validated snapshots,
+                    // and let a player explicitly restart recovery at the physical beacon.
+                    LOGGER.warn("BLACK FREQUENCY: quarantined recovery because saved restored flag has the wrong NBT type");
+                    s.restoring=false;
+                    s.restored=false;
+                    s.started=true;
+                    s.finished=true;
+                    s.restoreIndex=-1;
+                    s.restoreScan=-1;
+                    s.restoreTicks=0;
+                    if(s.centerOutScan) s.centerOutIndex=CENTER_OUT_COLUMN_COUNT;
+                    else {
+                        s.cursorX=RADIUS+1;
+                        s.cursorZ=-RADIUS;
+                        s.cursorY=Integer.MIN_VALUE;
+                    }
+                    s.setDirty();
+                } else {
+                    LOGGER.warn("BLACK FREQUENCY: normalized malformed restored flag before lifecycle progress");
                 }
             }
             if(quarantinedSnapshotPayloads>0)
@@ -3378,6 +3432,7 @@ public final class RiftController {
         // This pure NBT regression runs with every scan-mode startup, not only recovery.
         verifyMalformedInitializedFlagQuarantine();
         verifyMalformedStartedFlagQuarantine();
+        verifyMalformedCompletionFlagsQuarantine();
         if(fractureEditBudget(false)!=96 || fractureEditBudget(true)!=160
             || EDIT_BUDGET!=fractureEditBudget(CI_TEST))
             throw new IllegalStateException("CI fracture edit budget selection regression");
@@ -3867,6 +3922,95 @@ public final class RiftController {
                 +" stopped="+stopped+" stable="+stable
                 +" freshCountdownPreserved="+freshCountdownPreserved);
         LOGGER.info("BLACK_FREQUENCY_TEST MALFORMED_STARTED_FLAG_QUARANTINE_VERIFIED activeScanStopped=true anchorPreserved=true snapshotsPreserved=true roundTrip=true freshCountdownPreserved=true");
+    }
+
+    /** Completion flags must be typed: a wrong default must not resume fracture or replay recovery. */
+    private static void verifyMalformedCompletionFlagsQuarantine() {
+        BlockPos pos=new BlockPos(12,64,-7);
+        CompoundTag snapshot=new CompoundTag();
+        snapshot.putLong("pos",pos.asLong());
+        snapshot.put("state",NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
+        ListTag snapshots=new ListTag();
+        snapshots.add(snapshot);
+
+        CompoundTag malformedFinished=new CompoundTag();
+        malformedFinished.putInt("x",12);
+        malformedFinished.putInt("z",-7);
+        malformedFinished.putBoolean("initialized",true);
+        malformedFinished.putBoolean("started",true);
+        malformedFinished.putString("finished","corrupted");
+        malformedFinished.putBoolean("surfaceFirstScan",true);
+        malformedFinished.putBoolean("centerOutScan",true);
+        malformedFinished.putInt("centerOutIndex",17);
+        malformedFinished.putInt("edits",1);
+        malformedFinished.put("snapshots",snapshots.copy());
+        State finishedQuarantine=State.load(malformedFinished);
+        boolean finishedStopped=finishedQuarantine.started && finishedQuarantine.finished
+            && finishedQuarantine.centerOutIndex==CENTER_OUT_COLUMN_COUNT
+            && finishedQuarantine.x==12 && finishedQuarantine.z==-7
+            && finishedQuarantine.snapshots.size()==1
+            && finishedQuarantine.snapshots.get(0).getLong("pos")==pos.asLong()
+            && finishedQuarantine.isDirty();
+        State finishedRoundTrip=State.load(finishedQuarantine.save(new CompoundTag()));
+        boolean finishedStable=finishedRoundTrip.started && finishedRoundTrip.finished
+            && finishedRoundTrip.centerOutIndex==CENTER_OUT_COLUMN_COUNT
+            && finishedRoundTrip.x==12 && finishedRoundTrip.z==-7
+            && finishedRoundTrip.snapshots.size()==1
+            && finishedRoundTrip.snapshots.get(0).getLong("pos")==pos.asLong();
+        CompoundTag freshFinishedTag=new CompoundTag();
+        freshFinishedTag.putString("finished","corrupted");
+        State freshFinished=State.load(freshFinishedTag);
+        boolean freshCountdownPreserved=!freshFinished.started && !freshFinished.finished
+            && freshFinished.isDirty();
+        if(!finishedStopped || !finishedStable || !freshCountdownPreserved)
+            throw new IllegalStateException("CI malformed finished flag quarantine regression"
+                +" stopped="+finishedStopped+" stable="+finishedStable
+                +" freshCountdownPreserved="+freshCountdownPreserved);
+        LOGGER.info("BLACK_FREQUENCY_TEST MALFORMED_FINISHED_FLAG_QUARANTINE_VERIFIED activeScanStopped=true anchorPreserved=true snapshotsPreserved=true roundTrip=true freshCountdownPreserved=true");
+
+        CompoundTag malformedRestored=new CompoundTag();
+        malformedRestored.putInt("x",12);
+        malformedRestored.putInt("z",-7);
+        malformedRestored.putBoolean("initialized",true);
+        malformedRestored.putBoolean("started",true);
+        malformedRestored.putBoolean("finished",true);
+        malformedRestored.putBoolean("restoring",true);
+        malformedRestored.putString("restored","corrupted");
+        malformedRestored.putInt("restoreIndex",0);
+        malformedRestored.putInt("restoreScan",0);
+        malformedRestored.putInt("edits",1);
+        malformedRestored.putBoolean("surfaceFirstScan",true);
+        malformedRestored.putBoolean("centerOutScan",true);
+        malformedRestored.putInt("centerOutIndex",17);
+        malformedRestored.put("snapshots",snapshots.copy());
+        State restoredQuarantine=State.load(malformedRestored);
+        boolean restoredStopped=restoredQuarantine.started && restoredQuarantine.finished
+            && !restoredQuarantine.restoring && !restoredQuarantine.restored
+            && restoredQuarantine.restoreIndex==-1 && restoredQuarantine.restoreScan==-1
+            && restoredQuarantine.centerOutIndex==CENTER_OUT_COLUMN_COUNT
+            && restoredQuarantine.x==12 && restoredQuarantine.z==-7
+            && restoredQuarantine.snapshots.size()==1
+            && restoredQuarantine.snapshots.get(0).getLong("pos")==pos.asLong()
+            && restoredQuarantine.isDirty();
+        State restoredRoundTrip=State.load(restoredQuarantine.save(new CompoundTag()));
+        boolean restoredStable=restoredRoundTrip.started && restoredRoundTrip.finished
+            && !restoredRoundTrip.restoring && !restoredRoundTrip.restored
+            && restoredRoundTrip.centerOutIndex==CENTER_OUT_COLUMN_COUNT
+            && restoredRoundTrip.snapshots.size()==1
+            && restoredRoundTrip.snapshots.get(0).getLong("pos")==pos.asLong();
+        boolean beaconRestartAllowed=restoredStable && !restoredRoundTrip.snapshots.isEmpty()
+            && !restoredRoundTrip.restoring && !restoredRoundTrip.restored;
+        CompoundTag freshRestoredTag=new CompoundTag();
+        freshRestoredTag.putString("restored","corrupted");
+        State freshRestored=State.load(freshRestoredTag);
+        boolean freshStatePreserved=!freshRestored.started && !freshRestored.finished
+            && !freshRestored.restoring && !freshRestored.restored && freshRestored.isDirty();
+        if(!restoredStopped || !restoredStable || !beaconRestartAllowed || !freshStatePreserved)
+            throw new IllegalStateException("CI malformed restored flag quarantine regression"
+                +" stopped="+restoredStopped+" stable="+restoredStable
+                +" beaconRestartAllowed="+beaconRestartAllowed
+                +" freshStatePreserved="+freshStatePreserved);
+        LOGGER.info("BLACK_FREQUENCY_TEST MALFORMED_RESTORED_FLAG_QUARANTINE_VERIFIED activeRestoreStopped=true snapshotsPreserved=true beaconRestartAllowed=true terminalCursor=true roundTrip=true freshStatePreserved=true");
     }
 
     /** Verify that a pending terrain snapshot survives a SavedData round trip. */
