@@ -2869,6 +2869,8 @@ def capture_test_world():
 
                     summary=None
                     resumed=None
+                    reset_reason=None
+                    reset_rebuild=None
                     resume_deadline=time.monotonic()+8.0
                     while time.monotonic()<resume_deadline and p.poll() is None:
                         probe_logs=read_probe_log()
@@ -2878,29 +2880,68 @@ def capture_test_world():
                         resumed=re.search(
                             r"BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_RESUMED rebuilt=true segments=(\d+) arms=(\d+) cameraY=([-+0-9.eE]+) surfaceY=([-+0-9.eE]+) anchorChanged=(true|false)",
                             probe_logs)
-                        if summary and resumed:
+                        reset_reason=re.search(
+                            r"BLACK_FREQUENCY_TEST CLIENT_STATE_RESET reason=(client-level-unavailable|client-level-replaced) previousLevelPresent=(true|false)",
+                            probe_logs)
+                        if summary and summary.group(5) in ("client-level-unavailable","client-level-replaced"):
+                            after_summary=probe_logs[summary.end():]
+                            height_change=re.search(
+                                r"BLACK_FREQUENCY_GROUND_MESH_HEIGHT_INVALIDATED previousReferenceY=(-?\d+) referenceY=(-?\d+) delta=(\d+)",
+                                after_summary)
+                            if height_change:
+                                after_height=after_summary[height_change.end():]
+                                rebuilt=re.search(
+                                    r"BLACK_FREQUENCY_GROUND_MESH_RENDERED segments=(\d+) arms=(\d+) anchorX=(-?\d+) anchorZ=(-?\d+)",
+                                    after_height)
+                                if (rebuilt and int(height_change.group(3))>=64
+                                        and abs(int(height_change.group(2))-y)<=2):
+                                    reset_rebuild=(height_change,rebuilt)
+                        if summary and (resumed or (reset_reason and reset_rebuild)):
                             break
                         time.sleep(0.1)
-                    if not summary or not resumed:
-                        raise RuntimeError("BLACK FREQUENCY vertical cull probe did not emit new skip-summary and rebuild markers after its log cursor")
+                    if not summary:
+                        raise RuntimeError("BLACK FREQUENCY vertical cull probe did not emit a skip summary after its log cursor")
+                    reset_path=summary.group(5) in ("client-level-unavailable","client-level-replaced")
+                    if reset_path:
+                        if (not reset_reason or reset_reason.group(1)!=summary.group(5)
+                                or not reset_rebuild):
+                            raise RuntimeError("BLACK FREQUENCY client-level reset did not rebuild the ground mesh after camera return")
+                    elif not resumed:
+                        raise RuntimeError("BLACK FREQUENCY vertical cull probe did not resume the retained mesh after camera return")
                     sample_position=probe_logs.find("BLACK_FREQUENCY_TEST GROUND_MESH_CAMERA_VERTICAL_RANGE_SAMPLE")
                     entered_position=probe_logs.find("BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ENTERED")
                     summary_position=probe_logs.find("BLACK_FREQUENCY_GROUND_MESH_VERTICAL_CULL_SKIP_SUMMARY")
                     resumed_position=probe_logs.find("BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_RESUMED")
                     milestone_position=probe_logs.find("BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_SKIP_MILESTONE")
-                    if not (0<=sample_position<entered_position<milestone_position<summary_position<resumed_position):
-                        raise RuntimeError("BLACK FREQUENCY vertical cull probe markers were not emitted in sample/enter/milestone/skip/resume order")
+                    reset_position=probe_logs.find("BLACK_FREQUENCY_TEST CLIENT_STATE_RESET")
+                    if not (0<=sample_position<entered_position<milestone_position<summary_position):
+                        raise RuntimeError("BLACK FREQUENCY vertical cull probe markers were not emitted in sample/enter/milestone/skip order")
                     unavailable_anchor_position=probe_logs.find(
                         "BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_ANCHOR_CHUNK_UNAVAILABLE_PRESERVED")
                     if (unavailable_anchor_position>=0
                             and not (entered_position<unavailable_anchor_position<summary_position)):
                         raise RuntimeError("BLACK FREQUENCY unavailable-anchor preservation marker was out of cull/resume order")
                     frames,border_skips,chunk_skips,rebuild_skips=(int(summary.group(i)) for i in range(1,5))
-                    segments,arms=int(resumed.group(1)),int(resumed.group(2))
                     if (frames<3 or border_skips!=frames or chunk_skips!=frames
-                            or rebuild_skips!=frames or summary.group(5)!="camera-returned-or-anchor-changed"
-                            or resumed.group(5)!="false"):
+                            or rebuild_skips!=frames):
                         raise RuntimeError("BLACK FREQUENCY vertical cull skip accounting did not match the real skipped frames")
+                    if reset_path:
+                        height_change,rebuilt=reset_rebuild
+                        if not (0<=reset_position<summary_position
+                                and int(height_change.group(3))>=64
+                                and abs(int(height_change.group(2))-y)<=2
+                                and int(rebuilt.group(1))>=MIN_GROUND_MESH_SEGMENTS
+                                and int(rebuilt.group(2))>=MIN_GROUND_MESH_ARMS
+                                and int(rebuilt.group(3))==int(entered.group(4))
+                                and int(rebuilt.group(4))==int(entered.group(5))):
+                            raise RuntimeError("BLACK FREQUENCY client-level reset rebuild did not return to the original anchor")
+                        segments,arms=int(rebuilt.group(1)),int(rebuilt.group(2))
+                    else:
+                        if not (0<=summary_position<resumed_position
+                                and summary.group(5)=="camera-returned-or-anchor-changed"
+                                and resumed.group(5)=="false"):
+                            raise RuntimeError("BLACK FREQUENCY vertical cull resume markers were not emitted in order")
+                        segments,arms=int(resumed.group(1)),int(resumed.group(2))
                     if segments<MIN_GROUND_MESH_SEGMENTS or arms<MIN_GROUND_MESH_ARMS:
                         raise RuntimeError("BLACK FREQUENCY ground mesh did not rebuild after the camera returned")
                     restored=True

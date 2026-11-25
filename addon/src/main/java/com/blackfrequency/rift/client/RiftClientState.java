@@ -90,8 +90,8 @@ public final class RiftClientState {
         // Packets may arrive before the first client tick after joining a world.
         // Bind the state to that world immediately, rather than carrying it across sessions.
         net.minecraft.client.multiplayer.ClientLevel level=net.minecraft.client.Minecraft.getInstance().level;
-        if(level==null) { reset(); lastLevel=null; return; }
-        if(lastLevel!=null && lastLevel!=level) reset();
+        if(level==null) { reset("client-level-unavailable"); lastLevel=null; return; }
+        if(lastLevel!=null && lastLevel!=level) reset("client-level-replaced");
         lastLevel=level;
         ticksSincePacket=0;
         // Network data must never feed NaN or infinity into sky and overlay shaders.
@@ -323,6 +323,13 @@ public final class RiftClientState {
     public static int anchorX() { return anchorX; }
     public static int anchorZ() { return anchorZ; }
     public static void reset() {
+        reset("explicit-reset");
+    }
+    private static void reset(String reason) {
+        if(VERIFY_RIFT_CLIENT_PROFILES) {
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST CLIENT_STATE_RESET reason={} previousLevelPresent={}",reason,lastLevel!=null);
+        }
         progress=0;collapse=false;finaleTicks=0;serverFinaleTicks=0;ticksSincePacket=0;
         ciGreenPhasePreviewLogged=false;
         anchorX=0;anchorZ=0;anchorValid=false;
@@ -333,7 +340,7 @@ public final class RiftClientState {
         beaconAuraCompletionFadeTailRenderedLogged=false;
         beaconAuraProfileLogged=false;beaconAuraRenderedLogged=false;
         beaconAuraRestorationRenderedLogged=false;
-        GroundRenderer.clearCache();
+        GroundRenderer.clearCache(reason);
     }
 
     private static boolean shouldRenderBeaconAura(boolean active,boolean hasPosition,
@@ -3599,7 +3606,11 @@ public final class RiftClientState {
         }
 
         private static void clearCache() {
-            if(VERIFY_GROUND_MESH_PROFILES) flushVerticalCullSkipDiagnostics("cache-reset");
+            clearCache("cache-reset");
+        }
+
+        private static void clearCache(String reason) {
+            if(VERIFY_GROUND_MESH_PROFILES) flushVerticalCullSkipDiagnostics(reason);
             else verticallyCulledSkippedFrames=0L;
             clearGeometryCache();
             resetCacheProfileFlags();
