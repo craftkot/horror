@@ -1526,7 +1526,8 @@ public final class RiftController {
         final BlockPos.MutableBlockPos fractureBorderCursor = new BlockPos.MutableBlockPos();
         // Reuse the small per-tick retry set during recovery instead of allocating
         // a new HashSet on every server tick. It is transient and never persisted.
-        final java.util.Set<Long> restoreFailedWrites = new java.util.HashSet<>();
+        // Primitive packed positions avoid Long boxing in the per-tick failed-write retry set.
+        final LongOpenHashSet restoreFailedWrites=new LongOpenHashSet();
         private static long readBoundedElapsed(CompoundTag n,State state) {
             boolean present=n.contains("elapsed");
             boolean validType=n.contains("elapsed",Tag.TAG_LONG);
@@ -3751,12 +3752,16 @@ public final class RiftController {
     /** Verify that the transient retry set is cleared and reused between recovery ticks. */
     private static void verifyRestoreFailureCacheReuse() {
         State state=new State();
-        java.util.Set<Long> first=beginRestoreTick(state);
-        first.add(0xBFL);
-        java.util.Set<Long> second=beginRestoreTick(state);
+        LongOpenHashSet first=beginRestoreTick(state);
+        long packedPositionKey=0x7fff0000ffffL;
+        first.add(packedPositionKey);
+        LongOpenHashSet second=beginRestoreTick(state);
         if(first!=second || !second.isEmpty())
             throw new IllegalStateException("CI restore failure cache reuse regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_FAILURE_CACHE_REUSED");
+        second.add(packedPositionKey);
+        if(!first.contains(packedPositionKey))
+            throw new IllegalStateException("CI restore failure primitive-key lookup regression");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_FAILURE_CACHE_REUSED primitiveKeys=true transient=true clearedBetweenTicks=true");
     }
 
     /** Verify malformed snapshot containers are quarantined without dirtying legacy saves. */
@@ -5964,7 +5969,7 @@ public final class RiftController {
             && dx*dx+dz*dz<=(long)RADIUS*RADIUS;
     }
 
-    private static java.util.Set<Long> beginRestoreTick(State s) {
+    private static LongOpenHashSet beginRestoreTick(State s) {
         s.restoreFailedWrites.clear();
         return s.restoreFailedWrites;
     }
@@ -6166,7 +6171,7 @@ public final class RiftController {
         int chunkAvailabilityCandidates=0,chunkAvailabilityProbes=0,chunkAvailabilityCacheHits=0;
         // A failed block write must not be attempted repeatedly in one tick.
         // Other loaded snapshots can still recover; retry this position next tick.
-        java.util.Set<Long> failedWritesThisTick=beginRestoreTick(s);
+        LongOpenHashSet failedWritesThisTick=beginRestoreTick(s);
         while(s.restoreIndex>=0 && restoredThisTick<12 && checks<scanBudget) {
             // A single unloaded chunk must not block recovery in other loaded chunks.
             // Scan at most 48 candidates per tick and retain unloaded snapshots
