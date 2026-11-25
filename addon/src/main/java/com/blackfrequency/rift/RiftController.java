@@ -1107,8 +1107,10 @@ public final class RiftController {
                 movement=nextMovement;
                 previousActivation=activation;
             }
-            if(lift?!(lastVelocityY>firstVelocityY && lastActivation>firstActivation && lastActivation>=.65D)
-                :!(lastVelocityY<firstVelocityY && lastActivation>firstActivation && lastActivation>=.65D))
+            if(lift?!(lastVelocityY>firstVelocityY && lastActivation>=.45D
+                    && lastActivation-firstActivation>=.25D)
+                :!(lastVelocityY<firstVelocityY && lastActivation>=.45D
+                    && lastActivation-firstActivation>=.25D))
                 throw new IllegalStateException("CI actual ServerPlayer trajectory did not cross the gravity ramp");
             LOGGER.info("BLACK_FREQUENCY_TEST GRAVITY_ZONE_SERVER_PLAYER_TRAJECTORY_MODE_VERIFIED mode={} steps={} startTick={} firstActivation={} lastActivation={} maxActivationStep={} firstVelocityY={} finalVelocityY={} loadedChunksOnly=true",
                 lift?"lift":"sink",CI_GRAVITY_TRAJECTORY_STEPS,startTick,
