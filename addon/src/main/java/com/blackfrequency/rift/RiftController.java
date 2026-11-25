@@ -1494,7 +1494,8 @@ public final class RiftController {
         boolean ciRestoreUiAudiencePassLogged;
         // Transient recovery status: never serialized; rebuilt from loaded-chunk checks after restart.
         boolean unloadedSnapshotsPending;
-        final java.util.Set<Long> deferredRestoreChunks=new java.util.HashSet<>();
+        // Primitive keys keep deferred-chunk tracking allocation-free in the restore hot path.
+        final LongOpenHashSet deferredRestoreChunks=new LongOpenHashSet();
         // Chunk availability is stable during one server-thread restore scan; cache it without boxing.
         final LongOpenHashSet restoreChunksCheckedThisTick=new LongOpenHashSet();
         final LongOpenHashSet restoreChunksLoadedThisTick=new LongOpenHashSet();
