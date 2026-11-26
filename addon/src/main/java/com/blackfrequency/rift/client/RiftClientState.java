@@ -3020,6 +3020,14 @@ public final class RiftClientState {
             boolean leafHeightBounded=isCanopyAccentHeightWithinBounds(64.1D,leafTop)
                 && !isCanopyAccentHeightWithinBounds(64.1D,canopyAccentParticleY(77,1.0D))
                 && !isCanopyAccentHeightWithinBounds(Double.NaN,leafTop);
+            boolean heightmapPrefilterProfile=
+                !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,64)
+                && canopyAccentHeightmapMayContainValidLeafAccent(64.1D,68)
+                && canopyAccentHeightmapMayContainValidLeafAccent(64.26D,77)
+                && !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,77)
+                && !canopyAccentHeightmapMayContainValidLeafAccent(Double.NaN,68)
+                && !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,Integer.MIN_VALUE)
+                && !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,Integer.MAX_VALUE);
             boolean adjacentScanProfile=
                 canopyAccentAdjacentColumnX(10L,0,1)==10L && canopyAccentAdjacentColumnZ(10L,0,1)==9L
                 && canopyAccentAdjacentColumnX(10L,0,2)==10L && canopyAccentAdjacentColumnZ(10L,0,2)==11L
@@ -3101,7 +3109,7 @@ public final class RiftClientState {
                 && rotationProfile && emissionThrottleProfile
                 && zeroEmissionScanRecorded && emptyScanPreservesAttempt
                 && leafSelected && leafSparse && nonAccentSurfacesRejected && leafHeightBounded
-                && adjacentScanProfile && candidateDedupProfile
+                && adjacentScanProfile && candidateDedupProfile && heightmapPrefilterProfile
                 && particleScaleBounded && particleOffsetBounded
                 && particleVelocityBounded && foliageClearanceProfile && canopyAccentHeadroomProfile
                 && Math.abs(plantTop-71.06D)<1.0E-9D
@@ -3118,6 +3126,8 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_ACCENT_PROFILE_VERIFIED maxHeightAboveGround={} topLeafOnly=true exposedAirOnly=true loadedChunkOnly=true forceLoad=false",
                 GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_HEIGHTMAP_PREFILTER_PROFILE_VERIFIED openSurfaceRejected=true canopyAccepted=true heightBounded=true finiteGuard=true conservative=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_ADJACENT_SCAN_PROFILE_VERIFIED perSample=1 alternatingSides=true perpendicular=true loadedOnly=true radius=48 duplicateColumnsRejected=true");
             com.mojang.logging.LogUtils.getLogger().info(
@@ -3145,6 +3155,17 @@ public final class RiftClientState {
             return Double.isFinite(groundY) && Double.isFinite(accentY)
                 && accentY>groundY+1.0D
                 && accentY-groundY<=GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND;
+        }
+
+        // The leaf shape height is clamped to [0,1]. Reject a heightmap column before
+        // block-state/shape reads only when no possible leaf height can pass final bounds.
+        private static boolean canopyAccentHeightmapMayContainValidLeafAccent(double groundY,int topY) {
+            if(!Double.isFinite(groundY)) return false;
+            double minimumPossibleAccentY=topY-1.0D+GROUND_CANOPY_ACCENT_VERTICAL_OFFSET;
+            double maximumPossibleAccentY=topY+GROUND_CANOPY_ACCENT_VERTICAL_OFFSET;
+            return Double.isFinite(minimumPossibleAccentY) && Double.isFinite(maximumPossibleAccentY)
+                && maximumPossibleAccentY>groundY+1.0D
+                && minimumPossibleAccentY-groundY<=GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND;
         }
 
         // Sample one deterministic column beside the fissure, perpendicular to its arm.
@@ -3191,7 +3212,8 @@ public final class RiftClientState {
             if(chunk==null) return;
             int topY=chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,
                 blockX&15,blockZ&15);
-            if(topY<=level.getMinBuildHeight() || topY>=level.getMaxBuildHeight()) return;
+            if(topY<=level.getMinBuildHeight() || topY>=level.getMaxBuildHeight()
+                || !canopyAccentHeightmapMayContainValidLeafAccent(groundY,topY)) return;
             cursor.set(blockX,topY-1,blockZ);
             if(!level.getWorldBorder().isWithinBounds(cursor)) return;
             BlockState leaf=level.getBlockState(cursor);
