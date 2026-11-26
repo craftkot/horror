@@ -861,9 +861,11 @@ public final class RiftClientState {
         private static final int GROUND_CANOPY_ACCENT_PARTICLE_BUDGET=8;
         // Queue candidates while sampling, then emit only when the final mesh retains a nearby segment.
         private static final int GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET=32;
+        // A rebuild may inspect at most eighty already-loaded neighboring canopy columns.
+        private static final int GROUND_CANOPY_ACCENT_NEIGHBOR_SCAN_BUDGET=80;
         // Mesh invalidation can happen more often than the normal rebuild cadence while moving.
         private static final long GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS=REBUILD_INTERVAL;
-        private static final double GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE=.85D;
+        private static final double GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE=1.60D;
         private static final double GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE_SQR=
             GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE*GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE;
         private static final double GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA=.35D;
@@ -883,6 +885,8 @@ public final class RiftClientState {
         private static int groundCanopyAccentCandidateCount;
         private static int groundCanopyAccentFallbackScans;
         private static int groundCanopyAccentFallbackHits;
+        private static int groundCanopyAccentNeighborScans;
+        private static int groundCanopyAccentDistanceTwoHits;
         // Rotate the bounded emission window so later fissure arms are not starved by insertion order.
         private static int groundCanopyAccentCandidateCursor;
         private static long groundCanopyAccentLastAttemptTick=Long.MIN_VALUE;
@@ -3048,6 +3052,20 @@ public final class RiftClientState {
                 && canopyAccentAdjacentColumnZ(10L,2,1,true)==9L
                 && canopyAccentAdjacentColumnX(10L,3,1,true)==11L
                 && canopyAccentAdjacentColumnX(10L,-1,1,true)==Long.MIN_VALUE;
+            boolean secondRingScanProfile=
+                canopyAccentAdjacentColumnX(10L,1,1,false,2)==12L
+                && canopyAccentAdjacentColumnX(10L,1,1,true,2)==8L
+                && canopyAccentAdjacentColumnZ(10L,0,1,false,2)==8L
+                && canopyAccentAdjacentColumnZ(10L,0,1,true,2)==12L
+                && canopyAccentAdjacentColumnX(Long.MAX_VALUE,1,1,false,2)==Long.MIN_VALUE
+                && canopyAccentAdjacentColumnZ(Long.MIN_VALUE,0,1,false,2)==Long.MIN_VALUE
+                && canopyAccentAdjacentColumnX(10L,1,1,false,0)==Long.MIN_VALUE
+                && canopyAccentAdjacentColumnZ(10L,0,1,false,3)==Long.MIN_VALUE;
+            boolean neighborScanBudgetProfile=
+                canAttemptCanopyAccentNeighborScan(0)
+                && canAttemptCanopyAccentNeighborScan(GROUND_CANOPY_ACCENT_NEIGHBOR_SCAN_BUDGET-1)
+                && !canAttemptCanopyAccentNeighborScan(GROUND_CANOPY_ACCENT_NEIGHBOR_SCAN_BUDGET)
+                && !canAttemptCanopyAccentNeighborScan(-1);
             int[] duplicateCandidateX={-4,7};
             int[] duplicateCandidateZ={3,-9};
             boolean candidateDedupProfile=
@@ -3082,14 +3100,14 @@ public final class RiftClientState {
             boolean broadPhaseNear=canopyAccentCandidateInsideExpandedSegmentBounds(
                 .5D,.2D,fixture.a(),fixture.b());
             boolean broadPhaseFar=!canopyAccentCandidateInsideExpandedSegmentBounds(
-                .5D,1.0D,fixture.a(),fixture.b());
+                .5D,1.7D,fixture.a(),fixture.b());
             boolean broadPhaseCorner=canopyAccentCandidateInsideExpandedSegmentBounds(
-                -.8D,.8D,fixture.a(),fixture.b());
-            boolean exactCornerRejected=!canopyAccentCandidateNearSegment(-.8D,.8D,70.05D,fixture);
+                -1.2D,1.2D,fixture.a(),fixture.b());
+            boolean exactCornerRejected=!canopyAccentCandidateNearSegment(-1.2D,1.2D,70.05D,fixture);
             boolean invalidBoundsRejected=!canopyAccentCandidateInsideExpandedSegmentBounds(
                 Double.NaN,.2D,fixture.a(),fixture.b());
-            boolean nearSegment=canopyAccentCandidateNearSegment(.5D,.2D,70.05D,fixture);
-            boolean farSegment=!canopyAccentCandidateNearSegment(.5D,1.0D,70.05D,fixture);
+            boolean nearSegment=canopyAccentCandidateNearSegment(.5D,1.5D,70.05D,fixture);
+            boolean farSegment=!canopyAccentCandidateNearSegment(.5D,1.7D,70.05D,fixture);
             boolean heightMismatch=!canopyAccentCandidateNearSegment(.5D,.2D,70.5D,fixture);
             boolean invalidRejected=!canopyAccentCandidateNearSegment(Double.NaN,.2D,70.05D,fixture);
             boolean emptyMeshRejected=!canopyAccentCandidateTouchesMesh(0,0,70.0D,List.of());
@@ -3119,7 +3137,8 @@ public final class RiftClientState {
                 && rotationProfile && emissionThrottleProfile
                 && zeroEmissionScanRecorded && emptyScanPreservesAttempt
                 && leafSelected && leafSparse && nonAccentSurfacesRejected && leafHeightBounded
-                && adjacentScanProfile && oppositeSideScanProfile && candidateDedupProfile && heightmapPrefilterProfile
+                && adjacentScanProfile && oppositeSideScanProfile && secondRingScanProfile
+                && neighborScanBudgetProfile && candidateDedupProfile && heightmapPrefilterProfile
                 && particleScaleBounded && particleOffsetBounded
                 && particleVelocityBounded && foliageClearanceProfile && canopyAccentHeadroomProfile
                 && Math.abs(plantTop-71.06D)<1.0E-9D
@@ -3139,7 +3158,7 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_HEIGHTMAP_PREFILTER_PROFILE_VERIFIED openSurfaceRejected=true canopyAccepted=true heightBounded=true finiteGuard=true conservative=true");
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_ADJACENT_SCAN_PROFILE_VERIFIED perSample=1..2 alternatingSides=true perpendicular=true fallbackOnMiss=true loadedOnly=true radius=48 duplicateColumnsRejected=true");
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_ADJACENT_SCAN_PROFILE_VERIFIED perSample=1..4 maxNeighborScans=80 alternatingSides=true perpendicular=true distanceTwoFallback=true fallbackOnMiss=true loadedOnly=true radius=48 duplicateColumnsRejected=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_ROTATION_PROFILE_VERIFIED candidateCount=12 budget=8 firstWindow=0-7 secondWindow=8-11 wrap=true negativeStart=true invalidCountRejected=true");
             com.mojang.logging.LogUtils.getLogger().info(
@@ -3181,25 +3200,47 @@ public final class RiftClientState {
         // Sample one deterministic column beside the fissure, perpendicular to its arm.
         // Alternating the side by segment avoids bias while keeping the extra lookup bounded.
         private static long canopyAccentAdjacentColumnX(long blockX,int arm,int segment) {
-            return canopyAccentAdjacentColumnX(blockX,arm,segment,false);
+            return canopyAccentAdjacentColumnX(blockX,arm,segment,false,1);
         }
 
         private static long canopyAccentAdjacentColumnX(long blockX,int arm,int segment,boolean oppositeSide) {
-            if(arm<0 || arm>=ARM_COUNT || segment<1 || segment>SEGMENTS_PER_ARM) return Long.MIN_VALUE;
+            return canopyAccentAdjacentColumnX(blockX,arm,segment,oppositeSide,1);
+        }
+
+        private static long canopyAccentAdjacentColumnX(long blockX,int arm,int segment,
+                boolean oppositeSide,int distance) {
+            if(arm<0 || arm>=ARM_COUNT || segment<1 || segment>SEGMENTS_PER_ARM
+                || distance<1 || distance>2) return Long.MIN_VALUE;
             int side=(segment&1)==0?1:-1;
             if(oppositeSide) side=-side;
-            return blockX+(arm==1?-side:arm==3?side:0);
+            long delta=(long)(arm==1?-side:arm==3?side:0)*distance;
+            if((delta>0 && blockX>Long.MAX_VALUE-delta)
+                || (delta<0 && blockX<Long.MIN_VALUE-delta)) return Long.MIN_VALUE;
+            return blockX+delta;
         }
 
         private static long canopyAccentAdjacentColumnZ(long blockZ,int arm,int segment) {
-            return canopyAccentAdjacentColumnZ(blockZ,arm,segment,false);
+            return canopyAccentAdjacentColumnZ(blockZ,arm,segment,false,1);
         }
 
         private static long canopyAccentAdjacentColumnZ(long blockZ,int arm,int segment,boolean oppositeSide) {
-            if(arm<0 || arm>=ARM_COUNT || segment<1 || segment>SEGMENTS_PER_ARM) return Long.MIN_VALUE;
+            return canopyAccentAdjacentColumnZ(blockZ,arm,segment,oppositeSide,1);
+        }
+
+        private static long canopyAccentAdjacentColumnZ(long blockZ,int arm,int segment,
+                boolean oppositeSide,int distance) {
+            if(arm<0 || arm>=ARM_COUNT || segment<1 || segment>SEGMENTS_PER_ARM
+                || distance<1 || distance>2) return Long.MIN_VALUE;
             int side=(segment&1)==0?1:-1;
             if(oppositeSide) side=-side;
-            return blockZ+(arm==0?side:arm==2?-side:0);
+            long delta=(long)(arm==0?side:arm==2?-side:0)*distance;
+            if((delta>0 && blockZ>Long.MAX_VALUE-delta)
+                || (delta<0 && blockZ<Long.MIN_VALUE-delta)) return Long.MIN_VALUE;
+            return blockZ+delta;
+        }
+
+        private static boolean canAttemptCanopyAccentNeighborScan(int scans) {
+            return scans>=0 && scans<GROUND_CANOPY_ACCENT_NEIGHBOR_SCAN_BUDGET;
         }
 
         private static boolean hasCanopyAccentCandidate(int blockX,int blockZ,
@@ -3260,24 +3301,35 @@ public final class RiftClientState {
             if(level==null || cursor==null || !Double.isFinite(groundY)
                 || groundCanopyAccentCandidateCount<0
                 || groundCanopyAccentCandidateCount>=GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET) return false;
-            if(queueAdjacentExposedLeafCanopyAccent(level,blockX,blockZ,groundY,
-                    arm,segment,worldAnchorX,worldAnchorZ,cursor,false)) return true;
-            groundCanopyAccentFallbackScans++;
-            boolean fallbackQueued=queueAdjacentExposedLeafCanopyAccent(level,blockX,blockZ,groundY,
-                arm,segment,worldAnchorX,worldAnchorZ,cursor,true);
-            if(fallbackQueued) groundCanopyAccentFallbackHits++;
-            return fallbackQueued;
+            // Search both sides at one block first, then a second perpendicular ring.
+            // The total heightmap lookups are capped per mesh rebuild.
+            for(int distance=1;distance<=2;distance++) {
+                for(int side=0;side<2;side++) {
+                    if(!canAttemptCanopyAccentNeighborScan(groundCanopyAccentNeighborScans)) return false;
+                    groundCanopyAccentNeighborScans++;
+                    boolean oppositeSide=side==1;
+                    boolean fallback=distance>1 || oppositeSide;
+                    if(fallback) groundCanopyAccentFallbackScans++;
+                    if(queueAdjacentExposedLeafCanopyAccent(level,blockX,blockZ,groundY,
+                            arm,segment,worldAnchorX,worldAnchorZ,cursor,oppositeSide,distance)) {
+                        if(fallback) groundCanopyAccentFallbackHits++;
+                        if(distance==2) groundCanopyAccentDistanceTwoHits++;
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         private static boolean queueAdjacentExposedLeafCanopyAccent(
                 net.minecraft.client.multiplayer.ClientLevel level,int blockX,int blockZ,double groundY,
                 int arm,int segment,int worldAnchorX,int worldAnchorZ,BlockPos.MutableBlockPos cursor,
-                boolean oppositeSide) {
+                boolean oppositeSide,int distance) {
             if(level==null || cursor==null || !Double.isFinite(groundY)
                 || groundCanopyAccentCandidateCount<0
                 || groundCanopyAccentCandidateCount>=GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET) return false;
-            long adjacentX=canopyAccentAdjacentColumnX(blockX,arm,segment,oppositeSide);
-            long adjacentZ=canopyAccentAdjacentColumnZ(blockZ,arm,segment,oppositeSide);
+            long adjacentX=canopyAccentAdjacentColumnX(blockX,arm,segment,oppositeSide,distance);
+            long adjacentZ=canopyAccentAdjacentColumnZ(blockZ,arm,segment,oppositeSide,distance);
             if(adjacentX<Integer.MIN_VALUE || adjacentX>Integer.MAX_VALUE
                 || adjacentZ<Integer.MIN_VALUE || adjacentZ>Integer.MAX_VALUE) return false;
             long dx=adjacentX-worldAnchorX,dz=adjacentZ-worldAnchorZ;
@@ -3419,6 +3471,8 @@ public final class RiftClientState {
             groundCanopyAccentCandidateCount=0;
             groundCanopyAccentFallbackScans=0;
             groundCanopyAccentFallbackHits=0;
+            groundCanopyAccentNeighborScans=0;
+            groundCanopyAccentDistanceTwoHits=0;
             groundCanopyAccentParticlesEmitted=0;
             SURFACE_Y_BY_COLUMN.clear();
             SURFACE_CURSOR.set(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);
@@ -3548,10 +3602,12 @@ public final class RiftClientState {
             emitCanopyAccentCandidates(level,result,worldAnchorX,worldAnchorZ);
             if(VERIFY_GROUND_MESH_PROFILES && !canopyAccentBuildProfileLogged) {
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED candidates={} emitted={} candidateBudget={} budget={} loadedOnly=true radius=48 clientOnly=true plantOrLeafTop=true segmentBounded=true fallbackScans={} fallbackHits={}",
+                    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED candidates={} emitted={} candidateBudget={} budget={} loadedOnly=true radius=48 clientOnly=true plantOrLeafTop=true segmentBounded=true neighborScans={} neighborScanBudget={} fallbackScans={} fallbackHits={} distanceTwoHits={}",
                     groundCanopyAccentCandidateCount,groundCanopyAccentParticlesEmitted,
                     GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET,GROUND_CANOPY_ACCENT_PARTICLE_BUDGET,
-                    groundCanopyAccentFallbackScans,groundCanopyAccentFallbackHits);
+                    groundCanopyAccentNeighborScans,GROUND_CANOPY_ACCENT_NEIGHBOR_SCAN_BUDGET,
+                    groundCanopyAccentFallbackScans,groundCanopyAccentFallbackHits,
+                    groundCanopyAccentDistanceTwoHits);
                 canopyAccentBuildProfileLogged=true;
             }
             if(VERIFY_GROUND_MESH_PROFILES && groundCanopyAccentParticlesEmitted>0
@@ -3793,6 +3849,8 @@ public final class RiftClientState {
             groundCanopyAccentLastAttemptTick=Long.MIN_VALUE;
             groundCanopyAccentFallbackScans=0;
             groundCanopyAccentFallbackHits=0;
+            groundCanopyAccentNeighborScans=0;
+            groundCanopyAccentDistanceTwoHits=0;
             groundCanopyAccentParticlesEmitted=0;
         }
 
@@ -3839,6 +3897,8 @@ public final class RiftClientState {
             groundCanopyAccentLastAttemptTick=Long.MIN_VALUE;
             groundCanopyAccentFallbackScans=0;
             groundCanopyAccentFallbackHits=0;
+            groundCanopyAccentNeighborScans=0;
+            groundCanopyAccentDistanceTwoHits=0;
             groundCanopyAccentParticlesEmitted=0;
         }
 

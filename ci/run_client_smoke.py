@@ -523,16 +523,18 @@ def verify_restoration_particle_source():
     adjacent_accent_start=client_source.find("private static boolean queueAdjacentExposedLeafCanopyAccent(")
     adjacent_accent_end=client_source.find("\n        private static double sampleGroundY",adjacent_accent_start+1)
     adjacent_accent_body=client_source[adjacent_accent_start:adjacent_accent_end] if adjacent_accent_start>=0 and adjacent_accent_end>adjacent_accent_start else ""
-    if ("canopyAccentAdjacentColumnX" not in adjacent_accent_body
-            or "canopyAccentAdjacentColumnZ" not in adjacent_accent_body
+    if ("canopyAccentAdjacentColumnX(blockX,arm,segment,oppositeSide,distance)" not in adjacent_accent_body
+            or "canopyAccentAdjacentColumnZ(blockZ,arm,segment,oppositeSide,distance)" not in adjacent_accent_body
             or "Math.abs(dx)>RADIUS" not in adjacent_accent_body
             or "Math.abs(dz)>RADIUS" not in adjacent_accent_body
             or "queueExposedLeafCanopyAccent(level,(int)adjacentX,(int)adjacentZ,groundY,cursor)" not in adjacent_accent_body
-            or "cursor,false)) return true;" not in adjacent_accent_body
-            or "cursor,true);" not in adjacent_accent_body
-            or "groundCanopyAccentFallbackScans++" not in adjacent_accent_body
-            or "groundCanopyAccentFallbackHits++" not in adjacent_accent_body
-            or "perSample=1..2 alternatingSides=true perpendicular=true fallbackOnMiss=true" not in client_source
+            or "for(int distance=1;distance<=2;distance++)" not in adjacent_accent_body
+            or "for(int side=0;side<2;side++)" not in adjacent_accent_body
+            or "canAttemptCanopyAccentNeighborScan(groundCanopyAccentNeighborScans)" not in adjacent_accent_body
+            or "groundCanopyAccentNeighborScans++" not in adjacent_accent_body
+            or "GROUND_CANOPY_ACCENT_NEIGHBOR_SCAN_BUDGET=80;" not in client_source
+            or "GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE=1.60D;" not in client_source
+            or "perSample=1..4 maxNeighborScans=80 alternatingSides=true perpendicular=true distanceTwoFallback=true fallbackOnMiss=true" not in client_source
             or "queueAdjacentExposedLeafCanopyAccent(level,blockX,blockZ,sampledY," not in client_source
             or "GROUND_CANOPY_LEAF_ADJACENT_SCAN_PROFILE_VERIFIED" not in client_source):
         raise RuntimeError("BLACK FREQUENCY adjacent canopy scan must remain perpendicular, radius-bounded, and loaded-only")
@@ -5081,18 +5083,29 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: canopy accent candidates were not filtered against retained fissure segments",
                       flush=True)
                 return False
+            canopy_neighbor_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_ADJACENT_SCAN_PROFILE_VERIFIED "
+                "perSample=1..4 maxNeighborScans=80 alternatingSides=true perpendicular=true "
+                "distanceTwoFallback=true fallbackOnMiss=true loadedOnly=true radius=48 duplicateColumnsRejected=true"
+            )
+            if canopy_neighbor_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: bounded two-ring canopy scan profile was not exercised",flush=True)
+                return False
             canopy_budget=re.search(
                 r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED "
                 r"candidates=(\d+) emitted=(\d+) candidateBudget=32 budget=8 "
                 r"loadedOnly=true radius=48 clientOnly=true plantOrLeafTop=true segmentBounded=true "
-                r"fallbackScans=(\d+) fallbackHits=(\d+)",
+                r"neighborScans=(\d+) neighborScanBudget=80 fallbackScans=(\d+) "
+                r"fallbackHits=(\d+) distanceTwoHits=(\d+)",
                 log_after)
             if (not canopy_budget or int(canopy_budget.group(1))>32
                 or int(canopy_budget.group(2))>8
                 or int(canopy_budget.group(2))>int(canopy_budget.group(1))
-                or int(canopy_budget.group(3))>GROUND_MESH_SAMPLES
-                or int(canopy_budget.group(4))>int(canopy_budget.group(3))):
-                print("WORLD_CAPTURE_FAIL: client canopy accent candidates or emitted particles exceeded their bounded budgets",
+                or int(canopy_budget.group(3))>80
+                or int(canopy_budget.group(4))>int(canopy_budget.group(3))
+                or int(canopy_budget.group(5))>int(canopy_budget.group(4))
+                or int(canopy_budget.group(6))>int(canopy_budget.group(5))):
+                print("WORLD_CAPTURE_FAIL: client canopy accent candidates or neighbor scans exceeded their bounded budgets",
                       canopy_budget.groups() if canopy_budget else None,flush=True)
                 return False
             canopy_heightmap_prefilter_marker=(
