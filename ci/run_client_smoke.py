@@ -540,6 +540,7 @@ def verify_restoration_particle_source():
             or "isCanopyAccentHeadroomAvailable(head)" not in surface_plant_clearance_body
             or "isCanopyAccentSkippablePlant(head,head.getCollisionShape(level,cursor))" not in surface_plant_clearance_body
             or "canopyAccentPlantSurfaceParticleY" not in sample_ground_body
+            or "if(!Double.isFinite(shapeHeight) || shapeHeight<=0.0D" not in client_source
             or "skippedPlantSurfaceBlocks>=0" not in sample_ground_body
             or "skippedPlantSurfaceBlocks<0" not in sample_ground_body
             or "queuePlantSurfaceCanopyAccent" not in sample_ground_body

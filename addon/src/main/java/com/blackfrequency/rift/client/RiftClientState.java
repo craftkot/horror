@@ -2970,7 +2970,8 @@ public final class RiftClientState {
         }
 
         private static double canopyAccentPlantSurfaceParticleY(int surfaceY,double shapeHeight,int skippedPlants) {
-            if(skippedPlants<0 || skippedPlants>GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS) return Double.NaN;
+            if(!Double.isFinite(shapeHeight) || shapeHeight<=0.0D
+                || skippedPlants<0 || skippedPlants>GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS) return Double.NaN;
             if(skippedPlants==0) return canopyAccentParticleY(surfaceY,shapeHeight);
             long clearY=(long)surfaceY+1L+(long)skippedPlants;
             if(clearY<Integer.MIN_VALUE || clearY>Integer.MAX_VALUE) return Double.NaN;
@@ -3229,6 +3230,8 @@ public final class RiftClientState {
                 && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,2)-73.26D)<1.0E-9D
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,.8D,-1))
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,.8D,3))
+                && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,Double.NaN,0))
+                && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,0.0D,1))
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(Integer.MAX_VALUE,.8D,1));
             GroundSegment fixture=new GroundSegment(new GroundPoint(0.0D,70.0D,0.0D),
                 new GroundPoint(1.0D,70.0D,0.0D),0.0D,1.0D,GROUND_SAMPLES[0],
