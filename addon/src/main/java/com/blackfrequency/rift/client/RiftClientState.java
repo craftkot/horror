@@ -914,6 +914,19 @@ public final class RiftClientState {
         private static int groundCanopyAccentCandidateCursor;
         private static long groundCanopyAccentLastAttemptTick=Long.MIN_VALUE;
         private static int groundCanopyAccentParticlesEmitted;
+        // Rejection counters are populated only by the isolated client smoke profile.
+        private static int groundCanopyAccentQueueAttempts;
+        private static int groundCanopyAccentQueueAccepted;
+        private static int groundCanopyAccentQueueInvalidRejected;
+        private static int groundCanopyAccentQueueBudgetRejected;
+        private static int groundCanopyAccentQueueChunkRejected;
+        private static int groundCanopyAccentQueueHeightmapRejected;
+        private static int groundCanopyAccentQueueNonLeafRejected;
+        private static int groundCanopyAccentQueueHeadroomRejected;
+        private static int groundCanopyAccentQueueHeightRejected;
+        private static int groundCanopyAccentQueuePatternRejected;
+        private static int groundCanopyAccentQueueDuplicateRejected;
+        private static int groundCanopyAccentQueueSegmentRejected;
         private static boolean canopyAccentSelectorProfileLogged;
         private static boolean canopyAccentBuildProfileLogged;
         private static boolean canopyAccentEmissionLogged;
@@ -3367,34 +3380,69 @@ public final class RiftClientState {
          */
         private static boolean queueExposedLeafCanopyAccent(net.minecraft.client.multiplayer.ClientLevel level,
                 int blockX,int blockZ,double groundY,BlockPos.MutableBlockPos cursor) {
-            if(level==null || cursor==null || !Double.isFinite(groundY)
-                || groundCanopyAccentCandidateCount<0
-                || groundCanopyAccentCandidateCount>=GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET
-                || !level.hasChunk(blockX>>4,blockZ>>4)) return false;
+            if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueAttempts++;
+            if(level==null || cursor==null || !Double.isFinite(groundY)) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueInvalidRejected++;
+                return false;
+            }
+            if(groundCanopyAccentCandidateCount<0
+                || groundCanopyAccentCandidateCount>=GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueBudgetRejected++;
+                return false;
+            }
+            if(!level.hasChunk(blockX>>4,blockZ>>4)) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueChunkRejected++;
+                return false;
+            }
             var chunk=level.getChunkSource().getChunk(blockX>>4,blockZ>>4,
                 net.minecraft.world.level.chunk.ChunkStatus.FULL,false);
-            if(chunk==null) return false;
+            if(chunk==null) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueChunkRejected++;
+                return false;
+            }
             int topY=chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,
                 blockX&15,blockZ&15);
             if(topY<=level.getMinBuildHeight() || topY>=level.getMaxBuildHeight()
-                || !canopyAccentHeightmapMayContainValidLeafAccent(groundY,topY)) return false;
+                || !canopyAccentHeightmapMayContainValidLeafAccent(groundY,topY)) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueHeightmapRejected++;
+                return false;
+            }
             cursor.set(blockX,topY-1,blockZ);
-            if(!level.getWorldBorder().isWithinBounds(cursor)) return false;
+            if(!level.getWorldBorder().isWithinBounds(cursor)) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueInvalidRejected++;
+                return false;
+            }
             BlockState leaf=level.getBlockState(cursor);
-            if(!leaf.is(BlockTags.LEAVES)) return false;
+            if(!leaf.is(BlockTags.LEAVES)) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueNonLeafRejected++;
+                return false;
+            }
             double shapeHeight=leaf.getShape(level,cursor).max(Direction.Axis.Y);
             double accentY=canopyAccentParticleY(topY-1,shapeHeight);
             cursor.set(blockX,topY,blockZ);
             BlockState head=level.getBlockState(cursor);
-            if(!isCanopyAccentHeadroomAvailable(head)
-                || !isCanopyAccentHeightWithinBounds(groundY,accentY)
-                || !shouldQueueCanopyAccentCandidate(leaf,blockX,blockZ,groundCanopyAccentCandidateCount)
-                || hasCanopyAccentCandidate(blockX,blockZ)) return false;
+            if(!isCanopyAccentHeadroomAvailable(head)) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueHeadroomRejected++;
+                return false;
+            }
+            if(!isCanopyAccentHeightWithinBounds(groundY,accentY)) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueHeightRejected++;
+                return false;
+            }
+            if(!shouldQueueCanopyAccentCandidate(leaf,blockX,blockZ,groundCanopyAccentCandidateCount)) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueuePatternRejected++;
+                return false;
+            }
+            if(hasCanopyAccentCandidate(blockX,blockZ)) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueDuplicateRejected++;
+                return false;
+            }
             int candidate=groundCanopyAccentCandidateCount++;
             GROUND_CANOPY_ACCENT_X[candidate]=blockX;
             GROUND_CANOPY_ACCENT_Z[candidate]=blockZ;
             GROUND_CANOPY_ACCENT_Y[candidate]=accentY;
             GROUND_CANOPY_ACCENT_GROUND_Y[candidate]=groundY;
+            if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueAccepted++;
             return true;
         }
 
@@ -3458,6 +3506,7 @@ public final class RiftClientState {
                         if(distance==2) groundCanopyAccentDiagonalHits++;
                     } else if(candidate>=candidatesBefore) {
                         // Do not let an off-segment canopy point starve a later valid side.
+                        if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueSegmentRejected++;
                         groundCanopyAccentCandidateCount=candidatesBefore;
                     }
                 }
@@ -3620,6 +3669,18 @@ public final class RiftClientState {
             groundCanopyAccentNeighborDuplicateScans=0;
             groundCanopyAccentDiagonalHits=0;
             groundCanopyAccentParticlesEmitted=0;
+            groundCanopyAccentQueueAttempts=0;
+            groundCanopyAccentQueueAccepted=0;
+            groundCanopyAccentQueueInvalidRejected=0;
+            groundCanopyAccentQueueBudgetRejected=0;
+            groundCanopyAccentQueueChunkRejected=0;
+            groundCanopyAccentQueueHeightmapRejected=0;
+            groundCanopyAccentQueueNonLeafRejected=0;
+            groundCanopyAccentQueueHeadroomRejected=0;
+            groundCanopyAccentQueueHeightRejected=0;
+            groundCanopyAccentQueuePatternRejected=0;
+            groundCanopyAccentQueueDuplicateRejected=0;
+            groundCanopyAccentQueueSegmentRejected=0;
             SURFACE_Y_BY_COLUMN.clear();
             SURFACE_CURSOR.set(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);
             int surfaceSamples=0;
@@ -3755,6 +3816,14 @@ public final class RiftClientState {
                     groundCanopyAccentFallbackScans,groundCanopyAccentFallbackHits,
                     groundCanopyAccentDiagonalHits,groundCanopyAccentNeighborDuplicateScans,
                     groundCanopyAccentNeighborSampleCount);
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_REJECTION_PROFILE_VERIFIED attempts={} accepted={} invalid={} budget={} chunk={} heightmap={} nonLeaf={} headroom={} height={} pattern={} duplicate={} segment={}",
+                    groundCanopyAccentQueueAttempts,groundCanopyAccentQueueAccepted,
+                    groundCanopyAccentQueueInvalidRejected,groundCanopyAccentQueueBudgetRejected,
+                    groundCanopyAccentQueueChunkRejected,groundCanopyAccentQueueHeightmapRejected,
+                    groundCanopyAccentQueueNonLeafRejected,groundCanopyAccentQueueHeadroomRejected,
+                    groundCanopyAccentQueueHeightRejected,groundCanopyAccentQueuePatternRejected,
+                    groundCanopyAccentQueueDuplicateRejected,groundCanopyAccentQueueSegmentRejected);
                 canopyAccentBuildProfileLogged=true;
             }
             if(VERIFY_GROUND_MESH_PROFILES && groundCanopyAccentParticlesEmitted>0

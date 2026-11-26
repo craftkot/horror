@@ -5135,6 +5135,24 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: client canopy accent candidates or unique neighbor scans exceeded their bounded budgets",
                       canopy_budget.groups() if canopy_budget else None,flush=True)
                 return False
+            canopy_rejections=re.search(
+                r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_REJECTION_PROFILE_VERIFIED "
+                r"attempts=(\\d+) accepted=(\\d+) invalid=(\\d+) budget=(\\d+) chunk=(\\d+) "
+                r"heightmap=(\\d+) nonLeaf=(\\d+) headroom=(\\d+) height=(\\d+) "
+                r"pattern=(\\d+) duplicate=(\\d+) segment=(\\d+)",
+                log_after)
+            if not canopy_rejections:
+                print("WORLD_CAPTURE_FAIL: canopy accent rejection reasons were not reported",flush=True)
+                return False
+            rejection_counts=[int(value) for value in canopy_rejections.groups()]
+            attempts,accepted,*reasons,segment_rejected=rejection_counts
+            if (attempts>GROUND_MESH_SAMPLES+80
+                    or accepted>attempts
+                    or sum(reasons)+accepted!=attempts
+                    or segment_rejected>accepted):
+                print("WORLD_CAPTURE_FAIL: canopy accent rejection accounting is inconsistent",
+                      rejection_counts,flush=True)
+                return False
             canopy_heightmap_prefilter_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_HEIGHTMAP_PREFILTER_PROFILE_VERIFIED "
                 "openSurfaceRejected=true canopyAccepted=true heightBounded=true finiteGuard=true conservative=true"
