@@ -868,7 +868,7 @@ public final class RiftClientState {
             GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE*GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE;
         private static final double GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA=.35D;
         // Leaf-top accents may rise above the ground ribbon, but stay inside a bounded canopy envelope.
-        private static final double GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=12.0D;
+        private static final double GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=16.0D;
         // Lift and enlarge sparse motes just enough to read above short foliage.
         private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=.81F;
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.26D;
@@ -3018,13 +3018,15 @@ public final class RiftClientState {
                 && !shouldQueueCanopyAccentCandidate(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),0,0,0);
             double leafTop=canopyAccentParticleY(70,1.0D);
             boolean leafHeightBounded=isCanopyAccentHeightWithinBounds(64.1D,leafTop)
-                && !isCanopyAccentHeightWithinBounds(64.1D,canopyAccentParticleY(77,1.0D))
+                && isCanopyAccentHeightWithinBounds(64.1D,80.1D)
+                && !isCanopyAccentHeightWithinBounds(64.1D,80.100001D)
+                && !isCanopyAccentHeightWithinBounds(64.1D,canopyAccentParticleY(79,1.0D))
                 && !isCanopyAccentHeightWithinBounds(Double.NaN,leafTop);
             boolean heightmapPrefilterProfile=
                 !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,64)
                 && canopyAccentHeightmapMayContainValidLeafAccent(64.1D,68)
-                && canopyAccentHeightmapMayContainValidLeafAccent(64.26D,77)
-                && !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,77)
+                && canopyAccentHeightmapMayContainValidLeafAccent(64.26D,81)
+                && !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,81)
                 && !canopyAccentHeightmapMayContainValidLeafAccent(Double.NaN,68)
                 && !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,Integer.MIN_VALUE)
                 && !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,Integer.MAX_VALUE);
