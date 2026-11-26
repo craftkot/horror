@@ -69,5 +69,6 @@ final class Apparitions {
             }else e.setValue(new Ghost(g.id(),p,g.level(),g.point(),g.age()+1,seen));
         }
     }
+    boolean hasWatcher(ServerPlayer p){var g=active.get(p.getUUID());return g!=null&&g.player()==p&&g.level()==p.level();}
     void clear(){active.clear();nextId=-1;}
 }

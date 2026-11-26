@@ -1,3 +1,6 @@
 {
-  "event.unwritten.presence": "Здесь кто-то есть?"
+  "event.unwritten.presence": "Здесь кто-то есть?",
+  "event.unwritten.sleep.guilt": "Не могу уснуть. Не перестаю думать о своих поступках.",
+  "event.unwritten.sleep.watched": "Кто-то наблюдает за кроватью.",
+  "event.unwritten.sleep.call": "Кто-то зовёт из темноты."
 }

@@ -10,11 +10,14 @@ public final class HorrorDirector {
  private int pressure, karma, cooldown, quiet=120;
  private Event last;
  private int bonemealUses;
+ private int sleepCooldown;
+ public enum Sleep { ALLOW, GUILT, WATCHED, CALL }
  public HorrorDirector(long seed){random=new Random(seed);}
  public Optional<Decision> tick(Observation o){
   karma=Math.clamp(karma+Math.clamp(o.moralDelta(),-10,10),-100,100);
   pressure=Math.clamp(pressure+(o.dark()?2:0)+(o.alone()?1:0)+(o.underground()?1:0)-(o.safe()?4:0),0,1000);
   if(cooldown>0) cooldown--;
+  if(sleepCooldown>0)sleepCooldown--;
   if(quiet>0){quiet--;return Optional.empty();}
   if(o.safe()||cooldown>0||pressure<60)return Optional.empty();
   int stage=Math.min(5,1+pressure/200);
@@ -29,23 +32,30 @@ public final class HorrorDirector {
   pressure=Math.max(0,pressure-35);
   return Optional.of(new Decision(last,stage));
  }
+ public Sleep sleep(boolean watched){
+  if(sleepCooldown>0)return Sleep.ALLOW;
+  Sleep result=watched?Sleep.WATCHED:karma<0?Sleep.GUILT:karma>0&&random.nextInt(10)==0?Sleep.CALL:Sleep.ALLOW;
+  if(result!=Sleep.ALLOW)sleepCooldown=180;
+  return result;
+ }
  public void bonemeal(){if(++bonemealUses>=5){bonemealUses=0;adjustKarma(1);}}
  public void tame(){adjustKarma(1);}
  public void trample(){adjustKarma(-5);}
  public void explosion(){adjustKarma(-3);}
  public void adjustKarma(int delta){karma=Math.clamp(karma+Math.clamp(delta,-100,100),-100,100);}
  public void write(DataOutput out)throws IOException{
-  out.writeInt(2);out.writeInt(pressure);out.writeInt(karma);out.writeInt(cooldown);out.writeInt(quiet);
-  out.writeUTF(last==null?"":last.name());out.writeInt(bonemealUses);
+  out.writeInt(3);out.writeInt(pressure);out.writeInt(karma);out.writeInt(cooldown);out.writeInt(quiet);
+  out.writeUTF(last==null?"":last.name());out.writeInt(bonemealUses);out.writeInt(sleepCooldown);
  }
  public static HorrorDirector read(DataInput in,long seed)throws IOException{
-  int version=in.readInt();if(version!=1&&version!=2)throw new IOException("Unknown director version");
+  int version=in.readInt();if(version<1||version>3)throw new IOException("Unknown director version");
   var d=new HorrorDirector(seed);
   d.pressure=in.readInt();d.karma=in.readInt();d.cooldown=in.readInt();d.quiet=in.readInt();
   if(d.pressure<0||d.pressure>1000||Math.abs((long)d.karma)>100||d.cooldown<0||d.cooldown>120||d.quiet<0||d.quiet>120)throw new IOException("Invalid director state");
   var name=in.readUTF();
   try{d.last=name.isEmpty()?null:Event.valueOf(name);}catch(IllegalArgumentException ex){throw new IOException("Invalid event",ex);}
-  if(version==2){d.bonemealUses=in.readInt();if(d.bonemealUses<0||d.bonemealUses>=5)throw new IOException("Invalid bonemeal counter");}
+  if(version>=2){d.bonemealUses=in.readInt();if(d.bonemealUses<0||d.bonemealUses>=5)throw new IOException("Invalid bonemeal counter");}
+  if(version>=3){d.sleepCooldown=in.readInt();if(d.sleepCooldown<0||d.sleepCooldown>180)throw new IOException("Invalid sleep cooldown");}
   return d;
  }
  public int pressure(){return pressure;}

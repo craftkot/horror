@@ -1,3 +1,6 @@
 {
-  "event.unwritten.presence": "Is someone there?"
+  "event.unwritten.presence": "Is someone there?",
+  "event.unwritten.sleep.guilt": "I can't sleep. I keep thinking about what I've done.",
+  "event.unwritten.sleep.watched": "Something is watching the bed.",
+  "event.unwritten.sleep.call": "Someone is calling from the dark."
 }

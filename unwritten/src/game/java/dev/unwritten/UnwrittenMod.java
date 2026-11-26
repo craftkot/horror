@@ -7,6 +7,8 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.neoforge.event.entity.living.AnimalTameEvent;
 import net.neoforged.neoforge.event.entity.player.BonemealEvent;
+import net.neoforged.neoforge.event.entity.player.CanPlayerSleepEvent;
+import net.minecraft.world.entity.player.Player;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.ExplosionEvent;
 import net.minecraft.network.chat.Component;
@@ -31,6 +33,7 @@ public final class UnwrittenMod {
         NeoForge.EVENT_BUS.addListener(this::stopping);
         NeoForge.EVENT_BUS.addListener(this::tame);
         NeoForge.EVENT_BUS.addListener(this::bonemeal);
+        NeoForge.EVENT_BUS.addListener(this::sleep);
         NeoForge.EVENT_BUS.addListener(this::trample);
         NeoForge.EVENT_BUS.addListener(this::explosion);
     }
@@ -53,7 +56,19 @@ public final class UnwrittenMod {
         if(!event.isCanceled()&&event.getTamer() instanceof ServerPlayer p&&eligible(p))session(p).director().tame();
     }
     private void bonemeal(BonemealEvent event){
-        if(!event.isCanceled()&&event.getEntity() instanceof ServerPlayer p&&eligible(p))session(p).director().bonemeal();
+        if(!event.isCanceled()&&event.isValidBonemealTarget()&&event.getPlayer() instanceof ServerPlayer p&&eligible(p))session(p).director().bonemeal();
+    }
+    private void sleep(CanPlayerSleepEvent event){
+        var p=event.getEntity();
+        if(!eligible(p)||event.getProblem()!=null)return;
+        var s=session(p);var pos=event.getPos();
+        s.history().rememberBed(new PlayerHistory.Bed(p.level().dimension().identifier().toString(),pos.getX(),pos.getY(),pos.getZ()));
+        switch(s.director().sleep(apparitions.hasWatcher(p))){
+            case GUILT -> {event.setProblem(Player.BedSleepingProblem.OTHER_PROBLEM);p.sendSystemMessage(Component.translatable("event.unwritten.sleep.guilt"));}
+            case WATCHED -> {event.setProblem(Player.BedSleepingProblem.OTHER_PROBLEM);p.sendSystemMessage(Component.translatable("event.unwritten.sleep.watched"));}
+            case CALL -> p.sendSystemMessage(Component.translatable("event.unwritten.sleep.call"));
+            case ALLOW -> {}
+        }
     }
     private void trample(BlockEvent.FarmlandTrampleEvent event){
         if(!event.isCanceled()&&event.getEntity() instanceof ServerPlayer p&&eligible(p))session(p).director().trample();
@@ -96,7 +111,7 @@ public final class UnwrittenMod {
             case ECHO -> Apparitions.soundBehind(p, SoundEvents.AMBIENT_CAVE.value(), 0.45f, 0.75f);
             case DISTANT_SILHOUETTE -> apparitions.show(p);
             case FALSE_PRESENCE -> { Apparitions.soundBehind(p,SoundEvents.GRASS_STEP,0.9f,0.95f); apparitions.show(p); }
-            case LOCAL_ANOMALY -> anomalies.show(p);
+            case LOCAL_ANOMALY -> { if(!ReferenceEvents.markBase(p,session(p).history()))anomalies.show(p); }
             case BREATH -> Apparitions.soundBehind(p,SoundEvents.PLAYER_BREATH,1.0f,0.5f);
             case DOOR -> ReferenceEvents.toggleDoor(p);
             case TEXT -> p.sendSystemMessage(Component.translatable("event.unwritten.presence"));
