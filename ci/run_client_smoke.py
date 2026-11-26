@@ -481,7 +481,18 @@ def verify_restoration_particle_source():
     leaf_accent_start=client_source.find("private static void queueExposedLeafCanopyAccent(")
     leaf_accent_end=client_source.find("\n        private static double sampleGroundY",leaf_accent_start+1)
     leaf_accent_body=client_source[leaf_accent_start:leaf_accent_end] if leaf_accent_start>=0 and leaf_accent_end>leaf_accent_start else ""
+    heightmap_prefilter_start=client_source.find("private static boolean canopyAccentHeightmapMayContainValidLeafAccent(")
+    heightmap_prefilter_end=client_source.find("\n        // Sample one deterministic column",heightmap_prefilter_start+1)
+    heightmap_prefilter_body=(client_source[heightmap_prefilter_start:heightmap_prefilter_end]
+        if heightmap_prefilter_start>=0 and heightmap_prefilter_end>heightmap_prefilter_start else "")
+    heightmap_prefilter_at=leaf_accent_body.find("canopyAccentHeightmapMayContainValidLeafAccent(groundY,topY)")
+    leaf_state_at=leaf_accent_body.find("BlockState leaf=level.getBlockState(cursor);")
     if ("GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=12.0D;" not in client_source
+            or heightmap_prefilter_at<0 or leaf_state_at<0 or heightmap_prefilter_at>leaf_state_at
+            or "Double.isFinite(groundY)" not in heightmap_prefilter_body
+            or "maximumPossibleAccentY>groundY+1.0D" not in heightmap_prefilter_body
+            or "minimumPossibleAccentY-groundY<=GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND" not in heightmap_prefilter_body
+            or "GROUND_CANOPY_HEIGHTMAP_PREFILTER_PROFILE_VERIFIED" not in client_source
             or "level.hasChunk(blockX>>4,blockZ>>4)" not in leaf_accent_body
             or "getChunk(blockX>>4,blockZ>>4," not in leaf_accent_body
             or "net.minecraft.world.level.chunk.ChunkStatus.FULL,false" not in leaf_accent_body
