@@ -5480,7 +5480,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: custom Overworld cloud effects were not registered",flush=True)
                 return False
             cloud_runtime=re.search(
-                r"BLACK_FREQUENCY_TEST VANILLA_CLOUD_RUNTIME_STATE dimension=(\\S+) cloudStatus=(\\S+) effectsClass=(\\S+) cloudHeight=([-+0-9.eE]+) ciTestMode=(true|false)",
+                r"BLACK_FREQUENCY_TEST VANILLA_CLOUD_RUNTIME_STATE dimension=(\S+) cloudStatus=(\S+) effectsClass=(\S+) cloudHeight=([-+0-9.eE]+) ciTestMode=(true|false)",
                 log_after)
             if not cloud_runtime:
                 print("WORLD_CAPTURE_FAIL: runtime cloud status and active dimension effects were not observed",flush=True)
