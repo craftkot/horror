@@ -1093,8 +1093,8 @@ option_overrides=[
     # Use Fancy graphics in this disposable client: leaves are transparent and the
     # cloud layer is enabled, so both visual occlusion and cloud suppression are tested.
     ("graphicsMode","1"),
-    # Minecraft 1.20.1 stores CloudStatus as a quoted JSON string; bare true is rejected and falls back to OFF.
-    ("renderClouds",'"true"'),
+    # Minecraft 1.20.1 CloudStatus uses the unquoted options.txt tokens false/fast/true.
+    ("renderClouds","true"),
 ]
 if deferred_chunk_probe:
     option_overrides.extend((("renderDistance",str(DEFERRED_RENDER_DISTANCE)),
@@ -1113,9 +1113,9 @@ if option_values.get("pauseOnLostFocus")!="false":
     raise SystemExit("Could not disable Minecraft pauseOnLostFocus for deterministic integrated-server ticks")
 if option_values.get("graphicsMode")!="1":
     raise SystemExit("Could not enable Fancy graphics for the visual-occlusion smoke test")
-if option_values.get("renderClouds")!='"true"':
-    raise SystemExit("Could not serialize renderClouds as the Minecraft 1.20.1 CloudStatus string")
-print('WORLD_CAPTURE: Fancy graphics and vanilla clouds enabled for visual smoke tests (renderClouds:"true")',flush=True)
+if option_values.get("renderClouds")!="true":
+    raise SystemExit("Could not serialize renderClouds as the Minecraft 1.20.1 CloudStatus token")
+print("WORLD_CAPTURE: Fancy graphics and vanilla clouds enabled for visual smoke tests (renderClouds:true)",flush=True)
 if deferred_chunk_probe and (
         option_values.get("renderDistance")!=str(DEFERRED_RENDER_DISTANCE)
         or option_values.get("simulationDistance")!=str(DEFERRED_SIMULATION_DISTANCE)):
