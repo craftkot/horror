@@ -2892,7 +2892,7 @@ public final class RiftController {
             || !isBetterFissureTarget(4.0D,2,4.0D,0,true)
             || !isBetterFissureTarget(12.0D,2,4.0D,0,true)
             || isBetterFissureTarget(12.01D,2,4.0D,0,true)
-            || !isBetterFissureTarget(.5D,0,4.0D,2,true)
+            || !isBetterFissureTarget(.5D,0,12.0D,2,true)
             || isBetterFissureTarget(4.0D,0,4.0D,2,true)
             || isBetterFissureTarget(4.0D,1,4.0D,1,true)
             || isBetterFissureTarget(4.0D,3,4.0D,2,true)
