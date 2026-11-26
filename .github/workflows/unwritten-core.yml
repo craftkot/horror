@@ -15,5 +15,6 @@ jobs:
           java-version: '25'
       - run: |
           mkdir -p /tmp/unwritten-classes
-          javac -d /tmp/unwritten-classes unwritten/src/main/java/dev/unwritten/HorrorDirector.java unwritten/src/test/java/dev/unwritten/DirectorTest.java
+          javac -d /tmp/unwritten-classes unwritten/src/main/java/dev/unwritten/*.java unwritten/src/test/java/dev/unwritten/*.java
           java -cp /tmp/unwritten-classes dev.unwritten.DirectorTest
+          java -cp /tmp/unwritten-classes dev.unwritten.WorldLogicTest
