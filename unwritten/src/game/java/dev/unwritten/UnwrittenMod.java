@@ -3,7 +3,6 @@ package dev.unwritten;
 import java.util.*;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
@@ -14,13 +13,16 @@ public final class UnwrittenMod {
     private record Session(HorrorDirector director, PlayerHistory history) {}
     private final Map<UUID, Session> sessions = new HashMap<>();
     private int ticks;
+    private final Apparitions apparitions = new Apparitions();
     public UnwrittenMod() {
         NeoForge.EVENT_BUS.addListener(this::tick);
         NeoForge.EVENT_BUS.addListener(this::stop);
     }
-    private void stop(ServerStoppedEvent event) { sessions.clear(); ticks=0; }
+    private void stop(ServerStoppedEvent event) { sessions.clear(); apparitions.clear(); ticks=0; }
     private void tick(ServerTickEvent.Post event) {
-        if (++ticks % 20 != 0) return;
+        ++ticks;
+        apparitions.tick(event.getServer().getPlayerList().getPlayers());
+        if (ticks % 20 != 0) return;
         var players = event.getServer().getPlayerList().getPlayers();
         var online = new HashSet<UUID>();
         for (ServerPlayer p : players) {
@@ -43,8 +45,9 @@ public final class UnwrittenMod {
     private void play(ServerPlayer p, HorrorDirector.Decision decision) {
         // Only implemented effects are audible; higher-level events are deferred until their handlers exist.
         switch(decision.event()) {
-            case FOOTSTEPS -> p.playNotifySound(SoundEvents.GRASS_STEP, SoundSource.AMBIENT, 0.65f, 0.85f);
-            case ECHO -> p.playNotifySound(SoundEvents.AMBIENT_CAVE.value(), SoundSource.AMBIENT, 0.45f, 0.75f);
+            case FOOTSTEPS -> Apparitions.soundBehind(p, SoundEvents.GRASS_STEP, 0.65f, 0.85f);
+            case ECHO -> Apparitions.soundBehind(p, SoundEvents.AMBIENT_CAVE.value(), 0.45f, 0.75f);
+            case DISTANT_SILHOUETTE -> apparitions.show(p);
             default -> { }
         }
     }
