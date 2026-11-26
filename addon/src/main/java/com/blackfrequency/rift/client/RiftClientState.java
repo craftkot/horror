@@ -2962,13 +2962,18 @@ public final class RiftClientState {
             return -1;
         }
 
+        private static long canopyAccentLeafSurfaceY(int topY,int skippedPlants) {
+            if(skippedPlants<0 || skippedPlants>GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS) return Long.MIN_VALUE;
+            return (long)topY-1L-(long)skippedPlants;
+        }
+
         // WORLD_SURFACE includes leaves and non-colliding plants; walk down only through the
         // same two-block BushBlock allowlist so the selected leaf is actually exposed.
         private static int canopyAccentLeafSurfaceSkippedPlants(Level level,int blockX,int blockZ,int topY,
                 BlockPos.MutableBlockPos cursor) {
             if(level==null || cursor==null) return -1;
             for(int skipped=0;skipped<=GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS;skipped++) {
-                long leafY=(long)topY-1L-(long)skipped;
+                long leafY=canopyAccentLeafSurfaceY(topY,skipped);
                 if(leafY<level.getMinBuildHeight() || leafY>=level.getMaxBuildHeight()) return -1;
                 cursor.set(blockX,(int)leafY,blockZ);
                 BlockState candidate=level.getBlockState(cursor);
@@ -3250,12 +3255,13 @@ public final class RiftClientState {
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,Double.NaN,0))
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,0.0D,1))
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(Integer.MAX_VALUE,.8D,1));
-            long leafSurfaceY0=71L-1L;
-            long leafSurfaceY1=72L-1L-1L;
-            long leafSurfaceY2=73L-1L-2L;
-            boolean leafSurfaceScanProfile=leafSurfaceY0==70L && leafSurfaceY1==70L && leafSurfaceY2==70L
-                && (long)Integer.MIN_VALUE-1L<Integer.MIN_VALUE
-                && (long)Integer.MAX_VALUE-1L<=Integer.MAX_VALUE;
+            boolean leafSurfaceScanProfile=canopyAccentLeafSurfaceY(71,0)==70L
+                && canopyAccentLeafSurfaceY(72,1)==70L
+                && canopyAccentLeafSurfaceY(73,2)==70L
+                && canopyAccentLeafSurfaceY(71,-1)==Long.MIN_VALUE
+                && canopyAccentLeafSurfaceY(71,3)==Long.MIN_VALUE
+                && canopyAccentLeafSurfaceY(Integer.MIN_VALUE,2)==(long)Integer.MIN_VALUE-3L
+                && canopyAccentLeafSurfaceY(Integer.MAX_VALUE,2)==(long)Integer.MAX_VALUE-3L;
             GroundSegment fixture=new GroundSegment(new GroundPoint(0.0D,70.0D,0.0D),
                 new GroundPoint(1.0D,70.0D,0.0D),0.0D,1.0D,GROUND_SAMPLES[0],
                 1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
@@ -3518,12 +3524,17 @@ public final class RiftClientState {
                 if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueHeightmapRejected++;
                 return false;
             }
+            cursor.set(blockX,topY-1,blockZ);
+            if(!level.getWorldBorder().isWithinBounds(cursor)) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueInvalidRejected++;
+                return false;
+            }
             int skippedPlants=canopyAccentLeafSurfaceSkippedPlants(level,blockX,blockZ,topY,cursor);
             if(skippedPlants<0) {
                 if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueNonLeafRejected++;
                 return false;
             }
-            long leafY=(long)topY-1L-(long)skippedPlants;
+            long leafY=canopyAccentLeafSurfaceY(topY,skippedPlants);
             if(leafY<level.getMinBuildHeight() || leafY>=level.getMaxBuildHeight()) {
                 if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueInvalidRejected++;
                 return false;

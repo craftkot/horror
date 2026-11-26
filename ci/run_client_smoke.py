@@ -514,6 +514,8 @@ def verify_restoration_particle_source():
             or "net.minecraft.world.level.chunk.ChunkStatus.FULL,false" not in leaf_accent_body
             or "chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE" not in leaf_accent_body
             or "canopyAccentLeafSurfaceSkippedPlants(level,blockX,blockZ,topY,cursor)" not in leaf_accent_body
+            or "!level.getWorldBorder().isWithinBounds(cursor)" not in leaf_accent_body
+            or "canopyAccentLeafSurfaceY(topY,skipped)" not in client_source
             or "if(!leaf.is(BlockTags.LEAVES)) {" not in leaf_accent_body
             or "groundCanopyAccentQueueNonLeafRejected++" not in leaf_accent_body
             or "isCanopyAccentHeadroomAvailable(head)" not in leaf_accent_body
