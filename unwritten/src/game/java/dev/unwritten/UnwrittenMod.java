@@ -5,7 +5,11 @@ import java.nio.file.Path;
 import java.io.IOException;
 import com.mojang.logging.LogUtils;
 import net.minecraft.world.level.storage.LevelResource;
-import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
+import net.neoforged.neoforge.event.entity.living.AnimalTameEvent;
+import net.neoforged.neoforge.event.entity.player.BonemealEvent;
+import net.neoforged.neoforge.event.level.BlockEvent;
+import net.neoforged.neoforge.event.level.ExplosionEvent;
+import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -25,7 +29,10 @@ public final class UnwrittenMod {
         NeoForge.EVENT_BUS.addListener(this::tick);
         NeoForge.EVENT_BUS.addListener(this::stop);
         NeoForge.EVENT_BUS.addListener(this::stopping);
-        NeoForge.EVENT_BUS.addListener(this::death);
+        NeoForge.EVENT_BUS.addListener(this::tame);
+        NeoForge.EVENT_BUS.addListener(this::bonemeal);
+        NeoForge.EVENT_BUS.addListener(this::trample);
+        NeoForge.EVENT_BUS.addListener(this::explosion);
     }
     private void stop(ServerStoppedEvent event) { sessions.clear(); apparitions.clear(); anomalies.clear(); ticks=0; stateDirectory=null; }
     private void stopping(ServerStoppingEvent event) { sessions.forEach(this::save); anomalies.restoreAll(); }
@@ -41,13 +48,18 @@ public final class UnwrittenMod {
             catch(IOException ex){LogUtils.getLogger().warn("Unwritten: could not read state for {}",id,ex);return PlayerStateStore.fresh(seed);}
         });
     }
-    private void death(LivingDeathEvent event) {
-        if(stateDirectory==null)return;
-        if(event.getSource().getEntity() instanceof ServerPlayer p && !p.isCreative() && !p.isSpectator()){
-            var category=event.getEntity().getType().getCategory().getName();
-            if(category.equals("monster"))session(p).director().adjustKarma(1);
-            else if(category.equals("creature")||category.equals("water_creature"))session(p).director().adjustKarma(-3);
-        }
+    private boolean eligible(ServerPlayer p){return stateDirectory!=null&&!p.isCreative()&&!p.isSpectator();}
+    private void tame(AnimalTameEvent event){
+        if(!event.isCanceled()&&event.getTamer() instanceof ServerPlayer p&&eligible(p))session(p).director().tame();
+    }
+    private void bonemeal(BonemealEvent event){
+        if(!event.isCanceled()&&event.getEntity() instanceof ServerPlayer p&&eligible(p))session(p).director().bonemeal();
+    }
+    private void trample(BlockEvent.FarmlandTrampleEvent event){
+        if(!event.isCanceled()&&event.getEntity() instanceof ServerPlayer p&&eligible(p))session(p).director().trample();
+    }
+    private void explosion(ExplosionEvent.Detonate event){
+        if(event.getExplosion().getIndirectSourceEntity() instanceof ServerPlayer p&&eligible(p))session(p).director().explosion();
     }
     private void tick(ServerTickEvent.Post event) {
         ++ticks;
@@ -85,6 +97,9 @@ public final class UnwrittenMod {
             case DISTANT_SILHOUETTE -> apparitions.show(p);
             case FALSE_PRESENCE -> { Apparitions.soundBehind(p,SoundEvents.GRASS_STEP,0.9f,0.95f); apparitions.show(p); }
             case LOCAL_ANOMALY -> anomalies.show(p);
+            case BREATH -> Apparitions.soundBehind(p,SoundEvents.PLAYER_BREATH,1.0f,0.5f);
+            case DOOR -> ReferenceEvents.toggleDoor(p);
+            case TEXT -> p.sendSystemMessage(Component.translatable("event.unwritten.presence"));
         }
     }
 }

@@ -20,3 +20,4 @@ jobs:
           java -cp /tmp/unwritten-classes dev.unwritten.WorldLogicTest
           java -cp /tmp/unwritten-classes dev.unwritten.PersistenceTest
           java -cp /tmp/unwritten-classes dev.unwritten.AnomalyLifetimeTest
+          java -cp /tmp/unwritten-classes dev.unwritten.ReferenceKarmaTest
