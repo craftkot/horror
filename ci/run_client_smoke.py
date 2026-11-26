@@ -513,7 +513,8 @@ def verify_restoration_particle_source():
             or "getChunk(blockX>>4,blockZ>>4," not in leaf_accent_body
             or "net.minecraft.world.level.chunk.ChunkStatus.FULL,false" not in leaf_accent_body
             or "chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING" not in leaf_accent_body
-            or "if(!leaf.is(BlockTags.LEAVES)) return false;" not in leaf_accent_body
+            or "if(!leaf.is(BlockTags.LEAVES)) {" not in leaf_accent_body
+            or "groundCanopyAccentQueueNonLeafRejected++" not in leaf_accent_body
             or "!isCanopyAccentHeadroomAvailable(head)" not in leaf_accent_body
             or "isCanopyAccentHeightWithinBounds(groundY,accentY)" not in leaf_accent_body
             or "hasCanopyAccentCandidate(blockX,blockZ)" not in leaf_accent_body
