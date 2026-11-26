@@ -21,10 +21,17 @@ DEFERRED_SIMULATION_DISTANCE=5
 # Add a four-chunk margin beyond the fracture and the server's simulation-distance halo.
 # Per-chunk return teleports then load only visited chunks within the recovery audience.
 DEFERRED_PLAYER_TRAVEL_DISTANCE=224
+DEFERRED_CLIENT_ANCHOR_X=512
+DEFERRED_CLIENT_ANCHOR_Z=512
+DEFERRED_CLIENT_SPAWN_X=1024
+DEFERRED_CLIENT_SPAWN_Z=1024
+DEFERRED_INITIAL_SPAWN_TICKET_RADIUS=11
 DEFERRED_RESTORE_WARMUP_TICKS=600
 if DEFERRED_PLAYER_TRAVEL_DISTANCE<=DEFERRED_RESTORE_RADIUS+DEFERRED_SIMULATION_DISTANCE*16+64:
     raise RuntimeError("Deferred probe travel must clear the fracture and simulation-distance halo")
 DEFERRED_SPAWN_ACK_RE=r"Set (?:the )?world spawn(?: point)? to "
+INITIAL_PLAYER_SPAWN_RE=re.compile(
+    r"logged in with entity id \d+ at \(([-+0-9.eE]+),\s*([-+0-9.eE]+),\s*([-+0-9.eE]+)\)")
 DEFERRED_RESTORE_CHUNK_RE=re.compile(
     r"BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_DEFERRED "
     r"x=(-?\d+) y=(-?\d+) z=(-?\d+) "
@@ -33,6 +40,7 @@ DEFERRED_CHUNK_READINESS_RE=re.compile(
     r"BLACK_FREQUENCY_TEST RESTORE_DEFERRED_PROBE_CHUNK_READINESS "
     r"ticks=(\d+) uniqueChunks=(\d+) loadedChunks=(\d+) unloadedChunks=(\d+) "
     r"playerChunkX=(-?\d+) playerChunkZ=(-?\d+) "
+    r"anchorChunkX=(-?\d+) anchorChunkZ=(-?\d+) "
     r"spawnChunkX=(-?\d+) spawnChunkZ=(-?\d+) loadedOnly=true")
 FINALE_ANCHOR_RE=re.compile(
     r"BLACK_FREQUENCY_TEST FINALE_ANCHOR_VALID x=(-?\d+) z=(-?\d+)")
@@ -68,12 +76,33 @@ def verify_deferred_restore_chunk_bounds_profile():
             or "private static int restoreSnapshotScanWarmupTicks(boolean deferredClientProbe)" not in controller_source
             or "return deferredClientProbe?DEFERRED_CLIENT_SCAN_WARMUP_TICKS:0;" not in controller_source
             or "s.restoreTicks>scanWarmupTicks" not in controller_source
-            or "logDeferredProbeChunkReadiness(level,s);" not in controller_source):
+            or "logDeferredProbeChunkReadiness(level,s);" not in controller_source
+            or "private static final int DEFERRED_CLIENT_ANCHOR_X=512;" not in controller_source
+            or "private static final int DEFERRED_CLIENT_ANCHOR_Z=512;" not in controller_source
+            or "private static final int DEFERRED_CLIENT_SPAWN_X=1024;" not in controller_source
+            or "private static final int DEFERRED_CLIENT_SPAWN_Z=1024;" not in controller_source
+            or "private static boolean deferredClientProbeAnchorReady(ServerLevel level)" not in controller_source
+            or "if(!deferredClientProbeAnchorReady(level))" not in controller_source
+            or "DEFERRED_CLIENT_ANCHOR_PROFILE_VERIFIED" not in controller_source):
         raise RuntimeError("BLACK FREQUENCY deferred probe must wait for natural chunk-ticket expiry and report loaded-only readiness")
     if ('if(Boolean.getBoolean("blackfrequency.ciDeferredChunkProbe")' not in controller_source
             or "&& !level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4))" not in controller_source):
         raise RuntimeError("BLACK FREQUENCY may skip the synthetic beacon guard only in the deferred client probe")
+    anchor_chunk=(DEFERRED_CLIENT_ANCHOR_X>>4,DEFERRED_CLIENT_ANCHOR_Z>>4)
+    spawn_chunk=(DEFERRED_CLIENT_SPAWN_X>>4,DEFERRED_CLIENT_SPAWN_Z>>4)
+    if (anchor_chunk!=(32,32) or spawn_chunk!=(64,64)
+            or max(abs(anchor_chunk[0]),abs(anchor_chunk[1]))<=DEFERRED_INITIAL_SPAWN_TICKET_RADIUS
+            or max(abs(anchor_chunk[0]-spawn_chunk[0]),abs(anchor_chunk[1]-spawn_chunk[1]))<=DEFERRED_INITIAL_SPAWN_TICKET_RADIUS
+            or max(abs(spawn_chunk[0]),abs(spawn_chunk[1]))<=DEFERRED_INITIAL_SPAWN_TICKET_RADIUS):
+        raise RuntimeError("BLACK FREQUENCY deferred anchor must clear the initial and relocated spawn-ticket halos")
     client_source=pathlib.Path(__file__).read_text(encoding="utf-8")
+    spawn_verified_at=client_source.find('print("WORLD_CAPTURE: player spawn verified in log"')
+    anchor_creative_command=client_source.find('"/gamemode creative @s"',spawn_verified_at)
+    anchor_teleport_command=client_source.find('f"/tp @s {DEFERRED_CLIENT_ANCHOR_X} 120 {DEFERRED_CLIENT_ANCHOR_Z}"',spawn_verified_at)
+    shared_spawn_command=client_source.find('f"/setworldspawn {DEFERRED_CLIENT_SPAWN_X} 64 {DEFERRED_CLIENT_SPAWN_Z}"')
+    if (spawn_verified_at<0 or anchor_creative_command<=spawn_verified_at
+            or anchor_teleport_command<=anchor_creative_command or shared_spawn_command<0):
+        raise RuntimeError("BLACK FREQUENCY deferred player must move to the remote anchor before the finale and keep shared spawn separate")
     creative_command=client_source.rfind('"/gamemode creative @s"')
     travel_command=client_source.rfind('f"/tp @s ~{DEFERRED_PLAYER_TRAVEL_DISTANCE} 120 ~"')
     return_command=client_source.rfind('f"/tp @s {pad_x} {pad_y} {pad_z}"')
@@ -101,9 +130,10 @@ def verify_deferred_restore_chunk_bounds_profile():
           "radius",DEFERRED_RESTORE_RADIUS,"negativeCoordinates=true","boundary=true","loadedOnly=true",flush=True)
     readiness_fixture=("BLACK_FREQUENCY_TEST RESTORE_DEFERRED_PROBE_CHUNK_READINESS "
         "ticks=600 uniqueChunks=4 loadedChunks=1 unloadedChunks=3 "
-        "playerChunkX=14 playerChunkZ=-1 spawnChunkX=32 spawnChunkZ=32 loadedOnly=true")
+        "playerChunkX=46 playerChunkZ=32 anchorChunkX=32 anchorChunkZ=32 "
+        "spawnChunkX=64 spawnChunkZ=64 loadedOnly=true")
     readiness_match=DEFERRED_CHUNK_READINESS_RE.search(readiness_fixture)
-    if not readiness_match or tuple(map(int,readiness_match.groups()))!=(600,4,1,3,14,-1,32,32):
+    if not readiness_match or tuple(map(int,readiness_match.groups()))!=(600,4,1,3,46,32,32,32,64,64):
         raise RuntimeError("BLACK FREQUENCY deferred chunk-readiness fixture regression")
     print("WORLD_CAPTURE: deferred scan waits",DEFERRED_RESTORE_WARMUP_TICKS,
           "server ticks and records loaded-only chunk readiness",flush=True)
@@ -1105,7 +1135,10 @@ threading.Thread(target=tee,daemon=True).start()
 
 def capture_test_world():
     """Best-effort UI automation; confirm world entrance from the actual client log."""
-    deferred_spawn_relocated=False
+    deferred_shared_spawn_relocated=False
+    deferred_initial_spawn_chunk=None
+    deferred_anchor_creative=False
+    deferred_anchor_survival_restored=False
     game_window=None
     def find_game_window():
         named=subprocess.run(["xdotool","search","--onlyvisible","--name","Minecraft"],
@@ -2177,6 +2210,7 @@ def capture_test_world():
     vertical_cull_probe_verified=False
     def try_beacon_click(logs):
         nonlocal beacon_attempts,beacon_ready_at,last_beacon_attempt,beacon_aim_verified
+        nonlocal deferred_anchor_creative,deferred_anchor_survival_restored
         if os.environ.get("BF_TEST_PLAYER_BEACON")!="1":
             return
         # Do not begin mouse automation until the server confirms that the
@@ -2186,6 +2220,16 @@ def capture_test_world():
                 or "BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT" not in logs
                 or "BLACK_FREQUENCY_TEST PLAYER_VANILLA_FALL_RESTORED_AFTER_SAFE_PAD" not in logs):
             return
+        if (deferred_chunk_probe and deferred_anchor_creative
+                and not deferred_anchor_survival_restored):
+            if not send_isolated_chat_command(
+                    "/gamemode survival @s",
+                    r"Set own game mode to Survival Mode",
+                    "restore Survival on the verified safe beacon pad"):
+                return
+            deferred_anchor_survival_restored=True
+            print("WORLD_CAPTURE: restored Survival after the remote-anchor safe-pad teleport",
+                  "physicalInteraction=true",flush=True)
         if "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" in logs:
             return
         if "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" not in logs:
@@ -2450,7 +2494,7 @@ def capture_test_world():
                     "Starting to track player" in current):
                     spawned=True
                     break
-                time.sleep(2)
+                time.sleep(.1)
             if not spawned:
                 print("WORLD_CAPTURE_FAIL: integrated server started but player never spawned",flush=True)
                 snap("world-spawn-failure.png")
@@ -2462,6 +2506,34 @@ def capture_test_world():
                 print("WORLD_CAPTURE: JVM thread dump saved",flush=True)
                 return False
             print("WORLD_CAPTURE: player spawn verified in log",flush=True)
+            if deferred_chunk_probe:
+                current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                initial_spawn_match=INITIAL_PLAYER_SPAWN_RE.search(current)
+                if not initial_spawn_match:
+                    print("WORLD_CAPTURE_FAIL: initial player spawn coordinates are missing for deferred ticket separation",flush=True)
+                    return False
+                initial_x,_,initial_z=map(float,initial_spawn_match.groups())
+                deferred_initial_spawn_chunk=(math.floor(initial_x)>>4,math.floor(initial_z)>>4)
+                anchor_chunk=(DEFERRED_CLIENT_ANCHOR_X>>4,DEFERRED_CLIENT_ANCHOR_Z>>4)
+                if max(abs(anchor_chunk[0]-deferred_initial_spawn_chunk[0]),
+                       abs(anchor_chunk[1]-deferred_initial_spawn_chunk[1]))<=DEFERRED_INITIAL_SPAWN_TICKET_RADIUS:
+                    print("WORLD_CAPTURE_FAIL: remote fracture anchor overlaps the original spawn-ticket halo",
+                          {"initialSpawnChunk":deferred_initial_spawn_chunk,"anchorChunk":anchor_chunk},flush=True)
+                    return False
+                if not send_isolated_chat_command(
+                        "/gamemode creative @s",
+                        r"Set own game mode to Creative Mode",
+                        "enter Creative before moving the deferred probe anchor"):
+                    return False
+                deferred_anchor_creative=True
+                if not send_isolated_chat_command(
+                        f"/tp @s {DEFERRED_CLIENT_ANCHOR_X} 120 {DEFERRED_CLIENT_ANCHOR_Z}",
+                        r"Teleported .* to ",
+                        "move the player to the remote deferred-probe anchor before the finale"):
+                    return False
+                print("WORLD_CAPTURE: moved deferred probe player away from the original spawn-ticket halo",
+                      {"initialSpawnChunk":deferred_initial_spawn_chunk,"anchorChunk":anchor_chunk},
+                      "loadedOnly=true",flush=True)
             # Capture gameplay immediately: restoration can begin before the
             # initial frame series ends, so waiting until afterward misses it.
             restoration_shot=False
@@ -3153,15 +3225,15 @@ def capture_test_world():
                     break
                 snap(f"world-stage-{stage:02d}.png")
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-                if (deferred_chunk_probe and not deferred_spawn_relocated
+                if (deferred_chunk_probe and not deferred_shared_spawn_relocated
                         and "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" in current):
                     if not send_isolated_chat_command(
-                            "/setworldspawn 512 64 512",
+                            f"/setworldspawn {DEFERRED_CLIENT_SPAWN_X} 64 {DEFERRED_CLIENT_SPAWN_Z}",
                             DEFERRED_SPAWN_ACK_RE,
-                            "move spawn ticket away from the disposable fracture"):
+                            "move shared spawn beyond the remote fracture anchor"):
                         return False
-                    deferred_spawn_relocated=True
-                    print("WORLD_CAPTURE: moved spawn ticket away from the fracture before chunk-unload probe",
+                    deferred_shared_spawn_relocated=True
+                    print("WORLD_CAPTURE: moved shared spawn beyond the remote fracture anchor",
                           "loadedOnly=true",flush=True)
                     time.sleep(.25)
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else current
@@ -3191,15 +3263,15 @@ def capture_test_world():
             sparse_test=os.environ.get("BF_TEST_SPARSE_RECOVERY")=="1"
             while time.time()<fracture_deadline and p.poll() is None:
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-                if (deferred_chunk_probe and not deferred_spawn_relocated
+                if (deferred_chunk_probe and not deferred_shared_spawn_relocated
                         and "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" in current):
                     if not send_isolated_chat_command(
-                            "/setworldspawn 512 64 512",
+                            f"/setworldspawn {DEFERRED_CLIENT_SPAWN_X} 64 {DEFERRED_CLIENT_SPAWN_Z}",
                             DEFERRED_SPAWN_ACK_RE,
-                            "move spawn ticket away from the disposable fracture"):
+                            "move shared spawn beyond the remote fracture anchor"):
                         return False
-                    deferred_spawn_relocated=True
-                    print("WORLD_CAPTURE: moved spawn ticket away from the fracture before chunk-unload probe",
+                    deferred_shared_spawn_relocated=True
+                    print("WORLD_CAPTURE: moved shared spawn beyond the remote fracture anchor",
                           "loadedOnly=true",flush=True)
                     time.sleep(.25)
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else current
@@ -4377,13 +4449,18 @@ def capture_test_world():
                             print("WORLD_CAPTURE_FAIL: deferred probe did not report loaded-only chunk readiness",flush=True)
                             return False
                         (readiness_ticks,unique_chunks,loaded_chunks,unloaded_chunks,
-                         player_chunk_x,player_chunk_z,spawn_chunk_x,spawn_chunk_z)=map(int,readiness.groups())
+                         player_chunk_x,player_chunk_z,readiness_anchor_chunk_x,readiness_anchor_chunk_z,
+                         spawn_chunk_x,spawn_chunk_z)=map(int,readiness.groups())
                         anchor_match=FINALE_ANCHOR_RE.search(final_log)
                         if not anchor_match:
                             print("WORLD_CAPTURE_FAIL: deferred readiness has no verified fracture anchor",flush=True)
                             return False
                         anchor_x,anchor_z=map(int,anchor_match.groups())
                         anchor_chunk_x,anchor_chunk_z=anchor_x>>4,anchor_z>>4
+                        if deferred_initial_spawn_chunk is None:
+                            print("WORLD_CAPTURE_FAIL: original spawn-ticket center was not captured before the remote anchor move",flush=True)
+                            return False
+                        initial_spawn_chunk_x,initial_spawn_chunk_z=deferred_initial_spawn_chunk
                         if (readiness_ticks!=DEFERRED_RESTORE_WARMUP_TICKS
                                 or unique_chunks<1 or loaded_chunks+unloaded_chunks!=unique_chunks
                                 or unloaded_chunks<1):
@@ -4391,13 +4468,29 @@ def capture_test_world():
                                   {"ticks":readiness_ticks,"unique":unique_chunks,
                                    "loaded":loaded_chunks,"unloaded":unloaded_chunks},flush=True)
                             return False
+                        if ((anchor_chunk_x,anchor_chunk_z)!=(DEFERRED_CLIENT_ANCHOR_X>>4,DEFERRED_CLIENT_ANCHOR_Z>>4)
+                                or (readiness_anchor_chunk_x,readiness_anchor_chunk_z)!=(anchor_chunk_x,anchor_chunk_z)):
+                            print("WORLD_CAPTURE_FAIL: fracture anchor changed from the verified remote chunk",
+                                  {"anchor":(anchor_chunk_x,anchor_chunk_z),
+                                   "readinessAnchor":(readiness_anchor_chunk_x,readiness_anchor_chunk_z)},flush=True)
+                            return False
+                        if max(abs(anchor_chunk_x-initial_spawn_chunk_x),abs(anchor_chunk_z-initial_spawn_chunk_z))<=DEFERRED_INITIAL_SPAWN_TICKET_RADIUS:
+                            print("WORLD_CAPTURE_FAIL: original spawn-ticket halo still overlaps the fracture anchor",
+                                  {"initialSpawn":(initial_spawn_chunk_x,initial_spawn_chunk_z),
+                                   "anchor":(anchor_chunk_x,anchor_chunk_z)},flush=True)
+                            return False
                         if max(abs(player_chunk_x-anchor_chunk_x),abs(player_chunk_z-anchor_chunk_z))<=DEFERRED_SIMULATION_DISTANCE:
                             print("WORLD_CAPTURE_FAIL: player chunk remained inside the simulation-distance halo",
                                   {"player":(player_chunk_x,player_chunk_z),"anchor":(anchor_chunk_x,anchor_chunk_z)},flush=True)
                             return False
-                        if max(abs(spawn_chunk_x-anchor_chunk_x),abs(spawn_chunk_z-anchor_chunk_z))<=11:
-                            print("WORLD_CAPTURE_FAIL: spawn ticket remained inside the fracture's chunk halo",
+                        if max(abs(spawn_chunk_x-anchor_chunk_x),abs(spawn_chunk_z-anchor_chunk_z))<=DEFERRED_INITIAL_SPAWN_TICKET_RADIUS:
+                            print("WORLD_CAPTURE_FAIL: relocated shared spawn remained inside the fracture's chunk halo",
                                   {"spawn":(spawn_chunk_x,spawn_chunk_z),"anchor":(anchor_chunk_x,anchor_chunk_z)},flush=True)
+                            return False
+                        if max(abs(spawn_chunk_x-initial_spawn_chunk_x),abs(spawn_chunk_z-initial_spawn_chunk_z))<=DEFERRED_INITIAL_SPAWN_TICKET_RADIUS:
+                            print("WORLD_CAPTURE_FAIL: original and relocated spawn regions overlap unexpectedly",
+                                  {"initialSpawn":(initial_spawn_chunk_x,initial_spawn_chunk_z),
+                                   "spawn":(spawn_chunk_x,spawn_chunk_z)},flush=True)
                             return False
                         print("WORLD_CAPTURE: natural chunk-unload readiness verified",
                               {"uniqueChunks":unique_chunks,"loaded":loaded_chunks,
@@ -4408,7 +4501,7 @@ def capture_test_world():
                             for key,count in deferred_restore_deferred_counts.items()
                             if deferred_restore_reentry_counts.get(key,0)<count
                         }
-                        if (not deferred_spawn_relocated
+                        if (not deferred_shared_spawn_relocated
                                 or not deferred_probe_player_moved
                                 or not deferred_restore_chunks_seen
                                 or not deferred_restore_chunks_reentered

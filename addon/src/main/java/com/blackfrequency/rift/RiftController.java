@@ -401,6 +401,31 @@ public final class RiftController {
     // enough server time after that teleport for the old player/spawn tickets to expire.
     // Production is immediate; the disposable probe never forces a chunk load.
     private static final int DEFERRED_CLIENT_SCAN_WARMUP_TICKS=600;
+    // The isolated client probe moves its player to a remote chunk before the finale.
+    // Keep both the original spawn ticket and the relocated shared spawn outside this anchor.
+    private static final int DEFERRED_CLIENT_ANCHOR_X=512;
+    private static final int DEFERRED_CLIENT_ANCHOR_Z=512;
+    private static final int DEFERRED_CLIENT_SPAWN_X=1024;
+    private static final int DEFERRED_CLIENT_SPAWN_Z=1024;
+
+    private static boolean isDeferredClientAnchorChunk(int blockX,int blockZ) {
+        return (blockX>>4)==(DEFERRED_CLIENT_ANCHOR_X>>4)
+            && (blockZ>>4)==(DEFERRED_CLIENT_ANCHOR_Z>>4);
+    }
+
+    private static int chunkChebyshevDistance(int ax,int az,int bx,int bz) {
+        return Math.max(Math.abs(ax-bx),Math.abs(az-bz));
+    }
+
+    private static boolean deferredClientProbeAnchorReady(ServerLevel level) {
+        if(!CI_TEST || !Boolean.getBoolean("blackfrequency.ciDeferredChunkProbe")) return true;
+        for(var player:level.players()) {
+            if(!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
+            BlockPos pos=player.blockPosition();
+            if(isDeferredClientAnchorChunk(pos.getX(),pos.getZ())) return true;
+        }
+        return false;
+    }
 
     private static int restoreSnapshotScanWarmupTicks(boolean deferredClientProbe) {
         return deferredClientProbe?DEFERRED_CLIENT_SCAN_WARMUP_TICKS:0;
@@ -5468,6 +5493,19 @@ public final class RiftController {
             missingReloaded.edits,missingReloaded.snapshots.size(),missingReloaded.snapshotMissingEntries);
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_COMBINED_LOSS_VERIFIED overflow={} missing={} totalSkipped=13",
             combinedReloaded.snapshotOverflowEntries,combinedReloaded.snapshotMissingEntries);
+        int anchorChunkX=DEFERRED_CLIENT_ANCHOR_X>>4;
+        int anchorChunkZ=DEFERRED_CLIENT_ANCHOR_Z>>4;
+        int spawnChunkX=DEFERRED_CLIENT_SPAWN_X>>4;
+        int spawnChunkZ=DEFERRED_CLIENT_SPAWN_Z>>4;
+        if(!isDeferredClientAnchorChunk(DEFERRED_CLIENT_ANCHOR_X,DEFERRED_CLIENT_ANCHOR_Z)
+            || isDeferredClientAnchorChunk(DEFERRED_CLIENT_ANCHOR_X-16,DEFERRED_CLIENT_ANCHOR_Z)
+            || isDeferredClientAnchorChunk(DEFERRED_CLIENT_ANCHOR_X+16,DEFERRED_CLIENT_ANCHOR_Z)
+            || chunkChebyshevDistance(anchorChunkX,anchorChunkZ,0,0)<=11
+            || chunkChebyshevDistance(anchorChunkX,anchorChunkZ,spawnChunkX,spawnChunkZ)<=11
+            || chunkChebyshevDistance(spawnChunkX,spawnChunkZ,0,0)<=11)
+            throw new IllegalStateException("CI deferred fracture anchor overlaps an original or relocated spawn-ticket halo");
+        LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_CLIENT_ANCHOR_PROFILE_VERIFIED anchorChunk={},{} spawnChunk={},{} initialSpawnTicketRadius=11 separated=true countdownGated=true",
+            anchorChunkX,anchorChunkZ,spawnChunkX,spawnChunkZ);
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_BUDGET_PROFILE production=48 deferredClient=1");
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_INTERVAL_PROFILE production=1 deferredClient=2");
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_WARMUP_PROFILE production=0 deferredClient=600");
@@ -6248,9 +6286,9 @@ public final class RiftController {
             break;
         }
         BlockPos spawn=level.getSharedSpawnPos();
-        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_DEFERRED_PROBE_CHUNK_READINESS ticks={} uniqueChunks={} loadedChunks={} unloadedChunks={} playerChunkX={} playerChunkZ={} spawnChunkX={} spawnChunkZ={} loadedOnly=true",
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_DEFERRED_PROBE_CHUNK_READINESS ticks={} uniqueChunks={} loadedChunks={} unloadedChunks={} playerChunkX={} playerChunkZ={} anchorChunkX={} anchorChunkZ={} spawnChunkX={} spawnChunkZ={} loadedOnly=true",
             s.restoreTicks,uniqueChunks.size(),loadedChunks,unloadedChunks,
-            playerChunkX,playerChunkZ,spawn.getX()>>4,spawn.getZ()>>4);
+            playerChunkX,playerChunkZ,s.x>>4,s.z>>4,spawn.getX()>>4,spawn.getZ()>>4);
     }
 
     private static void restore(ServerLevel level,State s) {
@@ -6962,8 +7000,18 @@ public final class RiftController {
             LOGGER.info("BLACK_FREQUENCY_TEST LEGACY_FRACTURE_CURSOR_QUARANTINED");
         if(!s.started) {
             // Do not accelerate world generation before the test player has entered.
-            // An empty integrated server may still be creating spawn chunks.
-            s.elapsed += (CI_TEST && level.players().isEmpty() && !Boolean.getBoolean("blackfrequency.ciAllowEmptyServer")) ? 1L : TEST_STEP;
+            // The deferred probe also waits for a remote anchor so the original spawn
+            // ticket cannot keep the fracture's recovery chunks resident.
+            long elapsedStep=(CI_TEST && level.players().isEmpty()
+                && !Boolean.getBoolean("blackfrequency.ciAllowEmptyServer")) ? 1L : TEST_STEP;
+            if(!deferredClientProbeAnchorReady(level)) {
+                s.elapsed=Math.min(DAY*10L-1L,s.elapsed+elapsedStep);
+                if(CI_TEST && level.getGameTime()%100L==0L)
+                    LOGGER.info("BLACK_FREQUENCY_TEST DEFERRED_CLIENT_ANCHOR_WAITING targetChunkX={} targetChunkZ={} loadedOnly=true",
+                        DEFERRED_CLIENT_ANCHOR_X>>4,DEFERRED_CLIENT_ANCHOR_Z>>4);
+            } else {
+                s.elapsed+=elapsedStep;
+            }
             // Narrative beats are delivered as on-screen titles, not chat messages.
             // No manual commands are needed.
             if ((s.elapsed >= DAY*3 && s.elapsed-TEST_STEP < DAY*3) ||
