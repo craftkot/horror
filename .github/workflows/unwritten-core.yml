@@ -1,0 +1,19 @@
+name: Unwritten core tests
+on:
+  push:
+    branches: [the-unwritten-26.3]
+    paths: ['unwritten/**', '.github/workflows/unwritten-core.yml']
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - run: |
+          mkdir -p /tmp/unwritten-classes
+          javac -d /tmp/unwritten-classes unwritten/src/main/java/dev/unwritten/HorrorDirector.java unwritten/src/test/java/dev/unwritten/DirectorTest.java
+          java -cp /tmp/unwritten-classes dev.unwritten.DirectorTest
