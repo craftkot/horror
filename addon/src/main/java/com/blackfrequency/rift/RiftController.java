@@ -196,8 +196,8 @@ public final class RiftController {
     // also lets the loaded-only camera preview see fissures from a recovery-beacon pad.
     private static final double FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE = FISSURE_SAMPLE_SPACING*5.0D;
     private static final double FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE = 12.0D;
-    // Prefer a target with a short contiguous visible crack span when camera angles are nearly equal.
-    private static final double FISSURE_TARGET_VISIBILITY_TIE_WINDOW_DEGREES=3.0D;
+    // Allow a modest pitch trade-off when it exposes a longer uninterrupted fissure span.
+    private static final double FISSURE_TARGET_VISIBILITY_TIE_WINDOW_DEGREES=8.0D;
     private static final int FISSURE_TARGET_NEIGHBOR_SAMPLE_COUNT=2;
     // The disposable CI pad is perpendicular to the anchor-to-beacon vector.
     // Two empty near rows let the raised player's eye ray enter the beacon instead of passing above it.
@@ -2890,15 +2890,15 @@ public final class RiftController {
             || isBetterFissureTarget(-1.0D,0.0D,false)
             || isBetterFissureTarget(4.0D,Double.NaN,true)
             || !isBetterFissureTarget(4.0D,2,4.0D,0,true)
-            || !isBetterFissureTarget(6.5D,2,4.0D,0,true)
-            || isBetterFissureTarget(7.01D,2,4.0D,0,true)
+            || !isBetterFissureTarget(12.0D,2,4.0D,0,true)
+            || isBetterFissureTarget(12.01D,2,4.0D,0,true)
             || !isBetterFissureTarget(.5D,0,4.0D,2,true)
             || isBetterFissureTarget(4.0D,0,4.0D,2,true)
             || isBetterFissureTarget(4.0D,1,4.0D,1,true)
             || isBetterFissureTarget(4.0D,3,4.0D,2,true)
             || isBetterFissureTarget(4.0D,-1,4.0D,0,true)
             || isBetterFissureTarget(4.0D,2,4.0D,3,true)
-            || Math.abs(FISSURE_TARGET_VISIBILITY_TIE_WINDOW_DEGREES-3.0D)>1.0E-9D
+            || Math.abs(FISSURE_TARGET_VISIBILITY_TIE_WINDOW_DEGREES-8.0D)>1.0E-9D
             || FISSURE_TARGET_NEIGHBOR_SAMPLE_COUNT!=2
             || !isFissureTargetHorizontalDistance(minimumSquared)
             || !isFissureTargetHorizontalDistance(maximumSquared)
@@ -2948,6 +2948,10 @@ public final class RiftController {
 
     private static int selectCiBeaconPadSign(boolean positiveClear,boolean negativeClear) {
         return positiveClear?1:negativeClear?-1:0;
+    }
+
+    private static boolean hasContiguousVisibleFissureSpan(int visibleNeighbours) {
+        return visibleNeighbours>=1 && visibleNeighbours<=FISSURE_TARGET_NEIGHBOR_SAMPLE_COUNT;
     }
 
     /**
@@ -3002,9 +3006,10 @@ public final class RiftController {
             player));
         if(hit.getType()!=net.minecraft.world.phys.HitResult.Type.BLOCK
             || !hit.getBlockPos().equals(beacon)) return false;
-        // A clear beacon ray is not enough: reject a side whose camera is boxed in
-        // by nearby village terrain and cannot see any actual loaded fissure sample.
-        return findVisibleFissureTarget(level,s,player,eye)!=null;
+        // A single visible sample can still produce a nearly invisible crack behind a canopy.
+        // Accept this side only when at least one adjacent loaded sample is also visible.
+        FissureTarget targetSample=findVisibleFissureTarget(level,s,player,eye);
+        return targetSample!=null && hasContiguousVisibleFissureSpan(targetSample.visibleNeighbours());
     }
 
     private static int chooseCiBeaconPadSign(ServerLevel level,net.minecraft.server.level.ServerPlayer player,State s,BlockPos beacon,
@@ -3020,9 +3025,15 @@ public final class RiftController {
             || selectCiBeaconPadSign(false,false)!=0
             || !shouldTryAlternateCiBeaconPadAxis(0)
             || shouldTryAlternateCiBeaconPadAxis(1)
-            || shouldTryAlternateCiBeaconPadAxis(-1))
+            || shouldTryAlternateCiBeaconPadAxis(-1)
+            || hasContiguousVisibleFissureSpan(-1)
+            || hasContiguousVisibleFissureSpan(0)
+            || !hasContiguousVisibleFissureSpan(1)
+            || !hasContiguousVisibleFissureSpan(2)
+            || hasContiguousVisibleFissureSpan(3))
             throw new IllegalStateException("CI beacon pad clear-side selection regression");
-        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_APPROACH_SIDE_SELECTION_VERIFIED positivePreferred=true reverseFallback=true blockedRejected=true fissureVisibilityRequired=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_APPROACH_CONTIGUOUS_FISSURE_SPAN_VERIFIED minVisibleNeighbours=1 maxVisibleNeighbours=2 invalidRejected=true loadedOnly=true");
+        LOGGER.info("BLACK_FREQUENCY_TEST BEACON_APPROACH_SIDE_SELECTION_VERIFIED positivePreferred=true reverseFallback=true blockedRejected=true fissureVisibilityRequired=true contiguousSpanRequired=true");
         LOGGER.info("BLACK_FREQUENCY_TEST BEACON_APPROACH_AXIS_FALLBACK_POLICY_VERIFIED primaryPerpendicular=true alternateAfterBothSidesBlocked=true loadedOnly=true");
     }
 
