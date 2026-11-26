@@ -512,11 +512,16 @@ def verify_restoration_particle_source():
             or "level.hasChunk(blockX>>4,blockZ>>4)" not in leaf_accent_body
             or "getChunk(blockX>>4,blockZ>>4," not in leaf_accent_body
             or "net.minecraft.world.level.chunk.ChunkStatus.FULL,false" not in leaf_accent_body
-            or "chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING" not in leaf_accent_body
+            or "chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE" not in leaf_accent_body
+            or "canopyAccentLeafSurfaceSkippedPlants(level,blockX,blockZ,topY,cursor)" not in leaf_accent_body
             or "if(!leaf.is(BlockTags.LEAVES)) {" not in leaf_accent_body
             or "groundCanopyAccentQueueNonLeafRejected++" not in leaf_accent_body
-            or "isCanopyAccentSkippablePlant(head,head.getCollisionShape(level,cursor))" not in leaf_accent_body
-            or "GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS" not in leaf_accent_body
+            or "isCanopyAccentHeadroomAvailable(head)" not in leaf_accent_body
+            or "canopyAccentPlantSurfaceParticleY((int)leafY,shapeHeight,skippedPlants)" not in leaf_accent_body
+            or "private static int canopyAccentLeafSurfaceSkippedPlants(" not in client_source
+            or "isCanopyAccentSkippablePlant(candidate,candidate.getCollisionShape(level,cursor))" not in client_source
+            or "GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS" not in client_source
+            or "GROUND_CANOPY_LEAF_HEIGHTMAP_SOURCE_VERIFIED heightmap=world_surface includesLeaves=true includesPlants=true downwardPlantScan=2 roofRejected=true headroomAir=true loadedOnly=true" not in client_source
             or "if(!Double.isFinite(accentY)) {" not in leaf_accent_body
             or "groundCanopyAccentQueuePlantLifted++" not in leaf_accent_body
             or "isCanopyAccentHeightWithinBounds(groundY,accentY)" not in leaf_accent_body

@@ -2962,6 +2962,23 @@ public final class RiftClientState {
             return -1;
         }
 
+        // WORLD_SURFACE includes leaves and non-colliding plants; walk down only through the
+        // same two-block BushBlock allowlist so the selected leaf is actually exposed.
+        private static int canopyAccentLeafSurfaceSkippedPlants(Level level,int blockX,int blockZ,int topY,
+                BlockPos.MutableBlockPos cursor) {
+            if(level==null || cursor==null) return -1;
+            for(int skipped=0;skipped<=GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS;skipped++) {
+                long leafY=(long)topY-1L-(long)skipped;
+                if(leafY<level.getMinBuildHeight() || leafY>=level.getMaxBuildHeight()) return -1;
+                cursor.set(blockX,(int)leafY,blockZ);
+                BlockState candidate=level.getBlockState(cursor);
+                if(candidate.is(BlockTags.LEAVES)) return skipped;
+                if(skipped==GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS
+                    || !isCanopyAccentSkippablePlant(candidate,candidate.getCollisionShape(level,cursor))) return -1;
+            }
+            return -1;
+        }
+
         private static double canopyAccentLiftedParticleY(int topY,int skippedPlants) {
             if(skippedPlants<0 || skippedPlants>GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS) return Double.NaN;
             long liftedY=(long)topY+(long)skippedPlants;
@@ -3233,6 +3250,12 @@ public final class RiftClientState {
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,Double.NaN,0))
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,0.0D,1))
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(Integer.MAX_VALUE,.8D,1));
+            long leafSurfaceY0=71L-1L;
+            long leafSurfaceY1=72L-1L-1L;
+            long leafSurfaceY2=73L-1L-2L;
+            boolean leafSurfaceScanProfile=leafSurfaceY0==70L && leafSurfaceY1==70L && leafSurfaceY2==70L
+                && (long)Integer.MIN_VALUE-1L<Integer.MIN_VALUE
+                && (long)Integer.MAX_VALUE-1L<=Integer.MAX_VALUE;
             GroundSegment fixture=new GroundSegment(new GroundPoint(0.0D,70.0D,0.0D),
                 new GroundPoint(1.0D,70.0D,0.0D),0.0D,1.0D,GROUND_SAMPLES[0],
                 1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
@@ -3288,7 +3311,7 @@ public final class RiftClientState {
                 && candidateDedupProfile && heightmapPrefilterProfile
                 && particleScaleBounded && particleOffsetBounded
                 && particleVelocityBounded && foliageClearanceProfile && canopyAccentHeadroomProfile
-                && plantClearanceProfile
+                && plantClearanceProfile && leafSurfaceScanProfile
                 && Math.abs(plantTop-71.06D)<1.0E-9D
                 && Math.abs(invalidHeight-70.26D)<1.0E-9D
                 && Math.abs(excessiveHeight-71.26D)<1.0E-9D
@@ -3302,10 +3325,12 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SELECTOR_PROFILE_VERIFIED budget={} candidateBudget={} selection=three-of-four-sparse plantOrLeafTop=true invalidRejected=true heightBounded=true segmentBounded=true",
                 GROUND_CANOPY_ACCENT_PARTICLE_BUDGET,GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET);
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_ACCENT_PROFILE_VERIFIED maxHeightAboveGround={} topLeafOnly=true exposedAirOrLiftedBush=true maxPlantLift={} loadedChunkOnly=true forceLoad=false",
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_ACCENT_PROFILE_VERIFIED maxHeightAboveGround={} topLeafOnly=true exposedAirOrLiftedBush=true maxPlantLift={} loadedChunkOnly=true forceLoad=false heightmap=world_surface",
                 GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND,GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_HEIGHTMAP_PREFILTER_PROFILE_VERIFIED openSurfaceRejected=true canopyAccepted=true heightBounded=true finiteGuard=true conservative=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_HEIGHTMAP_SOURCE_VERIFIED heightmap=world_surface includesLeaves=true includesPlants=true downwardPlantScan=2 roofRejected=true headroomAir=true loadedOnly=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_ADJACENT_SCAN_PROFILE_VERIFIED perSample=1..4 maxNeighborScans=80 scanOrder=roundRobinPasses alternatingSides=true perpendicular=true diagonalFallback=true tangentTowardArmCenter=true fallbackOnMiss=true loadedOnly=true radius=48 uniqueColumns=true duplicateColumnsSkipped=true");
             com.mojang.logging.LogUtils.getLogger().info(
@@ -3460,6 +3485,10 @@ public final class RiftClientState {
          * The heightmap is read from a FULL chunk with load=false; roofs and a
          * second foliage layer suppress the mote instead of drawing through them.
          */
+        /**
+         * Queue one accent at the exposed top leaf of an already-loaded column.
+         * WORLD_SURFACE includes foliage; at most two collision-free bush blocks may sit above the leaf.
+         */
         private static boolean queueExposedLeafCanopyAccent(net.minecraft.client.multiplayer.ClientLevel level,
                 int blockX,int blockZ,double groundY,BlockPos.MutableBlockPos cursor) {
             if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueAttempts++;
@@ -3482,43 +3511,39 @@ public final class RiftClientState {
                 if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueChunkRejected++;
                 return false;
             }
-            int topY=chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,
+            int topY=chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE,
                 blockX&15,blockZ&15);
             if(topY<=level.getMinBuildHeight() || topY>=level.getMaxBuildHeight()
                 || !canopyAccentHeightmapMayContainValidLeafAccent(groundY,topY)) {
                 if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueHeightmapRejected++;
                 return false;
             }
-            cursor.set(blockX,topY-1,blockZ);
-            if(!level.getWorldBorder().isWithinBounds(cursor)) {
+            int skippedPlants=canopyAccentLeafSurfaceSkippedPlants(level,blockX,blockZ,topY,cursor);
+            if(skippedPlants<0) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueNonLeafRejected++;
+                return false;
+            }
+            long leafY=(long)topY-1L-(long)skippedPlants;
+            if(leafY<level.getMinBuildHeight() || leafY>=level.getMaxBuildHeight()) {
                 if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueInvalidRejected++;
                 return false;
             }
+            // The helper leaves the reusable cursor on the selected leaf; no second state read is needed.
             BlockState leaf=level.getBlockState(cursor);
             if(!leaf.is(BlockTags.LEAVES)) {
                 if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueNonLeafRejected++;
                 return false;
             }
             double shapeHeight=leaf.getShape(level,cursor).max(Direction.Axis.Y);
-            double accentY=Double.NaN;
-            int skippedPlants=0;
-            for(int clearance=0;clearance<=GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS;clearance++) {
-                long clearanceY=(long)topY+(long)clearance;
-                if(clearanceY>=level.getMaxBuildHeight()) break;
-                cursor.set(blockX,(int)clearanceY,blockZ);
-                BlockState head=level.getBlockState(cursor);
-                if(isCanopyAccentHeadroomAvailable(head)) {
-                    skippedPlants=clearance;
-                    accentY=clearance==0
-                        ? canopyAccentParticleY(topY-1,shapeHeight)
-                        : canopyAccentLiftedParticleY(topY,clearance);
-                    break;
-                }
-                if(clearance==GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS
-                    || !isCanopyAccentSkippablePlant(head,head.getCollisionShape(level,cursor))) break;
-            }
-            if(!Double.isFinite(accentY)) {
+            cursor.set(blockX,topY,blockZ);
+            BlockState head=level.getBlockState(cursor);
+            if(!isCanopyAccentHeadroomAvailable(head)) {
                 if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueHeadroomRejected++;
+                return false;
+            }
+            double accentY=canopyAccentPlantSurfaceParticleY((int)leafY,shapeHeight,skippedPlants);
+            if(!Double.isFinite(accentY)) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueInvalidRejected++;
                 return false;
             }
             if(!isCanopyAccentHeightWithinBounds(groundY,accentY)) {
