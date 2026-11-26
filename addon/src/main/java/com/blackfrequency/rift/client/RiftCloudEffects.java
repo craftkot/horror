@@ -26,13 +26,17 @@ public final class RiftCloudEffects {
         Objects.requireNonNull(ResourceLocation.tryBuild("minecraft","overworld"));
     private static boolean policyVerified;
     private static boolean suppressionLogged;
+    private static boolean cloudRenderCallbackLogged;
 
     private RiftCloudEffects() {}
 
     @SubscribeEvent
     public static void register(RegisterDimensionSpecialEffectsEvent event) {
         verifySuppressionPolicy();
-        event.register(OVERWORLD_ID,new RiftOverworldEffects());
+        RiftOverworldEffects effects=new RiftOverworldEffects();
+        event.register(OVERWORLD_ID,effects);
+        LOGGER.info("BLACK_FREQUENCY_TEST VANILLA_CLOUD_EFFECTS_REGISTERED dimension={} implementation={}",
+            OVERWORLD_ID,effects.getClass().getSimpleName());
     }
 
     private static boolean shouldSuppressVanillaClouds(float strength,boolean shaderReady) {
@@ -61,7 +65,13 @@ public final class RiftCloudEffects {
             if(!level.dimension().equals(Level.OVERWORLD)) return false;
             float strength=RiftClientState.visibleStrength();
             boolean shaderReady=RiftSkyRenderer.isShaderReady();
-            if(!shouldSuppressVanillaClouds(strength,shaderReady)) {
+            boolean suppress=shouldSuppressVanillaClouds(strength,shaderReady);
+            if(Boolean.getBoolean("blackfrequency.ciTestMode") && !cloudRenderCallbackLogged) {
+                cloudRenderCallbackLogged=true;
+                LOGGER.info("BLACK_FREQUENCY_TEST VANILLA_CLOUD_RENDER_CALLBACK dimension=overworld strength={} shaderReady={} suppress={}",
+                    strength,shaderReady,suppress);
+            }
+            if(!suppress) {
                 if(suppressionLogged) {
                     suppressionLogged=false;
                     LOGGER.info("BLACK_FREQUENCY_CLOUDS_RESTORED");

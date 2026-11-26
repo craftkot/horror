@@ -1085,6 +1085,9 @@ option_overrides=[
     ("rawMouseInput","false"),
     ("mouseSensitivity",str(MOUSE_SENSITIVITY)),
     ("pauseOnLostFocus","false"),
+    # The cloud suppression callback is not invoked when the user's cloud option is Off.
+    # Enable clouds only in this disposable client so the real render hook is exercised.
+    ("renderClouds","true"),
 ]
 if deferred_chunk_probe:
     option_overrides.extend((("renderDistance",str(DEFERRED_RENDER_DISTANCE)),
@@ -1101,6 +1104,9 @@ options_file.write_text("\n".join(option_lines)+"\n",encoding="utf-8")
 option_values={line.split(":",1)[0]:line.split(":",1)[1] for line in option_lines if ":" in line}
 if option_values.get("pauseOnLostFocus")!="false":
     raise SystemExit("Could not disable Minecraft pauseOnLostFocus for deterministic integrated-server ticks")
+if option_values.get("renderClouds")!="true":
+    raise SystemExit("Could not enable vanilla clouds for the cloud-suppression render-hook test")
+print("WORLD_CAPTURE: vanilla clouds enabled for the active-rift suppression test",flush=True)
 if deferred_chunk_probe and (
         option_values.get("renderDistance")!=str(DEFERRED_RENDER_DISTANCE)
         or option_values.get("simulationDistance")!=str(DEFERRED_SIMULATION_DISTANCE)):
@@ -5047,7 +5053,9 @@ def capture_test_world():
             cloud_source_path=ROOT/"addon/src/main/java/com/blackfrequency/rift/client/RiftCloudEffects.java"
             cloud_source_text=cloud_source_path.read_text(encoding="utf-8",errors="replace")
             if ("ResourceLocation.tryBuild(\"minecraft\",\"overworld\")" not in cloud_source_text
-                    or "event.register(OVERWORLD_ID,new RiftOverworldEffects());" not in cloud_source_text
+                    or "event.register(OVERWORLD_ID,effects);" not in cloud_source_text
+                    or "VANILLA_CLOUD_EFFECTS_REGISTERED" not in cloud_source_text
+                    or "VANILLA_CLOUD_RENDER_CALLBACK" not in cloud_source_text
                     or "new ResourceLocation(\"minecraft\",\"overworld\")" in cloud_source_text):
                 print("WORLD_CAPTURE_FAIL: Overworld effects registration still uses the deprecated ResourceLocation constructor",flush=True)
                 return False
@@ -5467,6 +5475,12 @@ def capture_test_world():
                 return False
             if "BLACK_FREQUENCY_TEST VANILLA_CLOUD_SHADER_FALLBACK_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: clouds are not preserved when the rift shader is unavailable",flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST VANILLA_CLOUD_EFFECTS_REGISTERED dimension=minecraft:overworld implementation=RiftOverworldEffects" not in log_after:
+                print("WORLD_CAPTURE_FAIL: custom Overworld cloud effects were not registered",flush=True)
+                return False
+            if "BLACK_FREQUENCY_TEST VANILLA_CLOUD_RENDER_CALLBACK" not in log_after:
+                print("WORLD_CAPTURE_FAIL: vanilla cloud render callback was not invoked",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST VANILLA_CLOUDS_SUPPRESSED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: vanilla clouds were not suppressed during the active rift",flush=True)
