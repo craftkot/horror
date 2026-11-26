@@ -112,7 +112,8 @@ def verify_deferred_restore_chunk_bounds_profile():
         if input_ready_start>=0 and isolated_command_start>input_ready_start else "")
     isolated_command_body=(client_source[isolated_command_start:isolated_command_end]
         if isolated_command_start>=0 and isolated_command_end>isolated_command_start else "")
-    if (not input_ready_body or DEFERRED_CLIENT_INPUT_READY_MARKER not in input_ready_body
+    if (not input_ready_body or "DEFERRED_CLIENT_INPUT_READY_MARKER" not in input_ready_body
+            or DEFERRED_CLIENT_INPUT_READY_MARKER not in client_source
             or "wait_for_isolated_client_input_ready()" not in isolated_command_body
             or "for attempt in range(2)" not in isolated_command_body
             or "command acknowledgement delayed; retrying" not in isolated_command_body):
