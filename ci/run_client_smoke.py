@@ -5479,8 +5479,31 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST VANILLA_CLOUD_EFFECTS_REGISTERED dimension=minecraft:overworld implementation=RiftOverworldEffects" not in log_after:
                 print("WORLD_CAPTURE_FAIL: custom Overworld cloud effects were not registered",flush=True)
                 return False
+            cloud_runtime=re.search(
+                r"BLACK_FREQUENCY_TEST VANILLA_CLOUD_RUNTIME_STATE dimension=(\\S+) cloudStatus=(\\S+) effectsClass=(\\S+) cloudHeight=([-+0-9.eE]+) ciTestMode=(true|false)",
+                log_after)
+            if not cloud_runtime:
+                print("WORLD_CAPTURE_FAIL: runtime cloud status and active dimension effects were not observed",flush=True)
+                return False
+            cloud_dimension,cloud_status,cloud_effects,cloud_height,cloud_ci_mode=cloud_runtime.groups()
+            try:
+                cloud_height_value=float(cloud_height)
+            except (TypeError,ValueError,OverflowError):
+                cloud_height_value=float("nan")
+            if (cloud_dimension!="minecraft:overworld"
+                    or cloud_status not in {"FAST","FANCY"}
+                    or cloud_effects!="RiftOverworldEffects"
+                    or not math.isfinite(cloud_height_value)
+                    or cloud_height_value<=0.0
+                    or cloud_ci_mode!="true"):
+                print("WORLD_CAPTURE_FAIL: runtime cloud configuration is not the expected active Overworld profile",
+                      {"dimension":cloud_dimension,"cloudStatus":cloud_status,
+                       "effectsClass":cloud_effects,"cloudHeight":cloud_height,
+                       "ciTestMode":cloud_ci_mode},flush=True)
+                return False
             if "BLACK_FREQUENCY_TEST VANILLA_CLOUD_RENDER_CALLBACK" not in log_after:
-                print("WORLD_CAPTURE_FAIL: vanilla cloud render callback was not invoked",flush=True)
+                print("WORLD_CAPTURE_FAIL: registered Overworld cloud callback was not invoked despite its runtime profile",
+                      {"cloudStatus":cloud_status,"effectsClass":cloud_effects},flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST VANILLA_CLOUDS_SUPPRESSED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: vanilla clouds were not suppressed during the active rift",flush=True)
