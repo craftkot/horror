@@ -5158,7 +5158,8 @@ def capture_test_world():
             rejection_counts=[int(value) for value in canopy_rejections.groups()]
             (attempts,accepted,invalid,budget,chunk,heightmap,non_leaf,headroom,
              height,pattern,duplicate,segment,plant_lifted)=rejection_counts
-            reasons=(invalid,budget,chunk,heightmap,non_leaf,headroom,height,pattern,duplicate,segment)
+            # Segment rejection happens after queue acceptance, so it is a subset of accepted, not a pre-queue rejection.
+            reasons=(invalid,budget,chunk,heightmap,non_leaf,headroom,height,pattern,duplicate)
             if (attempts>GROUND_MESH_SAMPLES+80
                     or accepted>attempts
                     or sum(reasons)+accepted!=attempts
