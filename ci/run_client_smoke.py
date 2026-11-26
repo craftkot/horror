@@ -524,6 +524,31 @@ def verify_restoration_particle_source():
             or "queueExposedLeafCanopyAccent(level,blockX,blockZ,groundY,cursor)" not in client_source
             or "GROUND_CANOPY_LEAF_ACCENT_PROFILE_VERIFIED" not in client_source):
         raise RuntimeError("BLACK FREQUENCY leaf canopy accents must use exposed top leaves from already-loaded chunks only")
+    surface_plant_clearance_start=client_source.find("private static int canopyAccentPlantSurfaceSkippedPlants(")
+    surface_plant_clearance_end=client_source.find("\\n        private static double canopyAccentLiftedParticleY(",surface_plant_clearance_start+1)
+    surface_plant_clearance_body=(client_source[surface_plant_clearance_start:surface_plant_clearance_end]
+        if surface_plant_clearance_start>=0 and surface_plant_clearance_end>surface_plant_clearance_start else "")
+    surface_plant_queue_start=client_source.find("private static boolean queuePlantSurfaceCanopyAccent(")
+    surface_plant_queue_end=client_source.find("\\n        /**",surface_plant_queue_start+1)
+    surface_plant_queue_body=(client_source[surface_plant_queue_start:surface_plant_queue_end]
+        if surface_plant_queue_start>=0 and surface_plant_queue_end>surface_plant_queue_start else "")
+    sample_ground_start=client_source.find("private static double sampleGroundY(")
+    sample_ground_end=client_source.find("\\n        private static long columnKey",sample_ground_start+1)
+    sample_ground_body=(client_source[sample_ground_start:sample_ground_end]
+        if sample_ground_start>=0 and sample_ground_end>sample_ground_start else "")
+    if ("for(int skipped=0;skipped<=GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS;skipped++)" not in surface_plant_clearance_body
+            or "isCanopyAccentHeadroomAvailable(head)" not in surface_plant_clearance_body
+            or "isCanopyAccentSkippablePlant(head,head.getCollisionShape(level,cursor))" not in surface_plant_clearance_body
+            or "canopyAccentPlantSurfaceParticleY" not in sample_ground_body
+            or "skippedPlantSurfaceBlocks>=0" not in sample_ground_body
+            or "skippedPlantSurfaceBlocks<0" not in sample_ground_body
+            or "queuePlantSurfaceCanopyAccent" not in sample_ground_body
+            or "groundCanopyAccentQueueAttempts++" not in surface_plant_queue_body
+            or "hasCanopyAccentCandidate(blockX,blockZ)" not in surface_plant_queue_body
+            or "groundCanopyAccentQueueAccepted++" not in surface_plant_queue_body
+            or "groundCanopyAccentQueuePlantLifted++" not in surface_plant_queue_body
+            or "GROUND_CANOPY_ACCENT_SURFACE_PLANT_LIFT_PROFILE_VERIFIED" not in client_source):
+        raise RuntimeError("BLACK FREQUENCY stacked ground-plant accents must use bounded non-colliding clearance and complete queue accounting")
     adjacent_accent_start=client_source.find("private static boolean queueAdjacentExposedLeafCanopyAccent(")
     adjacent_accent_end=client_source.find("\n        private static double sampleGroundY",adjacent_accent_start+1)
     adjacent_accent_body=client_source[adjacent_accent_start:adjacent_accent_end] if adjacent_accent_start>=0 and adjacent_accent_end>adjacent_accent_start else ""

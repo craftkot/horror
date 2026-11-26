@@ -2942,11 +2942,39 @@ public final class RiftClientState {
                 && collisionShape.isEmpty();
         }
 
+        // Ground plants can be stacked (for example, the two halves of tall grass).
+        // Walk only through the same bounded, collision-free BushBlock allowlist used by leaf accents.
+        private static int canopyAccentPlantSurfaceSkippedPlants(Level level,int blockX,int surfaceY,int blockZ,
+                BlockState firstHead,BlockPos.MutableBlockPos cursor) {
+            if(level==null || firstHead==null || cursor==null) return -1;
+            for(int skipped=0;skipped<=GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS;skipped++) {
+                long headY=(long)surfaceY+1L+(long)skipped;
+                if(headY<level.getMinBuildHeight() || headY>=level.getMaxBuildHeight()) return -1;
+                BlockState head=firstHead;
+                if(skipped>0) {
+                    cursor.set(blockX,(int)headY,blockZ);
+                    head=level.getBlockState(cursor);
+                }
+                if(isCanopyAccentHeadroomAvailable(head)) return skipped;
+                if(skipped==GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS
+                    || !isCanopyAccentSkippablePlant(head,head.getCollisionShape(level,cursor))) return -1;
+            }
+            return -1;
+        }
+
         private static double canopyAccentLiftedParticleY(int topY,int skippedPlants) {
             if(skippedPlants<0 || skippedPlants>GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS) return Double.NaN;
             long liftedY=(long)topY+(long)skippedPlants;
             if(liftedY<Integer.MIN_VALUE || liftedY>Integer.MAX_VALUE) return Double.NaN;
             return canopyAccentParticleY((int)liftedY,0.0D);
+        }
+
+        private static double canopyAccentPlantSurfaceParticleY(int surfaceY,double shapeHeight,int skippedPlants) {
+            if(skippedPlants<0 || skippedPlants>GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS) return Double.NaN;
+            if(skippedPlants==0) return canopyAccentParticleY(surfaceY,shapeHeight);
+            long clearY=(long)surfaceY+1L+(long)skippedPlants;
+            if(clearY<Integer.MIN_VALUE || clearY>Integer.MAX_VALUE) return Double.NaN;
+            return canopyAccentParticleY((int)clearY,0.0D);
         }
 
         private static boolean canopyAccentCandidateInsideExpandedSegmentBounds(double x,double z,
@@ -3195,7 +3223,13 @@ public final class RiftClientState {
                 && Math.abs(canopyAccentLiftedParticleY(70,2)-72.26D)<1.0E-9D
                 && Double.isNaN(canopyAccentLiftedParticleY(70,-1))
                 && Double.isNaN(canopyAccentLiftedParticleY(70,3))
-                && Double.isNaN(canopyAccentLiftedParticleY(Integer.MAX_VALUE,2));
+                && Double.isNaN(canopyAccentLiftedParticleY(Integer.MAX_VALUE,2))
+                && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,0)-71.06D)<1.0E-9D
+                && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,1)-72.26D)<1.0E-9D
+                && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,2)-73.26D)<1.0E-9D
+                && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,.8D,-1))
+                && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,.8D,3))
+                && Double.isNaN(canopyAccentPlantSurfaceParticleY(Integer.MAX_VALUE,.8D,1));
             GroundSegment fixture=new GroundSegment(new GroundPoint(0.0D,70.0D,0.0D),
                 new GroundPoint(1.0D,70.0D,0.0D),0.0D,1.0D,GROUND_SAMPLES[0],
                 1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
@@ -3292,6 +3326,9 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_HEADROOM_POLICY_VERIFIED airOnlyOrLiftedBush=true leavesRejected=true plantsBounded=true fluidsRejected=true solidRejected=true ribbonStillAllowed=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PLANT_CLEARANCE_PROFILE_VERIFIED maxLift={} bushOnly=true collisionEmpty=true leavesRejected=true fluidsRejected=true solidRejected=true",
+                GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SURFACE_PLANT_LIFT_PROFILE_VERIFIED maxLift={} stackedBushes=true collisionEmpty=true leavesRejected=true fluidsRejected=true solidRejected=true",
                 GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED near=true far=false broadPhaseCorner=true exactCornerRejected=true invalidBoundsRejected=true heightBounded=true invalidRejected=true emptyMeshRejected=true");
@@ -3505,6 +3542,46 @@ public final class RiftClientState {
             return true;
         }
 
+        private static boolean queuePlantSurfaceCanopyAccent(Level level,BlockState surface,
+                int blockX,int blockZ,double groundY,double accentY,int skippedPlants) {
+            if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueAttempts++;
+            if(level==null || surface==null || !Double.isFinite(groundY) || !Double.isFinite(accentY)
+                || skippedPlants<0 || skippedPlants>GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueInvalidRejected++;
+                return false;
+            }
+            if(groundCanopyAccentCandidateCount<0
+                || groundCanopyAccentCandidateCount>=GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueBudgetRejected++;
+                return false;
+            }
+            if(groundY<level.getMinBuildHeight() || groundY>=level.getMaxBuildHeight()
+                || accentY<level.getMinBuildHeight() || accentY>=level.getMaxBuildHeight()
+                || accentY<=groundY
+                || accentY-groundY>GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueHeightRejected++;
+                return false;
+            }
+            if(!shouldQueueCanopyAccentCandidate(surface,blockX,blockZ,groundCanopyAccentCandidateCount)) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueuePatternRejected++;
+                return false;
+            }
+            if(hasCanopyAccentCandidate(blockX,blockZ)) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueDuplicateRejected++;
+                return false;
+            }
+            int candidate=groundCanopyAccentCandidateCount++;
+            GROUND_CANOPY_ACCENT_X[candidate]=blockX;
+            GROUND_CANOPY_ACCENT_Z[candidate]=blockZ;
+            GROUND_CANOPY_ACCENT_Y[candidate]=accentY;
+            GROUND_CANOPY_ACCENT_GROUND_Y[candidate]=groundY;
+            if(VERIFY_GROUND_MESH_PROFILES) {
+                groundCanopyAccentQueueAccepted++;
+                if(skippedPlants>0) groundCanopyAccentQueuePlantLifted++;
+            }
+            return true;
+        }
+
         /**
          * Scan one side/ring at a time across the complete mesh sample set.
          * This prevents the first few samples from consuming the entire neighbor budget.
@@ -3637,24 +3714,17 @@ public final class RiftClientState {
 
                 double surfaceOffset=groundSurfaceOffset(supportHeight,snowLayerHeight);
                 double groundY=candidateY-1+surfaceOffset+GROUND_SURFACE_CLEARANCE;
-                if(emitCanopyAccent && plantSurface && isCanopyAccentHeadroomAvailable(head)
-                    && Double.isFinite(plantShapeHeight) && plantShapeHeight>0.0D
-                    && shouldQueueCanopyAccentCandidate(surface,blockX,blockZ,groundCanopyAccentCandidateCount)) {
-                    double accentY=canopyAccentParticleY(candidateY,plantShapeHeight);
-                    if(Double.isFinite(accentY) && accentY>=level.getMinBuildHeight()
-                        && accentY<level.getMaxBuildHeight()
-                        && Double.isFinite(groundY) && groundY>=level.getMinBuildHeight()
-                        && groundY<level.getMaxBuildHeight()) {
-                        int candidate=groundCanopyAccentCandidateCount++;
-                        GROUND_CANOPY_ACCENT_X[candidate]=blockX;
-                        GROUND_CANOPY_ACCENT_Z[candidate]=blockZ;
-                        GROUND_CANOPY_ACCENT_Y[candidate]=accentY;
-                        GROUND_CANOPY_ACCENT_GROUND_Y[candidate]=groundY;
-                    }
+                int skippedPlantSurfaceBlocks=emitCanopyAccent && plantSurface
+                    ? canopyAccentPlantSurfaceSkippedPlants(level,blockX,candidateY,blockZ,head,cursor) : -1;
+                if(emitCanopyAccent && plantSurface && skippedPlantSurfaceBlocks>=0) {
+                    double accentY=canopyAccentPlantSurfaceParticleY(candidateY,plantShapeHeight,
+                        skippedPlantSurfaceBlocks);
+                    queuePlantSurfaceCanopyAccent(level,surface,blockX,blockZ,groundY,accentY,
+                        skippedPlantSurfaceBlocks);
                 }
-                // A plant already has its own accent when the headroom is clear.
-                // Otherwise, allow one exposed top leaf in this column to carry the seam upward.
-                if(emitCanopyAccent && (!plantSurface || !isCanopyAccentHeadroomAvailable(head)))
+                // A plant surface carries its own accent only when the bounded clearance scan succeeds.
+                // Otherwise, let one exposed top leaf carry the seam upward.
+                if(emitCanopyAccent && (!plantSurface || skippedPlantSurfaceBlocks<0))
                     queueExposedLeafCanopyAccent(level,blockX,blockZ,groundY,cursor);
                 return groundY;
             }
