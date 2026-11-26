@@ -65,6 +65,14 @@ def verify_deferred_restore_chunk_bounds_profile():
     if ('if(Boolean.getBoolean("blackfrequency.ciDeferredChunkProbe")' not in controller_source
             or "&& !level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4))" not in controller_source):
         raise RuntimeError("BLACK FREQUENCY may skip the synthetic beacon guard only in the deferred client probe")
+    client_source=pathlib.Path(__file__).read_text(encoding="utf-8")
+    creative_command=client_source.find('"/gamemode creative @s"')
+    travel_command=client_source.find('f"/tp @s ~{DEFERRED_PLAYER_TRAVEL_DISTANCE} 120 ~"',creative_command)
+    return_command=client_source.find('f"/tp @s {pad_x} {pad_y} {pad_z}"',travel_command)
+    survival_command=client_source.find('"/gamemode survival @s"',return_command)
+    if (creative_command<0 or travel_command<=creative_command
+            or return_command<=travel_command or survival_command<=return_command):
+        raise RuntimeError("BLACK FREQUENCY deferred travel must protect the player and restore Survival before the physical beacon test")
     fixtures=(
         (48,0,3,0,0,0,48,True),
         (-48,0,-3,0,0,0,48,True),
@@ -4197,6 +4205,13 @@ def capture_test_world():
                     if (deferred_chunk_probe and not deferred_probe_player_moved
                             and restoration_shot
                             and "BLACK_FREQUENCY_TEST BEACON_RESTORATION_STARTED" in current):
+                        # Keep the remote player alive while waiting for chunk tickets to expire.
+                        # Creative is temporary; Survival is restored before the real beacon break.
+                        if not send_isolated_chat_command(
+                                "/gamemode creative @s",
+                                r"Set own game mode to Creative Mode",
+                                "enter creative mode for safe deferred travel"):
+                            return False
                         if not send_isolated_chat_command(
                                 f"/tp @s ~{DEFERRED_PLAYER_TRAVEL_DISTANCE} 120 ~",
                                 r"Teleported .* to ",
@@ -4315,10 +4330,23 @@ def capture_test_world():
                                 r"Teleported .* to ",
                                 "return to physical recovery beacon pad before final validation"):
                             return False
+                        if not send_isolated_chat_command(
+                                "/gamemode survival @s",
+                                r"Set own game mode to Survival Mode",
+                                "restore survival mode before physical beacon break"):
+                            return False
                         print("WORLD_CAPTURE: returned to physical beacon pad before deferred-probe validation",
                               pad_x,pad_y,pad_z,flush=True)
                         time.sleep(0.25)
                         final_log=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else final_log
+                        creative_mode_at=final_log.rfind("Set own game mode to Creative Mode")
+                        survival_mode_at=final_log.rfind("Set own game mode to Survival Mode")
+                        if creative_mode_at<0 or survival_mode_at<=creative_mode_at:
+                            print("WORLD_CAPTURE_FAIL: deferred travel did not restore Survival after Creative mode",flush=True)
+                            return False
+                        if "fell from a high place" in final_log[creative_mode_at:survival_mode_at]:
+                            print("WORLD_CAPTURE_FAIL: deferred travel player died before returning to Survival",flush=True)
+                            return False
                         if "BLACK_FREQUENCY_TEST POST_RESTORE_BEACON_BREAK_READY_FOR_REAL_PLAYER" not in final_log:
                             print("WORLD_CAPTURE_FAIL: post-restoration beacon was not exposed for the real player test",
                                   flush=True)
