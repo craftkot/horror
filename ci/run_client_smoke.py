@@ -487,7 +487,7 @@ def verify_restoration_particle_source():
         if heightmap_prefilter_start>=0 and heightmap_prefilter_end>heightmap_prefilter_start else "")
     heightmap_prefilter_at=leaf_accent_body.find("canopyAccentHeightmapMayContainValidLeafAccent(groundY,topY)")
     leaf_state_at=leaf_accent_body.find("BlockState leaf=level.getBlockState(cursor);")
-    if ("GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=12.0D;" not in client_source
+    if ("GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=16.0D;" not in client_source
             or heightmap_prefilter_at<0 or leaf_state_at<0 or heightmap_prefilter_at>leaf_state_at
             or "Double.isFinite(groundY)" not in heightmap_prefilter_body
             or "maximumPossibleAccentY>groundY+1.0D" not in heightmap_prefilter_body
@@ -4968,7 +4968,7 @@ def capture_test_world():
                 return False
             canopy_leaf_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_ACCENT_PROFILE_VERIFIED "
-                "maxHeightAboveGround=12.0 topLeafOnly=true exposedAirOnly=true loadedChunkOnly=true forceLoad=false"
+                "maxHeightAboveGround=16.0 topLeafOnly=true exposedAirOnly=true loadedChunkOnly=true forceLoad=false"
             )
             if canopy_leaf_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: exposed leaf-top accents did not pass their loaded-only canopy profile",flush=True)
