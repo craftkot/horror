@@ -3481,7 +3481,6 @@ public final class RiftClientState {
                 if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueHeadroomRejected++;
                 return false;
             }
-            if(VERIFY_GROUND_MESH_PROFILES && skippedPlants>0) groundCanopyAccentQueuePlantLifted++;
             if(!isCanopyAccentHeightWithinBounds(groundY,accentY)) {
                 if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueHeightRejected++;
                 return false;
@@ -3499,7 +3498,10 @@ public final class RiftClientState {
             GROUND_CANOPY_ACCENT_Z[candidate]=blockZ;
             GROUND_CANOPY_ACCENT_Y[candidate]=accentY;
             GROUND_CANOPY_ACCENT_GROUND_Y[candidate]=groundY;
-            if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueAccepted++;
+            if(VERIFY_GROUND_MESH_PROFILES) {
+                groundCanopyAccentQueueAccepted++;
+                if(skippedPlants>0) groundCanopyAccentQueuePlantLifted++;
+            }
             return true;
         }
 
