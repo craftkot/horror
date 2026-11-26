@@ -476,6 +476,20 @@ def verify_restoration_particle_source():
             or "snowSurfaceAccepted &= isGroundSurfaceAvailable(snow);" not in client_source
             or "fullSnowBlockRejected" not in client_source):
         raise RuntimeError("BLACK FREQUENCY snow layers must pass the surface filter without admitting full snow blocks")
+    leaf_accent_start=client_source.find("private static void queueExposedLeafCanopyAccent(")
+    leaf_accent_end=client_source.find("\n        private static double sampleGroundY",leaf_accent_start+1)
+    leaf_accent_body=client_source[leaf_accent_start:leaf_accent_end] if leaf_accent_start>=0 and leaf_accent_end>leaf_accent_start else ""
+    if ("GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=12.0D;" not in client_source
+            or "level.hasChunk(blockX>>4,blockZ>>4)" not in leaf_accent_body
+            or "getChunk(blockX>>4,blockZ>>4," not in leaf_accent_body
+            or "net.minecraft.world.level.chunk.ChunkStatus.FULL,false" not in leaf_accent_body
+            or "chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING" not in leaf_accent_body
+            or "if(!leaf.is(BlockTags.LEAVES)) return;" not in leaf_accent_body
+            or "!isCanopyAccentHeadroomAvailable(head)" not in leaf_accent_body
+            or "isCanopyAccentHeightWithinBounds(groundY,accentY)" not in leaf_accent_body
+            or "queueExposedLeafCanopyAccent(level,blockX,blockZ,groundY,cursor)" not in client_source
+            or "GROUND_CANOPY_LEAF_ACCENT_PROFILE_VERIFIED" not in client_source):
+        raise RuntimeError("BLACK FREQUENCY leaf canopy accents must use exposed top leaves from already-loaded chunks only")
     fissure_start=source.find("private static FissureEmission emitSurfaceFissure(")
     fissure_end=source.find("\n    private static",fissure_start+1)
     fissure_emitter=source[fissure_start:fissure_end] if fissure_start>=0 and fissure_end>fissure_start else ""
@@ -569,7 +583,8 @@ def verify_restoration_particle_source():
             or "padSign*offset" not in pad_body
             or "ciBeaconPadApproachClear(ServerLevel level,net.minecraft.server.level.ServerPlayer player,State s,BlockPos beacon" not in source
             or "ClipContext.Fluid.NONE,player" not in source
-            or "findVisibleFissureTarget(level,s,player,eye)!=null" not in source
+            or "FissureTarget targetSample=findVisibleFissureTarget(level,s,player,eye);" not in source
+            or "targetSample!=null && hasContiguousVisibleFissureSpan(targetSample.visibleNeighbours())" not in source
             or "fissureVisibilityRequired=true" not in source
             or "verifyCiBeaconPadSignSelection();" not in source
             or "for(int offset=CI_BEACON_PAD_FIRST_SOLID_ROW;offset<=CI_BEACON_PAD_LAST_SOLID_ROW;offset++)" not in pad_body
@@ -4919,12 +4934,19 @@ def capture_test_world():
                 return False
             canopy_selector_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SELECTOR_PROFILE_VERIFIED "
-                "budget=8 candidateBudget=32 selection=three-of-four-sparse plantOnly=true "
+                "budget=8 candidateBudget=32 selection=three-of-four-sparse plantOrLeafTop=true "
                 "invalidRejected=true heightBounded=true segmentBounded=true"
             )
             if (canopy_selector_marker not in log_after
                     or "&& ((blockX&1)==0 || (blockZ&1)==0);" not in camera_source):
-                print("WORLD_CAPTURE_FAIL: bounded three-of-four plant-only canopy accent selector was not verified",flush=True)
+                print("WORLD_CAPTURE_FAIL: bounded three-of-four plant/leaf-top canopy accent selector was not verified",flush=True)
+                return False
+            canopy_leaf_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_ACCENT_PROFILE_VERIFIED "
+                "maxHeightAboveGround=12.0 topLeafOnly=true exposedAirOnly=true loadedChunkOnly=true forceLoad=false"
+            )
+            if canopy_leaf_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: exposed leaf-top accents did not pass their loaded-only canopy profile",flush=True)
                 return False
             canopy_rotation_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_ROTATION_PROFILE_VERIFIED "

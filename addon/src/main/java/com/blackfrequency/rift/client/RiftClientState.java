@@ -867,6 +867,8 @@ public final class RiftClientState {
         private static final double GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE_SQR=
             GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE*GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE;
         private static final double GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA=.35D;
+        // Leaf-top accents may rise above the ground ribbon, but stay inside a bounded canopy envelope.
+        private static final double GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=12.0D;
         // Lift and enlarge sparse motes just enough to read above short foliage.
         private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=.81F;
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.26D;
@@ -2874,7 +2876,8 @@ public final class RiftClientState {
         private static boolean shouldQueueCanopyAccentCandidate(BlockState surface,
                 int blockX,int blockZ,int queued) {
             return surface!=null
-                && surface.getBlock() instanceof net.minecraft.world.level.block.BushBlock
+                && (surface.getBlock() instanceof net.minecraft.world.level.block.BushBlock
+                    || surface.is(BlockTags.LEAVES))
                 && queued>=0 && queued<GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET
                 && ((blockX&1)==0 || (blockZ&1)==0);
         }
@@ -3007,9 +3010,16 @@ public final class RiftClientState {
             boolean candidateBudgetRejected=!shouldQueueCanopyAccentCandidate(
                 plant,0,0,GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET);
             boolean negativeCounterRejected=!shouldQueueCanopyAccentCandidate(plant,0,0,-1);
-            boolean nonPlantsRejected=
+            BlockState leaf=net.minecraft.world.level.block.Blocks.OAK_LEAVES.defaultBlockState();
+            boolean leafSelected=shouldQueueCanopyAccentCandidate(leaf,0,0,0);
+            boolean leafSparse=!shouldQueueCanopyAccentCandidate(leaf,1,1,0);
+            boolean nonAccentSurfacesRejected=
                 !shouldQueueCanopyAccentCandidate(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),0,0,0)
                 && !shouldQueueCanopyAccentCandidate(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),0,0,0);
+            double leafTop=canopyAccentParticleY(70,1.0D);
+            boolean leafHeightBounded=isCanopyAccentHeightWithinBounds(64.1D,leafTop)
+                && !isCanopyAccentHeightWithinBounds(64.1D,canopyAccentParticleY(77,1.0D))
+                && !isCanopyAccentHeightWithinBounds(Double.NaN,leafTop);
             double plantTop=canopyAccentParticleY(70,.8D);
             double invalidHeight=canopyAccentParticleY(70,Double.NaN);
             double excessiveHeight=canopyAccentParticleY(70,2.0D);
@@ -3074,7 +3084,8 @@ public final class RiftClientState {
             if(!(selected && sparse && threeOfFourPattern && negativeCoordinatePattern && deterministic && candidateBudgetRejected && negativeCounterRejected
                 && rotationProfile && emissionThrottleProfile
                 && zeroEmissionScanRecorded && emptyScanPreservesAttempt
-                && nonPlantsRejected && particleScaleBounded && particleOffsetBounded
+                && leafSelected && leafSparse && nonAccentSurfacesRejected && leafHeightBounded
+                && particleScaleBounded && particleOffsetBounded
                 && particleVelocityBounded && foliageClearanceProfile && canopyAccentHeadroomProfile
                 && Math.abs(plantTop-71.06D)<1.0E-9D
                 && Math.abs(invalidHeight-70.26D)<1.0E-9D
@@ -3085,8 +3096,11 @@ public final class RiftClientState {
                 throw new IllegalStateException("BLACK FREQUENCY canopy accent particle profile regression");
             canopyAccentSelectorProfileLogged=true;
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SELECTOR_PROFILE_VERIFIED budget={} candidateBudget={} selection=three-of-four-sparse plantOnly=true invalidRejected=true heightBounded=true segmentBounded=true",
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SELECTOR_PROFILE_VERIFIED budget={} candidateBudget={} selection=three-of-four-sparse plantOrLeafTop=true invalidRejected=true heightBounded=true segmentBounded=true",
                 GROUND_CANOPY_ACCENT_PARTICLE_BUDGET,GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_ACCENT_PROFILE_VERIFIED maxHeightAboveGround={} topLeafOnly=true exposedAirOnly=true loadedChunkOnly=true forceLoad=false",
+                GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_ROTATION_PROFILE_VERIFIED candidateCount=12 budget=8 firstWindow=0-7 secondWindow=8-11 wrap=true negativeStart=true invalidCountRejected=true");
             com.mojang.logging.LogUtils.getLogger().info(
@@ -3106,6 +3120,47 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_HEADROOM_POLICY_VERIFIED airOnly=true leavesRejected=true plantsRejected=true fluidsRejected=true ribbonStillAllowed=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED near=true far=false broadPhaseCorner=true exactCornerRejected=true invalidBoundsRejected=true heightBounded=true invalidRejected=true emptyMeshRejected=true");
+        }
+
+        private static boolean isCanopyAccentHeightWithinBounds(double groundY,double accentY) {
+            return Double.isFinite(groundY) && Double.isFinite(accentY)
+                && accentY>groundY+1.0D
+                && accentY-groundY<=GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND;
+        }
+
+        /**
+         * Queue one accent at the exposed top leaf of an already-loaded column.
+         * The heightmap is read from a FULL chunk with load=false; roofs and a
+         * second foliage layer suppress the mote instead of drawing through them.
+         */
+        private static void queueExposedLeafCanopyAccent(net.minecraft.client.multiplayer.ClientLevel level,
+                int blockX,int blockZ,double groundY,BlockPos.MutableBlockPos cursor) {
+            if(level==null || cursor==null || !Double.isFinite(groundY)
+                || groundCanopyAccentCandidateCount<0
+                || groundCanopyAccentCandidateCount>=GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET
+                || !level.hasChunk(blockX>>4,blockZ>>4)) return;
+            var chunk=level.getChunkSource().getChunk(blockX>>4,blockZ>>4,
+                net.minecraft.world.level.chunk.ChunkStatus.FULL,false);
+            if(chunk==null) return;
+            int topY=chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,
+                blockX&15,blockZ&15);
+            if(topY<=level.getMinBuildHeight() || topY>=level.getMaxBuildHeight()) return;
+            cursor.set(blockX,topY-1,blockZ);
+            if(!level.getWorldBorder().isWithinBounds(cursor)) return;
+            BlockState leaf=level.getBlockState(cursor);
+            if(!leaf.is(BlockTags.LEAVES)) return;
+            double shapeHeight=leaf.getShape(level,cursor).max(Direction.Axis.Y);
+            double accentY=canopyAccentParticleY(topY-1,shapeHeight);
+            cursor.set(blockX,topY,blockZ);
+            BlockState head=level.getBlockState(cursor);
+            if(!isCanopyAccentHeadroomAvailable(head)
+                || !isCanopyAccentHeightWithinBounds(groundY,accentY)
+                || !shouldQueueCanopyAccentCandidate(leaf,blockX,blockZ,groundCanopyAccentCandidateCount)) return;
+            int candidate=groundCanopyAccentCandidateCount++;
+            GROUND_CANOPY_ACCENT_X[candidate]=blockX;
+            GROUND_CANOPY_ACCENT_Z[candidate]=blockZ;
+            GROUND_CANOPY_ACCENT_Y[candidate]=accentY;
+            GROUND_CANOPY_ACCENT_GROUND_Y[candidate]=groundY;
         }
 
         private static double sampleGroundY(net.minecraft.client.multiplayer.ClientLevel level,
@@ -3170,6 +3225,10 @@ public final class RiftClientState {
                         GROUND_CANOPY_ACCENT_GROUND_Y[candidate]=groundY;
                     }
                 }
+                // A plant already has its own accent when the headroom is clear.
+                // Otherwise, allow one exposed top leaf in this column to carry the seam upward.
+                if(emitCanopyAccent && (!plantSurface || !isCanopyAccentHeadroomAvailable(head)))
+                    queueExposedLeafCanopyAccent(level,blockX,blockZ,groundY,cursor);
                 return groundY;
             }
             return Double.NaN;
