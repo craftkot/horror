@@ -525,15 +525,15 @@ def verify_restoration_particle_source():
             or "GROUND_CANOPY_LEAF_ACCENT_PROFILE_VERIFIED" not in client_source):
         raise RuntimeError("BLACK FREQUENCY leaf canopy accents must use exposed top leaves from already-loaded chunks only")
     surface_plant_clearance_start=client_source.find("private static int canopyAccentPlantSurfaceSkippedPlants(")
-    surface_plant_clearance_end=client_source.find("\\n        private static double canopyAccentLiftedParticleY(",surface_plant_clearance_start+1)
+    surface_plant_clearance_end=client_source.find("\n        private static double canopyAccentLiftedParticleY(",surface_plant_clearance_start+1)
     surface_plant_clearance_body=(client_source[surface_plant_clearance_start:surface_plant_clearance_end]
         if surface_plant_clearance_start>=0 and surface_plant_clearance_end>surface_plant_clearance_start else "")
     surface_plant_queue_start=client_source.find("private static boolean queuePlantSurfaceCanopyAccent(")
-    surface_plant_queue_end=client_source.find("\\n        /**",surface_plant_queue_start+1)
+    surface_plant_queue_end=client_source.find("\n        /**",surface_plant_queue_start+1)
     surface_plant_queue_body=(client_source[surface_plant_queue_start:surface_plant_queue_end]
         if surface_plant_queue_start>=0 and surface_plant_queue_end>surface_plant_queue_start else "")
     sample_ground_start=client_source.find("private static double sampleGroundY(")
-    sample_ground_end=client_source.find("\\n        private static long columnKey",sample_ground_start+1)
+    sample_ground_end=client_source.find("\n        private static long columnKey",sample_ground_start+1)
     sample_ground_body=(client_source[sample_ground_start:sample_ground_end]
         if sample_ground_start>=0 and sample_ground_end>sample_ground_start else "")
     if ("for(int skipped=0;skipped<=GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS;skipped++)" not in surface_plant_clearance_body
