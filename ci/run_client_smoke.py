@@ -540,9 +540,14 @@ def verify_restoration_particle_source():
             or "GROUND_CANOPY_ACCENT_NEIGHBOR_SCAN_BUDGET=80;" not in client_source
             or "GROUND_CANOPY_ACCENT_NEIGHBOR_SAMPLE_BUDGET=ARM_COUNT*SEGMENTS_PER_ARM;" not in client_source
             or "GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE=1.60D;" not in client_source
+            or "long tangentSign=segment<=SEGMENTS_PER_ARM/2?1L:-1L;" not in client_source
+            or "distance==2" not in client_source
+            or "arm==0?tangentSign:arm==2?-tangentSign:0L" not in client_source
+            or "arm==1?tangentSign:arm==3?-tangentSign:0L" not in client_source
             or "queueCanopyAccentNeighborScanSample(blockX,blockZ,sampledY,arm,segment)" not in client_source
             or "scanCanopyAccentNeighborSamples(level,result,worldAnchorX,worldAnchorZ,SURFACE_CURSOR)" not in client_source
-            or "perSample=1..4 maxNeighborScans=80 scanOrder=roundRobinPasses alternatingSides=true perpendicular=true distanceTwoFallback=true fallbackOnMiss=true loadedOnly=true radius=48 uniqueColumns=true duplicateColumnsSkipped=true" not in client_source
+            or "perSample=1..4 maxNeighborScans=80 scanOrder=roundRobinPasses alternatingSides=true perpendicular=true diagonalFallback=true tangentTowardArmCenter=true fallbackOnMiss=true loadedOnly=true radius=48 uniqueColumns=true duplicateColumnsSkipped=true" not in client_source
+            or "GROUND_CANOPY_DIAGONAL_SCAN_PROFILE_VERIFIED normalOffset=1 tangentOffset=1 towardArmCenter=true maxHorizontalDistance=1.6 diagonalNear=true straightDistanceTwoRejected=true" not in client_source
             or "GROUND_CANOPY_LEAF_ADJACENT_SCAN_PROFILE_VERIFIED" not in client_source):
         raise RuntimeError("BLACK FREQUENCY adjacent canopy scan must be round-robin, unique-column, radius-bounded, and loaded-only")
     fissure_start=source.find("private static FissureEmission emitSurfaceFissure(")
@@ -5094,17 +5099,26 @@ def capture_test_world():
             canopy_neighbor_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_ADJACENT_SCAN_PROFILE_VERIFIED "
                 "perSample=1..4 maxNeighborScans=80 scanOrder=roundRobinPasses alternatingSides=true perpendicular=true "
-                "distanceTwoFallback=true fallbackOnMiss=true loadedOnly=true radius=48 uniqueColumns=true duplicateColumnsSkipped=true"
+                "diagonalFallback=true tangentTowardArmCenter=true fallbackOnMiss=true loadedOnly=true radius=48 uniqueColumns=true duplicateColumnsSkipped=true"
             )
             if canopy_neighbor_marker not in log_after:
-                print("WORLD_CAPTURE_FAIL: bounded two-ring canopy scan profile was not exercised",flush=True)
+                print("WORLD_CAPTURE_FAIL: bounded diagonal canopy scan profile was not exercised",flush=True)
+                return False
+            canopy_diagonal_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_DIAGONAL_SCAN_PROFILE_VERIFIED "
+                "normalOffset=1 tangentOffset=1 towardArmCenter=true maxHorizontalDistance=1.6 "
+                "diagonalNear=true straightDistanceTwoRejected=true"
+            )
+            if canopy_diagonal_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: diagonal canopy offsets did not satisfy the exact segment-distance guard",
+                      flush=True)
                 return False
             canopy_budget=re.search(
                 r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED "
                 r"candidates=(\d+) emitted=(\d+) candidateBudget=32 budget=8 "
                 r"loadedOnly=true radius=48 clientOnly=true plantOrLeafTop=true segmentBounded=true "
                 r"neighborScans=(\d+) neighborScanBudget=80 fallbackScans=(\d+) "
-                r"fallbackHits=(\d+) distanceTwoHits=(\d+) neighborDuplicates=(\d+) neighborSamples=(\d+)",
+                r"fallbackHits=(\d+) diagonalHits=(\d+) neighborDuplicates=(\d+) neighborSamples=(\d+)",
                 log_after)
             if (not canopy_budget or int(canopy_budget.group(1))>32
                 or int(canopy_budget.group(2))>8
