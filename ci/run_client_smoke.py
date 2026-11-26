@@ -68,6 +68,8 @@ def verify_deferred_restore_chunk_bounds_profile():
     controller_source=controller_source_path.read_text(encoding="utf-8")
     geometry_source_path=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"RiftGeometry.java")
     geometry_source=geometry_source_path.read_text(encoding="utf-8")
+    client_state_source_path=(ROOT/"addon"/"src"/"main"/"java"/"com"/"blackfrequency"/"rift"/"client"/"RiftClientState.java")
+    client_state_source=client_state_source_path.read_text(encoding="utf-8")
     radius_match=re.search(r"public static final int RADIUS\s*=\s*(\d+)\s*;",geometry_source)
     if (not radius_match or int(radius_match.group(1))!=DEFERRED_RESTORE_RADIUS
             or "private static final int RADIUS = RiftGeometry.RADIUS;" not in controller_source):
@@ -83,7 +85,9 @@ def verify_deferred_restore_chunk_bounds_profile():
             or "private static final int DEFERRED_CLIENT_SPAWN_Z=1024;" not in controller_source
             or "private static boolean deferredClientProbeAnchorReady(ServerLevel level)" not in controller_source
             or "if(!deferredClientProbeAnchorReady(level))" not in controller_source
-            or "DEFERRED_CLIENT_ANCHOR_PROFILE_VERIFIED" not in controller_source):
+            or "DEFERRED_CLIENT_ANCHOR_PROFILE_VERIFIED" not in controller_source
+            or "BLACK_FREQUENCY_TEST CLIENT_INPUT_READY screen=null player=true" not in client_state_source
+            or "minecraft.screen==null" not in client_state_source):
         raise RuntimeError("BLACK FREQUENCY deferred probe must wait for natural chunk-ticket expiry and report loaded-only readiness")
     if ('if(Boolean.getBoolean("blackfrequency.ciDeferredChunkProbe")' not in controller_source
             or "&& !level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4))" not in controller_source):
@@ -97,14 +101,14 @@ def verify_deferred_restore_chunk_bounds_profile():
         raise RuntimeError("BLACK FREQUENCY deferred anchor must clear the initial and relocated spawn-ticket halos")
     client_source=pathlib.Path(__file__).read_text(encoding="utf-8")
     spawn_verified_at=client_source.find('print("WORLD_CAPTURE: player spawn verified in log"')
-    client_world_ready_wait=client_source.find('client_world_ready_deadline=time.monotonic()+30.0',spawn_verified_at)
-    camera_pose_wait=client_source.find('"BLACK_FREQUENCY_TEST CLIENT_CAMERA_POSE" in current',spawn_verified_at)
+    client_world_ready_wait=client_source.find('client_world_ready_deadline=time.monotonic()+60.0',spawn_verified_at)
+    input_ready_wait=client_source.find('"BLACK_FREQUENCY_TEST CLIENT_INPUT_READY screen=null player=true" in current',spawn_verified_at)
     anchor_creative_command=client_source.find('"/gamemode creative @s"',spawn_verified_at)
     anchor_teleport_command=client_source.find('f"/tp @s {DEFERRED_CLIENT_ANCHOR_X} 120 {DEFERRED_CLIENT_ANCHOR_Z}"',spawn_verified_at)
     shared_spawn_command=client_source.find('f"/setworldspawn {DEFERRED_CLIENT_SPAWN_X} 64 {DEFERRED_CLIENT_SPAWN_Z}"')
     if (spawn_verified_at<0 or client_world_ready_wait<=spawn_verified_at
-            or camera_pose_wait<=client_world_ready_wait
-            or anchor_creative_command<=camera_pose_wait
+            or input_ready_wait<=client_world_ready_wait
+            or anchor_creative_command<=input_ready_wait
             or anchor_teleport_command<=anchor_creative_command or shared_spawn_command<0):
         raise RuntimeError("BLACK FREQUENCY deferred player must move to the remote anchor before the finale and keep shared spawn separate")
     creative_command=client_source.rfind('"/gamemode creative @s"')
@@ -2513,20 +2517,20 @@ def capture_test_world():
             if deferred_chunk_probe:
                 # Server login precedes the first playable client frame. Do not send
                 # chat commands while the integrated client is still on "Loading terrain".
-                client_world_ready_deadline=time.monotonic()+30.0
+                client_world_ready_deadline=time.monotonic()+60.0
                 client_world_ready=False
                 while time.monotonic()<client_world_ready_deadline and p.poll() is None:
                     current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-                    if "BLACK_FREQUENCY_TEST CLIENT_CAMERA_POSE" in current:
+                    if "BLACK_FREQUENCY_TEST CLIENT_INPUT_READY screen=null player=true" in current:
                         client_world_ready=True
                         break
                     time.sleep(.1)
                 if not client_world_ready:
-                    print("WORLD_CAPTURE_FAIL: integrated server accepted the player but the client never rendered a camera frame",flush=True)
+                    print("WORLD_CAPTURE_FAIL: integrated server accepted the player but the client input screen never closed",flush=True)
                     snap("deferred-anchor-world-not-rendered.png")
                     return False
-                print("WORLD_CAPTURE: first playable client camera frame confirmed before deferred anchor commands",
-                      "loadedWorld=true",flush=True)
+                print("WORLD_CAPTURE: client input surface ready after the world-loading screen closed",
+                      "screen=null","player=true",flush=True)
                 snap("deferred-anchor-world-ready.png")
                 initial_spawn_match=INITIAL_PLAYER_SPAWN_RE.search(current)
                 if not initial_spawn_match:

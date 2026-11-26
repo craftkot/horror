@@ -58,6 +58,7 @@ public final class RiftClientState {
     private static boolean beaconAuraProfileLogged;
     private static boolean beaconAuraRenderedLogged;
     private static boolean beaconAuraRestorationRenderedLogged;
+    private static boolean ciDeferredClientInputReadyLogged;
     private static final double BEACON_AURA_RENDER_DISTANCE=48.0D;
     private static final double BEACON_AURA_RENDER_DISTANCE_SQR=
         BEACON_AURA_RENDER_DISTANCE*BEACON_AURA_RENDER_DISTANCE;
@@ -332,6 +333,7 @@ public final class RiftClientState {
         }
         progress=0;collapse=false;finaleTicks=0;serverFinaleTicks=0;ticksSincePacket=0;
         ciGreenPhasePreviewLogged=false;
+        ciDeferredClientInputReadyLogged=false;
         anchorX=0;anchorZ=0;anchorValid=false;
         beaconPosition=Long.MIN_VALUE;beaconBlockPos=null;beaconPositionValid=false;restorationActive=false;
         beaconAuraCompletionFadeTicks=0;beaconAuraCompletionFadeProfileLogged=false;
@@ -792,7 +794,8 @@ public final class RiftClientState {
     @net.minecraftforge.eventbus.api.SubscribeEvent
     public static void onClientTick(net.minecraftforge.event.TickEvent.ClientTickEvent event) {
         if(event.phase!=net.minecraftforge.event.TickEvent.Phase.END) return;
-        net.minecraft.client.multiplayer.ClientLevel level=net.minecraft.client.Minecraft.getInstance().level;
+        Minecraft minecraft=Minecraft.getInstance();
+        net.minecraft.client.multiplayer.ClientLevel level=minecraft.level;
         if(level==null) {
             reset();
             lastLevel=null;
@@ -800,9 +803,19 @@ public final class RiftClientState {
         }
         if(lastLevel!=null && lastLevel!=level) reset();
         lastLevel=level;
+        // A server login is earlier than a usable client input surface: the
+        // ReceivingLevelScreen can still cover the world for several seconds.
+        // Only announce readiness after that screen is gone and a player exists.
+        if(Boolean.getBoolean("blackfrequency.ciDeferredChunkProbe")
+                && minecraft.player!=null && minecraft.screen==null && !minecraft.isPaused()
+                && !ciDeferredClientInputReadyLogged) {
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST CLIENT_INPUT_READY screen=null player=true");
+            ciDeferredClientInputReadyLogged=true;
+        }
         // Integrated singleplayer pauses server packets too. Do not expire the
         // fracture overlay while the simulation is paused in a menu.
-        if(net.minecraft.client.Minecraft.getInstance().isPaused()) return;
+        if(minecraft.isPaused()) return;
         if(beaconAuraCompletionFadeTicks>0) beaconAuraCompletionFadeTicks--;
         if(hasActiveTimedClientState(progress,collapse,finaleTicks,restorationActive)) {
             ticksSincePacket=Math.min(CLIENT_STATE_PACKET_TIMEOUT_TICKS+1,ticksSincePacket+1);
