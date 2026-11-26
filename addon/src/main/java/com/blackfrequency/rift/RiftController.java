@@ -400,8 +400,10 @@ public final class RiftController {
     // The integrated client moves away only after activating the beacon. Allow
     // enough server time after that teleport for the old player/spawn tickets to expire.
     // Production is immediate; the disposable probe never forces a chunk load.
+    private static final int DEFERRED_CLIENT_SCAN_WARMUP_TICKS=600;
+
     private static int restoreSnapshotScanWarmupTicks(boolean deferredClientProbe) {
-        return deferredClientProbe?600:0;
+        return deferredClientProbe?DEFERRED_CLIENT_SCAN_WARMUP_TICKS:0;
     }
 
     // A terminal cursor is trustworthy only when every retained snapshot has
@@ -5452,7 +5454,8 @@ public final class RiftController {
             || restoreSnapshotScanInterval(false)!=1
             || restoreSnapshotScanInterval(true)!=2
             || restoreSnapshotScanWarmupTicks(false)!=0
-            || restoreSnapshotScanWarmupTicks(true)!=200
+            || DEFERRED_CLIENT_SCAN_WARMUP_TICKS!=600
+            || restoreSnapshotScanWarmupTicks(true)!=DEFERRED_CLIENT_SCAN_WARMUP_TICKS
             || boundedSnapshotOverflowEntries(Integer.MAX_VALUE,0)!=MAX_EDITS
             || boundedSnapshotOverflowEntries(-1,0)!=0
             || boundedSnapshotOverflowEntries(4,5)!=0

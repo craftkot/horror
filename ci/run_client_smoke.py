@@ -64,8 +64,9 @@ def verify_deferred_restore_chunk_bounds_profile():
     if (not radius_match or int(radius_match.group(1))!=DEFERRED_RESTORE_RADIUS
             or "private static final int RADIUS = RiftGeometry.RADIUS;" not in controller_source):
         raise RuntimeError("BLACK FREQUENCY deferred restore radius must match the shared server fracture radius")
-    if ("private static int restoreSnapshotScanWarmupTicks(boolean deferredClientProbe)" not in controller_source
-            or f"return deferredClientProbe?{DEFERRED_RESTORE_WARMUP_TICKS}:0;" not in controller_source
+    if ("private static final int DEFERRED_CLIENT_SCAN_WARMUP_TICKS=600;" not in controller_source
+            or "private static int restoreSnapshotScanWarmupTicks(boolean deferredClientProbe)" not in controller_source
+            or "return deferredClientProbe?DEFERRED_CLIENT_SCAN_WARMUP_TICKS:0;" not in controller_source
             or "s.restoreTicks>scanWarmupTicks" not in controller_source
             or "logDeferredProbeChunkReadiness(level,s);" not in controller_source):
         raise RuntimeError("BLACK FREQUENCY deferred probe must wait for natural chunk-ticket expiry and report loaded-only readiness")
