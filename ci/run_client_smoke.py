@@ -5137,9 +5137,9 @@ def capture_test_world():
                 return False
             canopy_rejections=re.search(
                 r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_REJECTION_PROFILE_VERIFIED "
-                r"attempts=(\\d+) accepted=(\\d+) invalid=(\\d+) budget=(\\d+) chunk=(\\d+) "
-                r"heightmap=(\\d+) nonLeaf=(\\d+) headroom=(\\d+) height=(\\d+) "
-                r"pattern=(\\d+) duplicate=(\\d+) segment=(\\d+)",
+                r"attempts=(\d+) accepted=(\d+) invalid=(\d+) budget=(\d+) chunk=(\d+) "
+                r"heightmap=(\d+) nonLeaf=(\d+) headroom=(\d+) height=(\d+) "
+                r"pattern=(\d+) duplicate=(\d+) segment=(\d+)",
                 log_after)
             if not canopy_rejections:
                 print("WORLD_CAPTURE_FAIL: canopy accent rejection reasons were not reported",flush=True)
