@@ -22,7 +22,7 @@ public final class RiftCloudRuntimeProbe {
 
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
-        if(event.phase!=TickEvent.Phase.END || logged) return;
+        if(!Boolean.getBoolean("blackfrequency.ciTestMode") || event.phase!=TickEvent.Phase.END || logged) return;
         Minecraft minecraft=Minecraft.getInstance();
         ClientLevel level=minecraft.level;
         if(level==null) return;
