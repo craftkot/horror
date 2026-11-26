@@ -514,6 +514,7 @@ def verify_restoration_particle_source():
             or "net.minecraft.world.level.chunk.ChunkStatus.FULL,false" not in leaf_accent_body
             or "chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE" not in leaf_accent_body
             or "canopyAccentLeafSurfaceSkippedPlants(level,blockX,blockZ,topY,cursor)" not in leaf_accent_body
+            or "canopyAccentExclusiveHeightmapTopY(reportedTopY,reportedTopOccupied)" not in leaf_accent_body
             or "!level.getWorldBorder().isWithinBounds(cursor)" not in leaf_accent_body
             or "canopyAccentLeafSurfaceY(topY,skipped)" not in client_source
             or "if(!leaf.is(BlockTags.LEAVES)) {" not in leaf_accent_body
@@ -524,6 +525,7 @@ def verify_restoration_particle_source():
             or "isCanopyAccentSkippablePlant(candidate,candidate.getCollisionShape(level,cursor))" not in client_source
             or "GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS" not in client_source
             or "GROUND_CANOPY_LEAF_HEIGHTMAP_SOURCE_VERIFIED heightmap=world_surface includesLeaves=true includesPlants=true downwardPlantScan=2 roofRejected=true headroomAir=true loadedOnly=true" not in client_source
+            or "GROUND_CANOPY_ACCENT_HEIGHTMAP_TOP_NORMALIZATION_PROFILE_VERIFIED" not in client_source
             or "if(!Double.isFinite(accentY)) {" not in leaf_accent_body
             or "groundCanopyAccentQueuePlantLifted++" not in leaf_accent_body
             or "isCanopyAccentHeightWithinBounds(groundY,accentY)" not in leaf_accent_body
@@ -5182,20 +5184,21 @@ def capture_test_world():
             canopy_rejections=re.search(
                 r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_REJECTION_PROFILE_VERIFIED "
                 r"attempts=(\d+) accepted=(\d+) invalid=(\d+) budget=(\d+) chunk=(\d+) "
-                r"heightmap=(\d+) nonLeaf=(\d+) headroom=(\d+) height=(\d+) "
+                r"heightmap=(\d+) heightmapTopAdjusted=(\d+) nonLeaf=(\d+) headroom=(\d+) height=(\d+) "
                 r"pattern=(\d+) duplicate=(\d+) segment=(\d+) plantLifted=(\d+)",
                 log_after)
             if not canopy_rejections:
                 print("WORLD_CAPTURE_FAIL: canopy accent rejection reasons were not reported",flush=True)
                 return False
             rejection_counts=[int(value) for value in canopy_rejections.groups()]
-            (attempts,accepted,invalid,budget,chunk,heightmap,non_leaf,headroom,
+            (attempts,accepted,invalid,budget,chunk,heightmap,heightmap_top_adjusted,non_leaf,headroom,
              height,pattern,duplicate,segment,plant_lifted)=rejection_counts
             # Segment rejection happens after queue acceptance, so it is a subset of accepted, not a pre-queue rejection.
             reasons=(invalid,budget,chunk,heightmap,non_leaf,headroom,height,pattern,duplicate)
             if (attempts>GROUND_MESH_SAMPLES+80
                     or accepted>attempts
                     or sum(reasons)+accepted!=attempts
+                    or heightmap_top_adjusted>attempts
                     or segment>accepted
                     or plant_lifted>accepted):
                 print("WORLD_CAPTURE_FAIL: canopy accent rejection accounting is inconsistent",
@@ -5207,6 +5210,10 @@ def capture_test_world():
             )
             if canopy_heightmap_prefilter_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: canopy heightmap prefilter profile was not exercised",flush=True)
+                return False
+            if ("BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_HEIGHTMAP_TOP_NORMALIZATION_PROFILE_VERIFIED "
+                    "exclusive=true inclusive=true longArithmetic=true boundedCorrection=true") not in log_after:
+                print("WORLD_CAPTURE_FAIL: canopy heightmap top normalization profile was not exercised",flush=True)
                 return False
             continuity=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_STATS maxStep=([-+0-9.eE]+) steepStepsSkipped=(\d+)",
