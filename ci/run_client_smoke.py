@@ -103,8 +103,8 @@ def verify_deferred_restore_chunk_bounds_profile():
             or max(abs(spawn_chunk[0]),abs(spawn_chunk[1]))<=DEFERRED_INITIAL_SPAWN_TICKET_RADIUS):
         raise RuntimeError("BLACK FREQUENCY deferred anchor must clear the initial and relocated spawn-ticket halos")
     client_source=pathlib.Path(__file__).read_text(encoding="utf-8")
-    input_ready_start=client_source.find("def wait_for_isolated_client_input_ready(")
-    isolated_command_start=client_source.find("def send_isolated_chat_command(")
+    input_ready_start=client_source.find("    def wait_for_isolated_client_input_ready(")
+    isolated_command_start=client_source.find("    def send_isolated_chat_command(")
     isolated_command_end=client_source.find("    def click(",isolated_command_start)
     input_ready_body=(client_source[input_ready_start:isolated_command_start]
         if input_ready_start>=0 and isolated_command_start>input_ready_start else "")
