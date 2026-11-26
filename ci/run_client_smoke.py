@@ -2600,7 +2600,7 @@ def capture_test_world():
                     logs)
                 particles=parse_fissure_particle_emission(logs)
                 target=re.search(
-                    r"BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x=([-+0-9.eE]+) y=([-+0-9.eE]+) z=([-+0-9.eE]+) distanceSquared=([-+0-9.eE]+) horizontalDistanceSquared=([-+0-9.eE]+) viewScore=([-+0-9.eE]+) selection=balanced-view",
+                    r"BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x=([-+0-9.eE]+) y=([-+0-9.eE]+) z=([-+0-9.eE]+) distanceSquared=([-+0-9.eE]+) horizontalDistanceSquared=([-+0-9.eE]+) viewScore=([-+0-9.eE]+) visibleNeighbours=(\d+) selection=balanced-view-span",
                     logs)
                 safe_pad=re.search(
                     r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
@@ -2670,6 +2670,12 @@ def capture_test_world():
                 player_x,player_y,player_z=map(int,safe_pad.groups())
                 target_horizontal_squared=float(target.group(5))
                 target_view_score=float(target.group(6))
+                target_visible_neighbours=int(target.group(7))
+                if not 1<=target_visible_neighbours<=2:
+                    terrain_capture_failed=True
+                    print("WORLD_CAPTURE_FAIL: fissure target has no contiguous visible adjacent sample",
+                          target_visible_neighbours,flush=True)
+                    return
                 if not is_fissure_target_horizontal_distance(target_horizontal_squared):
                     terrain_capture_failed=True
                     print("WORLD_CAPTURE_FAIL: fissure camera target is outside the bounded standoff",
@@ -5224,8 +5230,8 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_SPARSE_RANGE_FIXTURE_VERIFIED horizontalSquared=58.11826889234223 acceptedBeyondLegacySixBlockCap=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: observed Sparse fissure standoff regression fixture was not verified",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=balanced-view targetPitch=45 ties=stable invalidRejected=true" not in log_after:
-                print("WORLD_CAPTURE_FAIL: balanced fissure camera target policy was not verified",flush=True)
+            if "BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=balanced-view-span targetPitch=45 visibilityTieWindowDegrees=3.0 neighbors=2 ties=stable invalidRejected=true" not in log_after:
+                print("WORLD_CAPTURE_FAIL: contiguous visible fissure camera target policy was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_STRUCTURAL_SUPPORT_FILTER_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: server did not reject structural blocks as fissure terrain",flush=True)

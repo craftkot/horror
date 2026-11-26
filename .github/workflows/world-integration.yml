@@ -110,7 +110,7 @@ jobs:
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_ACCENT_DUST_VERIFIED red=0.3 green=0.14 blue=0.88 scale=0.85' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_VIOLET_DUST_VERIFIED red=0.34 green=0.08 blue=0.78 scale=0.85' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST SURFACE_FISSURE_DUST_PULSE_PROFILE_VERIFIED min=0.65 low=0.75 base=0.85 high=0.95 max=1.05 variants=5' world-test.log
-          grep -q 'BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=balanced-view targetPitch=45 ties=stable invalidRejected=true minHorizontal=3.0 maxHorizontal=12.0' world-test.log
+          grep -q 'BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=balanced-view-span targetPitch=45 visibilityTieWindowDegrees=3.0 neighbors=2 ties=stable invalidRejected=true minHorizontal=3.0 maxHorizontal=12.0' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_BEACON_STANDOFF_PROFILE_VERIFIED maxHorizontal=12.0 beaconPadNear=6.5 beaconPadFar=11.75 boundaryRejected=true' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset=0 playerOffset=1 lateralRadius=0 axisPolicy=perpendicular firstSolidRow=3 gapRow=2 lastSolidRow=3 standoff=3.0 distanceSquared=9.25 padInnerFaceY=2.2666666666666666 beaconEntryY=0.8533333333333333 withinReach=true beamColumnUntouched=true perpendicular=true' world-test.log
           grep -q 'BLACK_FREQUENCY_TEST BEACON_BREAK_REACH_AABB_VERIFIED boundary=20.25 axes=3 negativeCoordinates=true outsideRejected=true invalidRejected=true' world-test.log

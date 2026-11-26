@@ -196,6 +196,9 @@ public final class RiftController {
     // also lets the loaded-only camera preview see fissures from a recovery-beacon pad.
     private static final double FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE = FISSURE_SAMPLE_SPACING*5.0D;
     private static final double FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE = 12.0D;
+    // Prefer a target with a short contiguous visible crack span when camera angles are nearly equal.
+    private static final double FISSURE_TARGET_VISIBILITY_TIE_WINDOW_DEGREES=3.0D;
+    private static final int FISSURE_TARGET_NEIGHBOR_SAMPLE_COUNT=2;
     // The disposable CI pad is perpendicular to the anchor-to-beacon vector.
     // Two empty near rows let the raised player's eye ray enter the beacon instead of passing above it.
     private static final int CI_BEACON_PAD_FLOOR_Y_OFFSET=0;
@@ -2781,7 +2784,7 @@ public final class RiftController {
     }
 
     private record FissureTarget(double x,double y,double z,double distanceSquared,
-            double horizontalDistanceSquared,double viewScore) {}
+            double horizontalDistanceSquared,double viewScore,int visibleNeighbours) {}
 
     private static boolean isBetterFissureTarget(double candidateScore,
             double bestScore,boolean hasBest) {
@@ -2790,6 +2793,23 @@ public final class RiftController {
         if(!hasBest) return true;
         return Double.isFinite(bestScore) && bestScore>=0.0D
             && candidateScore<bestScore;
+    }
+
+    private static boolean isBetterFissureTarget(double candidateScore,int candidateVisibleNeighbours,
+            double bestScore,int bestVisibleNeighbours,boolean hasBest) {
+        if(!Double.isFinite(candidateScore) || candidateScore<0.0D
+            || candidateVisibleNeighbours<0 || candidateVisibleNeighbours>FISSURE_TARGET_NEIGHBOR_SAMPLE_COUNT)
+            return false;
+        if(!hasBest) return true;
+        if(!Double.isFinite(bestScore) || bestScore<0.0D
+            || bestVisibleNeighbours<0 || bestVisibleNeighbours>FISSURE_TARGET_NEIGHBOR_SAMPLE_COUNT)
+            return false;
+        double scoreDelta=candidateScore-bestScore;
+        if(scoreDelta< -FISSURE_TARGET_VISIBILITY_TIE_WINDOW_DEGREES) return true;
+        if(scoreDelta> FISSURE_TARGET_VISIBILITY_TIE_WINDOW_DEGREES) return false;
+        if(candidateVisibleNeighbours!=bestVisibleNeighbours)
+            return candidateVisibleNeighbours>bestVisibleNeighbours;
+        return candidateScore<bestScore;
     }
 
     private static boolean isFissureTargetHorizontalDistance(double horizontalSquared) {
@@ -2810,6 +2830,52 @@ public final class RiftController {
         return Double.isFinite(score)?score:Double.POSITIVE_INFINITY;
     }
 
+    private static int countVisibleFissureNeighbours(ServerLevel level,State s,
+            net.minecraft.server.level.ServerPlayer viewer,net.minecraft.world.phys.Vec3 eye,
+            int arm,int segment,BlockPos.MutableBlockPos cursor,FissureGroundSample groundSample) {
+        int visible=0;
+        if(isVisibleFissureSample(level,s,viewer,eye,arm,segment-1,cursor,groundSample)) visible++;
+        if(isVisibleFissureSample(level,s,viewer,eye,arm,segment+1,cursor,groundSample)) visible++;
+        return visible;
+    }
+
+    /**
+     * Probe one adjacent sample with the same world-border, loaded-chunk and visual-ray guards
+     * as the primary target. This is a camera-selection check only: it never requests chunks.
+     */
+    private static boolean isVisibleFissureSample(ServerLevel level,State s,
+            net.minecraft.server.level.ServerPlayer viewer,net.minecraft.world.phys.Vec3 eye,
+            int arm,int segment,BlockPos.MutableBlockPos cursor,FissureGroundSample groundSample) {
+        if(level==null || s==null || viewer==null || !viewer.isAlive() || viewer.isRemoved()
+            || eye==null || !Double.isFinite(eye.x) || !Double.isFinite(eye.y) || !Double.isFinite(eye.z)
+            || cursor==null || groundSample==null || arm<0 || arm>=FISSURE_ARM_COUNT
+            || segment<1 || segment>FISSURE_SEGMENTS_PER_ARM) return false;
+        double angle=arm*Math.PI/2.0D;
+        double distance=segment*FISSURE_SAMPLE_SPACING;
+        double bend=Math.sin(segment*.85D+arm*1.1D)*RiftGeometry.FISSURE_BEND_AMPLITUDE;
+        double px=s.x+.5D+Math.cos(angle)*distance-Math.sin(angle)*bend;
+        double pz=s.z+.5D+Math.sin(angle)*distance+Math.cos(angle)*bend;
+        double vx=px-eye.x,vz=pz-eye.z;
+        double horizontalSquared=vx*vx+vz*vz;
+        if(!isFissureTargetHorizontalDistance(horizontalSquared)) return false;
+        int blockX=(int)Math.floor(px),blockZ=(int)Math.floor(pz);
+        long dx=(long)blockX-s.x,dz=(long)blockZ-s.z;
+        cursor.set(blockX,level.getMinBuildHeight(),blockZ);
+        if(dx*dx+dz*dz>(long)RADIUS*RADIUS
+            || !level.getWorldBorder().isWithinBounds(cursor)
+            || !level.hasChunk(blockX>>4,blockZ>>4)
+            || !findFissureGroundSample(level,blockX,blockZ,cursor,groundSample)
+            || groundSample.surfaceY>=level.getMaxBuildHeight()) return false;
+        net.minecraft.world.phys.Vec3 target=new net.minecraft.world.phys.Vec3(
+            px,groundSample.particleY,pz);
+        if(Math.abs(target.y-eye.y)>24.0D
+            || !fissureRayChunksLoaded(eye,target,(chunkX,chunkZ)->level.hasChunk(chunkX,chunkZ))) return false;
+        var hit=level.clip(new net.minecraft.world.level.ClipContext(eye,target,
+            net.minecraft.world.level.ClipContext.Block.VISUAL,
+            net.minecraft.world.level.ClipContext.Fluid.NONE,viewer));
+        return hit.getType()==net.minecraft.world.phys.HitResult.Type.MISS;
+    }
+
     private static void verifyFissureTargetSelectionPolicy() {
         double minimumSquared=FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE*FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE;
         double maximumSquared=FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE*FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE;
@@ -2823,6 +2889,17 @@ public final class RiftController {
             || isBetterFissureTarget(Double.NaN,0.0D,false)
             || isBetterFissureTarget(-1.0D,0.0D,false)
             || isBetterFissureTarget(4.0D,Double.NaN,true)
+            || !isBetterFissureTarget(4.0D,2,4.0D,0,true)
+            || !isBetterFissureTarget(6.5D,2,4.0D,0,true)
+            || isBetterFissureTarget(7.01D,2,4.0D,0,true)
+            || !isBetterFissureTarget(.5D,0,4.0D,2,true)
+            || isBetterFissureTarget(4.0D,0,4.0D,2,true)
+            || isBetterFissureTarget(4.0D,1,4.0D,1,true)
+            || isBetterFissureTarget(4.0D,3,4.0D,2,true)
+            || isBetterFissureTarget(4.0D,-1,4.0D,0,true)
+            || isBetterFissureTarget(4.0D,2,4.0D,3,true)
+            || Math.abs(FISSURE_TARGET_VISIBILITY_TIE_WINDOW_DEGREES-3.0D)>1.0E-9D
+            || FISSURE_TARGET_NEIGHBOR_SAMPLE_COUNT!=2
             || !isFissureTargetHorizontalDistance(minimumSquared)
             || !isFissureTargetHorizontalDistance(maximumSquared)
             || isFissureTargetHorizontalDistance(minimumSquared-1.0E-6D)
@@ -2852,7 +2929,8 @@ public final class RiftController {
             FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE,beaconPadNear,beaconPadFar);
         LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_SPARSE_RANGE_FIXTURE_VERIFIED horizontalSquared={} acceptedBeyondLegacySixBlockCap=true",
             sparseCameraFixtureSquared);
-        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=balanced-view targetPitch=45 ties=stable invalidRejected=true minHorizontal={} maxHorizontal={}",
+        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=balanced-view-span targetPitch=45 visibilityTieWindowDegrees={} neighbors={} ties=stable invalidRejected=true minHorizontal={} maxHorizontal={}",
+            FISSURE_TARGET_VISIBILITY_TIE_WINDOW_DEGREES,FISSURE_TARGET_NEIGHBOR_SAMPLE_COUNT,
             FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE,FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE);
         verifyCiBeaconPadProfile();
     }
@@ -3299,10 +3377,15 @@ public final class RiftController {
                 if(hit.getType()!=net.minecraft.world.phys.HitResult.Type.MISS) continue;
                 double viewScore=fissureTargetViewScore(horizontalSquared,vy);
                 if(!Double.isFinite(viewScore)) continue;
+                if(best!=null
+                    && viewScore-best.viewScore()>FISSURE_TARGET_VISIBILITY_TIE_WINDOW_DEGREES) continue;
+                int visibleNeighbours=countVisibleFissureNeighbours(
+                    level,s,viewer,eye,arm,segment,cursor,groundSample);
                 double distanceSquared=vx*vx+vy*vy+vz*vz;
-                if(isBetterFissureTarget(viewScore,
-                        best==null?Double.NaN:best.viewScore(),best!=null))
-                    best=new FissureTarget(px,target.y,pz,distanceSquared,horizontalSquared,viewScore);
+                if(isBetterFissureTarget(viewScore,visibleNeighbours,
+                        best==null?Double.NaN:best.viewScore(),
+                        best==null?-1:best.visibleNeighbours(),best!=null))
+                    best=new FissureTarget(px,target.y,pz,distanceSquared,horizontalSquared,viewScore,visibleNeighbours);
             }
         }
         return best;
@@ -7447,10 +7530,10 @@ public final class RiftController {
                             ciFissureTargetUnavailableLogged=true;
                         }
                     } else {
-                        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x={} y={} z={} distanceSquared={} horizontalDistanceSquared={} viewScore={} selection=balanced-view",
+                        LOGGER.info("BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET x={} y={} z={} distanceSquared={} horizontalDistanceSquared={} viewScore={} visibleNeighbours={} selection=balanced-view-span",
                             visibleFissure.x(),visibleFissure.y(),visibleFissure.z(),
                             visibleFissure.distanceSquared(),visibleFissure.horizontalDistanceSquared(),
-                            visibleFissure.viewScore());
+                            visibleFissure.viewScore(),visibleFissure.visibleNeighbours());
                     }
                     // Restore ordinary vanilla gravity only after the player is
                     // standing above a loaded, motion-blocking support block.
