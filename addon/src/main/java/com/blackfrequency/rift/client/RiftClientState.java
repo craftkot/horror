@@ -892,7 +892,7 @@ public final class RiftClientState {
         // Leaf-top accents may rise above the ground ribbon, but stay inside a bounded canopy envelope.
         private static final double GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=16.0D;
         // Lift and enlarge sparse motes just enough to read above short foliage.
-        private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=.81F;
+        private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=1.0F;
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.26D;
         // Keep canopy accents close to the fissure instead of letting them drift above the foliage.
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_SPEED=.003D;
@@ -3127,8 +3127,8 @@ public final class RiftClientState {
             double invalidHeight=canopyAccentParticleY(70,Double.NaN);
             double excessiveHeight=canopyAccentParticleY(70,2.0D);
             boolean particleScaleBounded=Float.isFinite(GROUND_CANOPY_ACCENT_PARTICLE_SCALE)
-                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE>=.72F
-                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=.82F;
+                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE>=.95F
+                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=1.05F;
             boolean particleOffsetBounded=Double.isFinite(GROUND_CANOPY_ACCENT_VERTICAL_OFFSET)
                 && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET>=.20D
                 && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET<=.28D;
