@@ -9,7 +9,8 @@ import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.phys.Vec3;
 
 /** Temporary, player-specific illusions. No server mobs or world modifications. */
@@ -45,7 +46,7 @@ final class Apparitions {
                 float facing=(float)Math.toDegrees(Math.atan2(-(p.getX()-point.x),p.getZ()-point.z));
                 int id=nextId--;
                 p.connection.send(new ClientboundAddEntityPacket(id,UUID.randomUUID(),point.x,point.y,point.z,
-                    0f,facing,EntityType.ENDERMAN,0,Vec3.ZERO,facing));
+                    0f,facing,Objects.requireNonNull(BuiltInRegistries.ENTITY_TYPE.getValue(Identifier.withDefaultNamespace("enderman"))),0,Vec3.ZERO,facing));
                 active.put(p.getUUID(),new Ghost(id,p,level,point,0,0));
                 return;
             }

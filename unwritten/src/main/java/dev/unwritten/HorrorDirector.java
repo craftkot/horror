@@ -1,5 +1,6 @@
 package dev.unwritten;
 import java.util.*;
+import java.io.*;
 /** Server-side policy; game adapter supplies observations once per second. */
 public final class HorrorDirector {
  public enum Event { FOOTSTEPS, DISTANT_SILHOUETTE, ECHO, FALSE_PRESENCE, LOCAL_ANOMALY }
@@ -16,7 +17,7 @@ public final class HorrorDirector {
   if(quiet>0){quiet--;return Optional.empty();}
   if(o.safe()||cooldown>0||pressure<60)return Optional.empty();
   int stage=Math.min(5,1+pressure/200);
-  if(random.nextDouble()>0.008*stage)return Optional.empty();
+  if(random.nextDouble()>0.008*stage*(1.0-karma/250.0))return Optional.empty();
   var choices=new ArrayList<>(List.of(Event.FOOTSTEPS,Event.ECHO));
   if(stage>=2)choices.add(Event.DISTANT_SILHOUETTE);
   if(stage>=3)choices.add(Event.FALSE_PRESENCE);
@@ -26,6 +27,20 @@ public final class HorrorDirector {
   cooldown=45+random.nextInt(76);
   pressure=Math.max(0,pressure-35);
   return Optional.of(new Decision(last,stage));
+ }
+ public void adjustKarma(int delta){karma=Math.clamp(karma+Math.clamp(delta,-100,100),-100,100);}
+ public void write(DataOutput out)throws IOException{
+  out.writeInt(1);out.writeInt(pressure);out.writeInt(karma);out.writeInt(cooldown);out.writeInt(quiet);
+  out.writeUTF(last==null?"":last.name());
+ }
+ public static HorrorDirector read(DataInput in,long seed)throws IOException{
+  if(in.readInt()!=1)throw new IOException("Unknown director version");
+  var d=new HorrorDirector(seed);
+  d.pressure=in.readInt();d.karma=in.readInt();d.cooldown=in.readInt();d.quiet=in.readInt();
+  if(d.pressure<0||d.pressure>1000||Math.abs((long)d.karma)>100||d.cooldown<0||d.cooldown>120||d.quiet<0||d.quiet>120)throw new IOException("Invalid director state");
+  var name=in.readUTF();
+  try{d.last=name.isEmpty()?null:Event.valueOf(name);}catch(IllegalArgumentException ex){throw new IOException("Invalid event",ex);}
+  return d;
  }
  public int pressure(){return pressure;}
  public int karma(){return karma;}
