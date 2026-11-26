@@ -515,7 +515,10 @@ def verify_restoration_particle_source():
             or "chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING" not in leaf_accent_body
             or "if(!leaf.is(BlockTags.LEAVES)) {" not in leaf_accent_body
             or "groundCanopyAccentQueueNonLeafRejected++" not in leaf_accent_body
-            or "!isCanopyAccentHeadroomAvailable(head)" not in leaf_accent_body
+            or "isCanopyAccentSkippablePlant(head,head.getCollisionShape(level,cursor))" not in leaf_accent_body
+            or "GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS" not in leaf_accent_body
+            or "if(!Double.isFinite(accentY)) {" not in leaf_accent_body
+            or "groundCanopyAccentQueuePlantLifted++" not in leaf_accent_body
             or "isCanopyAccentHeightWithinBounds(groundY,accentY)" not in leaf_accent_body
             or "hasCanopyAccentCandidate(blockX,blockZ)" not in leaf_accent_body
             or "queueExposedLeafCanopyAccent(level,blockX,blockZ,groundY,cursor)" not in client_source
@@ -5028,7 +5031,7 @@ def capture_test_world():
                 return False
             canopy_leaf_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_ACCENT_PROFILE_VERIFIED "
-                "maxHeightAboveGround=16.0 topLeafOnly=true exposedAirOnly=true loadedChunkOnly=true forceLoad=false"
+                "maxHeightAboveGround=16.0 topLeafOnly=true exposedAirOrLiftedBush=true maxPlantLift=2 loadedChunkOnly=true forceLoad=false"
             )
             if canopy_leaf_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: exposed leaf-top accents did not pass their loaded-only canopy profile",flush=True)
@@ -5084,12 +5087,19 @@ def capture_test_world():
                 return False
             canopy_headroom_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_HEADROOM_POLICY_VERIFIED "
-                "airOnly=true leavesRejected=true plantsRejected=true fluidsRejected=true ribbonStillAllowed=true"
+                "airOnlyOrLiftedBush=true leavesRejected=true plantsBounded=true fluidsRejected=true solidRejected=true ribbonStillAllowed=true"
+            )
+            canopy_plant_clearance_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PLANT_CLEARANCE_PROFILE_VERIFIED "
+                "maxLift=2 bushOnly=true collisionEmpty=true leavesRejected=true fluidsRejected=true solidRejected=true"
             )
             if (canopy_headroom_marker not in log_after
+                    or canopy_plant_clearance_marker not in log_after
                     or "isCanopyAccentHeadroomAvailable(head)" not in camera_source
-                    or "return head!=null && head.isAir() && head.getFluidState().isEmpty();" not in camera_source):
-                print("WORLD_CAPTURE_FAIL: canopy accent particles were not restricted to clear headroom",flush=True)
+                    or "return head!=null && head.isAir() && head.getFluidState().isEmpty();" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS=2;" not in camera_source
+                    or "isCanopyAccentSkippablePlant" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: canopy accent clearance must lift only above bounded non-colliding plants",flush=True)
                 return False
             canopy_segment_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED "
@@ -5140,17 +5150,20 @@ def capture_test_world():
                 r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_REJECTION_PROFILE_VERIFIED "
                 r"attempts=(\d+) accepted=(\d+) invalid=(\d+) budget=(\d+) chunk=(\d+) "
                 r"heightmap=(\d+) nonLeaf=(\d+) headroom=(\d+) height=(\d+) "
-                r"pattern=(\d+) duplicate=(\d+) segment=(\d+)",
+                r"pattern=(\d+) duplicate=(\d+) segment=(\d+) plantLifted=(\d+)",
                 log_after)
             if not canopy_rejections:
                 print("WORLD_CAPTURE_FAIL: canopy accent rejection reasons were not reported",flush=True)
                 return False
             rejection_counts=[int(value) for value in canopy_rejections.groups()]
-            attempts,accepted,*reasons,segment_rejected=rejection_counts
+            (attempts,accepted,invalid,budget,chunk,heightmap,non_leaf,headroom,
+             height,pattern,duplicate,segment,plant_lifted)=rejection_counts
+            reasons=(invalid,budget,chunk,heightmap,non_leaf,headroom,height,pattern,duplicate,segment)
             if (attempts>GROUND_MESH_SAMPLES+80
                     or accepted>attempts
                     or sum(reasons)+accepted!=attempts
-                    or segment_rejected>accepted):
+                    or segment>accepted
+                    or plant_lifted>accepted):
                 print("WORLD_CAPTURE_FAIL: canopy accent rejection accounting is inconsistent",
                       rejection_counts,flush=True)
                 return False
