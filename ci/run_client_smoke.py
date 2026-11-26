@@ -521,7 +521,7 @@ def verify_restoration_particle_source():
             or "GROUND_CANOPY_LEAF_ACCENT_PROFILE_VERIFIED" not in client_source):
         raise RuntimeError("BLACK FREQUENCY leaf canopy accents must use exposed top leaves from already-loaded chunks only")
     adjacent_accent_start=client_source.find("private static boolean queueAdjacentExposedLeafCanopyAccent(")
-    adjacent_accent_end=client_source.find("\n        private static void scanCanopyAccentNeighborSamples",adjacent_accent_start+1)
+    adjacent_accent_end=client_source.find("\n        private static double sampleGroundY",adjacent_accent_start+1)
     adjacent_accent_body=client_source[adjacent_accent_start:adjacent_accent_end] if adjacent_accent_start>=0 and adjacent_accent_end>adjacent_accent_start else ""
     neighbor_scan_start=client_source.find("private static void scanCanopyAccentNeighborSamples(")
     neighbor_scan_end=client_source.find("\n        private static double sampleGroundY",neighbor_scan_start+1)
