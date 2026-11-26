@@ -881,6 +881,8 @@ public final class RiftClientState {
         private static final DustParticleOptions GROUND_CANOPY_ACCENT_DUST=
             new DustParticleOptions(new Vector3f(.42F,.18F,.92F),GROUND_CANOPY_ACCENT_PARTICLE_SCALE);
         private static int groundCanopyAccentCandidateCount;
+        private static int groundCanopyAccentFallbackScans;
+        private static int groundCanopyAccentFallbackHits;
         // Rotate the bounded emission window so later fissure arms are not starved by insertion order.
         private static int groundCanopyAccentCandidateCursor;
         private static long groundCanopyAccentLastAttemptTick=Long.MIN_VALUE;
@@ -3040,6 +3042,12 @@ public final class RiftClientState {
                 && canopyAccentAdjacentColumnX(-10L,3,1)==-11L
                 && canopyAccentAdjacentColumnX(10L,-1,1)==Long.MIN_VALUE
                 && canopyAccentAdjacentColumnZ(10L,4,1)==Long.MIN_VALUE;
+            boolean oppositeSideScanProfile=
+                canopyAccentAdjacentColumnZ(10L,0,1,true)==11L
+                && canopyAccentAdjacentColumnX(10L,1,1,true)==9L
+                && canopyAccentAdjacentColumnZ(10L,2,1,true)==9L
+                && canopyAccentAdjacentColumnX(10L,3,1,true)==11L
+                && canopyAccentAdjacentColumnX(10L,-1,1,true)==Long.MIN_VALUE;
             int[] duplicateCandidateX={-4,7};
             int[] duplicateCandidateZ={3,-9};
             boolean candidateDedupProfile=
@@ -3111,7 +3119,7 @@ public final class RiftClientState {
                 && rotationProfile && emissionThrottleProfile
                 && zeroEmissionScanRecorded && emptyScanPreservesAttempt
                 && leafSelected && leafSparse && nonAccentSurfacesRejected && leafHeightBounded
-                && adjacentScanProfile && candidateDedupProfile && heightmapPrefilterProfile
+                && adjacentScanProfile && oppositeSideScanProfile && candidateDedupProfile && heightmapPrefilterProfile
                 && particleScaleBounded && particleOffsetBounded
                 && particleVelocityBounded && foliageClearanceProfile && canopyAccentHeadroomProfile
                 && Math.abs(plantTop-71.06D)<1.0E-9D
@@ -3131,7 +3139,7 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_HEIGHTMAP_PREFILTER_PROFILE_VERIFIED openSurfaceRejected=true canopyAccepted=true heightBounded=true finiteGuard=true conservative=true");
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_ADJACENT_SCAN_PROFILE_VERIFIED perSample=1 alternatingSides=true perpendicular=true loadedOnly=true radius=48 duplicateColumnsRejected=true");
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_ADJACENT_SCAN_PROFILE_VERIFIED perSample=1..2 alternatingSides=true perpendicular=true fallbackOnMiss=true loadedOnly=true radius=48 duplicateColumnsRejected=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_ROTATION_PROFILE_VERIFIED candidateCount=12 budget=8 firstWindow=0-7 secondWindow=8-11 wrap=true negativeStart=true invalidCountRejected=true");
             com.mojang.logging.LogUtils.getLogger().info(
@@ -3173,14 +3181,24 @@ public final class RiftClientState {
         // Sample one deterministic column beside the fissure, perpendicular to its arm.
         // Alternating the side by segment avoids bias while keeping the extra lookup bounded.
         private static long canopyAccentAdjacentColumnX(long blockX,int arm,int segment) {
+            return canopyAccentAdjacentColumnX(blockX,arm,segment,false);
+        }
+
+        private static long canopyAccentAdjacentColumnX(long blockX,int arm,int segment,boolean oppositeSide) {
             if(arm<0 || arm>=ARM_COUNT || segment<1 || segment>SEGMENTS_PER_ARM) return Long.MIN_VALUE;
             int side=(segment&1)==0?1:-1;
+            if(oppositeSide) side=-side;
             return blockX+(arm==1?-side:arm==3?side:0);
         }
 
         private static long canopyAccentAdjacentColumnZ(long blockZ,int arm,int segment) {
+            return canopyAccentAdjacentColumnZ(blockZ,arm,segment,false);
+        }
+
+        private static long canopyAccentAdjacentColumnZ(long blockZ,int arm,int segment,boolean oppositeSide) {
             if(arm<0 || arm>=ARM_COUNT || segment<1 || segment>SEGMENTS_PER_ARM) return Long.MIN_VALUE;
             int side=(segment&1)==0?1:-1;
+            if(oppositeSide) side=-side;
             return blockZ+(arm==0?side:arm==2?-side:0);
         }
 
@@ -3203,23 +3221,23 @@ public final class RiftClientState {
          * The heightmap is read from a FULL chunk with load=false; roofs and a
          * second foliage layer suppress the mote instead of drawing through them.
          */
-        private static void queueExposedLeafCanopyAccent(net.minecraft.client.multiplayer.ClientLevel level,
+        private static boolean queueExposedLeafCanopyAccent(net.minecraft.client.multiplayer.ClientLevel level,
                 int blockX,int blockZ,double groundY,BlockPos.MutableBlockPos cursor) {
             if(level==null || cursor==null || !Double.isFinite(groundY)
                 || groundCanopyAccentCandidateCount<0
                 || groundCanopyAccentCandidateCount>=GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET
-                || !level.hasChunk(blockX>>4,blockZ>>4)) return;
+                || !level.hasChunk(blockX>>4,blockZ>>4)) return false;
             var chunk=level.getChunkSource().getChunk(blockX>>4,blockZ>>4,
                 net.minecraft.world.level.chunk.ChunkStatus.FULL,false);
-            if(chunk==null) return;
+            if(chunk==null) return false;
             int topY=chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING,
                 blockX&15,blockZ&15);
             if(topY<=level.getMinBuildHeight() || topY>=level.getMaxBuildHeight()
-                || !canopyAccentHeightmapMayContainValidLeafAccent(groundY,topY)) return;
+                || !canopyAccentHeightmapMayContainValidLeafAccent(groundY,topY)) return false;
             cursor.set(blockX,topY-1,blockZ);
-            if(!level.getWorldBorder().isWithinBounds(cursor)) return;
+            if(!level.getWorldBorder().isWithinBounds(cursor)) return false;
             BlockState leaf=level.getBlockState(cursor);
-            if(!leaf.is(BlockTags.LEAVES)) return;
+            if(!leaf.is(BlockTags.LEAVES)) return false;
             double shapeHeight=leaf.getShape(level,cursor).max(Direction.Axis.Y);
             double accentY=canopyAccentParticleY(topY-1,shapeHeight);
             cursor.set(blockX,topY,blockZ);
@@ -3227,26 +3245,45 @@ public final class RiftClientState {
             if(!isCanopyAccentHeadroomAvailable(head)
                 || !isCanopyAccentHeightWithinBounds(groundY,accentY)
                 || !shouldQueueCanopyAccentCandidate(leaf,blockX,blockZ,groundCanopyAccentCandidateCount)
-                || hasCanopyAccentCandidate(blockX,blockZ)) return;
+                || hasCanopyAccentCandidate(blockX,blockZ)) return false;
             int candidate=groundCanopyAccentCandidateCount++;
             GROUND_CANOPY_ACCENT_X[candidate]=blockX;
             GROUND_CANOPY_ACCENT_Z[candidate]=blockZ;
             GROUND_CANOPY_ACCENT_Y[candidate]=accentY;
             GROUND_CANOPY_ACCENT_GROUND_Y[candidate]=groundY;
+            return true;
         }
 
-        private static void queueAdjacentExposedLeafCanopyAccent(
+        private static boolean queueAdjacentExposedLeafCanopyAccent(
                 net.minecraft.client.multiplayer.ClientLevel level,int blockX,int blockZ,double groundY,
                 int arm,int segment,int worldAnchorX,int worldAnchorZ,BlockPos.MutableBlockPos cursor) {
-            if(level==null || cursor==null || !Double.isFinite(groundY)) return;
-            long adjacentX=canopyAccentAdjacentColumnX(blockX,arm,segment);
-            long adjacentZ=canopyAccentAdjacentColumnZ(blockZ,arm,segment);
+            if(level==null || cursor==null || !Double.isFinite(groundY)
+                || groundCanopyAccentCandidateCount<0
+                || groundCanopyAccentCandidateCount>=GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET) return false;
+            if(queueAdjacentExposedLeafCanopyAccent(level,blockX,blockZ,groundY,
+                    arm,segment,worldAnchorX,worldAnchorZ,cursor,false)) return true;
+            groundCanopyAccentFallbackScans++;
+            boolean fallbackQueued=queueAdjacentExposedLeafCanopyAccent(level,blockX,blockZ,groundY,
+                arm,segment,worldAnchorX,worldAnchorZ,cursor,true);
+            if(fallbackQueued) groundCanopyAccentFallbackHits++;
+            return fallbackQueued;
+        }
+
+        private static boolean queueAdjacentExposedLeafCanopyAccent(
+                net.minecraft.client.multiplayer.ClientLevel level,int blockX,int blockZ,double groundY,
+                int arm,int segment,int worldAnchorX,int worldAnchorZ,BlockPos.MutableBlockPos cursor,
+                boolean oppositeSide) {
+            if(level==null || cursor==null || !Double.isFinite(groundY)
+                || groundCanopyAccentCandidateCount<0
+                || groundCanopyAccentCandidateCount>=GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET) return false;
+            long adjacentX=canopyAccentAdjacentColumnX(blockX,arm,segment,oppositeSide);
+            long adjacentZ=canopyAccentAdjacentColumnZ(blockZ,arm,segment,oppositeSide);
             if(adjacentX<Integer.MIN_VALUE || adjacentX>Integer.MAX_VALUE
-                || adjacentZ<Integer.MIN_VALUE || adjacentZ>Integer.MAX_VALUE) return;
+                || adjacentZ<Integer.MIN_VALUE || adjacentZ>Integer.MAX_VALUE) return false;
             long dx=adjacentX-worldAnchorX,dz=adjacentZ-worldAnchorZ;
             if(Math.abs(dx)>RADIUS || Math.abs(dz)>RADIUS
-                || dx*dx+dz*dz>(long)RADIUS*RADIUS) return;
-            queueExposedLeafCanopyAccent(level,(int)adjacentX,(int)adjacentZ,groundY,cursor);
+                || dx*dx+dz*dz>(long)RADIUS*RADIUS) return false;
+            return queueExposedLeafCanopyAccent(level,(int)adjacentX,(int)adjacentZ,groundY,cursor);
         }
 
         private static double sampleGroundY(net.minecraft.client.multiplayer.ClientLevel level,
@@ -3380,6 +3417,8 @@ public final class RiftClientState {
             // The static primitive map and mutable cursor are owned by the render
             // thread and reused across rebuilds; clear() keeps the map's capacity.
             groundCanopyAccentCandidateCount=0;
+            groundCanopyAccentFallbackScans=0;
+            groundCanopyAccentFallbackHits=0;
             groundCanopyAccentParticlesEmitted=0;
             SURFACE_Y_BY_COLUMN.clear();
             SURFACE_CURSOR.set(worldAnchorX,level.getMinBuildHeight(),worldAnchorZ);
@@ -3509,9 +3548,10 @@ public final class RiftClientState {
             emitCanopyAccentCandidates(level,result,worldAnchorX,worldAnchorZ);
             if(VERIFY_GROUND_MESH_PROFILES && !canopyAccentBuildProfileLogged) {
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED candidates={} emitted={} candidateBudget={} budget={} loadedOnly=true radius=48 clientOnly=true plantOrLeafTop=true segmentBounded=true",
+                    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED candidates={} emitted={} candidateBudget={} budget={} loadedOnly=true radius=48 clientOnly=true plantOrLeafTop=true segmentBounded=true fallbackScans={} fallbackHits={}",
                     groundCanopyAccentCandidateCount,groundCanopyAccentParticlesEmitted,
-                    GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET,GROUND_CANOPY_ACCENT_PARTICLE_BUDGET);
+                    GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET,GROUND_CANOPY_ACCENT_PARTICLE_BUDGET,
+                    groundCanopyAccentFallbackScans,groundCanopyAccentFallbackHits);
                 canopyAccentBuildProfileLogged=true;
             }
             if(VERIFY_GROUND_MESH_PROFILES && groundCanopyAccentParticlesEmitted>0
@@ -3751,6 +3791,8 @@ public final class RiftClientState {
             groundCanopyAccentCandidateCount=0;
             groundCanopyAccentCandidateCursor=0;
             groundCanopyAccentLastAttemptTick=Long.MIN_VALUE;
+            groundCanopyAccentFallbackScans=0;
+            groundCanopyAccentFallbackHits=0;
             groundCanopyAccentParticlesEmitted=0;
         }
 
@@ -3795,6 +3837,8 @@ public final class RiftClientState {
             groundCanopyAccentCandidateCount=0;
             groundCanopyAccentCandidateCursor=0;
             groundCanopyAccentLastAttemptTick=Long.MIN_VALUE;
+            groundCanopyAccentFallbackScans=0;
+            groundCanopyAccentFallbackHits=0;
             groundCanopyAccentParticlesEmitted=0;
         }
 

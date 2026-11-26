@@ -32,6 +32,7 @@ if DEFERRED_RENDER_DISTANCE<4:
 if DEFERRED_PLAYER_TRAVEL_DISTANCE<=DEFERRED_RESTORE_RADIUS+DEFERRED_SIMULATION_DISTANCE*16+64:
     raise RuntimeError("Deferred probe travel must clear the fracture and simulation-distance halo")
 DEFERRED_SPAWN_ACK_RE=r"Set (?:the )?world spawn(?: point)? to "
+DEFERRED_CLIENT_INPUT_READY_MARKER="BLACK_FREQUENCY_TEST CLIENT_INPUT_READY screen=null player=true"
 INITIAL_PLAYER_SPAWN_RE=re.compile(
     r"logged in with entity id \d+ at \(([-+0-9.eE]+),\s*([-+0-9.eE]+),\s*([-+0-9.eE]+)\)")
 DEFERRED_RESTORE_CHUNK_RE=re.compile(
@@ -102,6 +103,18 @@ def verify_deferred_restore_chunk_bounds_profile():
             or max(abs(spawn_chunk[0]),abs(spawn_chunk[1]))<=DEFERRED_INITIAL_SPAWN_TICKET_RADIUS):
         raise RuntimeError("BLACK FREQUENCY deferred anchor must clear the initial and relocated spawn-ticket halos")
     client_source=pathlib.Path(__file__).read_text(encoding="utf-8")
+    input_ready_start=client_source.find("def wait_for_isolated_client_input_ready(")
+    isolated_command_start=client_source.find("def send_isolated_chat_command(")
+    isolated_command_end=client_source.find("    def click(",isolated_command_start)
+    input_ready_body=(client_source[input_ready_start:isolated_command_start]
+        if input_ready_start>=0 and isolated_command_start>input_ready_start else "")
+    isolated_command_body=(client_source[isolated_command_start:isolated_command_end]
+        if isolated_command_start>=0 and isolated_command_end>isolated_command_start else "")
+    if (not input_ready_body or DEFERRED_CLIENT_INPUT_READY_MARKER not in input_ready_body
+            or "wait_for_isolated_client_input_ready()" not in isolated_command_body
+            or "for attempt in range(2)" not in isolated_command_body
+            or "command acknowledgement delayed; retrying" not in isolated_command_body):
+        raise RuntimeError("BLACK FREQUENCY isolated spawn relocation must wait for client readiness and retry an unacknowledged idempotent command")
     spawn_verified_at=client_source.find('print("WORLD_CAPTURE: player spawn verified in log"')
     client_world_ready_wait=client_source.find('client_world_ready_deadline=time.monotonic()+60.0',spawn_verified_at)
     input_ready_wait=client_source.find('"BLACK_FREQUENCY_TEST CLIENT_INPUT_READY screen=null player=true" in current',spawn_verified_at)
@@ -478,7 +491,7 @@ def verify_restoration_particle_source():
             or "snowSurfaceAccepted &= isGroundSurfaceAvailable(snow);" not in client_source
             or "fullSnowBlockRejected" not in client_source):
         raise RuntimeError("BLACK FREQUENCY snow layers must pass the surface filter without admitting full snow blocks")
-    leaf_accent_start=client_source.find("private static void queueExposedLeafCanopyAccent(")
+    leaf_accent_start=client_source.find("private static boolean queueExposedLeafCanopyAccent(")
     leaf_accent_end=client_source.find("\n        private static double sampleGroundY",leaf_accent_start+1)
     leaf_accent_body=client_source[leaf_accent_start:leaf_accent_end] if leaf_accent_start>=0 and leaf_accent_end>leaf_accent_start else ""
     heightmap_prefilter_start=client_source.find("private static boolean canopyAccentHeightmapMayContainValidLeafAccent(")
@@ -497,14 +510,14 @@ def verify_restoration_particle_source():
             or "getChunk(blockX>>4,blockZ>>4," not in leaf_accent_body
             or "net.minecraft.world.level.chunk.ChunkStatus.FULL,false" not in leaf_accent_body
             or "chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING" not in leaf_accent_body
-            or "if(!leaf.is(BlockTags.LEAVES)) return;" not in leaf_accent_body
+            or "if(!leaf.is(BlockTags.LEAVES)) return false;" not in leaf_accent_body
             or "!isCanopyAccentHeadroomAvailable(head)" not in leaf_accent_body
             or "isCanopyAccentHeightWithinBounds(groundY,accentY)" not in leaf_accent_body
             or "hasCanopyAccentCandidate(blockX,blockZ)" not in leaf_accent_body
             or "queueExposedLeafCanopyAccent(level,blockX,blockZ,groundY,cursor)" not in client_source
             or "GROUND_CANOPY_LEAF_ACCENT_PROFILE_VERIFIED" not in client_source):
         raise RuntimeError("BLACK FREQUENCY leaf canopy accents must use exposed top leaves from already-loaded chunks only")
-    adjacent_accent_start=client_source.find("private static void queueAdjacentExposedLeafCanopyAccent(")
+    adjacent_accent_start=client_source.find("private static boolean queueAdjacentExposedLeafCanopyAccent(")
     adjacent_accent_end=client_source.find("\n        private static double sampleGroundY",adjacent_accent_start+1)
     adjacent_accent_body=client_source[adjacent_accent_start:adjacent_accent_end] if adjacent_accent_start>=0 and adjacent_accent_end>adjacent_accent_start else ""
     if ("canopyAccentAdjacentColumnX" not in adjacent_accent_body
@@ -512,6 +525,11 @@ def verify_restoration_particle_source():
             or "Math.abs(dx)>RADIUS" not in adjacent_accent_body
             or "Math.abs(dz)>RADIUS" not in adjacent_accent_body
             or "queueExposedLeafCanopyAccent(level,(int)adjacentX,(int)adjacentZ,groundY,cursor)" not in adjacent_accent_body
+            or "cursor,false)) return true;" not in adjacent_accent_body
+            or "cursor,true);" not in adjacent_accent_body
+            or "groundCanopyAccentFallbackScans++" not in adjacent_accent_body
+            or "groundCanopyAccentFallbackHits++" not in adjacent_accent_body
+            or "perSample=1..2 alternatingSides=true perpendicular=true fallbackOnMiss=true" not in client_source
             or "queueAdjacentExposedLeafCanopyAccent(level,blockX,blockZ,sampledY," not in client_source
             or "GROUND_CANOPY_LEAF_ADJACENT_SCAN_PROFILE_VERIFIED" not in client_source):
         raise RuntimeError("BLACK FREQUENCY adjacent canopy scan must remain perpendicular, radius-bounded, and loaded-only")
@@ -1259,40 +1277,63 @@ def capture_test_world():
         if focus:
             focus_game()
         return subprocess.run(["xdotool","key","--clearmodifiers",k],check=False)
+    def wait_for_isolated_client_input_ready(timeout=20.0):
+        deadline=time.monotonic()+timeout
+        while time.monotonic()<deadline and p.poll() is None:
+            try:
+                current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+            except OSError:
+                current=""
+            if DEFERRED_CLIENT_INPUT_READY_MARKER in current:
+                return True
+            time.sleep(0.1)
+        return False
     def send_isolated_chat_command(command,confirmation,description,timeout=8.0):
         # This helper is used only in the disposable isolated client world.
         # A player teleport loads chunks through normal player movement; it never
         # calls setChunkForced or any server-side chunk-loading API.
-        if not focus_game():
-            print("WORLD_CAPTURE_FAIL: Minecraft focus was not confirmed for",description,flush=True)
+        if not wait_for_isolated_client_input_ready():
+            print("WORLD_CAPTURE_FAIL: client input was not ready for",description,flush=True)
             return False
-        log_offset=latest.stat().st_size if latest.exists() else 0
-        opened=key("t",focus=False)
-        time.sleep(0.35)
-        typed=subprocess.run(
-            ["xdotool","type","--clearmodifiers","--delay","5",command],
-            check=False)
-        time.sleep(0.12)
-        submitted=key("Return",focus=False)
-        if opened.returncode!=0 or typed.returncode!=0 or submitted.returncode!=0:
-            print("WORLD_CAPTURE_FAIL: could not submit isolated command for",description,flush=True)
-            return False
-        deadline=time.monotonic()+timeout
-        while time.monotonic()<deadline and p.poll() is None:
-            try:
-                with latest.open("rb") as stream:
-                    size=stream.seek(0,os.SEEK_END)
-                    if size<log_offset:
-                        fresh=""
-                    else:
-                        stream.seek(log_offset)
-                        fresh=stream.read().decode("utf-8",errors="replace")
-            except OSError:
-                fresh=""
-            if re.search(confirmation,fresh):
-                print("WORLD_CAPTURE: server acknowledged",description,flush=True)
-                return True
-            time.sleep(0.1)
+        for attempt in range(2):
+            if not focus_game():
+                print("WORLD_CAPTURE: Minecraft window focus was not confirmed; retrying",
+                      description,"attempt",attempt+1,flush=True)
+                continue
+            log_offset=latest.stat().st_size if latest.exists() else 0
+            print("WORLD_CAPTURE_INPUT: Minecraft window focus confirmed for",description,
+                  "attempt",attempt+1,flush=True)
+            opened=key("t",focus=False)
+            time.sleep(0.35)
+            typed=subprocess.run(
+                ["xdotool","type","--clearmodifiers","--delay","5",command],
+                check=False)
+            time.sleep(0.12)
+            submitted=key("Return",focus=False)
+            if opened.returncode!=0 or typed.returncode!=0 or submitted.returncode!=0:
+                print("WORLD_CAPTURE: isolated command input failed; retrying",
+                      description,"attempt",attempt+1,flush=True)
+                continue
+            deadline=time.monotonic()+timeout
+            while time.monotonic()<deadline and p.poll() is None:
+                try:
+                    with latest.open("rb") as stream:
+                        size=stream.seek(0,os.SEEK_END)
+                        if size<log_offset:
+                            fresh=""
+                        else:
+                            stream.seek(log_offset)
+                            fresh=stream.read().decode("utf-8",errors="replace")
+                except OSError:
+                    fresh=""
+                if re.search(confirmation,fresh):
+                    print("WORLD_CAPTURE: server acknowledged",description,flush=True)
+                    return True
+                time.sleep(0.1)
+            if attempt==0 and p.poll() is None:
+                print("WORLD_CAPTURE: command acknowledgement delayed; retrying",
+                      description,flush=True)
+                time.sleep(0.25)
         print("WORLD_CAPTURE_FAIL: no server acknowledgement for",description,flush=True)
         return False
     def click(x,y,focus=True):
@@ -5040,11 +5081,14 @@ def capture_test_world():
             canopy_budget=re.search(
                 r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED "
                 r"candidates=(\d+) emitted=(\d+) candidateBudget=32 budget=8 "
-                r"loadedOnly=true radius=48 clientOnly=true plantOrLeafTop=true segmentBounded=true",
+                r"loadedOnly=true radius=48 clientOnly=true plantOrLeafTop=true segmentBounded=true "
+                r"fallbackScans=(\d+) fallbackHits=(\d+)",
                 log_after)
             if (not canopy_budget or int(canopy_budget.group(1))>32
                 or int(canopy_budget.group(2))>8
-                or int(canopy_budget.group(2))>int(canopy_budget.group(1))):
+                or int(canopy_budget.group(2))>int(canopy_budget.group(1))
+                or int(canopy_budget.group(3))>GROUND_MESH_SAMPLES
+                or int(canopy_budget.group(4))>int(canopy_budget.group(3))):
                 print("WORLD_CAPTURE_FAIL: client canopy accent candidates or emitted particles exceeded their bounded budgets",
                       canopy_budget.groups() if canopy_budget else None,flush=True)
                 return False
