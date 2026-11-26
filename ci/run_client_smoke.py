@@ -5048,6 +5048,13 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: client canopy accent candidates or emitted particles exceeded their bounded budgets",
                       canopy_budget.groups() if canopy_budget else None,flush=True)
                 return False
+            canopy_heightmap_prefilter_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_HEIGHTMAP_PREFILTER_PROFILE_VERIFIED "
+                "openSurfaceRejected=true canopyAccepted=true heightBounded=true finiteGuard=true conservative=true"
+            )
+            if canopy_heightmap_prefilter_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: canopy heightmap prefilter profile was not exercised",flush=True)
+                return False
             continuity=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_CONTINUITY_STATS maxStep=([-+0-9.eE]+) steepStepsSkipped=(\d+)",
                 log_after)
