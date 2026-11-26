@@ -97,10 +97,14 @@ def verify_deferred_restore_chunk_bounds_profile():
         raise RuntimeError("BLACK FREQUENCY deferred anchor must clear the initial and relocated spawn-ticket halos")
     client_source=pathlib.Path(__file__).read_text(encoding="utf-8")
     spawn_verified_at=client_source.find('print("WORLD_CAPTURE: player spawn verified in log"')
+    client_world_ready_wait=client_source.find('client_world_ready_deadline=time.monotonic()+30.0',spawn_verified_at)
+    camera_pose_wait=client_source.find('"BLACK_FREQUENCY_TEST CLIENT_CAMERA_POSE" in current',spawn_verified_at)
     anchor_creative_command=client_source.find('"/gamemode creative @s"',spawn_verified_at)
     anchor_teleport_command=client_source.find('f"/tp @s {DEFERRED_CLIENT_ANCHOR_X} 120 {DEFERRED_CLIENT_ANCHOR_Z}"',spawn_verified_at)
     shared_spawn_command=client_source.find('f"/setworldspawn {DEFERRED_CLIENT_SPAWN_X} 64 {DEFERRED_CLIENT_SPAWN_Z}"')
-    if (spawn_verified_at<0 or anchor_creative_command<=spawn_verified_at
+    if (spawn_verified_at<0 or client_world_ready_wait<=spawn_verified_at
+            or camera_pose_wait<=client_world_ready_wait
+            or anchor_creative_command<=camera_pose_wait
             or anchor_teleport_command<=anchor_creative_command or shared_spawn_command<0):
         raise RuntimeError("BLACK FREQUENCY deferred player must move to the remote anchor before the finale and keep shared spawn separate")
     creative_command=client_source.rfind('"/gamemode creative @s"')
@@ -2507,7 +2511,23 @@ def capture_test_world():
                 return False
             print("WORLD_CAPTURE: player spawn verified in log",flush=True)
             if deferred_chunk_probe:
-                current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                # Server login precedes the first playable client frame. Do not send
+                # chat commands while the integrated client is still on "Loading terrain".
+                client_world_ready_deadline=time.monotonic()+30.0
+                client_world_ready=False
+                while time.monotonic()<client_world_ready_deadline and p.poll() is None:
+                    current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+                    if "BLACK_FREQUENCY_TEST CLIENT_CAMERA_POSE" in current:
+                        client_world_ready=True
+                        break
+                    time.sleep(.1)
+                if not client_world_ready:
+                    print("WORLD_CAPTURE_FAIL: integrated server accepted the player but the client never rendered a camera frame",flush=True)
+                    snap("deferred-anchor-world-not-rendered.png")
+                    return False
+                print("WORLD_CAPTURE: first playable client camera frame confirmed before deferred anchor commands",
+                      "loadedWorld=true",flush=True)
+                snap("deferred-anchor-world-ready.png")
                 initial_spawn_match=INITIAL_PLAYER_SPAWN_RE.search(current)
                 if not initial_spawn_match:
                     print("WORLD_CAPTURE_FAIL: initial player spawn coordinates are missing for deferred ticket separation",flush=True)
