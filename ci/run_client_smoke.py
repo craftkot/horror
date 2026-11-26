@@ -66,10 +66,10 @@ def verify_deferred_restore_chunk_bounds_profile():
             or "&& !level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4))" not in controller_source):
         raise RuntimeError("BLACK FREQUENCY may skip the synthetic beacon guard only in the deferred client probe")
     client_source=pathlib.Path(__file__).read_text(encoding="utf-8")
-    creative_command=client_source.find('"/gamemode creative @s"')
-    travel_command=client_source.find('f"/tp @s ~{DEFERRED_PLAYER_TRAVEL_DISTANCE} 120 ~"',creative_command)
-    return_command=client_source.find('f"/tp @s {pad_x} {pad_y} {pad_z}"',travel_command)
-    survival_command=client_source.find('"/gamemode survival @s"',return_command)
+    creative_command=client_source.rfind('"/gamemode creative @s"')
+    travel_command=client_source.rfind('f"/tp @s ~{DEFERRED_PLAYER_TRAVEL_DISTANCE} 120 ~"')
+    return_command=client_source.rfind('f"/tp @s {pad_x} {pad_y} {pad_z}"')
+    survival_command=client_source.rfind('"/gamemode survival @s"')
     if (creative_command<0 or travel_command<=creative_command
             or return_command<=travel_command or survival_command<=return_command):
         raise RuntimeError("BLACK FREQUENCY deferred travel must protect the player and restore Survival before the physical beacon test")
