@@ -20,14 +20,15 @@ public final class UnwrittenMod {
     private final Map<UUID, PlayerStateStore.State> sessions = new HashMap<>();
     private int ticks;
     private final Apparitions apparitions = new Apparitions();
+    private final LocalAnomalies anomalies = new LocalAnomalies();
     public UnwrittenMod() {
         NeoForge.EVENT_BUS.addListener(this::tick);
         NeoForge.EVENT_BUS.addListener(this::stop);
         NeoForge.EVENT_BUS.addListener(this::stopping);
         NeoForge.EVENT_BUS.addListener(this::death);
     }
-    private void stop(ServerStoppedEvent event) { sessions.clear(); apparitions.clear(); ticks=0; stateDirectory=null; }
-    private void stopping(ServerStoppingEvent event) { sessions.forEach(this::save); }
+    private void stop(ServerStoppedEvent event) { sessions.clear(); apparitions.clear(); anomalies.clear(); ticks=0; stateDirectory=null; }
+    private void stopping(ServerStoppingEvent event) { sessions.forEach(this::save); anomalies.restoreAll(); }
     private void save(UUID id, PlayerStateStore.State state) {
         if(stateDirectory==null)return;
         try { PlayerStateStore.save(stateDirectory,id,state); }
@@ -52,6 +53,7 @@ public final class UnwrittenMod {
         ++ticks;
         if(stateDirectory==null)stateDirectory=event.getServer().getWorldPath(LevelResource.ROOT).resolve("unwritten");
         apparitions.tick(event.getServer().getPlayerList().getPlayers());
+        anomalies.tick(event.getServer().getPlayerList().getPlayers());
         if (ticks % 20 != 0) return;
         var players = event.getServer().getPlayerList().getPlayers();
         var online = new HashSet<UUID>();
@@ -77,13 +79,12 @@ public final class UnwrittenMod {
         }
     }
     private void play(ServerPlayer p, HorrorDirector.Decision decision) {
-        // Local anomaly is still reserved for a later implementation.
         switch(decision.event()) {
             case FOOTSTEPS -> Apparitions.soundBehind(p, SoundEvents.GRASS_STEP, 0.65f, 0.85f);
             case ECHO -> Apparitions.soundBehind(p, SoundEvents.AMBIENT_CAVE.value(), 0.45f, 0.75f);
             case DISTANT_SILHOUETTE -> apparitions.show(p);
             case FALSE_PRESENCE -> { Apparitions.soundBehind(p,SoundEvents.GRASS_STEP,0.9f,0.95f); apparitions.show(p); }
-            default -> { }
+            case LOCAL_ANOMALY -> anomalies.show(p);
         }
     }
 }

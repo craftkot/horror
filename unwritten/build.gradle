@@ -16,3 +16,15 @@ neoForge {
     mods { unwritten { sourceSet(sourceSets.main) } }
 }
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+
+// Existing tests are standalone Java main programs, not JUnit.
+tasks.named('test') { enabled = false }
+['DirectorTest','WorldLogicTest','PersistenceTest','AnomalyLifetimeTest'].each { testName ->
+    def task = tasks.register("run" + testName, JavaExec) {
+        dependsOn tasks.named('testClasses')
+        classpath = sourceSets.test.runtimeClasspath
+        mainClass = 'dev.unwritten.' + testName
+        javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
+    }
+    tasks.named('check') { dependsOn task }
+}
