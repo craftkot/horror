@@ -32,7 +32,7 @@ public final class RiftCloudRuntimeProbe {
             level.dimension().location(),
             minecraft.options.getCloudsType().name(),
             level.effects().getClass().getSimpleName(),
-            level.effects().getCloudsHeight(),
+            level.effects().getCloudHeight(),
             Boolean.getBoolean("blackfrequency.ciTestMode"));
     }
 }
