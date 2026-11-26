@@ -1,0 +1,20 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="All Rights Reserved"
+[[mods]]
+modId="unwritten"
+version="0.1.0-alpha"
+displayName="The Unwritten"
+description='''An original adaptive psychological horror mod.'''
+[[dependencies.unwritten]]
+modId="neoforge"
+type="required"
+versionRange="[26.3.0.118,)"
+ordering="NONE"
+side="BOTH"
+[[dependencies.unwritten]]
+modId="minecraft"
+type="required"
+versionRange="[26.3]"
+ordering="NONE"
+side="BOTH"
