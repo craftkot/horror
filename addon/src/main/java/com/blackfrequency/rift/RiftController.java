@@ -3291,8 +3291,10 @@ public final class RiftController {
                 // The horizontal range was checked before chunk and heightmap reads above.
                 // Keep the vertical bound here because surface height is only known after sampling.
                 if(Math.abs(vy)>24.0D) continue;
+                // Collision shapes ignore foliage; use the visible shape so a cue is not
+                // aimed at a fissure hidden behind leaves or other opaque blocks.
                 var hit=level.clip(new net.minecraft.world.level.ClipContext(eye,target,
-                    net.minecraft.world.level.ClipContext.Block.COLLIDER,
+                    net.minecraft.world.level.ClipContext.Block.VISUAL,
                     net.minecraft.world.level.ClipContext.Fluid.NONE,viewer));
                 if(hit.getType()!=net.minecraft.world.phys.HitResult.Type.MISS) continue;
                 double viewScore=fissureTargetViewScore(horizontalSquared,vy);

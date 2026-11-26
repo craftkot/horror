@@ -250,10 +250,15 @@ def verify_fissure_target_view_score_profile():
     distance_guard=target_method.find("if(!isFissureTargetHorizontalDistance(horizontalSquared)) continue;")
     chunk_probe=target_method.find("!level.hasChunk(blockX>>4,blockZ>>4)")
     surface_probe=target_method.find("findFissureGroundSample(level,blockX,blockZ,cursor,groundSample)")
+    loaded_ray_guard=target_method.find("fissureRayChunksLoaded(eye,target")
+    visual_ray=target_method.find("ClipContext.Block.VISUAL")
+    collider_ray=target_method.find("ClipContext.Block.COLLIDER")
     if (distance_guard<0 or chunk_probe<0 or surface_probe<0
-            or distance_guard>chunk_probe or distance_guard>surface_probe):
-        raise RuntimeError("BLACK FREQUENCY fissure distance cull must precede loaded-chunk and heightmap reads")
-    print("WORLD_CAPTURE: balanced fissure target fixtures, 12-block beacon range, and early loaded-only distance cull verified",flush=True)
+            or distance_guard>chunk_probe or distance_guard>surface_probe
+            or loaded_ray_guard<0 or visual_ray<0 or collider_ray>=0
+            or loaded_ray_guard>visual_ray):
+        raise RuntimeError("BLACK FREQUENCY fissure target must cull range, verify loaded chunks, and use visual-shape occlusion")
+    print("WORLD_CAPTURE: balanced fissure target, 12-block range, loaded-only visual foliage occlusion verified",flush=True)
 
 def parse_fissure_particle_emission(log_text):
     match=FISSURE_PARTICLE_EMISSION_RE.search(log_text)
@@ -1085,8 +1090,9 @@ option_overrides=[
     ("rawMouseInput","false"),
     ("mouseSensitivity",str(MOUSE_SENSITIVITY)),
     ("pauseOnLostFocus","false"),
-    # The cloud suppression callback is not invoked when the user's cloud option is Off.
-    # Enable clouds only in this disposable client so the real render hook is exercised.
+    # Use Fancy graphics in this disposable client: leaves are transparent and the
+    # cloud layer is enabled, so both visual occlusion and cloud suppression are tested.
+    ("graphicsMode","1"),
     ("renderClouds","true"),
 ]
 if deferred_chunk_probe:
@@ -1104,9 +1110,11 @@ options_file.write_text("\n".join(option_lines)+"\n",encoding="utf-8")
 option_values={line.split(":",1)[0]:line.split(":",1)[1] for line in option_lines if ":" in line}
 if option_values.get("pauseOnLostFocus")!="false":
     raise SystemExit("Could not disable Minecraft pauseOnLostFocus for deterministic integrated-server ticks")
+if option_values.get("graphicsMode")!="1":
+    raise SystemExit("Could not enable Fancy graphics for the visual-occlusion smoke test")
 if option_values.get("renderClouds")!="true":
     raise SystemExit("Could not enable vanilla clouds for the cloud-suppression render-hook test")
-print("WORLD_CAPTURE: vanilla clouds enabled for the active-rift suppression test",flush=True)
+print("WORLD_CAPTURE: Fancy graphics and vanilla clouds enabled for visual smoke tests",flush=True)
 if deferred_chunk_probe and (
         option_values.get("renderDistance")!=str(DEFERRED_RENDER_DISTANCE)
         or option_values.get("simulationDistance")!=str(DEFERRED_SIMULATION_DISTANCE)):
@@ -5491,7 +5499,7 @@ def capture_test_world():
             except (TypeError,ValueError,OverflowError):
                 cloud_height_value=float("nan")
             if (cloud_dimension!="minecraft:overworld"
-                    or cloud_status not in {"FAST","FANCY"}
+                    or cloud_status!="FANCY"
                     or cloud_effects!="RiftOverworldEffects"
                     or not math.isfinite(cloud_height_value)
                     or cloud_height_value<=0.0
