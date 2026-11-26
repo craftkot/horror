@@ -3268,9 +3268,9 @@ def capture_test_world():
                             r"BLACK_FREQUENCY_TEST GROUND_MESH_VERTICAL_CULL_RESUMED rebuilt=true segments=(\d+) arms=(\d+) cameraY=([-+0-9.eE]+) surfaceY=([-+0-9.eE]+) anchorChanged=(true|false)",
                             probe_logs)
                         reset_reason=re.search(
-                            r"BLACK_FREQUENCY_TEST CLIENT_STATE_RESET reason=(client-level-unavailable|client-level-replaced) previousLevelPresent=(true|false)",
+                            r"BLACK_FREQUENCY_TEST CLIENT_STATE_RESET reason=(client-level-unavailable|client-level-replaced|stale-packet-timeout) previousLevelPresent=(true|false)",
                             probe_logs)
-                        if summary and summary.group(5) in ("client-level-unavailable","client-level-replaced"):
+                        if summary and summary.group(5) in ("client-level-unavailable","client-level-replaced","stale-packet-timeout"):
                             after_summary=probe_logs[summary.end():]
                             height_change=re.search(
                                 r"BLACK_FREQUENCY_GROUND_MESH_HEIGHT_INVALIDATED previousReferenceY=(-?\d+) referenceY=(-?\d+) delta=(\d+)",
@@ -3288,11 +3288,12 @@ def capture_test_world():
                         time.sleep(0.1)
                     if not summary:
                         raise RuntimeError("BLACK FREQUENCY vertical cull probe did not emit a skip summary after its log cursor")
-                    reset_path=summary.group(5) in ("client-level-unavailable","client-level-replaced")
+                    reset_path=summary.group(5) in ("client-level-unavailable","client-level-replaced","stale-packet-timeout")
                     if reset_path:
                         if (not reset_reason or reset_reason.group(1)!=summary.group(5)
+                                or (summary.group(5)=="stale-packet-timeout" and reset_reason.group(2)!="true")
                                 or not reset_rebuild):
-                            raise RuntimeError("BLACK FREQUENCY client-level reset did not rebuild the ground mesh after camera return")
+                            raise RuntimeError("BLACK FREQUENCY client state reset did not rebuild the ground mesh after camera return")
                     elif not resumed:
                         raise RuntimeError("BLACK FREQUENCY vertical cull probe did not resume the retained mesh after camera return")
                     sample_position=probe_logs.find("BLACK_FREQUENCY_TEST GROUND_MESH_CAMERA_VERTICAL_RANGE_SAMPLE")
@@ -3321,7 +3322,7 @@ def capture_test_world():
                                 and int(rebuilt.group(2))>=MIN_GROUND_MESH_ARMS
                                 and int(rebuilt.group(3))==int(entered.group(4))
                                 and int(rebuilt.group(4))==int(entered.group(5))):
-                            raise RuntimeError("BLACK FREQUENCY client-level reset rebuild did not return to the original anchor")
+                            raise RuntimeError("BLACK FREQUENCY client state reset rebuild did not return to the original anchor")
                         segments,arms=int(rebuilt.group(1)),int(rebuilt.group(2))
                     else:
                         if not (0<=summary_position<resumed_position

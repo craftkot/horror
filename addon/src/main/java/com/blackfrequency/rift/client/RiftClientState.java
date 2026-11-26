@@ -797,11 +797,14 @@ public final class RiftClientState {
         Minecraft minecraft=Minecraft.getInstance();
         net.minecraft.client.multiplayer.ClientLevel level=minecraft.level;
         if(level==null) {
-            reset();
+            // Clear the previous world's state once, not on every menu tick.
+            if(lastLevel!=null || hasActiveTimedClientState(progress,collapse,finaleTicks,restorationActive)
+                || beaconAuraCompletionFadeTicks>0 || anchorValid || beaconPositionValid)
+                reset("client-level-unavailable");
             lastLevel=null;
             return;
         }
-        if(lastLevel!=null && lastLevel!=level) reset();
+        if(lastLevel!=null && lastLevel!=level) reset("client-level-replaced");
         lastLevel=level;
         // A server login is earlier than a usable client input surface: the
         // ReceivingLevelScreen can still cover the world for several seconds.
@@ -820,7 +823,7 @@ public final class RiftClientState {
         if(hasActiveTimedClientState(progress,collapse,finaleTicks,restorationActive)) {
             ticksSincePacket=Math.min(CLIENT_STATE_PACKET_TIMEOUT_TICKS+1,ticksSincePacket+1);
             if(collapse) finaleTicks=predictedFinaleTicks(serverFinaleTicks,ticksSincePacket);
-            if(isClientPacketStateStale(ticksSincePacket)) reset();
+            if(isClientPacketStateStale(ticksSincePacket)) reset("stale-packet-timeout");
         }
     }
     @net.minecraftforge.eventbus.api.SubscribeEvent
