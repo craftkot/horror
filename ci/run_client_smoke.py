@@ -15,7 +15,7 @@ FISSURE_TARGET_MIN_HORIZONTAL_DISTANCE=3.0
 FISSURE_TARGET_MAX_HORIZONTAL_DISTANCE=12.0
 
 DEFERRED_RESTORE_RADIUS=48
-DEFERRED_RENDER_DISTANCE=2
+DEFERRED_RENDER_DISTANCE=4
 # Minecraft 1.20.1 clamps Simulation Distance to [5, 33]; 2 is rejected by Options.
 DEFERRED_SIMULATION_DISTANCE=5
 # Add a four-chunk margin beyond the fracture and the server's simulation-distance halo.
@@ -27,6 +27,8 @@ DEFERRED_CLIENT_SPAWN_X=1024
 DEFERRED_CLIENT_SPAWN_Z=1024
 DEFERRED_INITIAL_SPAWN_TICKET_RADIUS=11
 DEFERRED_RESTORE_WARMUP_TICKS=600
+if DEFERRED_RENDER_DISTANCE<4:
+    raise RuntimeError("Deferred client profile must retain a cloud-capable render distance")
 if DEFERRED_PLAYER_TRAVEL_DISTANCE<=DEFERRED_RESTORE_RADIUS+DEFERRED_SIMULATION_DISTANCE*16+64:
     raise RuntimeError("Deferred probe travel must clear the fracture and simulation-distance halo")
 DEFERRED_SPAWN_ACK_RE=r"Set (?:the )?world spawn(?: point)? to "
@@ -487,9 +489,21 @@ def verify_restoration_particle_source():
             or "if(!leaf.is(BlockTags.LEAVES)) return;" not in leaf_accent_body
             or "!isCanopyAccentHeadroomAvailable(head)" not in leaf_accent_body
             or "isCanopyAccentHeightWithinBounds(groundY,accentY)" not in leaf_accent_body
+            or "hasCanopyAccentCandidate(blockX,blockZ)" not in leaf_accent_body
             or "queueExposedLeafCanopyAccent(level,blockX,blockZ,groundY,cursor)" not in client_source
             or "GROUND_CANOPY_LEAF_ACCENT_PROFILE_VERIFIED" not in client_source):
         raise RuntimeError("BLACK FREQUENCY leaf canopy accents must use exposed top leaves from already-loaded chunks only")
+    adjacent_accent_start=client_source.find("private static void queueAdjacentExposedLeafCanopyAccent(")
+    adjacent_accent_end=client_source.find("\n        private static double sampleGroundY",adjacent_accent_start+1)
+    adjacent_accent_body=client_source[adjacent_accent_start:adjacent_accent_end] if adjacent_accent_start>=0 and adjacent_accent_end>adjacent_accent_start else ""
+    if ("canopyAccentAdjacentColumnX" not in adjacent_accent_body
+            or "canopyAccentAdjacentColumnZ" not in adjacent_accent_body
+            or "Math.abs(dx)>RADIUS" not in adjacent_accent_body
+            or "Math.abs(dz)>RADIUS" not in adjacent_accent_body
+            or "queueExposedLeafCanopyAccent(level,(int)adjacentX,(int)adjacentZ,groundY,cursor)" not in adjacent_accent_body
+            or "queueAdjacentExposedLeafCanopyAccent(level,blockX,blockZ,sampledY," not in client_source
+            or "GROUND_CANOPY_LEAF_ADJACENT_SCAN_PROFILE_VERIFIED" not in client_source):
+        raise RuntimeError("BLACK FREQUENCY adjacent canopy scan must remain perpendicular, radius-bounded, and loaded-only")
     fissure_start=source.find("private static FissureEmission emitSurfaceFissure(")
     fissure_end=source.find("\n    private static",fissure_start+1)
     fissure_emitter=source[fissure_start:fissure_end] if fissure_start>=0 and fissure_end>fissure_start else ""
@@ -1098,9 +1112,9 @@ opts.update({
 # disposable CI client, so use the regular cursor path for deterministic camera capture.
 options_file=MC/"options.txt"
 option_lines=options_file.read_text(encoding="utf-8",errors="replace").splitlines() if options_file.exists() else []
-# The normal isolated run deliberately uses a two-chunk view/simulation window.
-# Outer fracture snapshots must become genuinely unavailable before recovery, so
-# the client can travel to them and prove deferred restoration without force-loading.
+# Keep four rendered chunks so the vanilla cloud layer remains available during the
+# visual probe. The player still travels well beyond the 48-block fracture and the
+# five-chunk simulation halo, allowing natural unload without force-loading snapshots.
 option_overrides=[
     ("rawMouseInput","false"),
     ("mouseSensitivity",str(MOUSE_SENSITIVITY)),
@@ -5015,7 +5029,7 @@ def capture_test_world():
             canopy_budget=re.search(
                 r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED "
                 r"candidates=(\d+) emitted=(\d+) candidateBudget=32 budget=8 "
-                r"loadedOnly=true radius=48 clientOnly=true plantOnly=true segmentBounded=true",
+                r"loadedOnly=true radius=48 clientOnly=true plantOrLeafTop=true segmentBounded=true",
                 log_after)
             if (not canopy_budget or int(canopy_budget.group(1))>32
                 or int(canopy_budget.group(2))>8
@@ -5252,7 +5266,7 @@ def capture_test_world():
             if "BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_SPARSE_RANGE_FIXTURE_VERIFIED horizontalSquared=58.11826889234223 acceptedBeyondLegacySixBlockCap=true" not in log_after:
                 print("WORLD_CAPTURE_FAIL: observed Sparse fissure standoff regression fixture was not verified",flush=True)
                 return False
-            if "BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=balanced-view-span targetPitch=45 visibilityTieWindowDegrees=3.0 neighbors=2 ties=stable invalidRejected=true" not in log_after:
+            if "BLACK_FREQUENCY_TEST PLAYER_VISIBLE_FISSURE_TARGET_SELECTION_VERIFIED policy=balanced-view-span targetPitch=45 visibilityTieWindowDegrees=8.0 neighbors=2 ties=stable invalidRejected=true minHorizontal=3.0 maxHorizontal=12.0" not in log_after:
                 print("WORLD_CAPTURE_FAIL: contiguous visible fissure camera target policy was not verified",flush=True)
                 return False
             if "BLACK_FREQUENCY_TEST SURFACE_FISSURE_STRUCTURAL_SUPPORT_FILTER_VERIFIED" not in log_after:
