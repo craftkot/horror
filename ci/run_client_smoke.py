@@ -21,6 +21,7 @@ DEFERRED_SIMULATION_DISTANCE=5
 # Add a four-chunk margin beyond the fracture and the server's simulation-distance halo.
 # Per-chunk return teleports then load only visited chunks within the recovery audience.
 DEFERRED_PLAYER_TRAVEL_DISTANCE=224
+DEFERRED_RESTORE_WARMUP_TICKS=600
 if DEFERRED_PLAYER_TRAVEL_DISTANCE<=DEFERRED_RESTORE_RADIUS+DEFERRED_SIMULATION_DISTANCE*16+64:
     raise RuntimeError("Deferred probe travel must clear the fracture and simulation-distance halo")
 DEFERRED_SPAWN_ACK_RE=r"Set (?:the )?world spawn(?: point)? to "
@@ -28,6 +29,11 @@ DEFERRED_RESTORE_CHUNK_RE=re.compile(
     r"BLACK_FREQUENCY_TEST RESTORE_UNLOADED_CHUNK_DEFERRED "
     r"x=(-?\d+) y=(-?\d+) z=(-?\d+) "
     r"chunkX=(-?\d+) chunkZ=(-?\d+) loadedOnly=true")
+DEFERRED_CHUNK_READINESS_RE=re.compile(
+    r"BLACK_FREQUENCY_TEST RESTORE_DEFERRED_PROBE_CHUNK_READINESS "
+    r"ticks=(\d+) uniqueChunks=(\d+) loadedChunks=(\d+) unloadedChunks=(\d+) "
+    r"playerChunkX=(-?\d+) playerChunkZ=(-?\d+) "
+    r"spawnChunkX=(-?\d+) spawnChunkZ=(-?\d+) loadedOnly=true")
 FINALE_ANCHOR_RE=re.compile(
     r"BLACK_FREQUENCY_TEST FINALE_ANCHOR_VALID x=(-?\d+) z=(-?\d+)")
 
@@ -59,9 +65,10 @@ def verify_deferred_restore_chunk_bounds_profile():
             or "private static final int RADIUS = RiftGeometry.RADIUS;" not in controller_source):
         raise RuntimeError("BLACK FREQUENCY deferred restore radius must match the shared server fracture radius")
     if ("private static int restoreSnapshotScanWarmupTicks(boolean deferredClientProbe)" not in controller_source
-            or "return deferredClientProbe?200:0;" not in controller_source
-            or "s.restoreTicks>scanWarmupTicks" not in controller_source):
-        raise RuntimeError("BLACK FREQUENCY deferred probe must wait for natural chunk-ticket expiry before scanning")
+            or f"return deferredClientProbe?{DEFERRED_RESTORE_WARMUP_TICKS}:0;" not in controller_source
+            or "s.restoreTicks>scanWarmupTicks" not in controller_source
+            or "logDeferredProbeChunkReadiness(level,s);" not in controller_source):
+        raise RuntimeError("BLACK FREQUENCY deferred probe must wait for natural chunk-ticket expiry and report loaded-only readiness")
     if ('if(Boolean.getBoolean("blackfrequency.ciDeferredChunkProbe")' not in controller_source
             or "&& !level.hasChunk(beacon.getX()>>4,beacon.getZ()>>4))" not in controller_source):
         raise RuntimeError("BLACK FREQUENCY may skip the synthetic beacon guard only in the deferred client probe")
@@ -91,7 +98,14 @@ def verify_deferred_restore_chunk_bounds_profile():
             raise RuntimeError("BLACK FREQUENCY deferred snapshot coordinate/radius fixture regression")
     print("WORLD_CAPTURE: deferred snapshot chunk coordinates and circular fracture bounds verified",
           "radius",DEFERRED_RESTORE_RADIUS,"negativeCoordinates=true","boundary=true","loadedOnly=true",flush=True)
-    print("WORLD_CAPTURE: deferred scan waits 200 server ticks for natural chunk-ticket expiry",flush=True)
+    readiness_fixture=("BLACK_FREQUENCY_TEST RESTORE_DEFERRED_PROBE_CHUNK_READINESS "
+        "ticks=600 uniqueChunks=4 loadedChunks=1 unloadedChunks=3 "
+        "playerChunkX=14 playerChunkZ=-1 spawnChunkX=32 spawnChunkZ=32 loadedOnly=true")
+    readiness_match=DEFERRED_CHUNK_READINESS_RE.search(readiness_fixture)
+    if not readiness_match or tuple(map(int,readiness_match.groups()))!=(600,4,1,3,14,-1,32,32):
+        raise RuntimeError("BLACK FREQUENCY deferred chunk-readiness fixture regression")
+    print("WORLD_CAPTURE: deferred scan waits",DEFERRED_RESTORE_WARMUP_TICKS,
+          "server ticks and records loaded-only chunk readiness",flush=True)
 
 def is_fissure_target_horizontal_distance(horizontal_squared):
     try:
@@ -4354,9 +4368,40 @@ def capture_test_world():
                         if "BLACK_FREQUENCY_TEST RESTORE_SCAN_BUDGET_SELECTED value=1 deferredClient=true" not in final_log:
                             print("WORLD_CAPTURE_FAIL: deferred recovery did not use the slow client-only scan budget",flush=True)
                             return False
-                        if "BLACK_FREQUENCY_TEST RESTORE_SCAN_WARMUP_SELECTED ticks=200 deferredClient=true" not in final_log:
+                        if f"BLACK_FREQUENCY_TEST RESTORE_SCAN_WARMUP_SELECTED ticks={DEFERRED_RESTORE_WARMUP_TICKS} deferredClient=true" not in final_log:
                             print("WORLD_CAPTURE_FAIL: deferred recovery did not wait for natural chunk-ticket expiry",flush=True)
                             return False
+                        readiness=DEFERRED_CHUNK_READINESS_RE.search(final_log)
+                        if not readiness:
+                            print("WORLD_CAPTURE_FAIL: deferred probe did not report loaded-only chunk readiness",flush=True)
+                            return False
+                        (readiness_ticks,unique_chunks,loaded_chunks,unloaded_chunks,
+                         player_chunk_x,player_chunk_z,spawn_chunk_x,spawn_chunk_z)=map(int,readiness.groups())
+                        anchor_match=FINALE_ANCHOR_RE.search(final_log)
+                        if not anchor_match:
+                            print("WORLD_CAPTURE_FAIL: deferred readiness has no verified fracture anchor",flush=True)
+                            return False
+                        anchor_x,anchor_z=map(int,anchor_match.groups())
+                        anchor_chunk_x,anchor_chunk_z=anchor_x>>4,anchor_z>>4
+                        if (readiness_ticks!=DEFERRED_RESTORE_WARMUP_TICKS
+                                or unique_chunks<1 or loaded_chunks+unloaded_chunks!=unique_chunks
+                                or unloaded_chunks<1):
+                            print("WORLD_CAPTURE_FAIL: no valid recovery chunk unloaded naturally before scanning",
+                                  {"ticks":readiness_ticks,"unique":unique_chunks,
+                                   "loaded":loaded_chunks,"unloaded":unloaded_chunks},flush=True)
+                            return False
+                        if max(abs(player_chunk_x-anchor_chunk_x),abs(player_chunk_z-anchor_chunk_z))<=DEFERRED_SIMULATION_DISTANCE:
+                            print("WORLD_CAPTURE_FAIL: player chunk remained inside the simulation-distance halo",
+                                  {"player":(player_chunk_x,player_chunk_z),"anchor":(anchor_chunk_x,anchor_chunk_z)},flush=True)
+                            return False
+                        if max(abs(spawn_chunk_x-anchor_chunk_x),abs(spawn_chunk_z-anchor_chunk_z))<=11:
+                            print("WORLD_CAPTURE_FAIL: spawn ticket remained inside the fracture's chunk halo",
+                                  {"spawn":(spawn_chunk_x,spawn_chunk_z),"anchor":(anchor_chunk_x,anchor_chunk_z)},flush=True)
+                            return False
+                        print("WORLD_CAPTURE: natural chunk-unload readiness verified",
+                              {"uniqueChunks":unique_chunks,"loaded":loaded_chunks,
+                               "unloaded":unloaded_chunks,"playerChunk":(player_chunk_x,player_chunk_z),
+                               "spawnChunk":(spawn_chunk_x,spawn_chunk_z)},flush=True)
                         unresolved_deferred_chunks={
                             key:(count,deferred_restore_reentry_counts.get(key,0))
                             for key,count in deferred_restore_deferred_counts.items()

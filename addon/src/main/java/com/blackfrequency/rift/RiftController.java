@@ -397,10 +397,11 @@ public final class RiftController {
         return deferredClientProbe?2:1;
     }
 
-    // Let the integrated server retire stale player/spawn tickets before the
-    // disposable client probe checks snapshot availability. Production is immediate.
+    // The integrated client moves away only after activating the beacon. Allow
+    // enough server time after that teleport for the old player/spawn tickets to expire.
+    // Production is immediate; the disposable probe never forces a chunk load.
     private static int restoreSnapshotScanWarmupTicks(boolean deferredClientProbe) {
-        return deferredClientProbe?200:0;
+        return deferredClientProbe?600:0;
     }
 
     // A terminal cursor is trustworthy only when every retained snapshot has
@@ -5466,7 +5467,7 @@ public final class RiftController {
             combinedReloaded.snapshotOverflowEntries,combinedReloaded.snapshotMissingEntries);
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_BUDGET_PROFILE production=48 deferredClient=1");
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_INTERVAL_PROFILE production=1 deferredClient=2");
-        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_WARMUP_PROFILE production=0 deferredClient=200");
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_WARMUP_PROFILE production=0 deferredClient=600");
         LOGGER.info("BLACK_FREQUENCY_TEST RESTORATION_COMPLETION_ACTIONBAR_ONLY_VERIFIED success=true partial=true titlePackets=false");
     }
 
@@ -6223,6 +6224,32 @@ public final class RiftController {
         LOGGER.info("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_BLOCK_ENTITY_STATE_REJECTED chest=true furnace=true beacon=true");
     }
 
+    private static void logDeferredProbeChunkReadiness(ServerLevel level,State s) {
+        LongOpenHashSet uniqueChunks=new LongOpenHashSet();
+        int loadedChunks=0,unloadedChunks=0;
+        for(int index=0;index<s.snapshots.size();index++) {
+            CompoundTag entry=s.snapshots.get(index);
+            if(!entry.contains("pos",Tag.TAG_LONG)) continue;
+            BlockPos pos=BlockPos.of(entry.getLong("pos"));
+            int chunkX=pos.getX()>>4,chunkZ=pos.getZ()>>4;
+            long key=(((long)chunkX)<<32)^(chunkZ&0xffffffffL);
+            if(!uniqueChunks.add(key)) continue;
+            if(level.hasChunk(chunkX,chunkZ)) loadedChunks++;
+            else unloadedChunks++;
+        }
+        int playerChunkX=Integer.MIN_VALUE,playerChunkZ=Integer.MIN_VALUE;
+        for(var player:level.players()) {
+            if(!player.isAlive() || player.isRemoved()) continue;
+            playerChunkX=player.blockPosition().getX()>>4;
+            playerChunkZ=player.blockPosition().getZ()>>4;
+            break;
+        }
+        BlockPos spawn=level.getSharedSpawnPos();
+        LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_DEFERRED_PROBE_CHUNK_READINESS ticks={} uniqueChunks={} loadedChunks={} unloadedChunks={} playerChunkX={} playerChunkZ={} spawnChunkX={} spawnChunkZ={} loadedOnly=true",
+            s.restoreTicks,uniqueChunks.size(),loadedChunks,unloadedChunks,
+            playerChunkX,playerChunkZ,spawn.getX()>>4,spawn.getZ()>>4);
+    }
+
     private static void restore(ServerLevel level,State s) {
         // Reuse primitive per-tick caches: a chunk cannot load or unload halfway through this server-thread scan.
         s.restoreChunksCheckedThisTick.clear();
@@ -6400,6 +6427,8 @@ public final class RiftController {
         int configuredScanBudget=restoreSnapshotScanBudget(deferredClientProbe);
         int scanInterval=restoreSnapshotScanInterval(deferredClientProbe);
         int scanWarmupTicks=restoreSnapshotScanWarmupTicks(deferredClientProbe);
+        if(CI_TEST && deferredClientProbe && s.restoreTicks==scanWarmupTicks)
+            logDeferredProbeChunkReadiness(level,s);
         if(CI_TEST && s.restoreTicks==1) {
             LOGGER.info("BLACK_FREQUENCY_TEST RESTORE_SCAN_BUDGET_SELECTED value={} deferredClient={}",
                 configuredScanBudget,deferredClientProbe);
