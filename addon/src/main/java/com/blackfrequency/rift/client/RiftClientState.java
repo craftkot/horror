@@ -923,6 +923,7 @@ public final class RiftClientState {
         private static int groundCanopyAccentQueueBudgetRejected;
         private static int groundCanopyAccentQueueChunkRejected;
         private static int groundCanopyAccentQueueHeightmapRejected;
+        private static int groundCanopyAccentQueueHeightmapTopAdjusted;
         private static int groundCanopyAccentQueueNonLeafRejected;
         private static int groundCanopyAccentQueueHeadroomRejected;
         private static int groundCanopyAccentQueuePlantLifted;
@@ -2967,6 +2968,12 @@ public final class RiftClientState {
             return (long)topY-1L-(long)skippedPlants;
         }
 
+        // Some client chunk paths expose the occupied top cell while others expose the first free cell.
+        // Normalize from the actual loaded block state, never by assuming either convention.
+        private static long canopyAccentExclusiveHeightmapTopY(int reportedTopY,boolean reportedTopOccupied) {
+            return (long)reportedTopY+(reportedTopOccupied?1L:0L);
+        }
+
         // WORLD_SURFACE includes leaves and non-colliding plants; walk down only through the
         // same two-block BushBlock allowlist so the selected leaf is actually exposed.
         private static int canopyAccentLeafSurfaceSkippedPlants(Level level,int blockX,int blockZ,int topY,
@@ -3262,6 +3269,10 @@ public final class RiftClientState {
                 && canopyAccentLeafSurfaceY(71,3)==Long.MIN_VALUE
                 && canopyAccentLeafSurfaceY(Integer.MIN_VALUE,2)==(long)Integer.MIN_VALUE-3L
                 && canopyAccentLeafSurfaceY(Integer.MAX_VALUE,2)==(long)Integer.MAX_VALUE-3L;
+            boolean heightmapTopNormalizationProfile=
+                canopyAccentExclusiveHeightmapTopY(71,false)==71L
+                && canopyAccentExclusiveHeightmapTopY(70,true)==71L
+                && canopyAccentExclusiveHeightmapTopY(Integer.MAX_VALUE,true)==(long)Integer.MAX_VALUE+1L;
             GroundSegment fixture=new GroundSegment(new GroundPoint(0.0D,70.0D,0.0D),
                 new GroundPoint(1.0D,70.0D,0.0D),0.0D,1.0D,GROUND_SAMPLES[0],
                 1.0D,1.0D,1.0D,1.0D,0.0D,0.0D);
@@ -3317,7 +3328,7 @@ public final class RiftClientState {
                 && candidateDedupProfile && heightmapPrefilterProfile
                 && particleScaleBounded && particleOffsetBounded
                 && particleVelocityBounded && foliageClearanceProfile && canopyAccentHeadroomProfile
-                && plantClearanceProfile && leafSurfaceScanProfile
+                && plantClearanceProfile && leafSurfaceScanProfile && heightmapTopNormalizationProfile
                 && Math.abs(plantTop-71.06D)<1.0E-9D
                 && Math.abs(invalidHeight-70.26D)<1.0E-9D
                 && Math.abs(excessiveHeight-71.26D)<1.0E-9D
@@ -3337,6 +3348,8 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_HEIGHTMAP_PREFILTER_PROFILE_VERIFIED openSurfaceRejected=true canopyAccepted=true heightBounded=true finiteGuard=true conservative=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_HEIGHTMAP_SOURCE_VERIFIED heightmap=world_surface includesLeaves=true includesPlants=true downwardPlantScan=2 roofRejected=true headroomAir=true loadedOnly=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_HEIGHTMAP_TOP_NORMALIZATION_PROFILE_VERIFIED exclusive=true inclusive=true longArithmetic=true boundedCorrection=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_LEAF_ADJACENT_SCAN_PROFILE_VERIFIED perSample=1..4 maxNeighborScans=80 scanOrder=roundRobinPasses alternatingSides=true perpendicular=true diagonalFallback=true tangentTowardArmCenter=true fallbackOnMiss=true loadedOnly=true radius=48 uniqueColumns=true duplicateColumnsSkipped=true");
             com.mojang.logging.LogUtils.getLogger().info(
@@ -3517,10 +3530,31 @@ public final class RiftClientState {
                 if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueChunkRejected++;
                 return false;
             }
-            int topY=chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE,
+            int reportedTopY=chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE,
                 blockX&15,blockZ&15);
-            if(topY<=level.getMinBuildHeight() || topY>=level.getMaxBuildHeight()
-                || !canopyAccentHeightmapMayContainValidLeafAccent(groundY,topY)) {
+            if(reportedTopY<=level.getMinBuildHeight() || reportedTopY>=level.getMaxBuildHeight()) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueHeightmapRejected++;
+                return false;
+            }
+            cursor.set(blockX,reportedTopY,blockZ);
+            BlockState head=level.getBlockState(cursor);
+            boolean reportedTopOccupied=!isCanopyAccentHeadroomAvailable(head);
+            long exclusiveTopY=canopyAccentExclusiveHeightmapTopY(reportedTopY,reportedTopOccupied);
+            if(exclusiveTopY<=level.getMinBuildHeight() || exclusiveTopY>=level.getMaxBuildHeight()) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueHeadroomRejected++;
+                return false;
+            }
+            int topY=(int)exclusiveTopY;
+            if(topY!=reportedTopY) {
+                cursor.set(blockX,topY,blockZ);
+                head=level.getBlockState(cursor);
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueHeightmapTopAdjusted++;
+            }
+            if(!isCanopyAccentHeadroomAvailable(head)) {
+                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueHeadroomRejected++;
+                return false;
+            }
+            if(!canopyAccentHeightmapMayContainValidLeafAccent(groundY,topY)) {
                 if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueHeightmapRejected++;
                 return false;
             }
@@ -3546,12 +3580,6 @@ public final class RiftClientState {
                 return false;
             }
             double shapeHeight=leaf.getShape(level,cursor).max(Direction.Axis.Y);
-            cursor.set(blockX,topY,blockZ);
-            BlockState head=level.getBlockState(cursor);
-            if(!isCanopyAccentHeadroomAvailable(head)) {
-                if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueHeadroomRejected++;
-                return false;
-            }
             double accentY=canopyAccentPlantSurfaceParticleY((int)leafY,shapeHeight,skippedPlants);
             if(!Double.isFinite(accentY)) {
                 if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueInvalidRejected++;
@@ -3843,6 +3871,7 @@ public final class RiftClientState {
             groundCanopyAccentQueueBudgetRejected=0;
             groundCanopyAccentQueueChunkRejected=0;
             groundCanopyAccentQueueHeightmapRejected=0;
+            groundCanopyAccentQueueHeightmapTopAdjusted=0;
             groundCanopyAccentQueueNonLeafRejected=0;
             groundCanopyAccentQueueHeadroomRejected=0;
             groundCanopyAccentQueuePlantLifted=0;
@@ -3986,11 +4015,12 @@ public final class RiftClientState {
                     groundCanopyAccentDiagonalHits,groundCanopyAccentNeighborDuplicateScans,
                     groundCanopyAccentNeighborSampleCount);
                 com.mojang.logging.LogUtils.getLogger().info(
-                    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_REJECTION_PROFILE_VERIFIED attempts={} accepted={} invalid={} budget={} chunk={} heightmap={} nonLeaf={} headroom={} height={} pattern={} duplicate={} segment={} plantLifted={}",
+                    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_REJECTION_PROFILE_VERIFIED attempts={} accepted={} invalid={} budget={} chunk={} heightmap={} heightmapTopAdjusted={} nonLeaf={} headroom={} height={} pattern={} duplicate={} segment={} plantLifted={}",
                     groundCanopyAccentQueueAttempts,groundCanopyAccentQueueAccepted,
                     groundCanopyAccentQueueInvalidRejected,groundCanopyAccentQueueBudgetRejected,
                     groundCanopyAccentQueueChunkRejected,groundCanopyAccentQueueHeightmapRejected,
-                    groundCanopyAccentQueueNonLeafRejected,groundCanopyAccentQueueHeadroomRejected,
+                    groundCanopyAccentQueueHeightmapTopAdjusted,groundCanopyAccentQueueNonLeafRejected,
+                    groundCanopyAccentQueueHeadroomRejected,
                     groundCanopyAccentQueueHeightRejected,groundCanopyAccentQueuePatternRejected,
                     groundCanopyAccentQueueDuplicateRejected,groundCanopyAccentQueueSegmentRejected,
                     groundCanopyAccentQueuePlantLifted);
