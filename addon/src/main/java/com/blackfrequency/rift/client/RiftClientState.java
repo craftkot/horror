@@ -3094,6 +3094,7 @@ public final class RiftClientState {
             if(candidateCount<=0) return;
             long gameTime=level.getGameTime();
             if(!shouldAttemptCanopyAccentScan(gameTime,groundCanopyAccentLastAttemptTick)) return;
+            long emissionEpoch=Math.floorDiv(gameTime,(long)GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS);
             int start=canopyAccentCandidateIndex(groundCanopyAccentCandidateCursor,0,candidateCount);
             int visited=0;
             for(int offset=0;offset<candidateCount
@@ -3113,8 +3114,8 @@ public final class RiftClientState {
                 if(!level.getWorldBorder().isWithinBounds(SURFACE_CURSOR)
                     || !level.hasChunk(x>>4,z>>4)
                     || !canopyAccentCandidateTouchesMesh(x,z,groundY,segments)) continue;
-                double velocityX=canopyAccentHorizontalVelocity(x,z,0);
-                double velocityZ=canopyAccentHorizontalVelocity(x,z,1);
+                double velocityX=canopyAccentHorizontalVelocity(x,z,0,emissionEpoch);
+                double velocityZ=canopyAccentHorizontalVelocity(x,z,1,emissionEpoch);
                 if(!canopyAccentHorizontalDriftWithinBounds(velocityX,velocityZ)) continue;
                 level.addParticle(GROUND_CANOPY_ACCENT_DUST,x+.5D,accentY,z+.5D,
                     velocityX,GROUND_CANOPY_ACCENT_VERTICAL_SPEED,velocityZ);
@@ -3133,11 +3134,13 @@ public final class RiftClientState {
             return surfaceY+boundedHeight+GROUND_CANOPY_ACCENT_VERTICAL_OFFSET;
         }
 
-        // SplitMix64 turns a block coordinate and axis into a repeatable, bounded drift component.
-        // No Random, vector, or stream is allocated while emitting the eight-mote budget.
-        private static double canopyAccentHorizontalVelocity(int blockX,int blockZ,int axis) {
+        // SplitMix64 combines the block column, axis and ten-tick emission epoch.
+        // Each column is stable within one emission window but drifts differently in the next;
+        // no Random, vector, or stream is allocated while emitting the eight-mote budget.
+        private static double canopyAccentHorizontalVelocity(int blockX,int blockZ,int axis,long emissionEpoch) {
             if(axis<0 || axis>1) return Double.NaN;
             long hash=(((long)blockX)<<32) ^ (blockZ&0xffffffffL);
+            hash^=emissionEpoch*0xD1B54A32D192ED03L;
             hash+=axis==0?0x9E3779B97F4A7C15L:0xD1B54A32D192ED03L;
             hash=(hash^(hash>>>30))*0xBF58476D1CE4E5B9L;
             hash=(hash^(hash>>>27))*0x94D049BB133111EBL;
@@ -3271,18 +3274,23 @@ public final class RiftClientState {
             boolean particleVelocityBounded=Double.isFinite(GROUND_CANOPY_ACCENT_VERTICAL_SPEED)
                 && GROUND_CANOPY_ACCENT_VERTICAL_SPEED>=.002D
                 && GROUND_CANOPY_ACCENT_VERTICAL_SPEED<=.004D;
-            double driftX=canopyAccentHorizontalVelocity(516,515,0);
-            double driftZ=canopyAccentHorizontalVelocity(516,515,1);
+            long emissionEpoch=10L;
+            double driftX=canopyAccentHorizontalVelocity(516,515,0,emissionEpoch);
+            double driftZ=canopyAccentHorizontalVelocity(516,515,1,emissionEpoch);
+            double nextDriftX=canopyAccentHorizontalVelocity(516,515,0,emissionEpoch+1L);
+            double nextDriftZ=canopyAccentHorizontalVelocity(516,515,1,emissionEpoch+1L);
             boolean particleDriftProfile=Double.isFinite(GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED)
                 && GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED>=.003D
                 && GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED<=.006D
                 && canopyAccentHorizontalDriftWithinBounds(driftX,driftZ)
-                && driftX==canopyAccentHorizontalVelocity(516,515,0)
-                && driftZ==canopyAccentHorizontalVelocity(516,515,1)
-                && Double.isNaN(canopyAccentHorizontalVelocity(516,515,2))
+                && driftX==canopyAccentHorizontalVelocity(516,515,0,emissionEpoch)
+                && driftZ==canopyAccentHorizontalVelocity(516,515,1,emissionEpoch)
+                && (driftX!=nextDriftX || driftZ!=nextDriftZ)
+                && canopyAccentHorizontalDriftWithinBounds(nextDriftX,nextDriftZ)
+                && Double.isNaN(canopyAccentHorizontalVelocity(516,515,2,emissionEpoch))
                 && canopyAccentHorizontalDriftWithinBounds(
-                    canopyAccentHorizontalVelocity(Integer.MIN_VALUE,Integer.MAX_VALUE,0),
-                    canopyAccentHorizontalVelocity(Integer.MIN_VALUE,Integer.MAX_VALUE,1));
+                    canopyAccentHorizontalVelocity(Integer.MIN_VALUE,Integer.MAX_VALUE,0,Long.MIN_VALUE),
+                    canopyAccentHorizontalVelocity(Integer.MIN_VALUE,Integer.MAX_VALUE,1,Long.MIN_VALUE));
             boolean particleColorTransitionProfile=
                 isCanopyAccentTransitionColorValid(GROUND_CANOPY_ACCENT_START_COLOR)
                 && isCanopyAccentTransitionColorValid(GROUND_CANOPY_ACCENT_END_COLOR)
@@ -3437,8 +3445,8 @@ public final class RiftClientState {
                 GROUND_CANOPY_ACCENT_PARTICLE_SCALE,GROUND_CANOPY_ACCENT_VERTICAL_OFFSET,
                 GROUND_CANOPY_ACCENT_VERTICAL_SPEED);
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DRIFT_PROFILE_VERIFIED deterministic=true horizontalMax={} verticalUnchanged=true bounded=true",
-                GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED);
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DRIFT_PROFILE_VERIFIED deterministic=true temporalVariation=true epochTicks={} horizontalMax={} verticalUnchanged=true bounded=true",
+                GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS,GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_COLOR_TRANSITION_VERIFIED brightVioletToDeepViolet=true cachedOptions=true perParticleUpdate=true budgetUnchanged=true");
             com.mojang.logging.LogUtils.getLogger().info(
