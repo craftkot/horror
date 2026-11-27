@@ -970,8 +970,8 @@ public final class RiftClientState {
         // Taper cliff-side ribbon tips almost to a point without bridging terrain discontinuities.
         private static final double CLIFF_BREAK_TAPER=.06D;
         private static final double GROUND_CAP_TAPER_EPSILON=1.0E-9D;
-        // Keep the halo broad while narrowing the dark core and pulling its violet rails inward.
-        private static final double GROUND_GLOW_WIDTH_SCALE=5.75D;
+        // Broaden the soft violet halo while keeping its maximum half-width below half a block.
+        private static final double GROUND_GLOW_WIDTH_SCALE=6.25D;
         private static final double GROUND_CORE_WIDTH_SCALE=1.5D;
         // The recessed core pinches and widens along the seam; endpoint widths are interpolated per segment.
         private static final double GROUND_MIN_CORE_WIDTH_SCALE=.78D;
@@ -1035,8 +1035,8 @@ public final class RiftClientState {
         private static final int GROUND_EDGE_GREEN_CHANNEL=colorChannel(GROUND_EDGE_GREEN);
         private static final int GROUND_EDGE_BLUE_CHANNEL=colorChannel(GROUND_EDGE_BLUE);
         // Keep the halo readable against grass and stone without another draw call or mesh layer.
-        // Slightly stronger violet halo keeps the ground seam readable against grass and stone.
-        private static final float GROUND_GLOW_ALPHA=.72F;
+        // Keep the broadened violet halo readable against grass and stone without another draw call.
+        private static final float GROUND_GLOW_ALPHA=.74F;
         // GROUND_GLOW_ALPHA is binary32; allow its widened representation's rounding error.
         private static final double GROUND_GLOW_ALPHA_TOLERANCE=1.0E-7D;
         // A restrained violet filament pulses inside the dark core without another trig call.
@@ -1626,7 +1626,8 @@ public final class RiftClientState {
                     -maximumEdgeHalfWidth;
                 double minimumCoreEdgeGap=Math.min(leftCoreEdgeGap,rightCoreEdgeGap);
                 double maximumEdgeOffsetDelta=groundEdgeMaximumOffsetDelta(maximumHalfWidth);
-                if(Math.abs(GROUND_GLOW_WIDTH_SCALE-5.75D)>1.0E-9D
+                if(Math.abs(GROUND_GLOW_WIDTH_SCALE-6.25D)>1.0E-9D
+                    || !Double.isFinite(maximumGlowHalfWidth) || !(maximumGlowHalfWidth<.5D)
                     || Math.abs(GROUND_CORE_WIDTH_SCALE-1.5D)>1.0E-9D
                     || Math.abs(GROUND_EDGE_OFFSET_SCALE-2.6D)>1.0E-9D
                     || Math.abs(GROUND_EDGE_OFFSET_SKEW_SCALE-.12D)>1.0E-9D
@@ -1654,6 +1655,9 @@ public final class RiftClientState {
                     "BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale={} coreScale={} edgeOffsetScale={} edgeHalfWidth={} pulseMin={} pulseMax={} coreInsideEdgeBand=true",
                     GROUND_GLOW_WIDTH_SCALE,GROUND_CORE_WIDTH_SCALE,GROUND_EDGE_OFFSET_SCALE,GROUND_EDGE_HALF_WIDTH,
                     minimumHalfWidth,maximumHalfWidth);
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_GROUND_MESH_GLOW_WIDTH_BOUNDS_VERIFIED min={} max={} halfBlockLimit=0.5 bounded=true",
+                    minimumGlowHalfWidth,maximumGlowHalfWidth);
                 com.mojang.logging.LogUtils.getLogger().info(
                     "BLACK_FREQUENCY_GROUND_MESH_CORE_EDGE_GAP_VERIFIED min={} required={} valid=true",
                     minimumCoreEdgeGap,GROUND_MIN_CORE_EDGE_GAP);
@@ -2490,8 +2494,8 @@ public final class RiftClientState {
             double glowAlphaMinimum=glowPulseMinimum*GROUND_GLOW_ALPHA;
             double glowAlphaMaximum=glowPulseMaximum*GROUND_GLOW_ALPHA;
             if(!Float.isFinite(GROUND_GLOW_ALPHA) || GROUND_GLOW_ALPHA<.70F || GROUND_GLOW_ALPHA>.74F
-                || Math.abs(glowAlphaMinimum-.4032D)>GROUND_GLOW_ALPHA_TOLERANCE
-                || Math.abs(glowAlphaMaximum-.72D)>GROUND_GLOW_ALPHA_TOLERANCE)
+                || Math.abs(glowAlphaMinimum-.4144D)>GROUND_GLOW_ALPHA_TOLERANCE
+                || Math.abs(glowAlphaMaximum-.74D)>GROUND_GLOW_ALPHA_TOLERANCE)
                 throw new IllegalStateException("BLACK FREQUENCY ground glow alpha profile regression");
             double minimum=boundedCorePulse(0.0D);
             double midpoint=boundedCorePulse(.5D);

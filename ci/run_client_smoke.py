@@ -3749,12 +3749,12 @@ def capture_test_world():
             glow_alpha_match=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_GLOW_ALPHA_VERIFIED multiplier=([0-9.]+) fullStrengthPulseMin=([0-9.]+) fullStrengthPulseMax=([0-9.]+) minAlpha=([0-9.]+) maxAlpha=([0-9.]+)",
                 final_log)
-            expected_glow_alpha=(.72,.56,1.0,.4032,.72)
+            expected_glow_alpha=(.74,.56,1.0,.4144,.74)
             if (not glow_alpha_match
                     or any(not math.isclose(float(glow_alpha_match.group(i)),expected_glow_alpha[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-6)
                            for i in range(1,6))
-                    or "GROUND_GLOW_ALPHA=.72F;" not in camera_source
+                    or "GROUND_GLOW_ALPHA=.74F;" not in camera_source
                     or "int glowAlphaChannelA=colorChannel(alphaA*GROUND_GLOW_ALPHA);" not in camera_source
                     or "int glowAlphaChannelB=colorChannel(alphaB*GROUND_GLOW_ALPHA);" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: per-endpoint violet ground halo alpha profile is missing or outside its tested bounds",flush=True)
@@ -4153,7 +4153,17 @@ def capture_test_world():
             visual_profile_match=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_VISUAL_PROFILE_VERIFIED glowScale=([-+0-9.eE]+) coreScale=([-+0-9.eE]+) edgeOffsetScale=([-+0-9.eE]+) edgeHalfWidth=([-+0-9.eE]+) pulseMin=([-+0-9.eE]+) pulseMax=([-+0-9.eE]+) coreInsideEdgeBand=(true|false)",
                 final_log)
-            expected_visual_profile=(5.75,1.5,2.6,.025,.045,.074)
+            expected_visual_profile=(6.25,1.5,2.6,.025,.045,.074)
+            glow_width_bounds=re.search(
+                r"BLACK_FREQUENCY_GROUND_MESH_GLOW_WIDTH_BOUNDS_VERIFIED min=([-+0-9.eE]+) max=([-+0-9.eE]+) halfBlockLimit=0.5 bounded=true",
+                final_log)
+            if (not glow_width_bounds
+                    or not math.isclose(float(glow_width_bounds.group(1)),.28125,rel_tol=0.0,abs_tol=1.0e-9)
+                    or not math.isclose(float(glow_width_bounds.group(2)),.4625,rel_tol=0.0,abs_tol=1.0e-9)
+                    or "maximumGlowHalfWidth<.5D" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: widened ground halo exceeded its half-block footprint or was not verified",
+                      flush=True)
+                return False
             if (not visual_profile_match
                     or any(not math.isclose(float(visual_profile_match.group(i)),expected_visual_profile[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
@@ -4196,7 +4206,7 @@ def capture_test_world():
                 return False
             edge_width_profiles = {
                 "GROUND_EDGE_HALF_WIDTH=.025D;": {
-                    "embedded": (.25875,.4255,.0447525,.0996912972972973,.155733,.1708632,.0151302,.005,.010,.011,.015),
+                    "embedded": (.28125,.4625,.0447525,.0996912972972973,.155733,.1708632,.0151302,.005,.010,.011,.015),
                 },
             }
             edge_width_profile = next(
@@ -4204,7 +4214,7 @@ def capture_test_world():
                  if declaration in camera_source),
                 None,
             )
-            if ("GROUND_GLOW_WIDTH_SCALE=5.75D;" not in camera_source
+            if ("GROUND_GLOW_WIDTH_SCALE=6.25D;" not in camera_source
                     or "GROUND_CORE_WIDTH_SCALE=1.5D;" not in camera_source
                     or "GROUND_EDGE_OFFSET_SCALE=2.6D;" not in camera_source
                     or "GROUND_EDGE_OFFSET_SKEW_SCALE=.12D;" not in camera_source
