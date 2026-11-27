@@ -32,6 +32,18 @@ if DEFERRED_RENDER_DISTANCE<4:
 if DEFERRED_PLAYER_TRAVEL_DISTANCE<=DEFERRED_RESTORE_RADIUS+DEFERRED_SIMULATION_DISTANCE*16+64:
     raise RuntimeError("Deferred probe travel must clear the fracture and simulation-distance halo")
 DEFERRED_SPAWN_ACK_RE=r"Set (?:the )?world spawn(?: point)? to "
+def isolated_chat_command_body(command):
+    # Open command chat with the slash key itself; do not race the chat-screen transition.
+    if not isinstance(command,str) or not command.startswith("/") or len(command)<2:
+        return None
+    return command[1:]
+
+if (isolated_chat_command_body("/setworldspawn 1024 64 1024")!="setworldspawn 1024 64 1024"
+        or isolated_chat_command_body("/tp @s 512 120 512")!="tp @s 512 120 512"
+        or isolated_chat_command_body("setworldspawn 1024 64 1024") is not None
+        or isolated_chat_command_body("/") is not None):
+    raise RuntimeError("BLACK FREQUENCY isolated chat command prefix regression")
+
 DEFERRED_CLIENT_INPUT_READY_MARKER="BLACK_FREQUENCY_TEST CLIENT_INPUT_READY screen=null player=true"
 INITIAL_PLAYER_SPAWN_RE=re.compile(
     r"logged in with entity id \d+ at \(([-+0-9.eE]+),\s*([-+0-9.eE]+),\s*([-+0-9.eE]+)\)")
@@ -117,9 +129,11 @@ def verify_deferred_restore_chunk_bounds_profile():
             or "wait_for_isolated_client_input_ready()" not in isolated_command_body
             or "for attempt in range(2)" not in isolated_command_body
             or "command acknowledgement delayed; retrying" not in isolated_command_body
-            or "time.sleep(0.75)" not in isolated_command_body
-            or 'key("ctrl+a",focus=False)' not in isolated_command_body
-            or '"--delay","12"' not in isolated_command_body):
+            or "isolated_chat_command_body(command)" not in isolated_command_body
+            or 'key("Escape",focus=False)' not in isolated_command_body
+            or 'key("slash",focus=False)' not in isolated_command_body
+            or "time.sleep(1.25)" not in isolated_command_body
+            or '"--delay","25"' not in isolated_command_body):
         raise RuntimeError("BLACK FREQUENCY isolated spawn relocation must wait for client readiness and retry an unacknowledged idempotent command")
     spawn_verified_at=client_source.find('print("WORLD_CAPTURE: player spawn verified in log"')
     client_world_ready_wait=client_source.find('client_world_ready_deadline=time.monotonic()+60.0',spawn_verified_at)
@@ -1360,6 +1374,10 @@ def capture_test_world():
         # This helper is used only in the disposable isolated client world.
         # A player teleport loads chunks through normal player movement; it never
         # calls setChunkForced or any server-side chunk-loading API.
+        command_body=isolated_chat_command_body(command)
+        if command_body is None:
+            print("WORLD_CAPTURE_FAIL: isolated command must start with '/' for",description,flush=True)
+            return False
         if not wait_for_isolated_client_input_ready():
             print("WORLD_CAPTURE_FAIL: client input was not ready for",description,flush=True)
             return False
@@ -1371,18 +1389,21 @@ def capture_test_world():
             log_offset=latest.stat().st_size if latest.exists() else 0
             print("WORLD_CAPTURE_INPUT: Minecraft window focus confirmed for",description,
                   "attempt",attempt+1,flush=True)
-            opened=key("t",focus=False)
-            # GLFW can report input-ready before ChatScreen has accepted keyboard events.
-            # Wait for the screen transition, then clear stale text before typing the slash command.
-            time.sleep(0.75)
-            cleared=key("ctrl+a",focus=False)
-            time.sleep(0.10)
-            typed=subprocess.run(
-                ["xdotool","type","--clearmodifiers","--delay","12",command],
-                check=False)
+            closed=key("Escape",focus=False)
             time.sleep(0.12)
+            # The slash key opens ChatScreen with '/' already entered. Waiting before
+            # typing the body prevents early xdotool characters from being lost during
+            # the screen transition (which previously turned /setworldspawn into chat text).
+            opened=key("slash",focus=False)
+            time.sleep(1.25)
+            print("WORLD_CAPTURE_INPUT: command chat opened with slash key; typing body",
+                  description,flush=True)
+            typed=subprocess.run(
+                ["xdotool","type","--clearmodifiers","--delay","25",command_body],
+                check=False)
+            time.sleep(0.20)
             submitted=key("Return",focus=False)
-            if (opened.returncode!=0 or cleared.returncode!=0
+            if (closed.returncode!=0 or opened.returncode!=0
                     or typed.returncode!=0 or submitted.returncode!=0):
                 print("WORLD_CAPTURE: isolated command input failed; retrying",
                       description,"attempt",attempt+1,flush=True)
