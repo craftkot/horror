@@ -72,6 +72,33 @@ if (not FIRST_BLOCK_REMOVED_RE.fullmatch(
         "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED sampleX=1 sampleZ=2 groundY=64.01 plantX=1 plantZ=1 arm=0 segment=5 nextScan=true loadedOnly=true radius=48")):
     raise RuntimeError("BLACK FREQUENCY canopy fixture log regex regression")
 
+def find_canopy_fixture_sample_for_anchor(log_text,anchor_x,anchor_z):
+    # The renderer can log a sample at the initial spawn before the finale anchor
+    # is established. Select the newest sample whose source and plant columns both
+    # remain inside the active 48-block fracture, never the first stale match.
+    for match in reversed(list(CANOPY_FIXTURE_SAMPLE_RE.finditer(log_text))):
+        sample_x,sample_z=map(int,match.groups()[:2])
+        plant_x,plant_z=map(int,match.groups()[3:5])
+        sample_dx=sample_x-anchor_x
+        sample_dz=sample_z-anchor_z
+        plant_dx=plant_x-anchor_x
+        plant_dz=plant_z-anchor_z
+        if (sample_dx*sample_dx+sample_dz*sample_dz<=48*48
+                and plant_dx*plant_dx+plant_dz*plant_dz<=48*48):
+            return match
+    return None
+
+_fixture_sample_probe_log=(
+    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED "
+    "sampleX=2 sampleZ=0 groundY=66.01 plantX=2 plantZ=-1 arm=0 segment=5 "
+    "nextScan=true loadedOnly=true radius=48\n"
+    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED "
+    "sampleX=514 sampleZ=512 groundY=74.01 plantX=514 plantZ=511 arm=0 segment=5 "
+    "nextScan=true loadedOnly=true radius=48")
+_selected_fixture_sample=find_canopy_fixture_sample_for_anchor(_fixture_sample_probe_log,512,512)
+if _selected_fixture_sample is None or int(_selected_fixture_sample.group(4))!=514:
+    raise RuntimeError("BLACK FREQUENCY canopy fixture anchor selection regression")
+
 def is_valid_deferred_restore_chunk_event(x,z,chunk_x,chunk_z,anchor_x,anchor_z,radius):
     values=(x,z,chunk_x,chunk_z,anchor_x,anchor_z,radius)
     if any(type(value) is not int for value in values):
@@ -2884,7 +2911,12 @@ def capture_test_world():
                     if not canopy_fixture_seeded and marker and safe_pad:
                         anchor_match=FINALE_ANCHOR_RE.search(logs)
                         first_edit=FIRST_BLOCK_REMOVED_RE.search(logs)
-                        fixture_sample_match=CANOPY_FIXTURE_SAMPLE_RE.search(logs)
+                        if anchor_match and first_edit:
+                            anchor_x,anchor_z=map(int,anchor_match.groups())
+                            fixture_sample_match=find_canopy_fixture_sample_for_anchor(
+                                logs,anchor_x,anchor_z)
+                        else:
+                            fixture_sample_match=None
                         if anchor_match and first_edit and fixture_sample_match:
                             anchor_x,anchor_z=map(int,anchor_match.groups())
                             sample_x,sample_z=map(int,fixture_sample_match.groups()[:2])
