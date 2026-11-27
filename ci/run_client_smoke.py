@@ -5606,7 +5606,11 @@ def capture_test_world():
                     or "canopyAccentHorizontalVelocity(x,z,1,emissionEpoch,dimensionSalt)" not in camera_source
                     or "long dimensionSalt=canopyAccentDimensionSalt(level.dimension().location().toString());" not in camera_source
                     or "Math.floorDiv(gameTime,(long)GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS)" not in camera_source
-                    or "velocityX,GROUND_CANOPY_ACCENT_VERTICAL_SPEED,velocityZ" not in camera_source):
+                    or "private static double canopyAccentVerticalSpeed(boolean liftedPlantAccent)" not in camera_source
+                    or "return liftedPlantAccent ? GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED : GROUND_CANOPY_ACCENT_VERTICAL_SPEED;" not in camera_source
+                    or "double verticalSpeed=canopyAccentVerticalSpeed(liftedPlantAccent);" not in camera_source
+                    or "velocityX,verticalSpeed,velocityZ" not in camera_source
+                    or "&& liftedParticleVelocityBounded" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: bounded canopy accent particle profile was not verified",flush=True)
                 return False
             canopy_lifted_particle_marker=(
@@ -5624,9 +5628,19 @@ def capture_test_world():
                     or "&& particleScaleBounded && liftedParticleScaleBounded && particleOffsetBounded" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: lifted bush accents did not use the bounded cached high-visibility option",flush=True)
                 return False
+            canopy_lifted_motion_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_MOTION_PROFILE_VERIFIED "
+                "regularVerticalSpeed=0.003 liftedVerticalSpeed=0.006 adjacentPlantOnly=true bounded=true particleBudgetUnchanged=true"
+            )
+            if (canopy_lifted_motion_marker not in log_after
+                    or "GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED=.006D;" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED>=.005D" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED<=.007D" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: lifted canopy mote motion was not bounded or verified",flush=True)
+                return False
             canopy_drift_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DRIFT_PROFILE_VERIFIED "
-                "deterministic=true temporalVariation=true dimensionScoped=true epochTicks=10 horizontalMax=0.0045 verticalUnchanged=true bounded=true"
+                "deterministic=true temporalVariation=true dimensionScoped=true epochTicks=10 horizontalMax=0.0045 horizontalOnly=true liftedVerticalSeparate=true bounded=true"
             )
             dimension_salt_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DIMENSION_SALT_PROFILE_VERIFIED "

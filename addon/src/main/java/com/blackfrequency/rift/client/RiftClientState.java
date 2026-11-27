@@ -901,6 +901,8 @@ public final class RiftClientState {
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.40D;
         // Keep canopy accents close to the fissure instead of letting them drift above the foliage.
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_SPEED=.003D;
+        // Lifted bush motes rise twice as fast to remain readable above short foliage.
+        private static final double GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED=.006D;
         // A tiny coordinate-stable drift keeps motes moving without random state or per-particle allocations.
         private static final double GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED=.0045D;
         private static final int[] GROUND_CANOPY_ACCENT_X=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
@@ -3228,9 +3230,10 @@ public final class RiftClientState {
                 if(!canopyAccentHorizontalDriftWithinBounds(velocityX,velocityZ)) continue;
                 boolean liftedPlantAccent=GROUND_CANOPY_ACCENT_ADJACENT_PLANT[i]
                     && GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[i]>0;
+                double verticalSpeed=canopyAccentVerticalSpeed(liftedPlantAccent);
                 level.addParticle(liftedPlantAccent ? GROUND_CANOPY_ACCENT_LIFTED_DUST
                     : GROUND_CANOPY_ACCENT_DUST,x+.5D,accentY,z+.5D,
-                    velocityX,GROUND_CANOPY_ACCENT_VERTICAL_SPEED,velocityZ);
+                    velocityX,verticalSpeed,velocityZ);
                 groundCanopyAccentParticlesEmitted++;
                 if(VERIFY_GROUND_MESH_PROFILES && GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[i]>0
                     && GROUND_CANOPY_ACCENT_ADJACENT_PLANT[i]) {
@@ -3258,6 +3261,10 @@ public final class RiftClientState {
             // invalidations can repeat the same 32 distance/segment checks inside one rebuild interval.
             groundCanopyAccentLastAttemptTick=nextCanopyAccentAttemptTick(
                 gameTime,groundCanopyAccentLastAttemptTick,visited);
+        }
+
+        private static double canopyAccentVerticalSpeed(boolean liftedPlantAccent) {
+            return liftedPlantAccent ? GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED : GROUND_CANOPY_ACCENT_VERTICAL_SPEED;
         }
 
         private static double canopyAccentParticleY(int surfaceY,double shapeHeight) {
@@ -3425,6 +3432,14 @@ public final class RiftClientState {
             boolean particleVelocityBounded=Double.isFinite(GROUND_CANOPY_ACCENT_VERTICAL_SPEED)
                 && GROUND_CANOPY_ACCENT_VERTICAL_SPEED>=.002D
                 && GROUND_CANOPY_ACCENT_VERTICAL_SPEED<=.004D;
+            double regularVerticalSpeed=canopyAccentVerticalSpeed(false);
+            double liftedVerticalSpeed=canopyAccentVerticalSpeed(true);
+            boolean liftedParticleVelocityBounded=Double.isFinite(GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED)
+                && GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED>=.005D
+                && GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED<=.007D
+                && regularVerticalSpeed==GROUND_CANOPY_ACCENT_VERTICAL_SPEED
+                && liftedVerticalSpeed==GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED
+                && liftedVerticalSpeed>regularVerticalSpeed;
             long emissionEpoch=10L;
             long firstDimensionSalt=canopyAccentDimensionSalt("minecraft:overworld");
             long secondDimensionSalt=canopyAccentDimensionSalt("minecraft:the_nether");
@@ -3679,7 +3694,8 @@ public final class RiftClientState {
                 && neighborScanBudgetProfile && neighborScanPassProfile && neighborColumnDedupProfile
                 && candidateDedupProfile && heightmapPrefilterProfile
                 && particleScaleBounded && liftedParticleScaleBounded && particleOffsetBounded
-                && particleVelocityBounded && particleDriftProfile && particleColorTransitionProfile
+                && particleVelocityBounded && liftedParticleVelocityBounded
+                && particleDriftProfile && particleColorTransitionProfile
                 && foliageClearanceProfile && canopyAccentHeadroomProfile
                 && plantClearanceProfile && plantCollisionShapePrefilterProfile && vanillaDoublePlantProfile
                 && leafSurfaceScanProfile && heightmapTopNormalizationProfile
@@ -3729,9 +3745,12 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_PROFILE_VERIFIED regularScale={} liftedScale={} adjacentPlantOnly=true samePalette=true cachedOptions=true budgetUnchanged=true",
                 GROUND_CANOPY_ACCENT_PARTICLE_SCALE,GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE);
             com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_MOTION_PROFILE_VERIFIED regularVerticalSpeed={} liftedVerticalSpeed={} adjacentPlantOnly=true bounded=true particleBudgetUnchanged=true",
+                regularVerticalSpeed,liftedVerticalSpeed);
+            com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DIMENSION_SALT_PROFILE_VERIFIED algorithm=fnv1a64 stable=true distinct=true emptyFallback=true");
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DRIFT_PROFILE_VERIFIED deterministic=true temporalVariation=true dimensionScoped=true epochTicks={} horizontalMax={} verticalUnchanged=true bounded=true",
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DRIFT_PROFILE_VERIFIED deterministic=true temporalVariation=true dimensionScoped=true epochTicks={} horizontalMax={} horizontalOnly=true liftedVerticalSeparate=true bounded=true",
                 GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS,GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_COLOR_TRANSITION_VERIFIED brightVioletToDeepViolet=true cachedOptions=true perParticleUpdate=true budgetUnchanged=true");
