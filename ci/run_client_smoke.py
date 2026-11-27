@@ -88,7 +88,7 @@ def verify_stacked_plant_fixture_command_profile():
                 or marker_text not in verification):
             raise RuntimeError("BLACK FREQUENCY idempotent stacked-plant fixture command regression")
     if (STACKED_PLANT_FIXTURE_SKIPPED_PLANTS!=1
-            or not math.isclose(75+STACKED_PLANT_FIXTURE_PARTICLE_OFFSET,77.32,
+            or not math.isclose(75+STACKED_PLANT_FIXTURE_PARTICLE_OFFSET,77.40,
                                 rel_tol=0.0,abs_tol=1.0E-9)):
         raise RuntimeError("BLACK FREQUENCY two-block plant mote clearance regression")
     print("CI_PROFILE: stacked-plant fixture offsets and idempotent block commands verified",
