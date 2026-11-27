@@ -4571,6 +4571,21 @@ public final class RiftClientState {
                 || !SURFACE_Y_BY_COLUMN.isEmpty()) clearGeometryCache();
         }
 
+        private static void resetCanopyAccentFixtureProbeForAnchorChange(
+                int previousAnchorX,int previousAnchorZ,int nextAnchorX,int nextAnchorZ) {
+            // Anchor changes do not necessarily clear the mesh cache: both anchors may
+            // already be in loaded chunks. The fixture probe must nevertheless belong
+            // to the new mesh, or CI can only see a stale sample from the spawn anchor.
+            boolean previousSampleLogged=canopyAccentFixtureSampleLogged;
+            canopyAccentFixtureSampleLogged=false;
+            groundCanopyAccentLiftedLoggedCount=0;
+            if(VERIFY_GROUND_MESH_PROFILES && previousSampleLogged) {
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_ANCHOR_RESET_VERIFIED previousX={} previousZ={} anchorX={} anchorZ={} sampleReset=true liftedCounterReset=true",
+                    previousAnchorX,previousAnchorZ,nextAnchorX,nextAnchorZ);
+            }
+        }
+
         private static void resetCacheProfileFlags() {
             continuityBuildLogged=false;
             continuityProfileLogged=false;
@@ -4780,6 +4795,10 @@ public final class RiftClientState {
             unavailableAnchorChunkLogged=false;
             long tick=level.getGameTime();
             boolean anchorChanged=level!=cachedLevel || worldAnchorX!=cachedAnchorX || worldAnchorZ!=cachedAnchorZ;
+            if(anchorChanged) {
+                resetCanopyAccentFixtureProbeForAnchorChange(
+                    cachedAnchorX,cachedAnchorZ,worldAnchorX,worldAnchorZ);
+            }
             double cachedVerticalDelta=camera.y-cachedAnchorSurfaceY;
             if(shouldCullCachedGroundMeshBeforeRebuild(anchorChanged,!cachedSegments.isEmpty(),
                     cameraHorizontalDistanceSquared,cachedVerticalDelta)) {

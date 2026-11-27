@@ -126,6 +126,10 @@ CANOPY_FIXTURE_SAMPLE_RE=re.compile(
     r"sampleX=(-?\d+) sampleZ=(-?\d+) groundY=([-+0-9.eE]+) "
     r"plantX=(-?\d+) plantZ=(-?\d+) arm=(\d+) segment=(\d+) "
     r"anchorX=(-?\d+) anchorZ=(-?\d+) nextScan=true loadedOnly=true radius=48")
+CANOPY_FIXTURE_ANCHOR_RESET_RE=re.compile(
+    r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_ANCHOR_RESET_VERIFIED "
+    r"previousX=(-?\\d+) previousZ=(-?\\d+) anchorX=(-?\\d+) anchorZ=(-?\\d+) "
+    r"sampleReset=true liftedCounterReset=true")
 if (not FIRST_BLOCK_REMOVED_RE.fullmatch(
         "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x=1 y=2 z=3 surfaceY=4 scanOrder=surface-first-center-out")
         or not CANOPY_FIXTURE_SAMPLE_RE.fullmatch(
@@ -167,6 +171,22 @@ _stale_only_probe=(
     "anchorX=500 anchorZ=512 nextScan=true loadedOnly=true radius=48")
 if find_canopy_fixture_sample_for_anchor(_stale_only_probe,512,512) is not None:
     raise RuntimeError("BLACK FREQUENCY stale canopy fixture anchor regression")
+_anchor_change_probe_log=(
+    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED "
+    "sampleX=2 sampleZ=0 groundY=66.01 plantX=2 plantZ=-1 arm=0 segment=5 "
+    "anchorX=0 anchorZ=0 nextScan=true loadedOnly=true radius=48\\n"
+    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_ANCHOR_RESET_VERIFIED "
+    "previousX=0 previousZ=0 anchorX=4 anchorZ=-12 sampleReset=true liftedCounterReset=true\\n"
+    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED "
+    "sampleX=4 sampleZ=-12 groundY=64.01 plantX=5 plantZ=-12 arm=0 segment=5 "
+    "anchorX=4 anchorZ=-12 nextScan=true loadedOnly=true radius=48")
+_anchor_change_sample=find_canopy_fixture_sample_for_anchor(_anchor_change_probe_log,4,-12)
+_anchor_change_reset=next((m for m in CANOPY_FIXTURE_ANCHOR_RESET_RE.finditer(_anchor_change_probe_log)
+    if tuple(map(int,m.groups()))==(0,0,4,-12)),None)
+if (_anchor_change_sample is None
+        or tuple(map(int,_anchor_change_sample.groups()[7:9]))!=(4,-12)
+        or _anchor_change_reset is None):
+    raise RuntimeError("BLACK FREQUENCY same-session canopy fixture anchor reset regression")
 def is_valid_deferred_restore_chunk_event(x,z,chunk_x,chunk_z,anchor_x,anchor_z,radius):
     values=(x,z,chunk_x,chunk_z,anchor_x,anchor_z,radius)
     if any(type(value) is not int for value in values):
@@ -744,6 +764,20 @@ def verify_restoration_particle_source():
     neighbor_scan_start=client_source.find("private static void scanCanopyAccentNeighborSamples(")
     neighbor_scan_end=client_source.find("\n        private static double sampleGroundY",neighbor_scan_start+1)
     neighbor_scan_body=client_source[neighbor_scan_start:neighbor_scan_end] if neighbor_scan_start>=0 and neighbor_scan_end>neighbor_scan_start else ""
+    fixture_anchor_reset_start=client_source.find("private static void resetCanopyAccentFixtureProbeForAnchorChange(")
+    fixture_anchor_reset_end=client_source.find("\\n        private static",fixture_anchor_reset_start+1)
+    fixture_anchor_reset_body=(client_source[fixture_anchor_reset_start:fixture_anchor_reset_end]
+        if fixture_anchor_reset_start>=0 and fixture_anchor_reset_end>fixture_anchor_reset_start else "")
+    fixture_anchor_reset_call=(
+        "if(anchorChanged) {\\n                resetCanopyAccentFixtureProbeForAnchorChange("
+        "cachedAnchorX,cachedAnchorZ,worldAnchorX,worldAnchorZ);"
+    )
+    if (not fixture_anchor_reset_body
+            or "canopyAccentFixtureSampleLogged=false;" not in fixture_anchor_reset_body
+            or "groundCanopyAccentLiftedLoggedCount=0;" not in fixture_anchor_reset_body
+            or "GROUND_CANOPY_ACCENT_FIXTURE_ANCHOR_RESET_VERIFIED" not in fixture_anchor_reset_body
+            or fixture_anchor_reset_call not in client_source):
+        raise RuntimeError("BLACK FREQUENCY canopy fixture probe must reset when the active mesh anchor changes")
     fixture_queue_call=neighbor_scan_body.find("boolean queued=queueAdjacentExposedLeafCanopyAccent")
     fixture_retry_branch=neighbor_scan_body.find("if(!queued) {",fixture_queue_call)
     fixture_marker=neighbor_scan_body.find("GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED",fixture_queue_call)
@@ -3000,6 +3034,25 @@ def capture_test_world():
                             anchor_x,anchor_z=map(int,anchor_match.groups())
                             fixture_sample_match=find_canopy_fixture_sample_for_anchor(
                                 logs,anchor_x,anchor_z)
+                            stale_fixture_samples=[
+                                match for match in CANOPY_FIXTURE_SAMPLE_RE.finditer(logs)
+                                if tuple(map(int,match.groups()[7:9]))!=(anchor_x,anchor_z)
+                            ]
+                            if stale_fixture_samples:
+                                previous_anchor=tuple(map(int,stale_fixture_samples[-1].groups()[7:9]))
+                                expected_reset=(*previous_anchor,anchor_x,anchor_z)
+                                reset_confirmed=any(
+                                    tuple(map(int,match.groups()))==expected_reset
+                                    for match in CANOPY_FIXTURE_ANCHOR_RESET_RE.finditer(logs)
+                                )
+                                if not reset_confirmed or fixture_sample_match is None:
+                                    terrain_capture_failed=True
+                                    print(
+                                        "WORLD_CAPTURE_FAIL: active mesh anchor changed without a fresh canopy fixture sample",
+                                        {"previousAnchor":previous_anchor,"activeAnchor":(anchor_x,anchor_z),
+                                         "freshSample":fixture_sample_match is not None,
+                                         "resetConfirmed":reset_confirmed},flush=True)
+                                    return
                         else:
                             fixture_sample_match=None
                         if anchor_match and first_edit and fixture_sample_match:
