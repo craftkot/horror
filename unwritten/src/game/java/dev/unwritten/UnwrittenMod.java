@@ -41,6 +41,7 @@ public final class UnwrittenMod {
     private final LocalAnomalies anomalies = new LocalAnomalies();
     private final OreEncounter ores = new OreEncounter();
     private final ChaseEncounter chases = new ChaseEncounter();
+    private final MimicEncounter mimics = new MimicEncounter();
     private static final TagKey<Block> ORES=TagKey.create(Registries.BLOCK,Identifier.fromNamespaceAndPath("c","ores"));
     public UnwrittenMod() {
         NeoForge.EVENT_BUS.addListener(this::tick);
@@ -54,10 +55,12 @@ public final class UnwrittenMod {
         NeoForge.EVENT_BUS.addListener(chases::onJoin);
         NeoForge.EVENT_BUS.addListener(chases::onTarget);
         NeoForge.EVENT_BUS.addListener(chases::onDrops);
+        NeoForge.EVENT_BUS.addListener(mimics::onJoin);
+        NeoForge.EVENT_BUS.addListener(mimics::onDrops);
         NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST,this::oreBreak);
     }
-    private void stop(ServerStoppedEvent event) { sessions.clear(); apparitions.clear(); anomalies.clear(); ores.clear(); chases.clear(); ticks=0; stateDirectory=null; }
-    private void stopping(ServerStoppingEvent event) { sessions.forEach(this::save); anomalies.restoreAll(); ores.restoreAll(); chases.clear(); }
+    private void stop(ServerStoppedEvent event) { sessions.clear(); apparitions.clear(); anomalies.clear(); ores.clear(); chases.clear(); mimics.clear(); ticks=0; stateDirectory=null; }
+    private void stopping(ServerStoppingEvent event) { sessions.forEach(this::save); anomalies.restoreAll(); ores.restoreAll(); mimics.clear(); chases.clear(); }
     private void save(UUID id, PlayerStateStore.State state) {
         if(stateDirectory==null)return;
         try { PlayerStateStore.save(stateDirectory,id,state); }
@@ -82,7 +85,7 @@ public final class UnwrittenMod {
         if(!eligible(p)||event.getProblem()!=null)return;
         var s=session(p);var pos=event.getPos();
         s.history().rememberBed(new PlayerHistory.Bed(p.level().dimension().identifier().toString(),pos.getX(),pos.getY(),pos.getZ()));
-        switch(s.director().sleep(apparitions.hasWatcher(p)||chases.hasChase(p))){
+        switch(s.director().sleep(apparitions.hasWatcher(p)||chases.hasChase(p)||mimics.active(p))){
             case GUILT -> {event.setProblem(Player.BedSleepingProblem.OTHER_PROBLEM);p.sendSystemMessage(Component.translatable("event.unwritten.sleep.guilt"));}
             case WATCHED -> {event.setProblem(Player.BedSleepingProblem.OTHER_PROBLEM);p.sendSystemMessage(Component.translatable("event.unwritten.sleep.watched"));}
             case CALL -> p.sendSystemMessage(Component.translatable("event.unwritten.sleep.call"));
@@ -97,7 +100,7 @@ public final class UnwrittenMod {
     }
     private void oreBreak(BreakBlockEvent event){
         if(event.isCanceled()||!(event.getPlayer() instanceof ServerPlayer p)||!eligible(p)||!p.isAlive())return;
-        if(!event.getState().is(ORES))return;
+        if(!event.getState().is(ORES)||chases.hasChase(p)||mimics.active(p))return;
         if(OrePolicy.triggers(session(p).director().nullPresent(),true,p.getRandom().nextDouble()))
             ores.queue(p,event.getPos(),event.getState());
     }
@@ -105,6 +108,7 @@ public final class UnwrittenMod {
         ++ticks;
         if(stateDirectory==null)stateDirectory=event.getServer().getWorldPath(LevelResource.ROOT).resolve("unwritten");
         chases.tick(event.getServer().getPlayerList().getPlayers());
+        mimics.tick(event.getServer().getPlayerList().getPlayers(),chases);
         apparitions.tick(event.getServer().getPlayerList().getPlayers(),chases);
         anomalies.tick(event.getServer().getPlayerList().getPlayers());
         ores.tick(event.getServer().getPlayerList().getPlayers(),apparitions);
@@ -123,7 +127,7 @@ public final class UnwrittenMod {
             boolean alone = players.stream().noneMatch(other -> other != p && other.level() == level && other.distanceToSqr(p) < 1024);
             boolean safe = !dark && session.history().dwell() > 20;
             var obs = new HorrorDirector.Observation(dark,alone,underground,safe,0);
-            session.director().tick(obs).ifPresent(decision -> { if(!chases.hasChase(p))play(p, decision); });
+            session.director().tick(obs,!chases.hasChase(p)&&!mimics.active(p)).ifPresent(decision -> play(p, decision));
         }
         var it=sessions.entrySet().iterator();
         while(it.hasNext()){
@@ -148,6 +152,7 @@ public final class UnwrittenMod {
             case BREATH -> Apparitions.soundBehind(p,SoundEvents.PLAYER_BREATH,1.0f,0.5f);
             case DOOR -> ReferenceEvents.toggleDoor(p);
             case TEXT -> p.sendSystemMessage(Component.translatable("event.unwritten.presence"));
+            case MIMIC -> { if(!apparitions.hasWatcher(p))mimics.start(p); }
             case NULL_NEAR -> {
                 var effect=BuiltInRegistries.MOB_EFFECT.getOrThrow(ResourceKey.create(Registries.MOB_EFFECT,Identifier.withDefaultNamespace("blindness")));
                 if(!p.hasEffect(effect))p.addEffect(new MobEffectInstance(effect,120,0,false,false));

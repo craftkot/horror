@@ -3,7 +3,7 @@ import java.util.*;
 import java.io.*;
 /** Server-side policy; game adapter supplies observations once per second. */
 public final class HorrorDirector {
- public enum Event { FOOTSTEPS, DISTANT_SILHOUETTE, ECHO, FALSE_PRESENCE, LOCAL_ANOMALY, BREATH, DOOR, TEXT, NULL_NEAR, NULL_WHISPER }
+ public enum Event { FOOTSTEPS, DISTANT_SILHOUETTE, ECHO, FALSE_PRESENCE, LOCAL_ANOMALY, BREATH, DOOR, TEXT, NULL_NEAR, NULL_WHISPER, MIMIC }
  public record Observation(boolean dark, boolean alone, boolean underground, boolean safe, int moralDelta) {}
  public record Decision(Event event, int stage) {}
  private final Random random;
@@ -15,14 +15,15 @@ public final class HorrorDirector {
  private int mineCooldown;
  public enum Sleep { ALLOW, GUILT, WATCHED, CALL }
  public HorrorDirector(long seed){random=new Random(seed);}
- public Optional<Decision> tick(Observation o){
+ public Optional<Decision> tick(Observation o){return tick(o,true);}
+ public Optional<Decision> tick(Observation o,boolean allowEvents){
   karma=Math.clamp(karma+Math.clamp(o.moralDelta(),-10,10),-100,100);
   pressure=Math.clamp(pressure+(o.dark()?2:0)+(o.alone()?1:0)+(o.underground()?1:0)-(o.safe()?4:0),0,1000);
   if(cooldown>0) cooldown--;
   if(sleepCooldown>0)sleepCooldown--;
   if(mineCooldown>0)mineCooldown--;
   if(quiet>0){quiet--;return Optional.empty();}
-  if(o.safe()||cooldown>0||pressure<60)return Optional.empty();
+  if(!allowEvents||o.safe()||cooldown>0||pressure<60)return Optional.empty();
   int stage=Math.min(5,1+pressure/200);
   if(random.nextDouble()>0.008*stage*(1.0-karma/250.0))return Optional.empty();
   var choices=new ArrayList<>(List.of(Event.FOOTSTEPS,Event.ECHO,Event.BREATH,Event.DOOR));
@@ -30,6 +31,7 @@ public final class HorrorDirector {
   if(stage>=3){choices.add(Event.FALSE_PRESENCE);choices.add(Event.TEXT);}
   if(stage>=4){choices.add(Event.LOCAL_ANOMALY);choices.add(Event.NULL_NEAR);}
   if(nullPresent)choices.add(Event.NULL_WHISPER);
+  if(nullPresent&&stage>=4)choices.add(Event.MIMIC);
   if(choices.size()>1)choices.remove(last);
   last=choices.get(random.nextInt(choices.size()));
   if(last==Event.NULL_NEAR)nullPresent=true;
