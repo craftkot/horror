@@ -48,6 +48,7 @@ public final class UnwrittenMod {
     private static final TagKey<Block> ORES=TagKey.create(Registries.BLOCK,Identifier.fromNamespaceAndPath("c","ores"));
     public UnwrittenMod(net.neoforged.bus.api.IEventBus modBus) {
         modBus.addListener(SocialPayload::register);
+        modBus.addListener(TabPayload::register);
         NeoForge.EVENT_BUS.addListener(this::tick);
         NeoForge.EVENT_BUS.addListener(this::stop);
         NeoForge.EVENT_BUS.addListener(this::stopping);
@@ -116,7 +117,7 @@ public final class UnwrittenMod {
         mimics.tick(event.getServer().getPlayerList().getPlayers(),chases);
         narrative.tick(event.getServer().getPlayerList().getPlayers(),apparitions,chases,mimics);
         timeAnomalies.tick(event.getServer().getPlayerList().getPlayers());
-        social.tick(event.getServer().getPlayerList().getPlayers());
+        social.tick(event.getServer().getPlayerList().getPlayers(),mimics,chases,apparitions);
         apparitions.tick(event.getServer().getPlayerList().getPlayers(),chases);
         anomalies.tick(event.getServer().getPlayerList().getPlayers());
         ores.tick(event.getServer().getPlayerList().getPlayers(),apparitions);
@@ -135,7 +136,7 @@ public final class UnwrittenMod {
             boolean alone = players.stream().noneMatch(other -> other != p && other.level() == level && other.distanceToSqr(p) < 1024);
             boolean safe = !dark && session.history().dwell() > 20;
             var obs = new HorrorDirector.Observation(dark,alone,underground,safe,0);
-            session.director().tick(obs,!chases.hasChase(p)&&!mimics.active(p)&&!narrative.busy(p)).ifPresent(decision -> play(p, decision));
+            session.director().tick(obs,!chases.hasChase(p)&&!mimics.active(p)&&!narrative.busy(p)&&!social.busy(p)).ifPresent(decision -> play(p, decision));
         }
         var it=sessions.entrySet().iterator();
         while(it.hasNext()){
@@ -161,6 +162,7 @@ public final class UnwrittenMod {
             case DOOR -> ReferenceEvents.toggleDoor(p);
             case TEXT -> p.sendSystemMessage(Component.translatable("event.unwritten.presence"));
             case FALSE_JOIN -> social.join(p,p.level().getServer().getPlayerList().getPlayers());
+            case FALSE_LEAVE -> social.hideReal(p,p.level().getServer().getPlayerList().getPlayers());
             case FALSE_KICK -> { if(!apparitions.hasWatcher(p)&&!social.busy(p))net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(p,SocialPayload.INSTANCE); }
             case FREEZE_SKY -> timeAnomalies.start(p,true);
             case FALSE_TIME -> timeAnomalies.start(p,false);

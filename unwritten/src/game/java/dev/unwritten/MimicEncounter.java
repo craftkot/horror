@@ -26,7 +26,8 @@ final class MimicEncounter {
   var pos=BlockPos.containing(v);var level=p.level();
   return level.hasChunkAt(pos.getX(),pos.getZ())&&level.getBlockState(pos).isAir()&&level.getBlockState(pos.above()).isAir();
  }
- boolean start(ServerPlayer p){
+ boolean start(ServerPlayer p){return start(p,null);}
+ boolean start(ServerPlayer p,String alias){
   if(active(p)||!p.isAlive()||p.isCreative()||p.isSpectator())return false;
   var level=p.level();
   var type=BuiltInRegistries.ENTITY_TYPE.getValue(Identifier.withDefaultNamespace("husk"));
@@ -38,6 +39,7 @@ final class MimicEncounter {
    if(!level.noCollision(body))continue;
    body.setNoAi(true);body.setNoGravity(true);body.setSilent(true);body.setCanPickUpLoot(false);
    body.getPersistentData().putBoolean(MARK,true);
+   if(alias!=null)body.setCustomName(net.minecraft.network.chat.Component.literal(alias));
    rotate(body,p);
    owned.add(body.getUUID());
    if(!level.addFreshEntity(body)){owned.remove(body.getUUID());return false;}

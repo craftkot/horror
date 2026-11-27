@@ -27,7 +27,14 @@ final class SocialAnomalies {
    active.put(viewer.getUUID(),new Ghost(viewer,id,name,0));
   });
  }
- void tick(List<ServerPlayer> online){
+ void hideReal(ServerPlayer viewer,List<ServerPlayer> online){
+  if(busy(viewer))return;
+  var candidates=online.stream().filter(p->SocialPolicy.canHide(p==viewer,p.level()==viewer.level(),p.distanceToSqr(viewer))&&!p.isSpectator()).toList();
+  if(candidates.isEmpty())return;
+  var target=candidates.get(rng.nextInt(candidates.size()));
+  net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(viewer,new TabPayload(target.getUUID()));
+ }
+ void tick(List<ServerPlayer> online,MimicEncounter mimics,ChaseEncounter chases,Apparitions apparitions){
   var it=active.entrySet().iterator();
   while(it.hasNext()){
    var e=it.next();var ghost=e.getValue();var p=ghost.viewer();
@@ -35,7 +42,10 @@ final class SocialAnomalies {
    boolean conflict=online.stream().anyMatch(real->real.getGameProfile().name().equalsIgnoreCase(ghost.name()));
    if(!p.isAlive()||p.isCreative()||p.isSpectator()||conflict||SocialPolicy.expired(ghost.age()+1)){
     remove(ghost,!conflict&&p.isAlive()&&!p.isCreative()&&!p.isSpectator());it.remove();
-   }else e.setValue(new Ghost(p,ghost.id(),ghost.name(),ghost.age()+1));
+   }else {
+    if(SocialPolicy.shouldReveal(ghost.age())&&!mimics.active(p)&&!chases.hasChase(p)&&!apparitions.hasWatcher(p))mimics.start(p,ghost.name());
+    e.setValue(new Ghost(p,ghost.id(),ghost.name(),ghost.age()+1));
+   }
   }
  }
  private void remove(Ghost g,boolean announce){
