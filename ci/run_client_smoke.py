@@ -40,7 +40,7 @@ def isolated_chat_command_body(command):
 
 # The lower half is the sampled surface; only the upper half contributes to skippedPlants.
 STACKED_PLANT_FIXTURE_SKIPPED_PLANTS=1
-STACKED_PLANT_FIXTURE_PARTICLE_OFFSET=2.32
+STACKED_PLANT_FIXTURE_PARTICLE_OFFSET=2.40
 STACKED_PLANT_FIXTURE_STATES = {
     "support": ("minecraft:grass_block", "BF_CANOPY_SUPPORT_VERIFIED"),
     "lower": ("minecraft:tall_grass[half=lower]", "BF_CANOPY_LOWER_VERIFIED"),
@@ -93,7 +93,7 @@ def verify_stacked_plant_fixture_command_profile():
         raise RuntimeError("BLACK FREQUENCY two-block plant mote clearance regression")
     print("CI_PROFILE: stacked-plant fixture offsets and idempotent block commands verified",
           "supportY=74","lowerY=75","upperY=76","headroomY=77",
-          "skippedPlants=1","particleOffset=2.32",
+          "skippedPlants=1","particleOffset=2.40",
           "alreadyCorrectNoOp=true","buildBounds=true",flush=True)
 
 verify_stacked_plant_fixture_command_profile()
@@ -660,7 +660,7 @@ def verify_restoration_particle_source():
     heightmap_prefilter_at=leaf_accent_body.find("canopyAccentHeightmapMayContainValidLeafAccent(groundY,topY)")
     leaf_state_at=leaf_accent_body.find("BlockState leaf=level.getBlockState(cursor);")
     if ("GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=24.0D;" not in client_source
-            or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.32D;" not in client_source
+            or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.40D;" not in client_source
             or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET>=.28D" not in client_source
             or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET<=.36D" not in client_source
             or heightmap_prefilter_at<0 or leaf_state_at<0 or heightmap_prefilter_at>leaf_state_at
@@ -3163,7 +3163,7 @@ def capture_test_world():
                             lifted_y=float(lifted_match.group(2))
                             skipped=int(lifted_match.group(4))
                             # The lower half is the sampled surface; only the upper half is skipped.
-                            # The mote occupies the first clear cell above it, with the 0.32 particle offset.
+                            # The mote occupies the first clear cell above it, with the 0.40 particle offset.
                             expected_particle_y=canopy_fixture_position[1]+STACKED_PLANT_FIXTURE_PARTICLE_OFFSET
                             if (fixture_from_log!=canopy_fixture_position
                                     or skipped!=STACKED_PLANT_FIXTURE_SKIPPED_PLANTS
@@ -5559,14 +5559,14 @@ def capture_test_world():
                 return False
             canopy_particle_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED "
-                "scale=1.65 verticalOffset=0.32 verticalSpeed=0.003 "
+                "scale=1.75 verticalOffset=0.40 verticalSpeed=0.003 "
                 "scaleBounded=true heightBounded=true speedBounded=true"
             )
             if (canopy_particle_marker not in log_after
-                    or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE=1.65F;" not in camera_source
-                    or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE>=1.55F" not in camera_source
-                    or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=1.70F" not in camera_source
-                    or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.32D;" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE=1.75F;" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE>=1.65F" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=1.80F" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.40D;" not in camera_source
                     or "GROUND_CANOPY_ACCENT_VERTICAL_SPEED=.003D;" not in camera_source
                     or "GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED=.0045D;" not in camera_source
                     or "canopyAccentHorizontalVelocity(x,z,0,emissionEpoch,dimensionSalt)" not in camera_source
@@ -5607,7 +5607,7 @@ def capture_test_world():
                 return False
             canopy_clearance_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FOLIAGE_CLEARANCE_VERIFIED "
-                "offset=0.32 particleScale=1.65 baseRibbonUnchanged=true bounded=true"
+                "offset=0.40 particleScale=1.75 baseRibbonUnchanged=true bounded=true"
             )
             if canopy_clearance_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: canopy accent clearance above short foliage was not verified",flush=True)

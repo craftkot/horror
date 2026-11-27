@@ -895,8 +895,8 @@ public final class RiftClientState {
         // A mote may rise above at most two non-colliding bush plants, never through leaves or solids.
         private static final int GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS=2;
         // Lift canopy motes clear of the leaf billboard edge; the eight-particle emission budget stays unchanged.
-        private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=1.65F;
-        private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.32D;
+        private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=1.75F;
+        private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.40D;
         // Keep canopy accents close to the fissure instead of letting them drift above the foliage.
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_SPEED=.003D;
         // A tiny coordinate-stable drift keeps motes moving without random state or per-particle allocations.
@@ -3247,8 +3247,8 @@ public final class RiftClientState {
                 !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,64)
                 && canopyAccentHeightmapMayContainValidLeafAccent(64.1D,68)
                 && canopyAccentHeightmapMayContainValidLeafAccent(64.26D,81)
-                && canopyAccentHeightmapMayContainValidLeafAccent(64.32D,89)
-                && !canopyAccentHeightmapMayContainValidLeafAccent(64.319999D,89)
+                && canopyAccentHeightmapMayContainValidLeafAccent(64.4D,89)
+                && !canopyAccentHeightmapMayContainValidLeafAccent(64.399999D,89)
                 && !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,89)
                 && !canopyAccentHeightmapMayContainValidLeafAccent(Double.NaN,68)
                 && !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,Integer.MIN_VALUE)
@@ -3321,11 +3321,11 @@ public final class RiftClientState {
             double invalidHeight=canopyAccentParticleY(70,Double.NaN);
             double excessiveHeight=canopyAccentParticleY(70,2.0D);
             boolean particleScaleBounded=Float.isFinite(GROUND_CANOPY_ACCENT_PARTICLE_SCALE)
-                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE>=1.55F
-                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=1.70F;
+                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE>=1.65F
+                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=1.80F;
             boolean particleOffsetBounded=Double.isFinite(GROUND_CANOPY_ACCENT_VERTICAL_OFFSET)
-                && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET>=.28D
-                && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET<=.36D;
+                && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET>=.36D
+                && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET<=.44D;
             boolean particleVelocityBounded=Double.isFinite(GROUND_CANOPY_ACCENT_VERTICAL_SPEED)
                 && GROUND_CANOPY_ACCENT_VERTICAL_SPEED>=.002D
                 && GROUND_CANOPY_ACCENT_VERTICAL_SPEED<=.004D;
@@ -3384,21 +3384,21 @@ public final class RiftClientState {
                     net.minecraft.world.phys.shapes.Shapes.empty())
                 && !isCanopyAccentSkippablePlant(net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState(),
                     net.minecraft.world.phys.shapes.Shapes.block())
-                && Math.abs(canopyAccentLiftedParticleY(70,0)-70.32D)<1.0E-9D
-                && Math.abs(canopyAccentLiftedParticleY(70,1)-71.32D)<1.0E-9D
-                && Math.abs(canopyAccentLiftedParticleY(70,2)-72.32D)<1.0E-9D
+                && Math.abs(canopyAccentLiftedParticleY(70,0)-70.40D)<1.0E-9D
+                && Math.abs(canopyAccentLiftedParticleY(70,1)-71.40D)<1.0E-9D
+                && Math.abs(canopyAccentLiftedParticleY(70,2)-72.40D)<1.0E-9D
                 && Double.isNaN(canopyAccentLiftedParticleY(70,-1))
                 && Double.isNaN(canopyAccentLiftedParticleY(70,3))
                 && Double.isNaN(canopyAccentLiftedParticleY(Integer.MAX_VALUE,2))
-                && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,0)-71.12D)<1.0E-9D
-                && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,1)-72.32D)<1.0E-9D
-                && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,2)-73.32D)<1.0E-9D
+                && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,0)-71.20D)<1.0E-9D
+                && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,1)-72.40D)<1.0E-9D
+                && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,2)-73.40D)<1.0E-9D
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,.8D,-1))
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,.8D,3))
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,Double.NaN,0))
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,0.0D,0))
-                && Math.abs(canopyAccentPlantSurfaceParticleY(70,0.0D,1)-72.32D)<1.0E-9D
-                && Math.abs(canopyAccentPlantSurfaceParticleY(70,Double.NaN,2)-73.32D)<1.0E-9D
+                && Math.abs(canopyAccentPlantSurfaceParticleY(70,0.0D,1)-72.40D)<1.0E-9D
+                && Math.abs(canopyAccentPlantSurfaceParticleY(70,Double.NaN,2)-73.40D)<1.0E-9D
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(Integer.MAX_VALUE,.8D,1));
             boolean plantCollisionShapePrefilterProfile=
                 isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState())
@@ -3501,9 +3501,9 @@ public final class RiftClientState {
                 && foliageClearanceProfile && canopyAccentHeadroomProfile
                 && plantClearanceProfile && plantCollisionShapePrefilterProfile && vanillaDoublePlantProfile
                 && leafSurfaceScanProfile && heightmapTopNormalizationProfile
-                && Math.abs(plantTop-71.12D)<1.0E-9D
-                && Math.abs(invalidHeight-70.32D)<1.0E-9D
-                && Math.abs(excessiveHeight-71.32D)<1.0E-9D
+                && Math.abs(plantTop-71.20D)<1.0E-9D
+                && Math.abs(invalidHeight-70.40D)<1.0E-9D
+                && Math.abs(excessiveHeight-71.40D)<1.0E-9D
                 && broadPhaseNear && broadPhaseFar && broadPhaseCorner && exactCornerRejected
                 && invalidBoundsRejected && nearSegment && farSegment && heightMismatch && invalidRejected
                 && emptyMeshRejected && meshAccepted
