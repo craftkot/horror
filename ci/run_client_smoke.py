@@ -185,8 +185,8 @@ def verify_deferred_restore_chunk_bounds_profile():
             or "isolated_chat_command_body(command)" not in isolated_command_body
             or 'key("Escape",focus=False)' not in isolated_command_body
             or 'key("slash",focus=False)' not in isolated_command_body
-            or "time.sleep(1.25)" not in isolated_command_body
-            or '"--delay","25"' not in isolated_command_body):
+            or "time.sleep(1.75)" not in isolated_command_body
+            or '"--delay","35"' not in isolated_command_body):
         raise RuntimeError("BLACK FREQUENCY isolated spawn relocation must wait for client readiness and retry an unacknowledged idempotent command")
     spawn_verified_at=client_source.find('print("WORLD_CAPTURE: player spawn verified in log"')
     client_world_ready_wait=client_source.find('client_world_ready_deadline=time.monotonic()+60.0',spawn_verified_at)
@@ -1530,11 +1530,11 @@ def capture_test_world():
             opened=key("slash",focus=False)
             if opened.returncode==0:
                 isolated_chat_open=True
-            time.sleep(1.25)
+            time.sleep(1.75)
             print("WORLD_CAPTURE_INPUT: command chat opened with slash key; typing body",
                   description,flush=True)
             typed=subprocess.run(
-                ["xdotool","type","--clearmodifiers","--delay","25",command_body],
+                ["xdotool","type","--clearmodifiers","--delay","35",command_body],
                 check=False)
             time.sleep(0.20)
             submitted=key("Return",focus=False)
@@ -2963,33 +2963,21 @@ def capture_test_world():
                                 return
                             fixture_mutations=(
                                 (f"/setblock {fixture_x} {fixture_y-1} {fixture_z} minecraft:grass_block",
+                                 f"BF_CANOPY_SUPPORT_VERIFIED x={fixture_x} y={fixture_y-1} z={fixture_z}",
                                  "prepare sampled adjacent-plant support"),
                                 (f"/setblock {fixture_x} {fixture_y} {fixture_z} minecraft:tall_grass[half=lower]",
+                                 f"BF_CANOPY_LOWER_VERIFIED x={fixture_x} y={fixture_y} z={fixture_z}",
                                  "place sampled lower tall-grass half"),
                                 (f"/setblock {fixture_x} {fixture_y+1} {fixture_z} minecraft:tall_grass[half=upper]",
+                                 f"BF_CANOPY_UPPER_VERIFIED x={fixture_x} y={fixture_y+1} z={fixture_z}",
                                  "place sampled upper tall-grass half"),
                                 (f"/setblock {fixture_x} {fixture_y+2} {fixture_z} minecraft:air",
+                                 f"BF_CANOPY_HEADROOM_VERIFIED x={fixture_x} y={fixture_y+2} z={fixture_z}",
                                  "clear sampled stacked-plant headroom"),
                             )
-                            for command,description in fixture_mutations:
-                                if not send_isolated_chat_command(command,None,description):
-                                    terrain_capture_failed=True
-                                    return
-                            fixture_checks=(
-                                (f"/execute if block {fixture_x} {fixture_y-1} {fixture_z} minecraft:grass_block run say BF_CANOPY_SUPPORT_VERIFIED x={fixture_x} y={fixture_y-1} z={fixture_z}",
-                                 f"BF_CANOPY_SUPPORT_VERIFIED x={fixture_x} y={fixture_y-1} z={fixture_z}",
-                                 "verify sampled plant support"),
-                                (f"/execute if block {fixture_x} {fixture_y} {fixture_z} minecraft:tall_grass[half=lower] run say BF_CANOPY_LOWER_VERIFIED x={fixture_x} y={fixture_y} z={fixture_z}",
-                                 f"BF_CANOPY_LOWER_VERIFIED x={fixture_x} y={fixture_y} z={fixture_z}",
-                                 "verify sampled lower plant half"),
-                                (f"/execute if block {fixture_x} {fixture_y+1} {fixture_z} minecraft:tall_grass[half=upper] run say BF_CANOPY_UPPER_VERIFIED x={fixture_x} y={fixture_y+1} z={fixture_z}",
-                                 f"BF_CANOPY_UPPER_VERIFIED x={fixture_x} y={fixture_y+1} z={fixture_z}",
-                                 "verify sampled upper plant half"),
-                                (f"/execute if block {fixture_x} {fixture_y+2} {fixture_z} minecraft:air run say BF_CANOPY_HEADROOM_VERIFIED x={fixture_x} y={fixture_y+2} z={fixture_z}",
-                                 f"BF_CANOPY_HEADROOM_VERIFIED x={fixture_x} y={fixture_y+2} z={fixture_z}",
-                                 "verify sampled plant headroom"),
-                            )
-                            for command,marker_text,description in fixture_checks:
+                            if len({marker for _,marker,_ in fixture_mutations})!=len(fixture_mutations):
+                                raise RuntimeError("BLACK FREQUENCY stacked-plant mutation acknowledgements must be unique")
+                            for command,marker_text,description in fixture_mutations:
                                 if not send_isolated_chat_command(
                                         command,re.escape(marker_text),description,timeout=6.0):
                                     terrain_capture_failed=True
