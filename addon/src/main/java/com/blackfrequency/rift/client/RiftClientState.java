@@ -2934,13 +2934,23 @@ public final class RiftClientState {
             return head!=null && head.isAir() && head.getFluidState().isEmpty();
         }
 
+        // Check cheap block-state properties before asking Minecraft to build a collision shape.
+        // Most sampled columns are air, leaves, fluids, or solid blocks and need no shape query.
+        private static boolean isCanopyAccentPlantCandidate(BlockState state) {
+            return state!=null && state.getBlock() instanceof net.minecraft.world.level.block.BushBlock
+                && !state.is(BlockTags.LEAVES)
+                && state.getFluidState().isEmpty();
+        }
+
         private static boolean isCanopyAccentSkippablePlant(BlockState state,
                 net.minecraft.world.phys.shapes.VoxelShape collisionShape) {
-            return state!=null && collisionShape!=null
-                && state.getBlock() instanceof net.minecraft.world.level.block.BushBlock
-                && !state.is(BlockTags.LEAVES)
-                && state.getFluidState().isEmpty()
-                && collisionShape.isEmpty();
+            return isCanopyAccentPlantCandidate(state) && collisionShape!=null && collisionShape.isEmpty();
+        }
+
+        private static boolean isCanopyAccentSkippablePlant(BlockState state,Level level,
+                net.minecraft.core.BlockPos pos) {
+            return isCanopyAccentPlantCandidate(state) && level!=null && pos!=null
+                && state.getCollisionShape(level,pos).isEmpty();
         }
 
         // Ground plants can be stacked (for example, the two halves of tall grass).
@@ -2958,7 +2968,7 @@ public final class RiftClientState {
                 }
                 if(isCanopyAccentHeadroomAvailable(head)) return skipped;
                 if(skipped==GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS
-                    || !isCanopyAccentSkippablePlant(head,head.getCollisionShape(level,cursor))) return -1;
+                    || !isCanopyAccentSkippablePlant(head,level,cursor)) return -1;
             }
             return -1;
         }
@@ -2986,7 +2996,7 @@ public final class RiftClientState {
                 BlockState candidate=level.getBlockState(cursor);
                 if(candidate.is(BlockTags.LEAVES)) return skipped;
                 if(skipped==GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS
-                    || !isCanopyAccentSkippablePlant(candidate,candidate.getCollisionShape(level,cursor))) return -1;
+                    || !isCanopyAccentSkippablePlant(candidate,level,cursor)) return -1;
             }
             return -1;
         }
@@ -3262,6 +3272,13 @@ public final class RiftClientState {
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,Double.NaN,0))
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,0.0D,1))
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(Integer.MAX_VALUE,.8D,1));
+            boolean plantCollisionShapePrefilterProfile=
+                isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState())
+                && isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.TALL_GRASS.defaultBlockState())
+                && !isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.OAK_LEAVES.defaultBlockState())
+                && !isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.WATER.defaultBlockState())
+                && !isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState())
+                && !isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
             boolean leafSurfaceScanProfile=canopyAccentLeafSurfaceY(71,0)==70L
                 && canopyAccentLeafSurfaceY(72,1)==70L
                 && canopyAccentLeafSurfaceY(73,2)==70L
@@ -3328,7 +3345,7 @@ public final class RiftClientState {
                 && candidateDedupProfile && heightmapPrefilterProfile
                 && particleScaleBounded && particleOffsetBounded
                 && particleVelocityBounded && foliageClearanceProfile && canopyAccentHeadroomProfile
-                && plantClearanceProfile && leafSurfaceScanProfile && heightmapTopNormalizationProfile
+                && plantClearanceProfile && plantCollisionShapePrefilterProfile && leafSurfaceScanProfile && heightmapTopNormalizationProfile
                 && Math.abs(plantTop-71.06D)<1.0E-9D
                 && Math.abs(invalidHeight-70.26D)<1.0E-9D
                 && Math.abs(excessiveHeight-71.26D)<1.0E-9D
@@ -3377,6 +3394,8 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SURFACE_PLANT_LIFT_PROFILE_VERIFIED maxLift={} stackedBushes=true collisionEmpty=true leavesRejected=true fluidsRejected=true solidRejected=true",
                 GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_COLLISION_SHAPE_PREFILTER_VERIFIED bushOnly=true leavesRejectedBeforeShape=true fluidsRejectedBeforeShape=true solidsRejectedBeforeShape=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED near=true far=false broadPhaseCorner=true exactCornerRejected=true invalidBoundsRejected=true heightBounded=true invalidRejected=true emptyMeshRejected=true");
         }

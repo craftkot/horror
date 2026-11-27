@@ -522,7 +522,7 @@ def verify_restoration_particle_source():
             or "isCanopyAccentHeadroomAvailable(head)" not in leaf_accent_body
             or "canopyAccentPlantSurfaceParticleY((int)leafY,shapeHeight,skippedPlants)" not in leaf_accent_body
             or "private static int canopyAccentLeafSurfaceSkippedPlants(" not in client_source
-            or "isCanopyAccentSkippablePlant(candidate,candidate.getCollisionShape(level,cursor))" not in client_source
+            or "isCanopyAccentSkippablePlant(candidate,level,cursor)" not in leaf_accent_body
             or "GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS" not in client_source
             or "GROUND_CANOPY_LEAF_HEIGHTMAP_SOURCE_VERIFIED heightmap=world_surface includesLeaves=true includesPlants=true downwardPlantScan=2 roofRejected=true headroomAir=true loadedOnly=true" not in client_source
             or "GROUND_CANOPY_ACCENT_HEIGHTMAP_TOP_NORMALIZATION_PROFILE_VERIFIED" not in client_source
@@ -547,7 +547,7 @@ def verify_restoration_particle_source():
         if sample_ground_start>=0 and sample_ground_end>sample_ground_start else "")
     if ("for(int skipped=0;skipped<=GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS;skipped++)" not in surface_plant_clearance_body
             or "isCanopyAccentHeadroomAvailable(head)" not in surface_plant_clearance_body
-            or "isCanopyAccentSkippablePlant(head,head.getCollisionShape(level,cursor))" not in surface_plant_clearance_body
+            or "isCanopyAccentSkippablePlant(head,level,cursor)" not in surface_plant_clearance_body
             or "canopyAccentPlantSurfaceParticleY" not in sample_ground_body
             or "if(!Double.isFinite(shapeHeight) || shapeHeight<=0.0D" not in client_source
             or "skippedPlantSurfaceBlocks>=0" not in sample_ground_body
@@ -557,7 +557,9 @@ def verify_restoration_particle_source():
             or "hasCanopyAccentCandidate(blockX,blockZ)" not in surface_plant_queue_body
             or "groundCanopyAccentQueueAccepted++" not in surface_plant_queue_body
             or "groundCanopyAccentQueuePlantLifted++" not in surface_plant_queue_body
-            or "GROUND_CANOPY_ACCENT_SURFACE_PLANT_LIFT_PROFILE_VERIFIED" not in client_source):
+            or "GROUND_CANOPY_ACCENT_SURFACE_PLANT_LIFT_PROFILE_VERIFIED" not in client_source
+            or "private static boolean isCanopyAccentPlantCandidate(BlockState state)" not in client_source
+            or "return isCanopyAccentPlantCandidate(state) && level!=null && pos!=null\\n                && state.getCollisionShape(level,pos).isEmpty();" not in client_source):
         raise RuntimeError("BLACK FREQUENCY stacked ground-plant accents must use bounded non-colliding clearance and complete queue accounting")
     adjacent_accent_start=client_source.find("private static boolean queueAdjacentExposedLeafCanopyAccent(")
     adjacent_accent_end=client_source.find("\n        private static double sampleGroundY",adjacent_accent_start+1)
@@ -5128,8 +5130,13 @@ def capture_test_world():
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PLANT_CLEARANCE_PROFILE_VERIFIED "
                 "maxLift=2 bushOnly=true collisionEmpty=true leavesRejected=true fluidsRejected=true solidRejected=true"
             )
+            canopy_collision_prefilter_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_COLLISION_SHAPE_PREFILTER_VERIFIED "
+                "bushOnly=true leavesRejectedBeforeShape=true fluidsRejectedBeforeShape=true solidsRejectedBeforeShape=true"
+            )
             if (canopy_headroom_marker not in log_after
                     or canopy_plant_clearance_marker not in log_after
+                    or canopy_collision_prefilter_marker not in log_after
                     or "isCanopyAccentHeadroomAvailable(head)" not in camera_source
                     or "return head!=null && head.isAir() && head.getFluidState().isEmpty();" not in camera_source
                     or "GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS=2;" not in camera_source
