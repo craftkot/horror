@@ -10,7 +10,7 @@ import net.minecraft.world.level.GameType;
 
 /** Only the intended viewer receives these entries. Never creates a real server player. */
 final class SocialAnomalies {
- private record Ghost(ServerPlayer viewer,UUID id,String name,int age){}
+ private record Ghost(ServerPlayer viewer,UUID id,String name,ServerPlayer skinSource,int age){}
  private final Map<UUID,Ghost> active=new HashMap<>();
  private final Random rng=new Random();
  boolean busy(ServerPlayer viewer){return active.containsKey(viewer.getUUID());}
@@ -19,12 +19,10 @@ final class SocialAnomalies {
   var names=online.stream().map(p->p.getGameProfile().name()).toList();
   SocialPolicy.choose(names,rng).ifPresent(name->{
    UUID id=UUID.randomUUID();
-   var actions=EnumSet.of(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER,ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LISTED,ClientboundPlayerInfoUpdatePacket.Action.UPDATE_GAME_MODE,ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LATENCY);
-   var packet=new ClientboundPlayerInfoUpdatePacket(actions,List.<ServerPlayer>of());
-   packet.entries=List.of(new ClientboundPlayerInfoUpdatePacket.Entry(id,new GameProfile(id,name),true,30+rng.nextInt(90),GameType.SURVIVAL,null,true,0,null));
-   viewer.connection.send(packet);
+   var source=MimicEncounter.chooseSource(viewer,online,rng);
+   MimicEncounter.sendProfile(viewer,id,name,source,true);
    viewer.sendSystemMessage(Component.translatable("multiplayer.player.joined",Component.literal(name)).withStyle(ChatFormatting.YELLOW));
-   active.put(viewer.getUUID(),new Ghost(viewer,id,name,0));
+   active.put(viewer.getUUID(),new Ghost(viewer,id,name,source,0));
   });
  }
  void hideReal(ServerPlayer viewer,List<ServerPlayer> online){
@@ -41,10 +39,11 @@ final class SocialAnomalies {
    if(!online.contains(p)){it.remove();continue;}
    boolean conflict=online.stream().anyMatch(real->real.getGameProfile().name().equalsIgnoreCase(ghost.name()));
    if(!p.isAlive()||p.isCreative()||p.isSpectator()||conflict||SocialPolicy.expired(ghost.age()+1)){
+    mimics.cancelIdentity(p,ghost.id());
     remove(ghost,!conflict&&p.isAlive()&&!p.isCreative()&&!p.isSpectator());it.remove();
    }else {
-    if(SocialPolicy.shouldReveal(ghost.age())&&!mimics.active(p)&&!chases.hasChase(p)&&!apparitions.hasWatcher(p))mimics.start(p,ghost.name());
-    e.setValue(new Ghost(p,ghost.id(),ghost.name(),ghost.age()+1));
+    if(SocialPolicy.shouldReveal(ghost.age())&&!mimics.active(p)&&!chases.hasChase(p)&&!apparitions.hasWatcher(p))mimics.start(p,ghost.id(),ghost.name(),ghost.skinSource());
+    e.setValue(new Ghost(p,ghost.id(),ghost.name(),ghost.skinSource(),ghost.age()+1));
    }
   }
  }

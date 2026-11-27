@@ -40,3 +40,6 @@ Direct javap of the supplied Broken Script JAR: SetDoDaylightCycleEvent toggles 
 
 ## User-directed social behavior
 FakeDisconnectEvent is inspiration only. User explicitly rejects real disconnection, ban and out-of-world interruptions. See SOCIAL_DESIGN.md. Synthetic TAB entries and dismissal-only screen are new implementations; no original code/assets included.
+
+## FakePlayer appearance review
+Reopened the supplied TBS JAR and inspected FakePlayerRenderer and FakePlayerEntity with javap. Renderer bakes PLAYER and PLAYER_SLIM, changes PlayerModel when SkinManager.usesSlimArms changes, adds armor/item/cape layers. Entity obtains PlayerInfo.getSkin with default fallback and tests PlayerModelPart masks against a synchronized byte. We use the vanilla player-rendering path, preserving profile properties and the source Avatar skin-part mask rather than rebuilding the renderer or redistributing assets. 26.3 AvatarRenderer and packet signatures reviewed. See SOCIAL_DESIGN.md for adaptation and limitations.

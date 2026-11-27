@@ -60,13 +60,10 @@ public final class UnwrittenMod {
         NeoForge.EVENT_BUS.addListener(chases::onJoin);
         NeoForge.EVENT_BUS.addListener(chases::onTarget);
         NeoForge.EVENT_BUS.addListener(chases::onDrops);
-        NeoForge.EVENT_BUS.addListener(mimics::onJoin);
-        NeoForge.EVENT_BUS.addListener(mimics::onDrops);
-        NeoForge.EVENT_BUS.addListener(mimics::onDamage);
         NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST,this::oreBreak);
     }
     private void stop(ServerStoppedEvent event) { sessions.clear(); apparitions.clear(); anomalies.clear(); ores.clear(); chases.clear(); mimics.clear(); narrative.clear(); timeAnomalies.clear(); social.clear(); ticks=0; stateDirectory=null; }
-    private void stopping(ServerStoppingEvent event) { sessions.forEach(this::save); anomalies.restoreAll(); ores.restoreAll(); mimics.clear(); chases.clear(); timeAnomalies.restoreAll(); social.restoreAll(); }
+    private void stopping(ServerStoppingEvent event) { sessions.forEach(this::save); anomalies.restoreAll(); ores.restoreAll(); mimics.restoreAll(); chases.clear(); timeAnomalies.restoreAll(); social.restoreAll(); }
     private void save(UUID id, PlayerStateStore.State state) {
         if(stateDirectory==null)return;
         try { PlayerStateStore.save(stateDirectory,id,state); }
