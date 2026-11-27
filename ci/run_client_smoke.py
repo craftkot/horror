@@ -644,7 +644,7 @@ def verify_restoration_particle_source():
             or "GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA" not in adjacent_plant_body
             or "getChunk(" in adjacent_plant_body
             or "GROUND_CANOPY_ACCENT_ADJACENT_PLANT_SCAN_PROFILE_VERIFIED supportChecked=true groundTolerance=0.35 loadedOnly=true radius=48 maxSkipped=2" not in client_source
-            or "GROUND_CANOPY_ACCENT_ADJACENT_PLANT[candidate]=true" not in client_source
+            or "GROUND_CANOPY_ACCENT_ADJACENT_PLANT[groundCanopyAccentCandidateCount-1]=true" not in client_source
             or "GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_EMITTED" not in client_source
             or "&& !directLiftedAccent" not in client_source
             or "for(int candidate=candidatesBeforeSample;candidate<groundCanopyAccentCandidateCount;candidate++)" not in client_source
