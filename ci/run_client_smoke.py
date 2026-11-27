@@ -585,6 +585,20 @@ def verify_restoration_particle_source():
             or "private static boolean isCanopyAccentPlantCandidate(BlockState state)" not in client_source
             or "return isCanopyAccentPlantCandidate(state) && level!=null && pos!=null\n                && state.getCollisionShape(level,pos).isEmpty();" not in client_source):
         raise RuntimeError("BLACK FREQUENCY stacked ground-plant accents must use bounded non-colliding clearance and complete queue accounting")
+    double_plant_marker=(
+        "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_VANILLA_DOUBLE_PLANT_PROFILE_VERIFIED "
+        "blocks=6 halves=lower,upper stateAllowlist=true maxSkipped=2"
+    )
+    double_plant_blocks=(
+        "Blocks.TALL_GRASS","Blocks.LARGE_FERN","Blocks.LILAC",
+        "Blocks.PEONY","Blocks.ROSE_BUSH","Blocks.SUNFLOWER"
+    )
+    if (double_plant_marker not in log_after
+            or "DoublePlantBlock.HALF" not in client_source
+            or "DoubleBlockHalf.LOWER" not in client_source
+            or "DoubleBlockHalf.UPPER" not in client_source
+            or any(block not in client_source for block in double_plant_blocks)):
+        raise RuntimeError("BLACK FREQUENCY vanilla double-plant lower/upper states must pass the bounded canopy allowlist")
     adjacent_accent_start=client_source.find("private static boolean queueAdjacentExposedLeafCanopyAccent(")
     adjacent_accent_end=client_source.find("\n        private static double sampleGroundY",adjacent_accent_start+1)
     adjacent_accent_body=client_source[adjacent_accent_start:adjacent_accent_end] if adjacent_accent_start>=0 and adjacent_accent_end>adjacent_accent_start else ""
@@ -5283,6 +5297,10 @@ def capture_test_world():
             rejection_counts=[int(value) for value in canopy_rejections.groups()]
             (attempts,accepted,invalid,budget,chunk,heightmap,heightmap_top_adjusted,non_leaf,headroom,
              height,pattern,duplicate,segment,plant_lifted)=rejection_counts
+            if plant_lifted==0:
+                print("WORLD_CAPTURE_NOTE: no stacked plant column intersected the sampled fissure in this world; vanilla double-plant state coverage passed, live lift remains unproven",flush=True)
+            else:
+                print(f"WORLD_CAPTURE: stacked plant lift observed in {plant_lifted} canopy candidates",flush=True)
             # Segment rejection happens after queue acceptance, so it is a subset of accepted, not a pre-queue rejection.
             reasons=(invalid,budget,chunk,heightmap,non_leaf,headroom,height,pattern,duplicate)
             if (attempts>GROUND_MESH_SAMPLES+80

@@ -3371,6 +3371,31 @@ public final class RiftClientState {
                 && !isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.WATER.defaultBlockState())
                 && !isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState())
                 && !isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+            net.minecraft.world.level.block.Block[] vanillaDoublePlantBlocks={
+                net.minecraft.world.level.block.Blocks.TALL_GRASS,
+                net.minecraft.world.level.block.Blocks.LARGE_FERN,
+                net.minecraft.world.level.block.Blocks.LILAC,
+                net.minecraft.world.level.block.Blocks.PEONY,
+                net.minecraft.world.level.block.Blocks.ROSE_BUSH,
+                net.minecraft.world.level.block.Blocks.SUNFLOWER
+            };
+            boolean vanillaDoublePlantProfile=true;
+            for(net.minecraft.world.level.block.Block plantBlock:vanillaDoublePlantBlocks) {
+                if(!(plantBlock instanceof net.minecraft.world.level.block.DoublePlantBlock doublePlant)) {
+                    vanillaDoublePlantProfile=false;
+                    continue;
+                }
+                BlockState lower=doublePlant.defaultBlockState().setValue(
+                    net.minecraft.world.level.block.DoublePlantBlock.HALF,
+                    net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER);
+                BlockState upper=doublePlant.defaultBlockState().setValue(
+                    net.minecraft.world.level.block.DoublePlantBlock.HALF,
+                    net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER);
+                vanillaDoublePlantProfile &= isCanopyAccentPlantCandidate(lower)
+                    && isCanopyAccentPlantCandidate(upper)
+                    && isCanopyAccentSkippablePlant(lower,net.minecraft.world.phys.shapes.Shapes.empty())
+                    && isCanopyAccentSkippablePlant(upper,net.minecraft.world.phys.shapes.Shapes.empty());
+            }
             boolean leafSurfaceScanProfile=canopyAccentLeafSurfaceY(71,0)==70L
                 && canopyAccentLeafSurfaceY(72,1)==70L
                 && canopyAccentLeafSurfaceY(73,2)==70L
@@ -3438,7 +3463,8 @@ public final class RiftClientState {
                 && particleScaleBounded && particleOffsetBounded
                 && particleVelocityBounded && particleDriftProfile && particleColorTransitionProfile
                 && foliageClearanceProfile && canopyAccentHeadroomProfile
-                && plantClearanceProfile && plantCollisionShapePrefilterProfile && leafSurfaceScanProfile && heightmapTopNormalizationProfile
+                && plantClearanceProfile && plantCollisionShapePrefilterProfile && vanillaDoublePlantProfile
+                && leafSurfaceScanProfile && heightmapTopNormalizationProfile
                 && Math.abs(plantTop-71.12D)<1.0E-9D
                 && Math.abs(invalidHeight-70.32D)<1.0E-9D
                 && Math.abs(excessiveHeight-71.32D)<1.0E-9D
@@ -3496,6 +3522,8 @@ public final class RiftClientState {
                 GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_COLLISION_SHAPE_PREFILTER_VERIFIED bushOnly=true leavesRejectedBeforeShape=true fluidsRejectedBeforeShape=true solidsRejectedBeforeShape=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_VANILLA_DOUBLE_PLANT_PROFILE_VERIFIED blocks=6 halves=lower,upper stateAllowlist=true maxSkipped=2");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SEGMENT_FILTER_VERIFIED near=true far=false broadPhaseCorner=true exactCornerRejected=true invalidBoundsRejected=true heightBounded=true invalidRejected=true emptyMeshRejected=true");
         }
