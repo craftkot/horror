@@ -4579,10 +4579,13 @@ public final class RiftClientState {
             // Anchor changes do not necessarily clear the mesh cache: both anchors may
             // already be in loaded chunks. The fixture probe must nevertheless belong
             // to the new mesh, or CI can only see a stale sample from the spawn anchor.
-            boolean previousSampleLogged=canopyAccentFixtureSampleLogged;
+            boolean previousAnchorValid=previousAnchorX!=Integer.MIN_VALUE
+                && previousAnchorZ!=Integer.MIN_VALUE;
             canopyAccentFixtureSampleLogged=false;
             groundCanopyAccentLiftedLoggedCount=0;
-            if(VERIFY_GROUND_MESH_PROFILES && previousSampleLogged) {
+            // Cache invalidation may already have cleared the sample flag. The
+            // previous anchor is the durable signal that this is a real transition.
+            if(VERIFY_GROUND_MESH_PROFILES && previousAnchorValid) {
                 com.mojang.logging.LogUtils.getLogger().info(
                     "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_ANCHOR_RESET_VERIFIED previousX={} previousZ={} anchorX={} anchorZ={} sampleReset=true liftedCounterReset=true",
                     previousAnchorX,previousAnchorZ,nextAnchorX,nextAnchorZ);
