@@ -67,7 +67,7 @@ CANOPY_FIXTURE_SAMPLE_RE=re.compile(
     r"plantX=(-?\d+) plantZ=(-?\d+) arm=(\d+) segment=(\d+) "
     r"anchorX=(-?\d+) anchorZ=(-?\d+) nextScan=true loadedOnly=true radius=48")
 if (not FIRST_BLOCK_REMOVED_RE.fullmatch(
-        "BLACK FREQUENCY_TEST FIRST_BLOCK_REMOVED x=1 y=2 z=3 surfaceY=4 scanOrder=surface-first-center-out")
+        "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x=1 y=2 z=3 surfaceY=4 scanOrder=surface-first-center-out")
         or not CANOPY_FIXTURE_SAMPLE_RE.fullmatch(
         "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED sampleX=1 sampleZ=2 groundY=64.01 plantX=1 plantZ=1 arm=0 segment=5 anchorX=0 anchorZ=0 nextScan=true loadedOnly=true radius=48")):
     raise RuntimeError("BLACK FREQUENCY canopy fixture log regex regression")
