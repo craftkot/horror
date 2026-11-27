@@ -5151,7 +5151,7 @@ def capture_test_world():
                     or "GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED=.0045D;" not in camera_source
                     or "canopyAccentHorizontalVelocity(x,z,0,emissionEpoch,dimensionSalt)" not in camera_source
                     or "canopyAccentHorizontalVelocity(x,z,1,emissionEpoch,dimensionSalt)" not in camera_source
-                    or "long dimensionSalt=level.dimension().location().hashCode();" not in camera_source
+                    or "long dimensionSalt=canopyAccentDimensionSalt(level.dimension().location().toString());" not in camera_source
                     or "Math.floorDiv(gameTime,(long)GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS)" not in camera_source
                     or "velocityX,GROUND_CANOPY_ACCENT_VERTICAL_SPEED,velocityZ" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: bounded canopy accent particle profile was not verified",flush=True)
@@ -5160,7 +5160,14 @@ def capture_test_world():
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DRIFT_PROFILE_VERIFIED "
                 "deterministic=true temporalVariation=true dimensionScoped=true epochTicks=10 horizontalMax=0.0045 verticalUnchanged=true bounded=true"
             )
+            dimension_salt_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DIMENSION_SALT_PROFILE_VERIFIED "
+                "algorithm=fnv1a64 stable=true distinct=true emptyFallback=true"
+            )
             if (canopy_drift_marker not in log_after
+                    or dimension_salt_marker not in log_after
+                    or "private static long canopyAccentDimensionSalt(String dimensionKey)" not in camera_source
+                    or "hash*=0x100000001b3L;" not in camera_source
                     or "SplitMix64 combines the dimension key, block column, axis and ten-tick emission epoch" not in camera_source
                     or "hash^=dimensionSalt;" not in camera_source
                     or "hash^=emissionEpoch*0xD1B54A32D192ED03L;" not in camera_source
