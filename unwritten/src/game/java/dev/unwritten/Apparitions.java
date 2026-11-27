@@ -58,7 +58,7 @@ final class Apparitions {
             }
         }
     }
-    void tick(List<ServerPlayer> players) {
+    void tick(List<ServerPlayer> players, ChaseEncounter chases) {
         if(active.isEmpty())return;
         var it=active.entrySet().iterator();
         while(it.hasNext()){
@@ -82,6 +82,7 @@ final class Apparitions {
                 it.remove();
                 if(action==WatcherPolicy.Action.CLOSE || action==WatcherPolicy.Action.SPOTTED){
                     boolean close=action==WatcherPolicy.Action.CLOSE;
+                    if(RNG.nextInt(3)==0)chases.start(p,g.point());
                     var effect=BuiltInRegistries.MOB_EFFECT.getOrThrow(ResourceKey.create(Registries.MOB_EFFECT,Identifier.withDefaultNamespace(close?"blindness":"darkness")));
                     if(!p.hasEffect(effect))p.addEffect(new MobEffectInstance(effect,close?100:60,0,false,false));
                     p.connection.send(new ClientboundSoundPacket(Holder.direct(SoundEvents.AMBIENT_CAVE.value()),SoundSource.AMBIENT,g.point().x,g.point().y,g.point().z,.7f,.65f,RNG.nextLong()));

@@ -10,6 +10,10 @@ import net.neoforged.neoforge.event.entity.player.BonemealEvent;
 import net.neoforged.neoforge.event.entity.player.CanPlayerSleepEvent;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.neoforge.event.level.BlockEvent;
+import net.neoforged.neoforge.event.level.block.BreakBlockEvent;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.living.LivingChangeTargetEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.level.ExplosionEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.ChatFormatting;
@@ -36,6 +40,7 @@ public final class UnwrittenMod {
     private final Apparitions apparitions = new Apparitions();
     private final LocalAnomalies anomalies = new LocalAnomalies();
     private final OreEncounter ores = new OreEncounter();
+    private final ChaseEncounter chases = new ChaseEncounter();
     private static final TagKey<Block> ORES=TagKey.create(Registries.BLOCK,Identifier.fromNamespaceAndPath("c","ores"));
     public UnwrittenMod() {
         NeoForge.EVENT_BUS.addListener(this::tick);
@@ -46,10 +51,13 @@ public final class UnwrittenMod {
         NeoForge.EVENT_BUS.addListener(this::sleep);
         NeoForge.EVENT_BUS.addListener(this::trample);
         NeoForge.EVENT_BUS.addListener(this::explosion);
+        NeoForge.EVENT_BUS.addListener(chases::onJoin);
+        NeoForge.EVENT_BUS.addListener(chases::onTarget);
+        NeoForge.EVENT_BUS.addListener(chases::onDrops);
         NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST,this::oreBreak);
     }
-    private void stop(ServerStoppedEvent event) { sessions.clear(); apparitions.clear(); anomalies.clear(); ores.clear(); ticks=0; stateDirectory=null; }
-    private void stopping(ServerStoppingEvent event) { sessions.forEach(this::save); anomalies.restoreAll(); ores.restoreAll(); }
+    private void stop(ServerStoppedEvent event) { sessions.clear(); apparitions.clear(); anomalies.clear(); ores.clear(); chases.clear(); ticks=0; stateDirectory=null; }
+    private void stopping(ServerStoppingEvent event) { sessions.forEach(this::save); anomalies.restoreAll(); ores.restoreAll(); chases.clear(); }
     private void save(UUID id, PlayerStateStore.State state) {
         if(stateDirectory==null)return;
         try { PlayerStateStore.save(stateDirectory,id,state); }
@@ -74,7 +82,7 @@ public final class UnwrittenMod {
         if(!eligible(p)||event.getProblem()!=null)return;
         var s=session(p);var pos=event.getPos();
         s.history().rememberBed(new PlayerHistory.Bed(p.level().dimension().identifier().toString(),pos.getX(),pos.getY(),pos.getZ()));
-        switch(s.director().sleep(apparitions.hasWatcher(p))){
+        switch(s.director().sleep(apparitions.hasWatcher(p)||chases.hasChase(p))){
             case GUILT -> {event.setProblem(Player.BedSleepingProblem.OTHER_PROBLEM);p.sendSystemMessage(Component.translatable("event.unwritten.sleep.guilt"));}
             case WATCHED -> {event.setProblem(Player.BedSleepingProblem.OTHER_PROBLEM);p.sendSystemMessage(Component.translatable("event.unwritten.sleep.watched"));}
             case CALL -> p.sendSystemMessage(Component.translatable("event.unwritten.sleep.call"));
@@ -87,7 +95,7 @@ public final class UnwrittenMod {
     private void explosion(ExplosionEvent.Detonate event){
         if(event.getExplosion().getIndirectSourceEntity() instanceof ServerPlayer p&&eligible(p))session(p).director().explosion();
     }
-    private void oreBreak(BlockEvent.BreakEvent event){
+    private void oreBreak(BreakBlockEvent event){
         if(event.isCanceled()||!(event.getPlayer() instanceof ServerPlayer p)||!eligible(p)||!p.isAlive())return;
         if(!event.getState().is(ORES))return;
         if(OrePolicy.triggers(session(p).director().nullPresent(),true,p.getRandom().nextDouble()))
@@ -96,7 +104,8 @@ public final class UnwrittenMod {
     private void tick(ServerTickEvent.Post event) {
         ++ticks;
         if(stateDirectory==null)stateDirectory=event.getServer().getWorldPath(LevelResource.ROOT).resolve("unwritten");
-        apparitions.tick(event.getServer().getPlayerList().getPlayers());
+        chases.tick(event.getServer().getPlayerList().getPlayers());
+        apparitions.tick(event.getServer().getPlayerList().getPlayers(),chases);
         anomalies.tick(event.getServer().getPlayerList().getPlayers());
         ores.tick(event.getServer().getPlayerList().getPlayers(),apparitions);
         if (ticks % 20 != 0) return;
@@ -114,7 +123,7 @@ public final class UnwrittenMod {
             boolean alone = players.stream().noneMatch(other -> other != p && other.level() == level && other.distanceToSqr(p) < 1024);
             boolean safe = !dark && session.history().dwell() > 20;
             var obs = new HorrorDirector.Observation(dark,alone,underground,safe,0);
-            session.director().tick(obs).ifPresent(decision -> play(p, decision));
+            session.director().tick(obs).ifPresent(decision -> { if(!chases.hasChase(p))play(p, decision); });
         }
         var it=sessions.entrySet().iterator();
         while(it.hasNext()){
