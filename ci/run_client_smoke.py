@@ -1528,6 +1528,23 @@ env["LIBGL_ALWAYS_SOFTWARE"]="1"
 env["MESA_LOADER_DRIVER_OVERRIDE"]="llvmpipe"
 
 console=ROOT/"client-console.log"
+def read_client_log(fallback=""):
+    # The tee'd process stream is line-flushed; latest.log can lag the console appender
+    # during the final capture and otherwise hide freshly emitted render-thread markers.
+    try:
+        text=console.read_text(encoding="utf-8",errors="replace")
+        if text:
+            return text
+    except OSError:
+        pass
+    try:
+        text=latest.read_text(encoding="utf-8",errors="replace")
+        if text:
+            return text
+    except OSError:
+        pass
+    return fallback
+
 p=subprocess.Popen(cmd,cwd=MC,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,bufsize=1,env=env)
 
 def tee():
@@ -5280,7 +5297,7 @@ def capture_test_world():
                     print("WORLD_CAPTURE_FAIL: no player-visible ground fissure was captured",flush=True)
                     return False
                 print("WORLD_CAPTURE: restoration finished in integrated client",flush=True)
-            log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
+            log_after=read_client_log()
             canonical_snapshot_marker=("BLACK_FREQUENCY_TEST RECOVERY_SNAPSHOT_BLOCK_STATE_CANONICAL_ROUNDTRIP_VERIFIED "
                                        "valid=true invalidPropertyValue=true unknownProperty=true unknownBlock=true")
             if canonical_snapshot_marker not in log_after:
@@ -5304,7 +5321,7 @@ def capture_test_world():
             if os.environ.get("BF_TEST_NATURAL_BEACON")=="1":
                 if not mine_beacon_after_restoration(log_after):
                     return False
-                log_after=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else log_after
+                log_after=read_client_log(log_after)
             if (os.environ.get("BF_TEST_RESTORATION")=="1"
                     and "BLACK_FREQUENCY_TEST RESTORATION_PARTICLE_PROFILE_VERIFIED ring=24 ringIntervalTicks=20 sparks=4 helix=16 helixIntervalTicks=8 blockCue=6 blockIntervalBlocks=48 audience=8 audienceIntervalTicks=20 cachedDust=true" not in log_after):
                 print("WORLD_CAPTURE_FAIL: restoration particle cadence/profile was not verified",flush=True)
