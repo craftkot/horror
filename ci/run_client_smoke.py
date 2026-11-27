@@ -116,7 +116,10 @@ def verify_deferred_restore_chunk_bounds_profile():
             or DEFERRED_CLIENT_INPUT_READY_MARKER not in client_source
             or "wait_for_isolated_client_input_ready()" not in isolated_command_body
             or "for attempt in range(2)" not in isolated_command_body
-            or "command acknowledgement delayed; retrying" not in isolated_command_body):
+            or "command acknowledgement delayed; retrying" not in isolated_command_body
+            or "time.sleep(0.75)" not in isolated_command_body
+            or 'key("ctrl+a",focus=False)' not in isolated_command_body
+            or '"--delay","12"' not in isolated_command_body):
         raise RuntimeError("BLACK FREQUENCY isolated spawn relocation must wait for client readiness and retry an unacknowledged idempotent command")
     spawn_verified_at=client_source.find('print("WORLD_CAPTURE: player spawn verified in log"')
     client_world_ready_wait=client_source.find('client_world_ready_deadline=time.monotonic()+60.0',spawn_verified_at)
@@ -1366,13 +1369,18 @@ def capture_test_world():
             print("WORLD_CAPTURE_INPUT: Minecraft window focus confirmed for",description,
                   "attempt",attempt+1,flush=True)
             opened=key("t",focus=False)
-            time.sleep(0.35)
+            # GLFW can report input-ready before ChatScreen has accepted keyboard events.
+            # Wait for the screen transition, then clear stale text before typing the slash command.
+            time.sleep(0.75)
+            cleared=key("ctrl+a",focus=False)
+            time.sleep(0.10)
             typed=subprocess.run(
-                ["xdotool","type","--clearmodifiers","--delay","5",command],
+                ["xdotool","type","--clearmodifiers","--delay","12",command],
                 check=False)
             time.sleep(0.12)
             submitted=key("Return",focus=False)
-            if opened.returncode!=0 or typed.returncode!=0 or submitted.returncode!=0:
+            if (opened.returncode!=0 or cleared.returncode!=0
+                    or typed.returncode!=0 or submitted.returncode!=0):
                 print("WORLD_CAPTURE: isolated command input failed; retrying",
                       description,"attempt",attempt+1,flush=True)
                 continue

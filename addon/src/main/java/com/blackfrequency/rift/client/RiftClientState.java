@@ -893,9 +893,9 @@ public final class RiftClientState {
         private static final double GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=24.0D;
         // A mote may rise above at most two non-colliding bush plants, never through leaves or solids.
         private static final int GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS=2;
-        // Slightly enlarge canopy motes for foliage contrast; the eight-particle emission budget stays unchanged.
+        // Lift canopy motes clear of the leaf billboard edge; the eight-particle emission budget stays unchanged.
         private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=1.65F;
-        private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.26D;
+        private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.32D;
         // Keep canopy accents close to the fissure instead of letting them drift above the foliage.
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_SPEED=.003D;
         // A tiny coordinate-stable drift keeps motes moving without random state or per-particle allocations.
@@ -3274,8 +3274,8 @@ public final class RiftClientState {
                 && GROUND_CANOPY_ACCENT_PARTICLE_SCALE>=1.55F
                 && GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=1.70F;
             boolean particleOffsetBounded=Double.isFinite(GROUND_CANOPY_ACCENT_VERTICAL_OFFSET)
-                && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET>=.20D
-                && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET<=.28D;
+                && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET>=.28D
+                && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET<=.36D;
             boolean particleVelocityBounded=Double.isFinite(GROUND_CANOPY_ACCENT_VERTICAL_SPEED)
                 && GROUND_CANOPY_ACCENT_VERTICAL_SPEED>=.002D
                 && GROUND_CANOPY_ACCENT_VERTICAL_SPEED<=.004D;
@@ -3417,9 +3417,9 @@ public final class RiftClientState {
                 && particleVelocityBounded && particleDriftProfile && particleColorTransitionProfile
                 && foliageClearanceProfile && canopyAccentHeadroomProfile
                 && plantClearanceProfile && plantCollisionShapePrefilterProfile && leafSurfaceScanProfile && heightmapTopNormalizationProfile
-                && Math.abs(plantTop-71.06D)<1.0E-9D
-                && Math.abs(invalidHeight-70.26D)<1.0E-9D
-                && Math.abs(excessiveHeight-71.26D)<1.0E-9D
+                && Math.abs(plantTop-71.12D)<1.0E-9D
+                && Math.abs(invalidHeight-70.32D)<1.0E-9D
+                && Math.abs(excessiveHeight-71.32D)<1.0E-9D
                 && broadPhaseNear && broadPhaseFar && broadPhaseCorner && exactCornerRejected
                 && invalidBoundsRejected && nearSegment && farSegment && heightMismatch && invalidRejected
                 && emptyMeshRejected && meshAccepted
