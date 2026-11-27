@@ -128,7 +128,7 @@ CANOPY_FIXTURE_SAMPLE_RE=re.compile(
     r"anchorX=(-?\d+) anchorZ=(-?\d+) nextScan=true loadedOnly=true radius=48")
 CANOPY_FIXTURE_ANCHOR_RESET_RE=re.compile(
     r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_ANCHOR_RESET_VERIFIED "
-    r"previousX=(-?\\d+) previousZ=(-?\\d+) anchorX=(-?\\d+) anchorZ=(-?\\d+) "
+    r"previousX=(-?\d+) previousZ=(-?\d+) anchorX=(-?\d+) anchorZ=(-?\d+) "
     r"sampleReset=true liftedCounterReset=true")
 if (not FIRST_BLOCK_REMOVED_RE.fullmatch(
         "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x=1 y=2 z=3 surfaceY=4 scanOrder=surface-first-center-out")
@@ -174,7 +174,7 @@ if find_canopy_fixture_sample_for_anchor(_stale_only_probe,512,512) is not None:
 _anchor_change_probe_log=(
     "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED "
     "sampleX=2 sampleZ=0 groundY=66.01 plantX=2 plantZ=-1 arm=0 segment=5 "
-    "anchorX=0 anchorZ=0 nextScan=true loadedOnly=true radius=48\\n"
+    "anchorX=0 anchorZ=0 nextScan=true loadedOnly=true radius=48\n"
     "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_ANCHOR_RESET_VERIFIED "
     "previousX=0 previousZ=0 anchorX=4 anchorZ=-12 sampleReset=true liftedCounterReset=true\\n"
     "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED "
@@ -765,11 +765,11 @@ def verify_restoration_particle_source():
     neighbor_scan_end=client_source.find("\n        private static double sampleGroundY",neighbor_scan_start+1)
     neighbor_scan_body=client_source[neighbor_scan_start:neighbor_scan_end] if neighbor_scan_start>=0 and neighbor_scan_end>neighbor_scan_start else ""
     fixture_anchor_reset_start=client_source.find("private static void resetCanopyAccentFixtureProbeForAnchorChange(")
-    fixture_anchor_reset_end=client_source.find("\\n        private static",fixture_anchor_reset_start+1)
+    fixture_anchor_reset_end=client_source.find("\n        private static",fixture_anchor_reset_start+1)
     fixture_anchor_reset_body=(client_source[fixture_anchor_reset_start:fixture_anchor_reset_end]
         if fixture_anchor_reset_start>=0 and fixture_anchor_reset_end>fixture_anchor_reset_start else "")
     fixture_anchor_reset_call=(
-        "if(anchorChanged) {\\n                resetCanopyAccentFixtureProbeForAnchorChange("
+        "if(anchorChanged) {\n                resetCanopyAccentFixtureProbeForAnchorChange("
         "cachedAnchorX,cachedAnchorZ,worldAnchorX,worldAnchorZ);"
     )
     if (not fixture_anchor_reset_body
