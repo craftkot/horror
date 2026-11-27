@@ -612,7 +612,7 @@ def verify_restoration_particle_source():
     adjacent_accent_end=client_source.find("\n        private static double sampleGroundY",adjacent_accent_start+1)
     adjacent_accent_body=client_source[adjacent_accent_start:adjacent_accent_end] if adjacent_accent_start>=0 and adjacent_accent_end>adjacent_accent_start else ""
     adjacent_plant_start=client_source.find("private static boolean queueAdjacentPlantSurfaceCanopyAccent(")
-    adjacent_plant_end=client_source.find("\\n        private static boolean queueAdjacentExposedLeafCanopyAccent",adjacent_plant_start+1)
+    adjacent_plant_end=client_source.find("\n        private static boolean queueAdjacentExposedLeafCanopyAccent",adjacent_plant_start+1)
     adjacent_plant_body=(client_source[adjacent_plant_start:adjacent_plant_end]
         if adjacent_plant_start>=0 and adjacent_plant_end>adjacent_plant_start else "")
     neighbor_scan_start=client_source.find("private static void scanCanopyAccentNeighborSamples(")
@@ -1464,7 +1464,7 @@ def capture_test_world():
                     print("WORLD_CAPTURE: server acknowledged",description,flush=True)
                     return True
                 time.sleep(0.1)
-            if attempt==0 and p.poll() is None:
+            if required and attempt==0 and p.poll() is None:
                 print("WORLD_CAPTURE: command acknowledgement delayed; retrying",
                       description,flush=True)
                 time.sleep(0.25)
@@ -2831,7 +2831,7 @@ def capture_test_world():
                     if not canopy_fixture_seeded and marker and safe_pad:
                         anchor_match=FINALE_ANCHOR_RE.search(logs)
                         first_edit=re.search(
-                            r"BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x=(-?\\d+) y=(-?\\d+) z=(-?\\d+) surfaceY=(-?\\d+) scanOrder=surface-first-center-out",
+                            r"BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x=(-?\d+) y=(-?\d+) z=(-?\d+) surfaceY=(-?\d+) scanOrder=surface-first-center-out",
                             logs)
                         if anchor_match and first_edit:
                             anchor_x,anchor_z=map(int,anchor_match.groups())
@@ -2890,11 +2890,11 @@ def capture_test_world():
                             return
                     if canopy_fixture_seeded and not canopy_fixture_verified:
                         fixture_match=re.search(
-                            r"BF_CANOPY_STACKED_FIXTURE_VERIFIED x=(-?\\d+) y=(-?\\d+) z=(-?\\d+)",
+                            r"BF_CANOPY_STACKED_FIXTURE_VERIFIED x=(-?\d+) y=(-?\d+) z=(-?\d+)",
                             logs)
                         lifted_pattern=(
                             r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_EMITTED "
-                            r"x=(-?\\d+) y=([-+0-9.eE]+) z=(-?\\d+) skippedPlants=(\\d+) "
+                            r"x=(-?\d+) y=([-+0-9.eE]+) z=(-?\d+) skippedPlants=(\d+) "
                             r"source=adjacent loadedOnly=true radius=48 clientOnly=true"
                         )
                         lifted_match=next((match for match in re.finditer(lifted_pattern,logs)
@@ -5441,10 +5441,10 @@ def capture_test_world():
                 print(f"WORLD_CAPTURE: initial sampled columns queued {plant_lifted} stacked-plant accents",flush=True)
             if os.environ.get("BF_ISOLATED_TEST")=="1":
                 fixture_match=re.search(
-                    r"BF_CANOPY_STACKED_FIXTURE_VERIFIED x=(-?\\d+) y=(-?\\d+) z=(-?\\d+)",log_after)
+                    r"BF_CANOPY_STACKED_FIXTURE_VERIFIED x=(-?\d+) y=(-?\d+) z=(-?\d+)",log_after)
                 lifted_pattern=(
                     r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_EMITTED "
-                    r"x=(-?\\d+) y=([-+0-9.eE]+) z=(-?\\d+) skippedPlants=(\\d+) "
+                    r"x=(-?\d+) y=([-+0-9.eE]+) z=(-?\d+) skippedPlants=(\d+) "
                     r"source=adjacent loadedOnly=true radius=48 clientOnly=true"
                 )
                 anchor_match=FINALE_ANCHOR_RE.search(log_after)
