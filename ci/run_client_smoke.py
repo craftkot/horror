@@ -38,6 +38,68 @@ def isolated_chat_command_body(command):
         return None
     return command[1:]
 
+STACKED_PLANT_FIXTURE_STATES = {
+    "lower": ("minecraft:tall_grass[half=lower]", "BF_CANOPY_LOWER_VERIFIED"),
+    "upper": ("minecraft:tall_grass[half=upper]", "BF_CANOPY_UPPER_VERIFIED"),
+    "headroom": ("minecraft:air", "BF_CANOPY_HEADROOM_VERIFIED"),
+}
+
+def stacked_plant_fixture_positions(support_y):
+    # groundY is the top face of the support block at floor(groundY).
+    # The lower plant half therefore starts one block above that support.
+    if type(support_y) is not int or support_y < -64 or support_y > 316:
+        return None
+    return support_y+1,support_y+2,support_y+3
+
+def stacked_plant_support_presence_command(x,support_y,z):
+    values=(x,support_y,z)
+    if any(type(value) is not int or value<-(1<<31) or value>(1<<31)-1 for value in values):
+        raise ValueError("BLACK FREQUENCY stacked-plant support coordinates must be signed 32-bit integers")
+    marker=f"BF_CANOPY_SUPPORT_PRESENT x={x} y={support_y} z={z}"
+    command=(f"/execute unless block {x} {support_y} {z} minecraft:air "
+             f"run say {marker}")
+    return command,marker
+
+def stacked_plant_fixture_commands(x,y,z,slot):
+    values=(x,y,z)
+    if any(type(value) is not int or value<-(1<<31) or value>(1<<31)-1 for value in values):
+        raise ValueError("BLACK FREQUENCY stacked-plant fixture coordinates must be signed 32-bit integers")
+    if y < -64 or y > 319 or slot not in STACKED_PLANT_FIXTURE_STATES:
+        raise ValueError("BLACK FREQUENCY stacked-plant fixture slot or build height is invalid")
+    block_state,marker=STACKED_PLANT_FIXTURE_STATES[slot]
+    position=f"{x} {y} {z}"
+    marker_text=f"{marker} x={x} y={y} z={z}"
+    # The mutation is idempotent: an already-correct block is not sent through
+    # setblock again (which reports "Could not set the block" for a no-op).
+    mutation=(f"/execute unless block {position} {block_state} "
+              f"run setblock {position} {block_state}")
+    verification=(f"/execute if block {position} {block_state} run say {marker_text}")
+    return mutation,verification,marker_text
+
+def verify_stacked_plant_fixture_command_profile():
+    if (stacked_plant_fixture_positions(75)!=(76,77,78)
+            or stacked_plant_fixture_positions(-64)!=(-63,-62,-61)
+            or stacked_plant_fixture_positions(316)!=(317,318,319)
+            or stacked_plant_fixture_positions(-65) is not None
+            or stacked_plant_fixture_positions(317) is not None):
+        raise RuntimeError("BLACK FREQUENCY stacked-plant support/plant/headroom offset regression")
+    support_command,support_marker=stacked_plant_support_presence_command(513,75,518)
+    if ("unless block 513 75 518 minecraft:air" not in support_command
+            or support_marker not in support_command):
+        raise RuntimeError("BLACK FREQUENCY stacked-plant support-presence guard regression")
+    for slot,(state,marker) in STACKED_PLANT_FIXTURE_STATES.items():
+        mutation,verification,marker_text=stacked_plant_fixture_commands(513,76,518,slot)
+        if (f"execute unless block 513 76 518 {state}" not in mutation
+                or f"run setblock 513 76 518 {state}" not in mutation
+                or f"execute if block 513 76 518 {state} run say {marker}" not in verification
+                or marker_text not in verification):
+            raise RuntimeError("BLACK FREQUENCY idempotent stacked-plant fixture command regression")
+    print("WORLD_CAPTURE: stacked-plant fixture offsets and idempotent block commands verified",
+          "supportY=75","lowerY=76","upperY=77","headroomY=78",
+          "supportPreserved=true","alreadyCorrectNoOp=true","buildBounds=true",flush=True)
+
+verify_stacked_plant_fixture_command_profile()
+
 if (isolated_chat_command_body("/setworldspawn 1024 64 1024")!="setworldspawn 1024 64 1024"
         or isolated_chat_command_body("/tp @s 512 120 512")!="tp @s 512 120 512"
         or isolated_chat_command_body("setworldspawn 1024 64 1024") is not None
@@ -2953,45 +3015,50 @@ def capture_test_world():
                                       {"sample":(sample_x,sample_z),"groundY":sample_ground_y},flush=True)
                                 return
                             fixture_y=math.floor(sample_ground_y)
+                            plant_positions=stacked_plant_fixture_positions(fixture_y)
                             dx=fixture_x-anchor_x
                             dz=fixture_z-anchor_z
                             sample_dx=sample_x-anchor_x
                             sample_dz=sample_z-anchor_z
-                            if (fixture_y < -63 or fixture_y > 317
+                            if (plant_positions is None
                                     or sample_dx*sample_dx+sample_dz*sample_dz>48*48
                                     or dx*dx+dz*dz>48*48):
                                 terrain_capture_failed=True
                                 print("WORLD_CAPTURE_FAIL: sampled stacked-plant fixture escaped build or fracture bounds",
                                       {"anchor":(anchor_x,anchor_z),"sample":(sample_x,sample_z),
-                                       "fixture":(fixture_x,fixture_y,fixture_z),"groundY":sample_ground_y},flush=True)
+                                       "support":(fixture_x,fixture_y,fixture_z),"groundY":sample_ground_y},flush=True)
+                                return
+                            plant_lower_y,plant_upper_y,headroom_y=plant_positions
+                            support_command,support_marker=stacked_plant_support_presence_command(
+                                fixture_x,fixture_y,fixture_z)
+                            if not send_isolated_chat_command(
+                                    support_command,re.escape(support_marker),
+                                    "verify sampled adjacent-plant support is present",timeout=6.0):
+                                terrain_capture_failed=True
                                 return
                             fixture_mutations=(
-                                (f"/setblock {fixture_x} {fixture_y-1} {fixture_z} minecraft:grass_block",
-                                 f"BF_CANOPY_SUPPORT_VERIFIED x={fixture_x} y={fixture_y-1} z={fixture_z}",
-                                 "prepare sampled adjacent-plant support"),
-                                (f"/setblock {fixture_x} {fixture_y} {fixture_z} minecraft:tall_grass[half=lower]",
-                                 f"BF_CANOPY_LOWER_VERIFIED x={fixture_x} y={fixture_y} z={fixture_z}",
-                                 "place sampled lower tall-grass half"),
-                                (f"/setblock {fixture_x} {fixture_y+1} {fixture_z} minecraft:tall_grass[half=upper]",
-                                 f"BF_CANOPY_UPPER_VERIFIED x={fixture_x} y={fixture_y+1} z={fixture_z}",
-                                 "place sampled upper tall-grass half"),
-                                (f"/setblock {fixture_x} {fixture_y+2} {fixture_z} minecraft:air",
-                                 f"BF_CANOPY_HEADROOM_VERIFIED x={fixture_x} y={fixture_y+2} z={fixture_z}",
-                                 "clear sampled stacked-plant headroom"),
+                                ("lower",plant_lower_y,"place sampled lower tall-grass half"),
+                                ("upper",plant_upper_y,"place sampled upper tall-grass half"),
+                                ("headroom",headroom_y,"clear sampled stacked-plant headroom"),
                             )
-                            if len({marker for _,marker,_ in fixture_mutations})!=len(fixture_mutations):
-                                raise RuntimeError("BLACK FREQUENCY stacked-plant mutation acknowledgements must be unique")
-                            for command,marker_text,description in fixture_mutations:
+                            for slot,block_y,description in fixture_mutations:
+                                mutation_command,verification_command,marker_text=stacked_plant_fixture_commands(
+                                    fixture_x,block_y,fixture_z,slot)
                                 if not send_isolated_chat_command(
-                                        command,re.escape(marker_text),description,timeout=6.0):
+                                        mutation_command,None,description):
+                                    terrain_capture_failed=True
+                                    return
+                                if not send_isolated_chat_command(
+                                        verification_command,re.escape(marker_text),
+                                        "verify "+description,timeout=6.0):
                                     terrain_capture_failed=True
                                     return
                             fixture_check=(
-                                f"/execute if block {fixture_x} {fixture_y-1} {fixture_z} minecraft:grass_block "
-                                f"if block {fixture_x} {fixture_y} {fixture_z} minecraft:tall_grass[half=lower] "
-                                f"if block {fixture_x} {fixture_y+1} {fixture_z} minecraft:tall_grass[half=upper] "
-                                f"if block {fixture_x} {fixture_y+2} {fixture_z} minecraft:air "
-                                f"run say BF_CANOPY_STACKED_FIXTURE_VERIFIED x={fixture_x} y={fixture_y} z={fixture_z}"
+                                f"/execute unless block {fixture_x} {fixture_y} {fixture_z} minecraft:air "
+                                f"if block {fixture_x} {plant_lower_y} {fixture_z} minecraft:tall_grass[half=lower] "
+                                f"if block {fixture_x} {plant_upper_y} {fixture_z} minecraft:tall_grass[half=upper] "
+                                f"if block {fixture_x} {headroom_y} {fixture_z} minecraft:air "
+                                f"run say BF_CANOPY_STACKED_FIXTURE_VERIFIED x={fixture_x} y={plant_lower_y} z={fixture_z}"
                             )
                             if not send_isolated_chat_command(
                                     fixture_check,r"BF_CANOPY_STACKED_FIXTURE_VERIFIED",
@@ -2999,10 +3066,11 @@ def capture_test_world():
                                 terrain_capture_failed=True
                                 return
                             canopy_fixture_seeded=True
-                            canopy_fixture_position=(fixture_x,fixture_y,fixture_z)
+                            canopy_fixture_position=(fixture_x,plant_lower_y,fixture_z)
                             canopy_fixture_seeded_at=time.monotonic()
-                            print("WORLD_CAPTURE: placed a verified two-block tall-grass fixture at the next loaded fissure-neighbor sample",
+                            print("WORLD_CAPTURE: placed a verified two-block tall-grass fixture above the preserved sampled support",
                                   {"anchor":(anchor_x,anchor_z),"sample":(sample_x,sample_ground_y,sample_z),
+                                   "support":(fixture_x,fixture_y,fixture_z),
                                    "fixture":canopy_fixture_position,"arm":int(fixture_sample_match.group(6)),
                                    "segment":int(fixture_sample_match.group(7)),
                                    "radiusSquared":dx*dx+dz*dz,"loadedOnly":True},flush=True)
@@ -3025,6 +3093,7 @@ def capture_test_world():
                             fixture_from_log=tuple(map(int,fixture_match.groups()))
                             lifted_y=float(lifted_match.group(2))
                             skipped=int(lifted_match.group(4))
+                            # The marker is the lower plant half; the mote clears both halves by 2.32 blocks.
                             expected_particle_y=canopy_fixture_position[1]+2.32
                             if (fixture_from_log!=canopy_fixture_position
                                     or skipped<1
