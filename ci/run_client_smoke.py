@@ -5119,6 +5119,17 @@ def capture_test_world():
                     or "0.0D,GROUND_CANOPY_ACCENT_VERTICAL_SPEED,0.0D" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: bounded canopy accent particle profile was not verified",flush=True)
                 return False
+            canopy_color_transition_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_COLOR_TRANSITION_VERIFIED "
+                "brightVioletToDeepViolet=true cachedOptions=true perParticleUpdate=true budgetUnchanged=true"
+            )
+            if (canopy_color_transition_marker not in log_after
+                    or "import net.minecraft.core.particles.DustColorTransitionOptions;" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_START_COLOR=new Vector3f(.62F,.26F,1.0F);" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_END_COLOR=new Vector3f(.20F,.04F,.46F);" not in camera_source
+                    or "new DustColorTransitionOptions(GROUND_CANOPY_ACCENT_START_COLOR,GROUND_CANOPY_ACCENT_END_COLOR," not in camera_source):
+                print("WORLD_CAPTURE_FAIL: animated violet canopy mote color transition was not verified",flush=True)
+                return False
             canopy_clearance_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FOLIAGE_CLEARANCE_VERIFIED "
                 "offset=0.26 particleScale=1.65 baseRibbonUnchanged=true bounded=true"

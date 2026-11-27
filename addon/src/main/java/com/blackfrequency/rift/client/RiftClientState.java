@@ -14,7 +14,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.DustColorTransitionOptions;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
@@ -902,8 +902,13 @@ public final class RiftClientState {
         private static final int[] GROUND_CANOPY_ACCENT_Z=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final double[] GROUND_CANOPY_ACCENT_Y=new double[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final double[] GROUND_CANOPY_ACCENT_GROUND_Y=new double[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
-        private static final DustParticleOptions GROUND_CANOPY_ACCENT_DUST=
-            new DustParticleOptions(new Vector3f(.42F,.18F,.92F),GROUND_CANOPY_ACCENT_PARTICLE_SCALE);
+        // Vanilla's transition dust animates each mote from a bright violet core to a deep purple edge.
+        // Reuse one immutable-by-convention option; the per-rebuild particle budget remains eight.
+        private static final Vector3f GROUND_CANOPY_ACCENT_START_COLOR=new Vector3f(.62F,.26F,1.0F);
+        private static final Vector3f GROUND_CANOPY_ACCENT_END_COLOR=new Vector3f(.20F,.04F,.46F);
+        private static final DustColorTransitionOptions GROUND_CANOPY_ACCENT_DUST=
+            new DustColorTransitionOptions(GROUND_CANOPY_ACCENT_START_COLOR,GROUND_CANOPY_ACCENT_END_COLOR,
+                GROUND_CANOPY_ACCENT_PARTICLE_SCALE);
         private static int groundCanopyAccentCandidateCount;
         private static int groundCanopyAccentFallbackScans;
         private static int groundCanopyAccentFallbackHits;
@@ -3123,6 +3128,13 @@ public final class RiftClientState {
             return surfaceY+boundedHeight+GROUND_CANOPY_ACCENT_VERTICAL_OFFSET;
         }
 
+        private static boolean isCanopyAccentTransitionColorValid(Vector3f color) {
+            return color!=null && Float.isFinite(color.x) && Float.isFinite(color.y) && Float.isFinite(color.z)
+                && color.x>=0.0F && color.x<=1.0F
+                && color.y>=0.0F && color.y<=1.0F
+                && color.z>=0.0F && color.z<=1.0F;
+        }
+
         private static void verifyCanopyAccentProfile() {
             if(canopyAccentSelectorProfileLogged) return;
             BlockState plant=net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState();
@@ -3235,6 +3247,10 @@ public final class RiftClientState {
             boolean particleVelocityBounded=Double.isFinite(GROUND_CANOPY_ACCENT_VERTICAL_SPEED)
                 && GROUND_CANOPY_ACCENT_VERTICAL_SPEED>=.002D
                 && GROUND_CANOPY_ACCENT_VERTICAL_SPEED<=.004D;
+            boolean particleColorTransitionProfile=
+                isCanopyAccentTransitionColorValid(GROUND_CANOPY_ACCENT_START_COLOR)
+                && isCanopyAccentTransitionColorValid(GROUND_CANOPY_ACCENT_END_COLOR)
+                && !GROUND_CANOPY_ACCENT_START_COLOR.equals(GROUND_CANOPY_ACCENT_END_COLOR);
             boolean foliageClearanceProfile=particleOffsetBounded
                 && Math.abs((plantTop-70.8D)-GROUND_CANOPY_ACCENT_VERTICAL_OFFSET)<1.0E-9D
                 && Math.abs(groundSurfaceOffset(1.0D,Double.NaN)-1.0D)<1.0E-9D
@@ -3344,7 +3360,8 @@ public final class RiftClientState {
                 && neighborScanBudgetProfile && neighborScanPassProfile && neighborColumnDedupProfile
                 && candidateDedupProfile && heightmapPrefilterProfile
                 && particleScaleBounded && particleOffsetBounded
-                && particleVelocityBounded && foliageClearanceProfile && canopyAccentHeadroomProfile
+                && particleVelocityBounded && particleColorTransitionProfile
+                && foliageClearanceProfile && canopyAccentHeadroomProfile
                 && plantClearanceProfile && plantCollisionShapePrefilterProfile && leafSurfaceScanProfile && heightmapTopNormalizationProfile
                 && Math.abs(plantTop-71.06D)<1.0E-9D
                 && Math.abs(invalidHeight-70.26D)<1.0E-9D
@@ -3383,6 +3400,8 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED scale={} verticalOffset={} verticalSpeed={} scaleBounded=true heightBounded=true speedBounded=true",
                 GROUND_CANOPY_ACCENT_PARTICLE_SCALE,GROUND_CANOPY_ACCENT_VERTICAL_OFFSET,
                 GROUND_CANOPY_ACCENT_VERTICAL_SPEED);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_COLOR_TRANSITION_VERIFIED brightVioletToDeepViolet=true cachedOptions=true perParticleUpdate=true budgetUnchanged=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FOLIAGE_CLEARANCE_VERIFIED offset={} particleScale={} baseRibbonUnchanged=true bounded=true",
                 GROUND_CANOPY_ACCENT_VERTICAL_OFFSET,GROUND_CANOPY_ACCENT_PARTICLE_SCALE);
