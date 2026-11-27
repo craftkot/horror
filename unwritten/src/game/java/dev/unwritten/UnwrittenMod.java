@@ -109,8 +109,8 @@ public final class UnwrittenMod {
         switch(decision.event()) {
             case FOOTSTEPS -> Apparitions.soundBehind(p, SoundEvents.GRASS_STEP, 0.65f, 0.85f);
             case ECHO -> Apparitions.soundBehind(p, SoundEvents.AMBIENT_CAVE.value(), 0.45f, 0.75f);
-            case DISTANT_SILHOUETTE -> apparitions.show(p);
-            case FALSE_PRESENCE -> { Apparitions.soundBehind(p,SoundEvents.GRASS_STEP,0.9f,0.95f); apparitions.show(p); }
+            case DISTANT_SILHOUETTE -> apparitions.show(p,false);
+            case FALSE_PRESENCE -> { Apparitions.soundBehind(p,SoundEvents.GRASS_STEP,0.9f,0.95f); apparitions.show(p,true); }
             case LOCAL_ANOMALY -> { if(!ReferenceEvents.markBase(p,session(p).history()))anomalies.show(p); }
             case BREATH -> Apparitions.soundBehind(p,SoundEvents.PLAYER_BREATH,1.0f,0.5f);
             case DOOR -> ReferenceEvents.toggleDoor(p);
