@@ -768,15 +768,19 @@ def verify_restoration_particle_source():
     fixture_anchor_reset_end=client_source.find("\n        private static",fixture_anchor_reset_start+1)
     fixture_anchor_reset_body=(client_source[fixture_anchor_reset_start:fixture_anchor_reset_end]
         if fixture_anchor_reset_start>=0 and fixture_anchor_reset_end>fixture_anchor_reset_start else "")
-    fixture_anchor_reset_call=(
-        "if(anchorChanged) {\n                resetCanopyAccentFixtureProbeForAnchorChange("
-        "cachedAnchorX,cachedAnchorZ,worldAnchorX,worldAnchorZ);"
+    # Match the Java call across formatting changes; the argument list is intentionally
+    # split over multiple source lines in RiftClientState.java.
+    fixture_anchor_reset_call=re.search(
+        r"if\\s*\\(\\s*anchorChanged\\s*\\)\\s*\\{\\s*"
+        r"resetCanopyAccentFixtureProbeForAnchorChange\\(\\s*"
+        r"cachedAnchorX\\s*,\\s*cachedAnchorZ\\s*,\\s*worldAnchorX\\s*,\\s*worldAnchorZ\\s*\\)\\s*;",
+        client_source
     )
     if (not fixture_anchor_reset_body
             or "canopyAccentFixtureSampleLogged=false;" not in fixture_anchor_reset_body
             or "groundCanopyAccentLiftedLoggedCount=0;" not in fixture_anchor_reset_body
             or "GROUND_CANOPY_ACCENT_FIXTURE_ANCHOR_RESET_VERIFIED" not in fixture_anchor_reset_body
-            or fixture_anchor_reset_call not in client_source):
+            or fixture_anchor_reset_call is None):
         raise RuntimeError("BLACK FREQUENCY canopy fixture probe must reset when the active mesh anchor changes")
     fixture_queue_call=neighbor_scan_body.find("boolean queued=queueAdjacentExposedLeafCanopyAccent")
     fixture_retry_branch=neighbor_scan_body.find("if(!queued) {",fixture_queue_call)
