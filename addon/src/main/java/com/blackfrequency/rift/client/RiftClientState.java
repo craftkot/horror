@@ -905,6 +905,8 @@ public final class RiftClientState {
         private static final double GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED=.0045D;
         private static final int[] GROUND_CANOPY_ACCENT_X=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final int[] GROUND_CANOPY_ACCENT_Z=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
+        // Keep each queued mote attached to the fissure arm that produced its sample.
+        private static final int[] GROUND_CANOPY_ACCENT_ARM=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         // Reused scratch buffers keep spatially stratified sampling allocation-free on the render thread.
         private static final int[] GROUND_CANOPY_ACCENT_SPATIAL_ORDER=
             new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
@@ -912,6 +914,8 @@ public final class RiftClientState {
             new boolean[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final double[] GROUND_CANOPY_ACCENT_SPATIAL_NEAREST_DISTANCE_SQUARED=
             new double[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
+        private static final int[] GROUND_CANOPY_ACCENT_SPATIAL_ARM_COUNTS=new int[ARM_COUNT];
+        private static final int[] GROUND_CANOPY_ACCENT_SPATIAL_ARM_SELECTED_COUNTS=new int[ARM_COUNT];
         private static final double[] GROUND_CANOPY_ACCENT_Y=new double[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final double[] GROUND_CANOPY_ACCENT_GROUND_Y=new double[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final int[] GROUND_CANOPY_ACCENT_SKIPPED_PLANTS=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
@@ -3105,43 +3109,63 @@ public final class RiftClientState {
             return (int)Math.floorMod((long)start+(long)offset,(long)candidateCount);
         }
 
-        // Greedy farthest-point ordering spreads a bounded particle window over the actual
-        // fissure coordinates, not merely over candidate insertion order. Scratch arrays are
-        // shared by the render-thread-only caller; this method allocates nothing.
-        private static int buildCanopyAccentSpatialOrder(int[] candidateX,int[] candidateZ,
-                int candidateCount,int start,int[] order,boolean[] selected,double[] nearestDistanceSquared) {
-            if(candidateX==null || candidateZ==null || order==null || selected==null
-                || nearestDistanceSquared==null || candidateCount<=0
-                || candidateCount>candidateX.length || candidateCount>candidateZ.length
-                || candidateCount>order.length || candidateCount>selected.length
-                || candidateCount>nearestDistanceSquared.length) return 0;
+        // Round-robin across active fissure arms first, then use farthest-point sampling
+        // inside each arm. This prevents a long arm from consuming the eight-mote budget.
+        // All scratch storage is fixed-size and owned by the render thread.
+        private static int buildCanopyAccentSpatialOrder(int[] candidateX,int[] candidateZ,int[] candidateArm,
+                int candidateCount,int start,int[] order,boolean[] selected,double[] nearestDistanceSquared,
+                int[] armCounts,int[] armSelected) {
+            if(candidateX==null || candidateZ==null || candidateArm==null || order==null || selected==null
+                || nearestDistanceSquared==null || armCounts==null || armSelected==null
+                || candidateCount<=0 || candidateCount>candidateX.length || candidateCount>candidateZ.length
+                || candidateCount>candidateArm.length || candidateCount>order.length
+                || candidateCount>selected.length || candidateCount>nearestDistanceSquared.length
+                || armCounts.length<ARM_COUNT || armSelected.length<ARM_COUNT) return 0;
             int first=canopyAccentCandidateIndex(start,0,candidateCount);
             if(first<0) return 0;
-            for(int i=0;i<candidateCount;i++) {
-                selected[i]=false;
-                double dx=(double)candidateX[i]-candidateX[first];
-                double dz=(double)candidateZ[i]-candidateZ[first];
-                nearestDistanceSquared[i]=dx*dx+dz*dz;
+            for(int arm=0;arm<ARM_COUNT;arm++) {
+                armCounts[arm]=0;
+                armSelected[arm]=0;
             }
-            order[0]=first;
-            selected[first]=true;
-            nearestDistanceSquared[first]=-1.0D;
-            for(int position=1;position<candidateCount;position++) {
+            for(int i=0;i<candidateCount;i++) {
+                int arm=candidateArm[i];
+                if(arm<0 || arm>=ARM_COUNT) return 0;
+                selected[i]=false;
+                nearestDistanceSquared[i]=Double.POSITIVE_INFINITY;
+                armCounts[arm]++;
+            }
+            int rotationArm=candidateArm[first];
+            for(int position=0;position<candidateCount;position++) {
+                int bestArm=-1;
+                int bestArmSelected=Integer.MAX_VALUE;
+                // Prefer the least represented arm; rotated arm order resolves ties deterministically.
+                for(int offset=0;offset<ARM_COUNT;offset++) {
+                    int arm=(rotationArm+offset)%ARM_COUNT;
+                    if(armCounts[arm]<=armSelected[arm]) continue;
+                    if(armSelected[arm]<bestArmSelected) {
+                        bestArm=arm;
+                        bestArmSelected=armSelected[arm];
+                    }
+                }
+                if(bestArm<0) return position;
                 int best=-1;
                 double bestDistanceSquared=-1.0D;
-                // Rotated index order makes equal-distance ties deterministic across rebuilds.
-                for(int offset=1;offset<candidateCount;offset++) {
+                for(int offset=0;offset<candidateCount;offset++) {
                     int candidate=canopyAccentCandidateIndex(start,offset,candidateCount);
-                    if(!selected[candidate] && nearestDistanceSquared[candidate]>bestDistanceSquared) {
+                    if(selected[candidate] || candidateArm[candidate]!=bestArm) continue;
+                    double distanceSquared=armSelected[bestArm]==0
+                        ? 0.0D : nearestDistanceSquared[candidate];
+                    if(best<0 || distanceSquared>bestDistanceSquared) {
                         best=candidate;
-                        bestDistanceSquared=nearestDistanceSquared[candidate];
+                        bestDistanceSquared=distanceSquared;
                     }
                 }
                 if(best<0) return position;
                 order[position]=best;
                 selected[best]=true;
+                armSelected[bestArm]++;
                 for(int candidate=0;candidate<candidateCount;candidate++) {
-                    if(selected[candidate]) continue;
+                    if(selected[candidate] || candidateArm[candidate]!=bestArm) continue;
                     double dx=(double)candidateX[candidate]-candidateX[best];
                     double dz=(double)candidateZ[candidate]-candidateZ[best];
                     double candidateDistanceSquared=dx*dx+dz*dz;
@@ -3177,8 +3201,9 @@ public final class RiftClientState {
             long dimensionSalt=canopyAccentDimensionSalt(level.dimension().location().toString());
             int start=canopyAccentCandidateIndex(groundCanopyAccentCandidateCursor,0,candidateCount);
             int orderedCount=buildCanopyAccentSpatialOrder(GROUND_CANOPY_ACCENT_X,GROUND_CANOPY_ACCENT_Z,
-                candidateCount,start,GROUND_CANOPY_ACCENT_SPATIAL_ORDER,GROUND_CANOPY_ACCENT_SPATIAL_SELECTED,
-                GROUND_CANOPY_ACCENT_SPATIAL_NEAREST_DISTANCE_SQUARED);
+                GROUND_CANOPY_ACCENT_ARM,candidateCount,start,GROUND_CANOPY_ACCENT_SPATIAL_ORDER,
+                GROUND_CANOPY_ACCENT_SPATIAL_SELECTED,GROUND_CANOPY_ACCENT_SPATIAL_NEAREST_DISTANCE_SQUARED,
+                GROUND_CANOPY_ACCENT_SPATIAL_ARM_COUNTS,GROUND_CANOPY_ACCENT_SPATIAL_ARM_SELECTED_COUNTS);
             if(orderedCount<=0) return;
             int visited=0;
             for(int offset=0;offset<orderedCount
@@ -3549,40 +3574,52 @@ public final class RiftClientState {
                 && secondWindowStart==8 && secondWindowEnd==11 && wrappedWindow==0
                 && canopyAccentCandidateIndex(-1,0,rotationCandidateCount)==11
                 && canopyAccentCandidateIndex(0,0,0)==-1;
-            int[] spreadFixtureX={0,1,2,3,100,101,102,103};
-            int[] spreadFixtureZ={0,0,0,0,0,0,0,0};
-            int[] spreadOrder=new int[spreadFixtureX.length];
-            boolean[] spreadSelected=new boolean[spreadFixtureX.length];
-            boolean[] spreadSeen=new boolean[spreadFixtureX.length];
-            double[] spreadNearest=new double[spreadFixtureX.length];
-            boolean spatialSpreadProfile=buildCanopyAccentSpatialOrder(spreadFixtureX,spreadFixtureZ,
-                spreadFixtureX.length,0,spreadOrder,spreadSelected,spreadNearest)==spreadFixtureX.length;
-            for(int count=1;count<=spreadFixtureX.length;count++) {
-                for(int cursorStart=0;cursorStart<count;cursorStart++) {
-                    int ordered=buildCanopyAccentSpatialOrder(spreadFixtureX,spreadFixtureZ,count,
-                        cursorStart,spreadOrder,spreadSelected,spreadNearest);
-                    spatialSpreadProfile &= ordered==count;
-                    for(int i=0;i<count;i++) spreadSeen[i]=false;
-                    for(int i=0;i<ordered;i++) {
-                        int candidate=spreadOrder[i];
-                        if(candidate<0 || candidate>=count || spreadSeen[candidate])
-                            spatialSpreadProfile=false;
-                        else spreadSeen[candidate]=true;
-                    }
-                    if(count==spreadFixtureX.length) {
-                        int firstCluster=0,secondCluster=0;
-                        for(int i=0;i<GROUND_CANOPY_ACCENT_PARTICLE_BUDGET/2;i++) {
-                            if(spreadOrder[i]<4) firstCluster++;
-                            else secondCluster++;
-                        }
-                        spatialSpreadProfile &= firstCluster==2 && secondCluster==2;
-                    }
+            int[] branchFixtureX={0,0,0,0,1,2,3,4,0,0,0,0,-1,-2,-3,-4};
+            int[] branchFixtureZ={1,2,3,4,0,0,0,0,-1,-2,-3,-4,0,0,0,0};
+            int[] branchFixtureArm={0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3};
+            int[] branchOrder=new int[branchFixtureX.length];
+            int[] branchOrderCopy=new int[branchFixtureX.length];
+            boolean[] branchSelected=new boolean[branchFixtureX.length];
+            boolean[] branchSeen=new boolean[branchFixtureX.length];
+            double[] branchNearest=new double[branchFixtureX.length];
+            int[] branchCounts=new int[ARM_COUNT];
+            int[] branchSelectedCounts=new int[ARM_COUNT];
+            int[] branchWindowCounts=new int[ARM_COUNT];
+            boolean branchBalanceProfile=ARM_COUNT==4;
+            for(int cursorStart=0;cursorStart<branchFixtureX.length;cursorStart++) {
+                int ordered=buildCanopyAccentSpatialOrder(branchFixtureX,branchFixtureZ,branchFixtureArm,
+                    branchFixtureX.length,cursorStart,branchOrder,branchSelected,branchNearest,
+                    branchCounts,branchSelectedCounts);
+                branchBalanceProfile &= ordered==branchFixtureX.length;
+                for(int i=0;i<branchFixtureX.length;i++) branchSeen[i]=false;
+                for(int arm=0;arm<ARM_COUNT;arm++) branchWindowCounts[arm]=0;
+                for(int i=0;i<ordered;i++) {
+                    int candidate=branchOrder[i];
+                    if(candidate<0 || candidate>=branchFixtureX.length || branchSeen[candidate])
+                        branchBalanceProfile=false;
+                    else branchSeen[candidate]=true;
+                    if(i<GROUND_CANOPY_ACCENT_PARTICLE_BUDGET)
+                        branchWindowCounts[branchFixtureArm[candidate]]++;
                 }
+                for(int arm=0;arm<ARM_COUNT;arm++)
+                    branchBalanceProfile &= branchWindowCounts[arm]==2;
+                System.arraycopy(branchOrder,0,branchOrderCopy,0,ordered);
+                int repeated=buildCanopyAccentSpatialOrder(branchFixtureX,branchFixtureZ,branchFixtureArm,
+                    branchFixtureX.length,cursorStart,branchOrder,branchSelected,branchNearest,
+                    branchCounts,branchSelectedCounts);
+                branchBalanceProfile &= repeated==ordered;
+                for(int i=0;i<repeated;i++) branchBalanceProfile &= branchOrder[i]==branchOrderCopy[i];
             }
-            spatialSpreadProfile &= buildCanopyAccentSpatialOrder(spreadFixtureX,spreadFixtureZ,
-                0,0,spreadOrder,spreadSelected,spreadNearest)==0
-                && buildCanopyAccentSpatialOrder(spreadFixtureX,spreadFixtureZ,
-                    spreadFixtureX.length+1,0,spreadOrder,spreadSelected,spreadNearest)==0;
+            int[] invalidBranchArms=branchFixtureArm.clone();
+            invalidBranchArms[0]=ARM_COUNT;
+            branchBalanceProfile &= buildCanopyAccentSpatialOrder(branchFixtureX,branchFixtureZ,
+                invalidBranchArms,branchFixtureX.length,0,branchOrder,branchSelected,branchNearest,
+                branchCounts,branchSelectedCounts)==0
+                && buildCanopyAccentSpatialOrder(branchFixtureX,branchFixtureZ,branchFixtureArm,
+                    0,0,branchOrder,branchSelected,branchNearest,branchCounts,branchSelectedCounts)==0
+                && buildCanopyAccentSpatialOrder(branchFixtureX,branchFixtureZ,branchFixtureArm,
+                    branchFixtureX.length+1,0,branchOrder,branchSelected,branchNearest,
+                    branchCounts,branchSelectedCounts)==0;
             boolean emissionThrottleProfile=GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS==10L
                 && shouldAttemptCanopyAccentScan(0L,Long.MIN_VALUE)
                 && !shouldAttemptCanopyAccentScan(100L,100L)
@@ -3595,7 +3632,7 @@ public final class RiftClientState {
             boolean zeroEmissionScanRecorded=nextCanopyAccentAttemptTick(110L,100L,12)==110L;
             boolean emptyScanPreservesAttempt=nextCanopyAccentAttemptTick(110L,100L,0)==100L;
             if(!(selected && sparse && threeOfFourPattern && negativeCoordinatePattern && deterministic && candidateBudgetRejected && negativeCounterRejected
-                && rotationProfile && spatialSpreadProfile && emissionThrottleProfile && dimensionSaltProfile
+                && rotationProfile && branchBalanceProfile && emissionThrottleProfile && dimensionSaltProfile
                 && zeroEmissionScanRecorded && emptyScanPreservesAttempt
                 && leafSelected && leafSparse && nonAccentSurfacesRejected && leafHeightBounded
                 && adjacentScanProfile && oppositeSideScanProfile && secondRingScanProfile
@@ -3634,8 +3671,8 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_ROTATION_PROFILE_VERIFIED candidateCount=12 budget=8 firstWindow=0-7 secondWindow=8-11 wrap=true negativeStart=true invalidCountRejected=true");
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SPATIAL_SPREAD_PROFILE_VERIFIED candidateBudget={} particleBudget={} selection=greedy-farthest-point uniqueOrder=true clusterCoverage=true deterministic=true scratchArrays=true allocationFree=true cursorStep=1",
-                GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET,GROUND_CANOPY_ACCENT_PARTICLE_BUDGET);
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BRANCH_BALANCE_PROFILE_VERIFIED candidateBudget={} particleBudget={} arms={} selection=round-robin-arm-then-farthest uniqueOrder=true perArmBudget=2 deterministic=true scratchArrays=true allocationFree=true cursorStep=1",
+                GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET,GROUND_CANOPY_ACCENT_PARTICLE_BUDGET,ARM_COUNT);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_EMISSION_THROTTLE_PROFILE_VERIFIED intervalTicks={} first=true sameTickBlocked=true beforeBoundaryBlocked=true boundaryAllowed=true clockRollbackReset=true overflowSafe=true",
                 GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS);
@@ -3815,9 +3852,9 @@ public final class RiftClientState {
          * WORLD_SURFACE includes foliage; at most two collision-free bush blocks may sit above the leaf.
          */
         private static boolean queueExposedLeafCanopyAccent(net.minecraft.client.multiplayer.ClientLevel level,
-                int blockX,int blockZ,double groundY,BlockPos.MutableBlockPos cursor) {
+                int blockX,int blockZ,double groundY,int arm,BlockPos.MutableBlockPos cursor) {
             if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueAttempts++;
-            if(level==null || cursor==null || !Double.isFinite(groundY)) {
+            if(level==null || cursor==null || !Double.isFinite(groundY) || arm<0 || arm>=ARM_COUNT) {
                 if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueInvalidRejected++;
                 return false;
             }
@@ -3909,6 +3946,7 @@ public final class RiftClientState {
             GROUND_CANOPY_ACCENT_Y[candidate]=accentY;
             GROUND_CANOPY_ACCENT_GROUND_Y[candidate]=groundY;
             GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[candidate]=skippedPlants;
+            GROUND_CANOPY_ACCENT_ARM[candidate]=arm;
             GROUND_CANOPY_ACCENT_ADJACENT_PLANT[candidate]=false;
             if(VERIFY_GROUND_MESH_PROFILES) {
                 groundCanopyAccentQueueAccepted++;
@@ -3918,10 +3956,11 @@ public final class RiftClientState {
         }
 
         private static boolean queuePlantSurfaceCanopyAccent(Level level,BlockState surface,
-                int blockX,int blockZ,double groundY,double accentY,int skippedPlants) {
+                int blockX,int blockZ,double groundY,double accentY,int skippedPlants,int arm) {
             if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueAttempts++;
             if(level==null || surface==null || !Double.isFinite(groundY) || !Double.isFinite(accentY)
-                || skippedPlants<0 || skippedPlants>GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS) {
+                || skippedPlants<0 || skippedPlants>GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS
+                || arm<0 || arm>=ARM_COUNT) {
                 if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueInvalidRejected++;
                 return false;
             }
@@ -3951,6 +3990,7 @@ public final class RiftClientState {
             GROUND_CANOPY_ACCENT_Y[candidate]=accentY;
             GROUND_CANOPY_ACCENT_GROUND_Y[candidate]=groundY;
             GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[candidate]=skippedPlants;
+            GROUND_CANOPY_ACCENT_ARM[candidate]=arm;
             GROUND_CANOPY_ACCENT_ADJACENT_PLANT[candidate]=false;
             if(VERIFY_GROUND_MESH_PROFILES) {
                 groundCanopyAccentQueueAccepted++;
@@ -4068,8 +4108,8 @@ public final class RiftClientState {
 
         private static boolean queueAdjacentPlantSurfaceCanopyAccent(
                 net.minecraft.client.multiplayer.ClientLevel level,int blockX,int blockZ,double groundY,
-                BlockPos.MutableBlockPos cursor) {
-            if(level==null || cursor==null || !Double.isFinite(groundY)
+                int arm,BlockPos.MutableBlockPos cursor) {
+            if(level==null || cursor==null || !Double.isFinite(groundY) || arm<0 || arm>=ARM_COUNT
                 || groundCanopyAccentCandidateCount<0
                 || groundCanopyAccentCandidateCount>=GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET) return false;
             double surfaceYValue=Math.floor(groundY);
@@ -4103,7 +4143,7 @@ public final class RiftClientState {
             if(!Double.isFinite(shapeHeight)) return false;
             double accentY=canopyAccentPlantSurfaceParticleY(surfaceY,shapeHeight,skippedPlants);
             boolean queued=queuePlantSurfaceCanopyAccent(
-                level,surface,blockX,blockZ,plantGroundY,accentY,skippedPlants);
+                level,surface,blockX,blockZ,plantGroundY,accentY,skippedPlants,arm);
             if(queued) GROUND_CANOPY_ACCENT_ADJACENT_PLANT[groundCanopyAccentCandidateCount-1]=true;
             return queued;
         }
@@ -4112,7 +4152,7 @@ public final class RiftClientState {
                 net.minecraft.client.multiplayer.ClientLevel level,int blockX,int blockZ,double groundY,
                 int arm,int segment,int worldAnchorX,int worldAnchorZ,BlockPos.MutableBlockPos cursor,
                 boolean oppositeSide,int distance) {
-            if(level==null || cursor==null || !Double.isFinite(groundY)
+            if(level==null || cursor==null || !Double.isFinite(groundY) || arm<0 || arm>=ARM_COUNT
                 || groundCanopyAccentCandidateCount<0
                 || groundCanopyAccentCandidateCount>=GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET) return false;
             long adjacentX=canopyAccentAdjacentColumnX(blockX,arm,segment,oppositeSide,distance);
@@ -4122,13 +4162,14 @@ public final class RiftClientState {
             long dx=adjacentX-worldAnchorX,dz=adjacentZ-worldAnchorZ;
             if(Math.abs(dx)>RADIUS || Math.abs(dz)>RADIUS
                 || dx*dx+dz*dz>(long)RADIUS*RADIUS) return false;
-            if(queueAdjacentPlantSurfaceCanopyAccent(level,(int)adjacentX,(int)adjacentZ,groundY,cursor))
+            if(queueAdjacentPlantSurfaceCanopyAccent(level,(int)adjacentX,(int)adjacentZ,groundY,arm,cursor))
                 return true;
-            return queueExposedLeafCanopyAccent(level,(int)adjacentX,(int)adjacentZ,groundY,cursor);
+            return queueExposedLeafCanopyAccent(level,(int)adjacentX,(int)adjacentZ,groundY,arm,cursor);
         }
 
         private static double sampleGroundY(net.minecraft.client.multiplayer.ClientLevel level,
-                int blockX,int blockZ,int referenceY,BlockPos.MutableBlockPos cursor,boolean emitCanopyAccent) {
+                int blockX,int blockZ,int referenceY,BlockPos.MutableBlockPos cursor,
+                boolean emitCanopyAccent,int arm) {
             // The caller owns one render-thread cursor for the whole mesh rebuild.
             // Every state and collision shape is consumed before the cursor moves;
             // no mutable position escapes this method or is retained by the mesh.
@@ -4182,12 +4223,12 @@ public final class RiftClientState {
                     double accentY=canopyAccentPlantSurfaceParticleY(candidateY,plantShapeHeight,
                         skippedPlantSurfaceBlocks);
                     queuePlantSurfaceCanopyAccent(level,surface,blockX,blockZ,groundY,accentY,
-                        skippedPlantSurfaceBlocks);
+                        skippedPlantSurfaceBlocks,arm);
                 }
                 // A plant surface carries its own accent only when the bounded clearance scan succeeds.
                 // Otherwise, let one exposed top leaf carry the seam upward.
                 if(emitCanopyAccent && (!plantSurface || skippedPlantSurfaceBlocks<0))
-                    queueExposedLeafCanopyAccent(level,blockX,blockZ,groundY,cursor);
+                    queueExposedLeafCanopyAccent(level,blockX,blockZ,groundY,arm,cursor);
                 return groundY;
             }
             return Double.NaN;
@@ -4317,7 +4358,7 @@ public final class RiftClientState {
                         // Unsupported columns are cached as NaN; only the +infinity
                         // default-return sentinel means this primitive-map key is absent.
                         int candidatesBeforeSample=groundCanopyAccentCandidateCount;
-                        sampledY=sampleGroundY(level,blockX,blockZ,referenceY,SURFACE_CURSOR,true);
+                        sampledY=sampleGroundY(level,blockX,blockZ,referenceY,SURFACE_CURSOR,true,arm);
                         boolean directLiftedAccent=false;
                         for(int candidate=candidatesBeforeSample;candidate<groundCanopyAccentCandidateCount;candidate++) {
                             if(GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[candidate]>0) {

@@ -5556,16 +5556,19 @@ def capture_test_world():
                     or "canopyAccentCandidateIndex" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: canopy accent emission window does not rotate across queued fissure candidates",flush=True)
                 return False
-            canopy_spread_marker=(
-                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SPATIAL_SPREAD_PROFILE_VERIFIED "
-                "candidateBudget=32 particleBudget=8 selection=greedy-farthest-point uniqueOrder=true clusterCoverage=true deterministic=true scratchArrays=true allocationFree=true cursorStep=1"
+            canopy_branch_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BRANCH_BALANCE_PROFILE_VERIFIED "
+                "candidateBudget=32 particleBudget=8 arms=4 selection=round-robin-arm-then-farthest "
+                "uniqueOrder=true perArmBudget=2 deterministic=true scratchArrays=true allocationFree=true cursorStep=1"
             )
-            if (canopy_spread_marker not in log_after
-                    or "buildCanopyAccentSpatialOrder(GROUND_CANOPY_ACCENT_X,GROUND_CANOPY_ACCENT_Z," not in camera_source
+            if (canopy_branch_marker not in log_after
+                    or "buildCanopyAccentSpatialOrder(GROUND_CANOPY_ACCENT_X,GROUND_CANOPY_ACCENT_Z,\n                GROUND_CANOPY_ACCENT_ARM," not in camera_source
+                    or "GROUND_CANOPY_ACCENT_ARM[candidate]=arm;" not in camera_source
+                    or "armCounts[arm]<=armSelected[arm]" not in camera_source
                     or "int i=GROUND_CANOPY_ACCENT_SPATIAL_ORDER[offset];" not in camera_source
                     or "candidateDistanceSquared<nearestDistanceSquared[candidate]" not in camera_source
                     or "groundCanopyAccentCandidateCursor=canopyAccentCandidateIndex(start,1,candidateCount);" not in camera_source):
-                print("WORLD_CAPTURE_FAIL: canopy accent samples are not spatially stratified across the bounded fissure candidate pool",flush=True)
+                print("WORLD_CAPTURE_FAIL: canopy accents are not balanced across the four bounded fissure arms",flush=True)
                 return False
             canopy_emission_throttle_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_EMISSION_THROTTLE_PROFILE_VERIFIED "
