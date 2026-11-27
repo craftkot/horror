@@ -29,3 +29,4 @@ jobs:
           java -cp /tmp/unwritten-classes dev.unwritten.MimicPolicyTest
           java -cp /tmp/unwritten-classes dev.unwritten.NarrativePolicyTest
           java -cp /tmp/unwritten-classes dev.unwritten.TimePolicyTest
+          java -cp /tmp/unwritten-classes dev.unwritten.SocialPolicyTest

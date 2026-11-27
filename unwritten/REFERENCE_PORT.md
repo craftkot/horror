@@ -37,3 +37,6 @@ Reopened both JARs with javap this turn. CoordsEvent sets ShowCoords=true and qu
 
 ## Time anomaly port
 Direct javap of the supplied Broken Script JAR: SetDoDaylightCycleEvent toggles enabled daylight off if its timer is inactive, sets 4000 ticks; SetTimeEvent chooses MIDNIGHT for roll <0.7 otherwise DAY. Extracted the embedded BrokenCore JAR and checked TimeOfDay: DAY=1000, MIDNIGHT=18000, setFake() broadcasts a custom fake-time payload. Port intentionally uses per-player visual clock packets (26.3 clock API), freezes for 4000 ticks or shows the fake time for 200 ticks (our provisional duration), restores current authoritative state, preserves actual day count, skips paused clocks for freeze and only affects Overworld. No gamerule mutation. MoonPhaseEvent increments moonStage modulo three and clears moonShouldChange; custom moon textures/stages are not implemented. Also reopened The God DimensTimerProcedure; dimension timers need a separate port. Fixed NarrativeEvents action bar API based on compilation log. Latest build pending.
+
+## User-directed social behavior
+FakeDisconnectEvent is inspiration only. User explicitly rejects real disconnection, ban and out-of-world interruptions. See SOCIAL_DESIGN.md. Synthetic TAB entries and dismissal-only screen are new implementations; no original code/assets included.

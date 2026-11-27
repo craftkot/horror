@@ -9,5 +9,6 @@
   "event.unwritten.null.title": "NULL",
   "event.unwritten.coords": "X: %s  Y: %s  Z: %s",
   "event.unwritten.help.request": "<God> Help me. He won't let me leave.",
-  "event.unwritten.help.warning": "<God> He's here. Run."
+  "event.unwritten.help.warning": "<God> He's here. Run.",
+  "event.unwritten.fakekick.reason": "Connection lost."
 }
