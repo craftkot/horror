@@ -898,6 +898,8 @@ public final class RiftClientState {
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.26D;
         // Keep canopy accents close to the fissure instead of letting them drift above the foliage.
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_SPEED=.003D;
+        // A tiny coordinate-stable drift keeps motes moving without random state or per-particle allocations.
+        private static final double GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED=.0045D;
         private static final int[] GROUND_CANOPY_ACCENT_X=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final int[] GROUND_CANOPY_ACCENT_Z=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final double[] GROUND_CANOPY_ACCENT_Y=new double[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
@@ -3111,8 +3113,11 @@ public final class RiftClientState {
                 if(!level.getWorldBorder().isWithinBounds(SURFACE_CURSOR)
                     || !level.hasChunk(x>>4,z>>4)
                     || !canopyAccentCandidateTouchesMesh(x,z,groundY,segments)) continue;
+                double velocityX=canopyAccentHorizontalVelocity(x,z,0);
+                double velocityZ=canopyAccentHorizontalVelocity(x,z,1);
+                if(!canopyAccentHorizontalDriftWithinBounds(velocityX,velocityZ)) continue;
                 level.addParticle(GROUND_CANOPY_ACCENT_DUST,x+.5D,accentY,z+.5D,
-                    0.0D,GROUND_CANOPY_ACCENT_VERTICAL_SPEED,0.0D);
+                    velocityX,GROUND_CANOPY_ACCENT_VERTICAL_SPEED,velocityZ);
                 groundCanopyAccentParticlesEmitted++;
             }
             groundCanopyAccentCandidateCursor=canopyAccentCandidateIndex(start,visited,candidateCount);
@@ -3126,6 +3131,25 @@ public final class RiftClientState {
             double boundedHeight=Double.isFinite(shapeHeight)
                 ? Math.max(0.0D,Math.min(1.0D,shapeHeight)) : 0.0D;
             return surfaceY+boundedHeight+GROUND_CANOPY_ACCENT_VERTICAL_OFFSET;
+        }
+
+        // SplitMix64 turns a block coordinate and axis into a repeatable, bounded drift component.
+        // No Random, vector, or stream is allocated while emitting the eight-mote budget.
+        private static double canopyAccentHorizontalVelocity(int blockX,int blockZ,int axis) {
+            if(axis<0 || axis>1) return Double.NaN;
+            long hash=(((long)blockX)<<32) ^ (blockZ&0xffffffffL);
+            hash+=axis==0?0x9E3779B97F4A7C15L:0xD1B54A32D192ED03L;
+            hash=(hash^(hash>>>30))*0xBF58476D1CE4E5B9L;
+            hash=(hash^(hash>>>27))*0x94D049BB133111EBL;
+            hash^=hash>>>31;
+            double unit=(hash>>>11)*0x1.0p-53D;
+            return (unit*2.0D-1.0D)*GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED;
+        }
+
+        private static boolean canopyAccentHorizontalDriftWithinBounds(double velocityX,double velocityZ) {
+            return Double.isFinite(velocityX) && Double.isFinite(velocityZ)
+                && Math.abs(velocityX)<=GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED
+                && Math.abs(velocityZ)<=GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED;
         }
 
         private static boolean isCanopyAccentTransitionColorValid(Vector3f color) {
@@ -3247,6 +3271,18 @@ public final class RiftClientState {
             boolean particleVelocityBounded=Double.isFinite(GROUND_CANOPY_ACCENT_VERTICAL_SPEED)
                 && GROUND_CANOPY_ACCENT_VERTICAL_SPEED>=.002D
                 && GROUND_CANOPY_ACCENT_VERTICAL_SPEED<=.004D;
+            double driftX=canopyAccentHorizontalVelocity(516,515,0);
+            double driftZ=canopyAccentHorizontalVelocity(516,515,1);
+            boolean particleDriftProfile=Double.isFinite(GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED)
+                && GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED>=.003D
+                && GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED<=.006D
+                && canopyAccentHorizontalDriftWithinBounds(driftX,driftZ)
+                && driftX==canopyAccentHorizontalVelocity(516,515,0)
+                && driftZ==canopyAccentHorizontalVelocity(516,515,1)
+                && Double.isNaN(canopyAccentHorizontalVelocity(516,515,2))
+                && canopyAccentHorizontalDriftWithinBounds(
+                    canopyAccentHorizontalVelocity(Integer.MIN_VALUE,Integer.MAX_VALUE,0),
+                    canopyAccentHorizontalVelocity(Integer.MIN_VALUE,Integer.MAX_VALUE,1));
             boolean particleColorTransitionProfile=
                 isCanopyAccentTransitionColorValid(GROUND_CANOPY_ACCENT_START_COLOR)
                 && isCanopyAccentTransitionColorValid(GROUND_CANOPY_ACCENT_END_COLOR)
@@ -3360,7 +3396,7 @@ public final class RiftClientState {
                 && neighborScanBudgetProfile && neighborScanPassProfile && neighborColumnDedupProfile
                 && candidateDedupProfile && heightmapPrefilterProfile
                 && particleScaleBounded && particleOffsetBounded
-                && particleVelocityBounded && particleColorTransitionProfile
+                && particleVelocityBounded && particleDriftProfile && particleColorTransitionProfile
                 && foliageClearanceProfile && canopyAccentHeadroomProfile
                 && plantClearanceProfile && plantCollisionShapePrefilterProfile && leafSurfaceScanProfile && heightmapTopNormalizationProfile
                 && Math.abs(plantTop-71.06D)<1.0E-9D
@@ -3400,6 +3436,9 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED scale={} verticalOffset={} verticalSpeed={} scaleBounded=true heightBounded=true speedBounded=true",
                 GROUND_CANOPY_ACCENT_PARTICLE_SCALE,GROUND_CANOPY_ACCENT_VERTICAL_OFFSET,
                 GROUND_CANOPY_ACCENT_VERTICAL_SPEED);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DRIFT_PROFILE_VERIFIED deterministic=true horizontalMax={} verticalUnchanged=true bounded=true",
+                GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_COLOR_TRANSITION_VERIFIED brightVioletToDeepViolet=true cachedOptions=true perParticleUpdate=true budgetUnchanged=true");
             com.mojang.logging.LogUtils.getLogger().info(

@@ -5116,8 +5116,21 @@ def capture_test_world():
                     or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=1.70F" not in camera_source
                     or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.26D;" not in camera_source
                     or "GROUND_CANOPY_ACCENT_VERTICAL_SPEED=.003D;" not in camera_source
-                    or "0.0D,GROUND_CANOPY_ACCENT_VERTICAL_SPEED,0.0D" not in camera_source):
+                    or "GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED=.0045D;" not in camera_source
+                    or "canopyAccentHorizontalVelocity(x,z,0)" not in camera_source
+                    or "canopyAccentHorizontalVelocity(x,z,1)" not in camera_source
+                    or "velocityX,GROUND_CANOPY_ACCENT_VERTICAL_SPEED,velocityZ" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: bounded canopy accent particle profile was not verified",flush=True)
+                return False
+            canopy_drift_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DRIFT_PROFILE_VERIFIED "
+                "deterministic=true horizontalMax=0.0045 verticalUnchanged=true bounded=true"
+            )
+            if (canopy_drift_marker not in log_after
+                    or "SplitMix64 turns a block coordinate and axis" not in camera_source
+                    or "hash=(hash^(hash>>>30))*0xBF58476D1CE4E5B9L;" not in camera_source
+                    or "canopyAccentHorizontalDriftWithinBounds(velocityX,velocityZ)" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: deterministic bounded canopy mote drift was not verified",flush=True)
                 return False
             canopy_color_transition_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_COLOR_TRANSITION_VERIFIED "
