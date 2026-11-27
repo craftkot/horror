@@ -18,11 +18,12 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.level.LightLayer;
 
 /** Temporary, player-specific illusions. No server mobs or world modifications. */
 final class Apparitions {
     private static final Random RNG = new Random();
-    private record Ghost(int id, ServerPlayer player, Object level, Vec3 point, int age, int seen, boolean stalk) {}
+    private record Ghost(int id, ServerPlayer player, Object level, Vec3 point, int age, int seen, boolean stalk, boolean mine) {}
     private final Map<UUID,Ghost> active = new HashMap<>();
     private int nextId = -1;
     static void soundBehind(ServerPlayer p, SoundEvent sound, float volume, float pitch) {
@@ -31,32 +32,35 @@ final class Apparitions {
         p.connection.send(new ClientboundSoundPacket(Holder.direct(sound), SoundSource.AMBIENT,
             p.getX()+Math.sin(angle)*distance, p.getY(), p.getZ()-Math.cos(angle)*distance, volume,pitch,RNG.nextLong()));
     }
-    void show(ServerPlayer p, boolean stalk) {
-        if(active.containsKey(p.getUUID())) return;
+    void show(ServerPlayer p, boolean stalk) { show(p,stalk,false); }
+    boolean show(ServerPlayer p, boolean stalk, boolean mine) {
+        if(active.containsKey(p.getUUID())) return false;
         var level=p.level();
         double yaw=Math.toRadians(p.getYRot());
         for(int i=0;i<24;i++){
             // Outside the forward hemisphere; enough room for the tall placeholder.
             double angle=yaw+(RNG.nextDouble()-.5)*Math.PI;
-            double radius=14+RNG.nextDouble()*16;
+            double radius=mine?9+RNG.nextDouble()*12:14+RNG.nextDouble()*16;
             int x=(int)Math.floor(p.getX()+Math.sin(angle)*radius);
             int z=(int)Math.floor(p.getZ()-Math.cos(angle)*radius);
             if(!level.hasChunkAt(x,z))continue;
             for(int dy=3;dy>=-4;dy--){
                 var block=new BlockPos(x,p.blockPosition().getY()+dy,z);
+                if(mine && level.getBrightness(LightLayer.SKY,block)!=0)continue;
                 if(!level.getBlockState(block.below()).isSolidRender() ||
                    !level.getBlockState(block).isAir() ||
                    !level.getBlockState(block.above()).isAir() ||
-                   !level.getBlockState(block.above(2)).isAir())continue;
+                   (!mine&&!level.getBlockState(block.above(2)).isAir()))continue;
                 Vec3 point=Vec3.atBottomCenterOf(block);
                 float facing=(float)Math.toDegrees(Math.atan2(-(p.getX()-point.x),p.getZ()-point.z));
                 int id=nextId--;
                 p.connection.send(new ClientboundAddEntityPacket(id,UUID.randomUUID(),point.x,point.y,point.z,
-                    0f,facing,Objects.requireNonNull(BuiltInRegistries.ENTITY_TYPE.getValue(Identifier.withDefaultNamespace("enderman"))),0,Vec3.ZERO,facing));
-                active.put(p.getUUID(),new Ghost(id,p,level,point,0,0,stalk));
-                return;
+                    0f,facing,Objects.requireNonNull(BuiltInRegistries.ENTITY_TYPE.getValue(Identifier.withDefaultNamespace(mine?"husk":"enderman"))),0,Vec3.ZERO,facing));
+                active.put(p.getUUID(),new Ghost(id,p,level,point,0,0,stalk,mine));
+                return true;
             }
         }
+        return false;
     }
     void tick(List<ServerPlayer> players, ChaseEncounter chases) {
         if(active.isEmpty())return;
@@ -82,12 +86,19 @@ final class Apparitions {
                 it.remove();
                 if(action==WatcherPolicy.Action.CLOSE || action==WatcherPolicy.Action.SPOTTED){
                     boolean close=action==WatcherPolicy.Action.CLOSE;
-                    if(RNG.nextInt(3)==0)chases.start(p,g.point());
+                    if(g.mine()&&close){
+                        if(RNG.nextBoolean()&&chases.start(p,g.point()))continue;
+                        var blind=BuiltInRegistries.MOB_EFFECT.getOrThrow(ResourceKey.create(Registries.MOB_EFFECT,Identifier.withDefaultNamespace("blindness")));
+                        if(!p.hasEffect(blind))p.addEffect(new MobEffectInstance(blind,10,2,false,false));
+                        p.connection.send(new ClientboundSoundPacket(Holder.direct(SoundEvents.AMBIENT_CAVE.value()),SoundSource.AMBIENT,g.point().x,g.point().y,g.point().z,.7f,.65f,RNG.nextLong()));
+                        continue;
+                    }
+                    if(!g.mine()&&RNG.nextInt(3)==0)chases.start(p,g.point());
                     var effect=BuiltInRegistries.MOB_EFFECT.getOrThrow(ResourceKey.create(Registries.MOB_EFFECT,Identifier.withDefaultNamespace(close?"blindness":"darkness")));
                     if(!p.hasEffect(effect))p.addEffect(new MobEffectInstance(effect,close?100:60,0,false,false));
                     p.connection.send(new ClientboundSoundPacket(Holder.direct(SoundEvents.AMBIENT_CAVE.value()),SoundSource.AMBIENT,g.point().x,g.point().y,g.point().z,.7f,.65f,RNG.nextLong()));
                 }
-            }else e.setValue(new Ghost(g.id(),p,g.level(),g.point(),g.age()+1,seen,g.stalk()));
+            }else e.setValue(new Ghost(g.id(),p,g.level(),g.point(),g.age()+1,seen,g.stalk(),g.mine()));
         }
     }
     boolean hasWatcher(ServerPlayer p){var g=active.get(p.getUUID());return g!=null&&g.player()==p&&g.level()==p.level();}

@@ -26,7 +26,7 @@ final class ChaseEncounter {
   if(type==null||!(type.create(level,EntitySpawnReason.EVENT) instanceof Mob mob))return false;
   mob.setPos(point.x,point.y,point.z);
   if(!level.noCollision(mob))return false;
-  mob.addTag(MARK);mob.setCanPickUpLoot(false);
+  mob.getPersistentData().putBoolean(MARK,true);mob.setCanPickUpLoot(false);
   owners.put(mob.getUUID(),p.getUUID());
   if(!level.addFreshEntity(mob)){owners.remove(mob.getUUID());return false;}
   active.put(p.getUUID(),new Chase(p,mob,0,0,p.position()));
@@ -52,14 +52,14 @@ final class ChaseEncounter {
   }
  }
  void onJoin(EntityJoinLevelEvent event){
-  if(!event.getLevel().isClientSide()&&event.getEntity().getTags().contains(MARK)&&!owners.containsKey(event.getEntity().getUUID()))event.setCanceled(true);
+  if(!event.getLevel().isClientSide()&&event.getEntity().getPersistentData().contains(MARK)&&!owners.containsKey(event.getEntity().getUUID()))event.setCanceled(true);
  }
  void onTarget(LivingChangeTargetEvent event){
-  if(!event.getEntity().getTags().contains(MARK))return;
+  if(!event.getEntity().getPersistentData().contains(MARK))return;
   var owner=owners.get(event.getEntity().getUUID());var next=event.getNewAboutToBeSetTarget();
   if(next!=null&&(owner==null||!owner.equals(next.getUUID())))event.setNewAboutToBeSetTarget(null);
  }
- void onDrops(LivingDropsEvent event){if(event.getEntity().getTags().contains(MARK))event.setCanceled(true);}
+ void onDrops(LivingDropsEvent event){if(event.getEntity().getPersistentData().contains(MARK))event.setCanceled(true);}
  private void remove(Chase c){owners.remove(c.mob().getUUID());c.mob().discard();}
  void clear(){active.values().forEach(this::remove);active.clear();owners.clear();}
 }

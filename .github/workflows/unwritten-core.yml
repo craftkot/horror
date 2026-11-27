@@ -25,3 +25,4 @@ jobs:
           java -cp /tmp/unwritten-classes dev.unwritten.WatcherPolicyTest
           java -cp /tmp/unwritten-classes dev.unwritten.OrePolicyTest
           java -cp /tmp/unwritten-classes dev.unwritten.ChasePolicyTest
+          java -cp /tmp/unwritten-classes dev.unwritten.MinePolicyTest
