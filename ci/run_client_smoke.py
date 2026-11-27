@@ -771,9 +771,9 @@ def verify_restoration_particle_source():
     # Match the Java call across formatting changes; the argument list is intentionally
     # split over multiple source lines in RiftClientState.java.
     fixture_anchor_reset_call=re.search(
-        r"if\\s*\\(\\s*anchorChanged\\s*\\)\\s*\\{\\s*"
-        r"resetCanopyAccentFixtureProbeForAnchorChange\\(\\s*"
-        r"cachedAnchorX\\s*,\\s*cachedAnchorZ\\s*,\\s*worldAnchorX\\s*,\\s*worldAnchorZ\\s*\\)\\s*;",
+        r"if\s*\(\s*anchorChanged\s*\)\s*\{\s*"
+        r"resetCanopyAccentFixtureProbeForAnchorChange\(\s*"
+        r"cachedAnchorX\s*,\s*cachedAnchorZ\s*,\s*worldAnchorX\s*,\s*worldAnchorZ\s*\)\s*;",
         client_source
     )
     if (not fixture_anchor_reset_body
