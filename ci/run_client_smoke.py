@@ -768,24 +768,28 @@ def verify_restoration_particle_source():
     fixture_anchor_reset_end=client_source.find("\n        private static",fixture_anchor_reset_start+1)
     fixture_anchor_reset_body=(client_source[fixture_anchor_reset_start:fixture_anchor_reset_end]
         if fixture_anchor_reset_start>=0 and fixture_anchor_reset_end>fixture_anchor_reset_start else "")
-    # Match the Java call across formatting changes; the argument list is intentionally
-    # split over multiple source lines in RiftClientState.java.
+    # The last fixture anchor survives geometry-cache invalidation; cachedAnchorX/Z may not.
     fixture_anchor_reset_call=re.search(
         r"if\s*\(\s*anchorChanged\s*\)\s*\{\s*"
         r"resetCanopyAccentFixtureProbeForAnchorChange\(\s*"
-        r"cachedAnchorX\s*,\s*cachedAnchorZ\s*,\s*worldAnchorX\s*,\s*worldAnchorZ\s*\)\s*;",
+        r"worldAnchorX\s*,\s*worldAnchorZ\s*\)\s*;",
         client_source
     )
     if (not fixture_anchor_reset_body
             or "canopyAccentFixtureSampleLogged=false;" not in fixture_anchor_reset_body
             or "groundCanopyAccentLiftedLoggedCount=0;" not in fixture_anchor_reset_body
-            or "previousAnchorX!=Integer.MIN_VALUE" not in fixture_anchor_reset_body
-            or "previousAnchorZ!=Integer.MIN_VALUE" not in fixture_anchor_reset_body
-            or "if(VERIFY_GROUND_MESH_PROFILES && previousAnchorValid)" not in fixture_anchor_reset_body
-            or "previousSampleLogged" in fixture_anchor_reset_body
+            or "previousSampleAnchorX=canopyAccentFixtureSampleAnchorX;" not in fixture_anchor_reset_body
+            or "previousSampleAnchorZ=canopyAccentFixtureSampleAnchorZ;" not in fixture_anchor_reset_body
+            or "if(VERIFY_GROUND_MESH_PROFILES && sampleAnchorChanged)" not in fixture_anchor_reset_body
+            or "canopyAccentFixtureSampleAnchorX=nextAnchorX;" not in fixture_anchor_reset_body
+            or "canopyAccentFixtureSampleAnchorZ=nextAnchorZ;" not in fixture_anchor_reset_body
             or "GROUND_CANOPY_ACCENT_FIXTURE_ANCHOR_RESET_VERIFIED" not in fixture_anchor_reset_body
+            or "canopyAccentFixtureSampleAnchorX=Integer.MIN_VALUE;" not in client_source
+            or "canopyAccentFixtureSampleAnchorZ=Integer.MIN_VALUE;" not in client_source
+            or "canopyAccentFixtureSampleAnchorX=worldAnchorX;" not in neighbor_scan_body
+            or "canopyAccentFixtureSampleAnchorZ=worldAnchorZ;" not in neighbor_scan_body
             or fixture_anchor_reset_call is None):
-        raise RuntimeError("BLACK FREQUENCY canopy fixture probe must reset when the active mesh anchor changes")
+        raise RuntimeError("BLACK FREQUENCY canopy fixture probe must preserve its sampled anchor across cache invalidation")
     geometry_cache_clear_start=client_source.find("private static void clearGeometryCache()")
     geometry_cache_clear_end=client_source.find(
         "\n        private static void clearGeometryCacheIfPresent",geometry_cache_clear_start+1)
@@ -794,7 +798,9 @@ def verify_restoration_particle_source():
     if ("groundCanopyAccentLiftedLoggedCount=0;" not in geometry_cache_clear_body
             or "canopyAccentFixtureSampleLogged=false;" not in geometry_cache_clear_body
             or "groundCanopyAccentNeighborSampleCount=0;" not in geometry_cache_clear_body
-            or "groundCanopyAccentCandidateCount=0;" not in geometry_cache_clear_body):
+            or "groundCanopyAccentCandidateCount=0;" not in geometry_cache_clear_body
+            or "canopyAccentFixtureSampleAnchorX=" in geometry_cache_clear_body
+            or "canopyAccentFixtureSampleAnchorZ=" in geometry_cache_clear_body):
         raise RuntimeError("BLACK FREQUENCY geometry cache invalidation must reset per-mesh canopy probe state")
     fixture_queue_call=neighbor_scan_body.find("boolean queued=queueAdjacentExposedLeafCanopyAccent")
     fixture_retry_branch=neighbor_scan_body.find("if(!queued) {",fixture_queue_call)
