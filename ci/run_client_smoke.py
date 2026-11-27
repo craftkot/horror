@@ -3080,7 +3080,7 @@ def capture_test_world():
                             fixture_from_log=tuple(map(int,fixture_match.groups()))
                             lifted_y=float(lifted_match.group(2))
                             skipped=int(lifted_match.group(4))
-                            # The marker is the lower plant half; the mote clears both halves by 2.32 blocks.
+                            # The marker is the lower plant half; the mote clears both occupied cells and the 0.32 offset.
                             # Two occupied plant cells are skipped; the mote is emitted
                             # in the first clear cell above them, then raised by the 0.32 offset.
                             expected_particle_y=canopy_fixture_position[1]+3.32
