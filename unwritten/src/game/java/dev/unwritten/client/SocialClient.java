@@ -12,6 +12,7 @@ import net.neoforged.neoforge.client.network.event.RegisterClientPayloadHandlers
 public final class SocialClient {
  @SubscribeEvent
  public static void register(RegisterClientPayloadHandlersEvent event){
+  event.register(dev.unwritten.SkinPayload.TYPE,(payload,context)->SkinPresentation.bind(payload.alias(),payload.source()));
   event.register(dev.unwritten.TabPayload.TYPE,(payload,context)->TabPresentation.begin(payload.target()));
   event.register(SocialPayload.TYPE,(payload,context)->{
    var mc=Minecraft.getInstance();

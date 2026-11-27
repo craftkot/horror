@@ -49,6 +49,7 @@ public final class UnwrittenMod {
     public UnwrittenMod(net.neoforged.bus.api.IEventBus modBus) {
         modBus.addListener(SocialPayload::register);
         modBus.addListener(TabPayload::register);
+        modBus.addListener(SkinPayload::register);
         NeoForge.EVENT_BUS.addListener(this::tick);
         NeoForge.EVENT_BUS.addListener(this::stop);
         NeoForge.EVENT_BUS.addListener(this::stopping);

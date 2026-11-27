@@ -9,6 +9,9 @@ import net.minecraft.network.protocol.game.*;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Avatar;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.item.ItemStack;
@@ -21,7 +24,7 @@ final class MimicEncounter {
  private static final List<EquipmentSlot> SLOTS=List.of(EquipmentSlot.MAINHAND,EquipmentSlot.OFFHAND,EquipmentSlot.HEAD,EquipmentSlot.CHEST,EquipmentSlot.LEGS,EquipmentSlot.FEET);
  private final Random rng=new Random();
  private int nextId=-1000000000;
- private record Echo(ServerPlayer viewer,Object world,int entityId,UUID profileId,boolean ownProfile,ServerPlayer skinSource,MimicPolicy.Pattern pattern,Vec3 point,int ticks){}
+ private record Echo(ServerPlayer viewer,Object world,int entityId,UUID profileId,boolean ownProfile,ServerPlayer skinSource,MimicPolicy.Pattern pattern,Vec3 point,int ticks,LivingEntity.SwingDescription lastSwing){}
  private final Map<UUID,Echo> active=new HashMap<>();
  boolean active(ServerPlayer p){return active.containsKey(p.getUUID());}
  static ServerPlayer chooseSource(ServerPlayer viewer,List<ServerPlayer> players,Random rng){
@@ -34,6 +37,7 @@ final class MimicEncounter {
   var packet=new ClientboundPlayerInfoUpdatePacket(actions,List.<ServerPlayer>of());
   packet.entries=List.of(new ClientboundPlayerInfoUpdatePacket.Entry(id,profile,listed,50,GameType.SURVIVAL,null,true,0,null));
   viewer.connection.send(packet);
+  net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(viewer,new SkinPayload(id,source.getUUID()));
  }
  private Vec3 point(ServerPlayer p,MimicPolicy.Pattern pattern){return new Vec3(pattern.x(p.getX()),p.getY(),pattern.z(p.getZ()));}
  private boolean clearPosition(ServerPlayer p,Vec3 v){
@@ -57,8 +61,8 @@ final class MimicEncounter {
    if(ownProfile)sendProfile(p,id,name,source,false);
    float yaw=MimicPolicy.yaw(p.getYRot()),pitch=MimicPolicy.pitch(p.getXRot());
    p.connection.send(new ClientboundAddEntityPacket(entityId,id,v.x,v.y,v.z,pitch,yaw,type,0,Vec3.ZERO,MimicPolicy.yaw(p.getYHeadRot())));
-   var e=new Echo(p,p.level(),entityId,id,ownProfile,source,pattern,v,0);
-   active.put(p.getUUID(),e);appearance(e);return true;
+   var e=new Echo(p,p.level(),entityId,id,ownProfile,source,pattern,v,0,null);
+   active.put(p.getUUID(),e);appearance(e);motion(e);return true;
   }
   return false;
  }
@@ -71,6 +75,15 @@ final class MimicEncounter {
   var equipment=new ArrayList<Pair<EquipmentSlot,ItemStack>>();
   for(var slot:SLOTS)equipment.add(Pair.of(slot,source.getItemBySlot(slot).copy()));
   e.viewer().connection.send(new ClientboundSetEquipmentPacket(e.entityId(),equipment));
+ }
+ private void motion(Echo e){
+  var p=e.viewer();
+  var pose=p.getPose()==Pose.CROUCHING?Pose.CROUCHING:Pose.STANDING;
+  // Copy only crouch/sprint bits. Do not copy invisibility, fire or unrelated effects.
+  byte flags=(byte)(p.getEntityData().get(Entity.DATA_SHARED_FLAGS_ID)&0x0A);
+  p.connection.send(new ClientboundSetEntityDataPacket(e.entityId(),List.of(
+    SynchedEntityData.DataValue.create(Entity.DATA_POSE,pose),
+    SynchedEntityData.DataValue.create(Entity.DATA_SHARED_FLAGS_ID,flags))));
  }
  void tick(List<ServerPlayer> players,ChaseEncounter chases){
   var it=active.entrySet().iterator();
@@ -88,9 +101,12 @@ final class MimicEncounter {
     p.connection.send(ClientboundTeleportEntityPacket.teleport(e.entityId(),change,Set.of(),p.onGround()));
     var head=new ClientboundRotateHeadPacket(p,(byte)(MimicPolicy.yaw(p.getYHeadRot())*256f/360f));
     head.entityId=e.entityId();p.connection.send(head);
+    motion(e);
    }
+   var swing=p.getCurrentSwing();
+   if(swing!=null&&swing!=e.lastSwing())p.connection.send(new ClientboundSwingAnimationPacket(e.entityId(),swing.hand(),swing.animation()));
    if(e.ticks()%20==0)appearance(e);
-   entry.setValue(new Echo(p,e.world(),e.entityId(),e.profileId(),e.ownProfile(),e.skinSource(),e.pattern(),v,e.ticks()+1));
+   entry.setValue(new Echo(p,e.world(),e.entityId(),e.profileId(),e.ownProfile(),e.skinSource(),e.pattern(),v,e.ticks()+1,swing));
   }
  }
  void cancelIdentity(ServerPlayer p,UUID profileId){

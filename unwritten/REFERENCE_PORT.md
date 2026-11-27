@@ -43,3 +43,6 @@ FakeDisconnectEvent is inspiration only. User explicitly rejects real disconnect
 
 ## FakePlayer appearance review
 Reopened the supplied TBS JAR and inspected FakePlayerRenderer and FakePlayerEntity with javap. Renderer bakes PLAYER and PLAYER_SLIM, changes PlayerModel when SkinManager.usesSlimArms changes, adds armor/item/cape layers. Entity obtains PlayerInfo.getSkin with default fallback and tests PlayerModelPart masks against a synchronized byte. We use the vanilla player-rendering path, preserving profile properties and the source Avatar skin-part mask rather than rebuilding the renderer or redistributing assets. 26.3 AvatarRenderer and packet signatures reviewed. See SOCIAL_DESIGN.md for adaptation and limitations.
+
+## Appearance follow-up
+Reopened the actual supplied Broken Script JAR; FakePlayerEntity.getSkin calls PlayerInfo.getSkin and falls back to default using selected-player UUID, and isModelPartShown tests DATA_PLAYER_MODE_CUSTOMISATION masks. The new skin-link implementation follows that lookup approach without impersonating a real server profile. Crouch/sprint/swing synchronization is our extension, not a claim that the original FakePlayerMimic copied all those animations. See SOCIAL_DESIGN.md.
