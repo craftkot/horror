@@ -13,7 +13,7 @@ public final class SocialClient {
  @SubscribeEvent
  public static void register(RegisterClientPayloadHandlersEvent event){
   event.register(dev.unwritten.SkinPayload.TYPE,(payload,context)->SkinPresentation.bind(payload.alias(),payload.source()));
-  event.register(dev.unwritten.TabPayload.TYPE,(payload,context)->TabPresentation.begin(payload.target()));
+  event.register(dev.unwritten.TabPayload.TYPE,(payload,context)->{if(payload.begin())TabPresentation.begin(payload.target());else TabPresentation.end(payload.target(),payload.announce());});
   event.register(SocialPayload.TYPE,(payload,context)->{
    var mc=Minecraft.getInstance();
    if(mc.player==null||mc.level==null||mc.gui.screen()!=null||mc.gui.overlay()!=null)return;

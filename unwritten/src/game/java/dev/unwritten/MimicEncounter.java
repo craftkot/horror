@@ -49,6 +49,8 @@ final class MimicEncounter {
   var source=chooseSource(p,p.level().getServer().getPlayerList().getPlayers(),rng);
   return start(p,UUID.randomUUID(),source.getGameProfile().name(),source,true);
  }
+ boolean startCopy(ServerPlayer p,UUID id,ServerPlayer source){return start(p,id,source.getGameProfile().name(),source,true);}
+ boolean activeIdentity(ServerPlayer p,UUID id){var e=active.get(p.getUUID());return e!=null&&e.profileId().equals(id);}
  boolean start(ServerPlayer p,UUID id,String name,ServerPlayer source){return start(p,id,name,source,false);}
  private boolean start(ServerPlayer p,UUID id,String name,ServerPlayer source,boolean ownProfile){
   if(active(p)||!p.isAlive()||p.isCreative()||p.isSpectator())return false;

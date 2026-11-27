@@ -24,6 +24,13 @@ public final class TabPresentation {
   hidden=new Hidden(connection,id,info.getProfile().name(),0);
   announce(mc,"multiplayer.player.left",hidden.name());
  }
+ public static void end(UUID id,boolean announceReturn){
+  var h=hidden;if(h==null||!h.id().equals(id))return;
+  hidden=null;
+  var mc=Minecraft.getInstance();var connection=mc.getConnection();
+  if(announceReturn&&mc.player!=null&&mc.player.isAlive()&&connection==h.connection()&&connection.getListedOnlinePlayers().stream().anyMatch(p->p.getProfile().id().equals(id)))
+   announce(mc,"multiplayer.player.joined",h.name());
+ }
  public static List<PlayerInfo> filter(List<PlayerInfo> rows){
   var h=hidden;
   if(h==null||Minecraft.getInstance().getConnection()!=h.connection())return rows;
@@ -38,7 +45,7 @@ public final class TabPresentation {
   }
   // Respect an actual server departure or a real unlist. No fabricated return.
   if(connection.getListedOnlinePlayers().stream().noneMatch(p->p.getProfile().id().equals(h.id()))){hidden=null;return;}
-  if(h.age()+1>=SocialPolicy.HIDE_TICKS){hidden=null;announce(mc,"multiplayer.player.joined",h.name());}
+  if(h.age()+1>=SocialPolicy.CLIENT_HIDE_LIMIT){end(h.id(),true);}
   else hidden=new Hidden(connection,h.id(),h.name(),h.age()+1);
  }
  private static void announce(Minecraft mc,String key,String name){mc.player.sendSystemMessage(Component.translatable(key,Component.literal(name)).withStyle(ChatFormatting.YELLOW));}

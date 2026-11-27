@@ -9,8 +9,11 @@ public final class SocialPolicy {
   names.removeIf(n->occupied.stream().anyMatch(n::equalsIgnoreCase));
   return names.isEmpty()?Optional.empty():Optional.of(names.get(rng.nextInt(names.size())));
  }
- public static final int MIMIC_AT=120, HIDE_TICKS=400;
+ public static final int MIMIC_AT=120, HIDE_TICKS=600;
  public static boolean canHide(boolean self,boolean sameWorld,double distanceSquared){return !self&&(!sameWorld||Double.isFinite(distanceSquared)&&distanceSquared>1024);}
+ public static final int COPY_RETRY_END=200, CLIENT_HIDE_LIMIT=640;
+ public static boolean copyOpportunity(int age){return age>=MIMIC_AT&&age<=COPY_RETRY_END&&age%20==0;}
+ public static boolean endHidden(int age,boolean copyStarted,boolean copyActive){return age>=HIDE_TICKS||(copyStarted&&!copyActive)||(age>COPY_RETRY_END&&!copyStarted);}
  public static boolean shouldReveal(int age){return age==MIMIC_AT;}
  public static boolean expired(int age){return age>=DURATION;}
  private SocialPolicy(){}
