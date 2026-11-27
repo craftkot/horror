@@ -3098,6 +3098,24 @@ public final class RiftClientState {
             return (int)Math.floorMod((long)start+(long)offset,(long)candidateCount);
         }
 
+        private static int canopyAccentCandidateGcd(int left,int right) {
+            while(right!=0) {
+                int remainder=left%right;
+                left=right;
+                right=remainder;
+            }
+            return left;
+        }
+
+        // Use a coprime stride so each eight-mote window samples the whole candidate
+        // list instead of repeatedly favoring the first fissure arm's insertion order.
+        private static int canopyAccentCandidateStride(int candidateCount) {
+            if(candidateCount<=1) return 0;
+            int stride=Math.max(2,candidateCount/GROUND_CANOPY_ACCENT_PARTICLE_BUDGET);
+            while(stride<candidateCount && canopyAccentCandidateGcd(stride,candidateCount)!=1) stride++;
+            return stride<candidateCount?stride:1;
+        }
+
         private static boolean shouldAttemptCanopyAccentScan(long gameTime,long lastEmissionTick) {
             if(lastEmissionTick==Long.MIN_VALUE || gameTime<lastEmissionTick) return true;
             try {
@@ -3122,10 +3140,11 @@ public final class RiftClientState {
             long emissionEpoch=Math.floorDiv(gameTime,(long)GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS);
             long dimensionSalt=canopyAccentDimensionSalt(level.dimension().location().toString());
             int start=canopyAccentCandidateIndex(groundCanopyAccentCandidateCursor,0,candidateCount);
+            int stride=canopyAccentCandidateStride(candidateCount);
             int visited=0;
             for(int offset=0;offset<candidateCount
                 && groundCanopyAccentParticlesEmitted<GROUND_CANOPY_ACCENT_PARTICLE_BUDGET;offset++) {
-                int i=canopyAccentCandidateIndex(start,offset,candidateCount);
+                int i=canopyAccentCandidateIndex(start,offset*stride,candidateCount);
                 visited=offset+1;
                 int x=GROUND_CANOPY_ACCENT_X[i],z=GROUND_CANOPY_ACCENT_Z[i];
                 long dx=(long)x-worldAnchorX,dz=(long)z-worldAnchorZ;
@@ -3169,7 +3188,8 @@ public final class RiftClientState {
                     }
                 }
             }
-            groundCanopyAccentCandidateCursor=canopyAccentCandidateIndex(start,visited,candidateCount);
+            // Slide one slot per cadence; coprime windows give every queued column equal long-run coverage.
+            groundCanopyAccentCandidateCursor=canopyAccentCandidateIndex(start,1,candidateCount);
             // Record the bounded scan even when every candidate is rejected; otherwise rapid mesh
             // invalidations can repeat the same 32 distance/segment checks inside one rebuild interval.
             groundCanopyAccentLastAttemptTick=nextCanopyAccentAttemptTick(
@@ -3490,6 +3510,52 @@ public final class RiftClientState {
                 && secondWindowStart==8 && secondWindowEnd==11 && wrappedWindow==0
                 && canopyAccentCandidateIndex(-1,0,rotationCandidateCount)==11
                 && canopyAccentCandidateIndex(0,0,0)==-1;
+            int spreadStride=canopyAccentCandidateStride(rotationCandidateCount);
+            int[] expectedSpreadFirst={0,5,10,3,8,1,6,11};
+            int[] expectedSpreadSecond={1,6,11,4,9,2,7,0};
+            boolean spreadWindowProfile=spreadStride==5;
+            boolean[] spreadSeen=new boolean[rotationCandidateCount];
+            int[] spreadCoverage=new int[rotationCandidateCount];
+            int nextSpreadStart=canopyAccentCandidateIndex(firstWindowStart,1,rotationCandidateCount);
+            for(int offset=0;offset<GROUND_CANOPY_ACCENT_PARTICLE_BUDGET;offset++) {
+                int first=canopyAccentCandidateIndex(firstWindowStart,offset*spreadStride,rotationCandidateCount);
+                int second=canopyAccentCandidateIndex(nextSpreadStart,offset*spreadStride,rotationCandidateCount);
+                spreadWindowProfile &= first==expectedSpreadFirst[offset]
+                    && second==expectedSpreadSecond[offset] && !spreadSeen[first];
+                spreadSeen[first]=true;
+            }
+            for(int cursorStart=0;cursorStart<rotationCandidateCount;cursorStart++)
+                for(int offset=0;offset<GROUND_CANOPY_ACCENT_PARTICLE_BUDGET;offset++) {
+                    int index=canopyAccentCandidateIndex(cursorStart,offset*spreadStride,rotationCandidateCount);
+                    if(index<0 || index>=spreadCoverage.length) spreadWindowProfile=false;
+                    else spreadCoverage[index]++;
+                }
+            for(int coverage:spreadCoverage)
+                spreadWindowProfile &= coverage==GROUND_CANOPY_ACCENT_PARTICLE_BUDGET;
+            boolean strideCoverageProfile=true;
+            for(int count=1;count<=GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET;count++) {
+                int stride=canopyAccentCandidateStride(count);
+                if(count==1) strideCoverageProfile &= stride==0;
+                else strideCoverageProfile &= stride>0 && stride<count
+                    && canopyAccentCandidateGcd(stride,count)==1;
+                boolean[] seen=new boolean[count];
+                for(int offset=0;offset<count;offset++) {
+                    int index=canopyAccentCandidateIndex(0,offset*stride,count);
+                    if(index<0 || index>=count || seen[index]) strideCoverageProfile=false;
+                    else seen[index]=true;
+                }
+                int[] coverage=new int[count];
+                for(int cursorStart=0;cursorStart<count;cursorStart++)
+                    for(int offset=0;offset<Math.min(count,GROUND_CANOPY_ACCENT_PARTICLE_BUDGET);offset++) {
+                        int index=canopyAccentCandidateIndex(cursorStart,offset*stride,count);
+                        if(index<0 || index>=count) strideCoverageProfile=false;
+                        else coverage[index]++;
+                    }
+                int expectedCoverage=Math.min(count,GROUND_CANOPY_ACCENT_PARTICLE_BUDGET);
+                for(int coverageCount:coverage)
+                    strideCoverageProfile &= coverageCount==expectedCoverage;
+            }
+            spreadWindowProfile &= strideCoverageProfile;
             boolean emissionThrottleProfile=GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS==10L
                 && shouldAttemptCanopyAccentScan(0L,Long.MIN_VALUE)
                 && !shouldAttemptCanopyAccentScan(100L,100L)
@@ -3502,7 +3568,7 @@ public final class RiftClientState {
             boolean zeroEmissionScanRecorded=nextCanopyAccentAttemptTick(110L,100L,12)==110L;
             boolean emptyScanPreservesAttempt=nextCanopyAccentAttemptTick(110L,100L,0)==100L;
             if(!(selected && sparse && threeOfFourPattern && negativeCoordinatePattern && deterministic && candidateBudgetRejected && negativeCounterRejected
-                && rotationProfile && emissionThrottleProfile && dimensionSaltProfile
+                && rotationProfile && spreadWindowProfile && emissionThrottleProfile && dimensionSaltProfile
                 && zeroEmissionScanRecorded && emptyScanPreservesAttempt
                 && leafSelected && leafSparse && nonAccentSurfacesRejected && leafHeightBounded
                 && adjacentScanProfile && oppositeSideScanProfile && secondRingScanProfile
@@ -3540,6 +3606,10 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_DIAGONAL_SCAN_PROFILE_VERIFIED normalOffset=1 tangentOffset=1 towardArmCenter=true maxHorizontalDistance=1.6 diagonalNear=true straightDistanceTwoRejected=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_ROTATION_PROFILE_VERIFIED candidateCount=12 budget=8 firstWindow=0-7 secondWindow=8-11 wrap=true negativeStart=true invalidCountRejected=true");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SPREAD_PROFILE_VERIFIED candidateBudget={} particleBudget={} stride={} coprime=true uniqueWindow=true balancedCoverage=true cursorStep=1",
+                GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET,GROUND_CANOPY_ACCENT_PARTICLE_BUDGET,
+                canopyAccentCandidateStride(rotationCandidateCount));
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_EMISSION_THROTTLE_PROFILE_VERIFIED intervalTicks={} first=true sameTickBlocked=true beforeBoundaryBlocked=true boundaryAllowed=true clockRollbackReset=true overflowSafe=true",
                 GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS);
