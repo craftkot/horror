@@ -4241,7 +4241,10 @@ def capture_test_world():
             bevel_profile=re.search(
                 r"BLACK_FREQUENCY_GROUND_MESH_BEVEL_PROFILE_VERIFIED width=([-+0-9.eE]+) lift=([-+0-9.eE]+) innerRecess=([-+0-9.eE]+) minOuterClearance=([-+0-9.eE]+) maxOuterClearance=([-+0-9.eE]+) maxOuterHalfWidth=([-+0-9.eE]+) maxGlowHalfWidth=([-+0-9.eE]+) withinGlow=true offsets=true invalidRejected=true",
                 final_log)
-            expected_bevel=(.045,.010,.005,.019,.021,.074*1.5*1.22*1.15+.045,.074*5.75)
+            glow_scale_match=re.search(r"GROUND_GLOW_WIDTH_SCALE=([-+0-9.eE]+)D;",camera_source)
+            expected_glow_half_width=(.074*float(glow_scale_match.group(1))
+                                      if glow_scale_match else float("nan"))
+            expected_bevel=(.045,.010,.005,.019,.021,.074*1.5*1.22*1.15+.045,expected_glow_half_width)
             if (not bevel_profile
                     or any(not math.isclose(float(bevel_profile.group(i)),expected_bevel[i-1],
                                              rel_tol=0.0,abs_tol=1.0e-9)
