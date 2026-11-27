@@ -3141,7 +3141,8 @@ public final class RiftClientState {
         private static double canopyAccentHorizontalVelocity(int blockX,int blockZ,int axis,
                 long emissionEpoch,long worldSeed) {
             if(axis<0 || axis>1) return Double.NaN;
-            long hash=(((long)blockX)<<32) ^ (blockZ&0xffffffffL) ^ worldSeed;
+            long hash=(((long)blockX)<<32) ^ (blockZ&0xffffffffL);
+            hash^=worldSeed;
             hash^=emissionEpoch*0xD1B54A32D192ED03L;
             hash+=axis==0?0x9E3779B97F4A7C15L:0xD1B54A32D192ED03L;
             hash=(hash^(hash>>>30))*0xBF58476D1CE4E5B9L;
