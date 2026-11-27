@@ -47,6 +47,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Validate client smoke script syntax
+        run: python -m py_compile ci/run_client_smoke.py
+
       - name: Install client smoke dependencies
         run: |
           set -e

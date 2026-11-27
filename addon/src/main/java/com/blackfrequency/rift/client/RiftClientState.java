@@ -3549,6 +3549,13 @@ public final class RiftClientState {
                 GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_STACKED_PLANT_HEIGHT_INDEPENDENCE_VERIFIED directSurfaceRequiresShape=true liftedSurfaceIgnoresShape=true zeroShape=true nonFiniteShape=true bounded=true");
+            if(canopyAccentPlantSurfaceShapeHeight(null,null,0,0,0,1,null)!=0.0D
+                || !Double.isNaN(canopyAccentPlantSurfaceShapeHeight(null,null,0,0,0,0,null))
+                || !Double.isNaN(canopyAccentPlantSurfaceShapeHeight(null,null,0,0,0,-1,null))
+                || !Double.isNaN(canopyAccentPlantSurfaceShapeHeight(null,null,0,0,0,3,null)))
+                throw new IllegalStateException("BLACK FREQUENCY stacked-plant shape-query policy regression");
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_STACKED_PLANT_SHAPE_QUERY_SKIPPED_VERIFIED liftedSkipsOutlineShape=true directSurfaceUsesShape=true invalidRejected=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SURFACE_PLANT_LIFT_PROFILE_VERIFIED maxLift={} stackedBushes=true collisionEmpty=true leavesRejected=true fluidsRejected=true solidRejected=true",
                 GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS);
@@ -3902,6 +3909,19 @@ public final class RiftClientState {
             groundCanopyAccentNeighborSampleCursor=canopyAccentCandidateIndex(start,1,sampleCount);
         }
 
+        // A lifted accent is placed in the clear cell above stacked plants, so the
+        // lower plant's outline shape is irrelevant. Avoid querying it on that path.
+        private static double canopyAccentPlantSurfaceShapeHeight(Level level,BlockState surface,
+                int blockX,int surfaceY,int blockZ,int skippedPlants,BlockPos.MutableBlockPos cursor) {
+            if(skippedPlants<0 || skippedPlants>GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS)
+                return Double.NaN;
+            if(skippedPlants>0) return 0.0D;
+            if(level==null || surface==null || cursor==null) return Double.NaN;
+            cursor.set(blockX,surfaceY,blockZ);
+            double shapeHeight=surface.getShape(level,cursor).max(Direction.Axis.Y);
+            return Double.isFinite(shapeHeight) && shapeHeight>0.0D ? shapeHeight : Double.NaN;
+        }
+
         private static boolean queueAdjacentPlantSurfaceCanopyAccent(
                 net.minecraft.client.multiplayer.ClientLevel level,int blockX,int blockZ,double groundY,
                 BlockPos.MutableBlockPos cursor) {
@@ -3928,14 +3948,15 @@ public final class RiftClientState {
                 +GROUND_SURFACE_CLEARANCE;
             if(!Double.isFinite(plantGroundY)
                 || Math.abs(plantGroundY-groundY)>GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA) return false;
-            cursor.set(blockX,surfaceY,blockZ);
-            double shapeHeight=surface.getShape(level,cursor).max(Direction.Axis.Y);
             cursor.set(blockX,surfaceY+1,blockZ);
             BlockState head=level.getBlockState(cursor);
             if(!isGroundHeadClear(head)) return false;
             int skippedPlants=canopyAccentPlantSurfaceSkippedPlants(
                 level,blockX,surfaceY,blockZ,head,cursor);
             if(skippedPlants<0) return false;
+            double shapeHeight=canopyAccentPlantSurfaceShapeHeight(
+                level,surface,blockX,surfaceY,blockZ,skippedPlants,cursor);
+            if(!Double.isFinite(shapeHeight)) return false;
             double accentY=canopyAccentPlantSurfaceParticleY(surfaceY,shapeHeight,skippedPlants);
             boolean queued=queuePlantSurfaceCanopyAccent(
                 level,surface,blockX,blockZ,plantGroundY,accentY,skippedPlants);

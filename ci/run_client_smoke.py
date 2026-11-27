@@ -594,6 +594,15 @@ def verify_restoration_particle_source():
             or "private static boolean isCanopyAccentPlantCandidate(BlockState state)" not in client_source
             or "return isCanopyAccentPlantCandidate(state) && level!=null && pos!=null\n                && state.getCollisionShape(level,pos).isEmpty();" not in client_source):
         raise RuntimeError("BLACK FREQUENCY stacked ground-plant accents must use bounded non-colliding clearance and complete queue accounting")
+    plant_shape_helper_start=client_source.find("private static double canopyAccentPlantSurfaceShapeHeight(")
+    plant_shape_helper_end=client_source.find("\\n        private static boolean queueAdjacentPlantSurfaceCanopyAccent",plant_shape_helper_start+1)
+    plant_shape_helper_body=(client_source[plant_shape_helper_start:plant_shape_helper_end]
+        if plant_shape_helper_start>=0 and plant_shape_helper_end>plant_shape_helper_start else "")
+    if ("if(skippedPlants>0) return 0.0D;" not in plant_shape_helper_body
+            or "surface.getShape(level,cursor).max(Direction.Axis.Y)" not in plant_shape_helper_body
+            or "if(skippedPlants<0 || skippedPlants>GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS)" not in plant_shape_helper_body
+            or "GROUND_CANOPY_ACCENT_STACKED_PLANT_SHAPE_QUERY_SKIPPED_VERIFIED" not in client_source):
+        raise RuntimeError("BLACK FREQUENCY lifted plant accents must skip unused outline-shape queries with bounded inputs")
     double_plant_marker=(
         "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_VANILLA_DOUBLE_PLANT_PROFILE_VERIFIED "
         "blocks=6 halves=lower,upper stateAllowlist=true maxSkipped=2"
@@ -629,6 +638,7 @@ def verify_restoration_particle_source():
             or "isGroundSupport(support)" not in adjacent_plant_body
             or "groundSupportHeight(support,level,cursor)" not in adjacent_plant_body
             or "canopyAccentPlantSurfaceSkippedPlants" not in adjacent_plant_body
+            or "canopyAccentPlantSurfaceShapeHeight(" not in adjacent_plant_body
             or "GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA" not in adjacent_plant_body
             or "getChunk(" in adjacent_plant_body
             or "GROUND_CANOPY_ACCENT_ADJACENT_PLANT_SCAN_PROFILE_VERIFIED supportChecked=true groundTolerance=0.35 loadedOnly=true radius=48 maxSkipped=2" not in client_source
@@ -2885,7 +2895,7 @@ def capture_test_world():
                             canopy_fixture_seeded_at=time.monotonic()
                             print("WORLD_CAPTURE: placed a verified two-block tall-grass fixture beside fissure sample",
                                   {"anchor":(anchor_x,anchor_z),"fixture":canopy_fixture_position,
-                                   "radiusSquared":dx*dx+dz*dz,"loadedOnly=true"},flush=True)
+                                   "radiusSquared":dx*dx+dz*dz,"loadedOnly":True},flush=True)
                             time.sleep(.65)
                             return
                     if canopy_fixture_seeded and not canopy_fixture_verified:
@@ -5477,6 +5487,13 @@ def capture_test_world():
             )
             if stacked_height_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: stacked-plant surface-height independence profile was not exercised",flush=True)
+                return False
+            shape_query_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_STACKED_PLANT_SHAPE_QUERY_SKIPPED_VERIFIED "
+                "liftedSkipsOutlineShape=true directSurfaceUsesShape=true invalidRejected=true"
+            )
+            if shape_query_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: lifted-plant outline-shape query policy was not exercised",flush=True)
                 return False
             # Segment rejection happens after queue acceptance, so it is a subset of accepted, not a pre-queue rejection.
             reasons=(invalid,budget,chunk,heightmap,non_leaf,headroom,height,pattern,duplicate)
