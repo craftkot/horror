@@ -689,7 +689,7 @@ def verify_restoration_particle_source():
             or "groundCanopyAccentQueuePlantLifted++" not in leaf_accent_body
             or "isCanopyAccentHeightWithinBounds(groundY,accentY)" not in leaf_accent_body
             or "hasCanopyAccentCandidate(blockX,blockZ)" not in leaf_accent_body
-            or "queueExposedLeafCanopyAccent(level,blockX,blockZ,groundY,cursor)" not in client_source
+            or "queueExposedLeafCanopyAccent(level,blockX,blockZ,groundY,arm,cursor)" not in client_source
             or "GROUND_CANOPY_LEAF_ACCENT_PROFILE_VERIFIED" not in client_source):
         raise RuntimeError("BLACK FREQUENCY leaf canopy accents must use exposed top leaves from already-loaded chunks only")
     surface_plant_clearance_start=client_source.find("private static int canopyAccentPlantSurfaceSkippedPlants(")
