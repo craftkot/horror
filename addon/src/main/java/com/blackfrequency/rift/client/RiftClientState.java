@@ -896,6 +896,8 @@ public final class RiftClientState {
         private static final int GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS=2;
         // Lift canopy motes clear of the leaf billboard edge; the eight-particle emission budget stays unchanged.
         private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=1.75F;
+        // Lifted bush accents get a slightly stronger silhouette without increasing particle count.
+        private static final float GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE=1.95F;
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.40D;
         // Keep canopy accents close to the fissure instead of letting them drift above the foliage.
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_SPEED=.003D;
@@ -916,6 +918,10 @@ public final class RiftClientState {
         private static final DustColorTransitionOptions GROUND_CANOPY_ACCENT_DUST=
             new DustColorTransitionOptions(GROUND_CANOPY_ACCENT_START_COLOR,GROUND_CANOPY_ACCENT_END_COLOR,
                 GROUND_CANOPY_ACCENT_PARTICLE_SCALE);
+        // Reuse a second cached option only for motes lifted above non-colliding bush plants.
+        private static final DustColorTransitionOptions GROUND_CANOPY_ACCENT_LIFTED_DUST=
+            new DustColorTransitionOptions(GROUND_CANOPY_ACCENT_START_COLOR,GROUND_CANOPY_ACCENT_END_COLOR,
+                GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE);
         private static int groundCanopyAccentCandidateCount;
         private static int groundCanopyAccentFallbackScans;
         private static int groundCanopyAccentFallbackHits;
@@ -3137,7 +3143,10 @@ public final class RiftClientState {
                 double velocityX=canopyAccentHorizontalVelocity(x,z,0,emissionEpoch,dimensionSalt);
                 double velocityZ=canopyAccentHorizontalVelocity(x,z,1,emissionEpoch,dimensionSalt);
                 if(!canopyAccentHorizontalDriftWithinBounds(velocityX,velocityZ)) continue;
-                level.addParticle(GROUND_CANOPY_ACCENT_DUST,x+.5D,accentY,z+.5D,
+                boolean liftedPlantAccent=GROUND_CANOPY_ACCENT_ADJACENT_PLANT[i]
+                    && GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[i]>0;
+                level.addParticle(liftedPlantAccent ? GROUND_CANOPY_ACCENT_LIFTED_DUST
+                    : GROUND_CANOPY_ACCENT_DUST,x+.5D,accentY,z+.5D,
                     velocityX,GROUND_CANOPY_ACCENT_VERTICAL_SPEED,velocityZ);
                 groundCanopyAccentParticlesEmitted++;
                 if(VERIFY_GROUND_MESH_PROFILES && GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[i]>0
@@ -3323,6 +3332,9 @@ public final class RiftClientState {
             boolean particleScaleBounded=Float.isFinite(GROUND_CANOPY_ACCENT_PARTICLE_SCALE)
                 && GROUND_CANOPY_ACCENT_PARTICLE_SCALE>=1.65F
                 && GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=1.80F;
+            boolean liftedParticleScaleBounded=Float.isFinite(GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE)
+                && GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE>=1.90F
+                && GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE<=2.00F;
             boolean particleOffsetBounded=Double.isFinite(GROUND_CANOPY_ACCENT_VERTICAL_OFFSET)
                 && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET>=.36D
                 && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET<=.44D;
@@ -3496,7 +3508,7 @@ public final class RiftClientState {
                 && adjacentScanProfile && oppositeSideScanProfile && secondRingScanProfile
                 && neighborScanBudgetProfile && neighborScanPassProfile && neighborColumnDedupProfile
                 && candidateDedupProfile && heightmapPrefilterProfile
-                && particleScaleBounded && particleOffsetBounded
+                && particleScaleBounded && liftedParticleScaleBounded && particleOffsetBounded
                 && particleVelocityBounded && particleDriftProfile && particleColorTransitionProfile
                 && foliageClearanceProfile && canopyAccentHeadroomProfile
                 && plantClearanceProfile && plantCollisionShapePrefilterProfile && vanillaDoublePlantProfile
@@ -3539,6 +3551,9 @@ public final class RiftClientState {
                 GROUND_CANOPY_ACCENT_PARTICLE_SCALE,GROUND_CANOPY_ACCENT_VERTICAL_OFFSET,
                 GROUND_CANOPY_ACCENT_VERTICAL_SPEED);
             com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_PROFILE_VERIFIED regularScale={} liftedScale={} adjacentPlantOnly=true samePalette=true cachedOptions=true budgetUnchanged=true",
+                GROUND_CANOPY_ACCENT_PARTICLE_SCALE,GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE);
+            com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DIMENSION_SALT_PROFILE_VERIFIED algorithm=fnv1a64 stable=true distinct=true emptyFallback=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DRIFT_PROFILE_VERIFIED deterministic=true temporalVariation=true dimensionScoped=true epochTicks={} horizontalMax={} verticalUnchanged=true bounded=true",
@@ -3546,8 +3561,9 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_COLOR_TRANSITION_VERIFIED brightVioletToDeepViolet=true cachedOptions=true perParticleUpdate=true budgetUnchanged=true");
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FOLIAGE_CLEARANCE_VERIFIED offset={} particleScale={} baseRibbonUnchanged=true bounded=true",
-                GROUND_CANOPY_ACCENT_VERTICAL_OFFSET,GROUND_CANOPY_ACCENT_PARTICLE_SCALE);
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FOLIAGE_CLEARANCE_VERIFIED offset={} particleScale={} liftedParticleScale={} baseRibbonUnchanged=true bounded=true",
+                GROUND_CANOPY_ACCENT_VERTICAL_OFFSET,GROUND_CANOPY_ACCENT_PARTICLE_SCALE,
+                GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_HEADROOM_POLICY_VERIFIED airOnlyOrLiftedBush=true leavesRejected=true plantsBounded=true fluidsRejected=true solidRejected=true ribbonStillAllowed=true");
             com.mojang.logging.LogUtils.getLogger().info(

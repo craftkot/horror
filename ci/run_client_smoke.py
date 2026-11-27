@@ -5593,6 +5593,21 @@ def capture_test_world():
                     or "velocityX,GROUND_CANOPY_ACCENT_VERTICAL_SPEED,velocityZ" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: bounded canopy accent particle profile was not verified",flush=True)
                 return False
+            canopy_lifted_particle_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_PROFILE_VERIFIED "
+                "regularScale=1.75 liftedScale=1.95 adjacentPlantOnly=true samePalette=true cachedOptions=true budgetUnchanged=true"
+            )
+            if (canopy_lifted_particle_marker not in log_after
+                    or "GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE=1.95F;" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE>=1.90F" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE<=2.00F" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_LIFTED_DUST=" not in camera_source
+                    or "boolean liftedPlantAccent=GROUND_CANOPY_ACCENT_ADJACENT_PLANT[i]" not in camera_source
+                    or "&& GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[i]>0;" not in camera_source
+                    or "liftedPlantAccent ? GROUND_CANOPY_ACCENT_LIFTED_DUST" not in camera_source
+                    or "&& particleScaleBounded && liftedParticleScaleBounded && particleOffsetBounded" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: lifted bush accents did not use the bounded cached high-visibility option",flush=True)
+                return False
             canopy_drift_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DRIFT_PROFILE_VERIFIED "
                 "deterministic=true temporalVariation=true dimensionScoped=true epochTicks=10 horizontalMax=0.0045 verticalUnchanged=true bounded=true"
@@ -5624,7 +5639,7 @@ def capture_test_world():
                 return False
             canopy_clearance_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FOLIAGE_CLEARANCE_VERIFIED "
-                "offset=0.4 particleScale=1.75 baseRibbonUnchanged=true bounded=true"
+                "offset=0.4 particleScale=1.75 liftedParticleScale=1.95 baseRibbonUnchanged=true bounded=true"
             )
             if canopy_clearance_marker not in log_after:
                 print("WORLD_CAPTURE_FAIL: canopy accent clearance above short foliage was not verified",flush=True)
