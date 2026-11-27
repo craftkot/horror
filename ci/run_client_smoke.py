@@ -5117,20 +5117,20 @@ def capture_test_world():
                     or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.26D;" not in camera_source
                     or "GROUND_CANOPY_ACCENT_VERTICAL_SPEED=.003D;" not in camera_source
                     or "GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED=.0045D;" not in camera_source
-                    or "canopyAccentHorizontalVelocity(x,z,0,emissionEpoch,worldSeed)" not in camera_source
-                    or "canopyAccentHorizontalVelocity(x,z,1,emissionEpoch,worldSeed)" not in camera_source
-                    or "long worldSeed=level.getSeed();" not in camera_source
+                    or "canopyAccentHorizontalVelocity(x,z,0,emissionEpoch,dimensionSalt)" not in camera_source
+                    or "canopyAccentHorizontalVelocity(x,z,1,emissionEpoch,dimensionSalt)" not in camera_source
+                    or "long dimensionSalt=level.dimension().location().hashCode();" not in camera_source
                     or "Math.floorDiv(gameTime,(long)GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS)" not in camera_source
                     or "velocityX,GROUND_CANOPY_ACCENT_VERTICAL_SPEED,velocityZ" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: bounded canopy accent particle profile was not verified",flush=True)
                 return False
             canopy_drift_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DRIFT_PROFILE_VERIFIED "
-                "deterministic=true temporalVariation=true worldSeedScoped=true epochTicks=10 horizontalMax=0.0045 verticalUnchanged=true bounded=true"
+                "deterministic=true temporalVariation=true dimensionScoped=true epochTicks=10 horizontalMax=0.0045 verticalUnchanged=true bounded=true"
             )
             if (canopy_drift_marker not in log_after
-                    or "SplitMix64 combines the world seed, block column, axis and ten-tick emission epoch" not in camera_source
-                    or "hash^=worldSeed;" not in camera_source
+                    or "SplitMix64 combines the dimension key, block column, axis and ten-tick emission epoch" not in camera_source
+                    or "hash^=dimensionSalt;" not in camera_source
                     or "hash^=emissionEpoch*0xD1B54A32D192ED03L;" not in camera_source
                     or "canopyAccentHorizontalDriftWithinBounds(velocityX,velocityZ)" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: deterministic bounded canopy mote drift was not verified",flush=True)
