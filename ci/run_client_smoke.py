@@ -565,6 +565,10 @@ def verify_restoration_particle_source():
     surface_plant_queue_end=client_source.find("\n        /**",surface_plant_queue_start+1)
     surface_plant_queue_body=(client_source[surface_plant_queue_start:surface_plant_queue_end]
         if surface_plant_queue_start>=0 and surface_plant_queue_end>surface_plant_queue_start else "")
+    plant_surface_particle_start=client_source.find("private static double canopyAccentPlantSurfaceParticleY(")
+    plant_surface_particle_end=client_source.find("\n        private static boolean canopyAccentCandidateInsideExpandedSegmentBounds",plant_surface_particle_start+1)
+    plant_surface_particle_body=(client_source[plant_surface_particle_start:plant_surface_particle_end]
+        if plant_surface_particle_start>=0 and plant_surface_particle_end>plant_surface_particle_start else "")
     sample_ground_start=client_source.find("private static double sampleGroundY(")
     sample_ground_end=client_source.find("\n        private static long columnKey",sample_ground_start+1)
     sample_ground_body=(client_source[sample_ground_start:sample_ground_end]
@@ -581,6 +585,10 @@ def verify_restoration_particle_source():
             or "hasCanopyAccentCandidate(blockX,blockZ)" not in surface_plant_queue_body
             or "groundCanopyAccentQueueAccepted++" not in surface_plant_queue_body
             or "groundCanopyAccentQueuePlantLifted++" not in surface_plant_queue_body
+            or "if(skippedPlants==0) {" not in plant_surface_particle_body
+            or "if(!Double.isFinite(shapeHeight) || shapeHeight<=0.0D) return Double.NaN;" not in plant_surface_particle_body
+            or "long clearY=(long)surfaceY+1L+(long)skippedPlants;" not in plant_surface_particle_body
+            or "GROUND_CANOPY_ACCENT_STACKED_PLANT_HEIGHT_INDEPENDENCE_VERIFIED" not in client_source
             or "GROUND_CANOPY_ACCENT_SURFACE_PLANT_LIFT_PROFILE_VERIFIED" not in client_source
             or "private static boolean isCanopyAccentPlantCandidate(BlockState state)" not in client_source
             or "return isCanopyAccentPlantCandidate(state) && level!=null && pos!=null\n                && state.getCollisionShape(level,pos).isEmpty();" not in client_source):
@@ -5305,6 +5313,13 @@ def capture_test_world():
                 print("WORLD_CAPTURE_NOTE: no stacked plant column intersected the sampled fissure in this world; vanilla double-plant state coverage passed, live lift remains unproven",flush=True)
             else:
                 print(f"WORLD_CAPTURE: stacked plant lift observed in {plant_lifted} canopy candidates",flush=True)
+            stacked_height_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_STACKED_PLANT_HEIGHT_INDEPENDENCE_VERIFIED "
+                "directSurfaceRequiresShape=true liftedSurfaceIgnoresShape=true zeroShape=true nonFiniteShape=true bounded=true"
+            )
+            if stacked_height_marker not in log_after:
+                print("WORLD_CAPTURE_FAIL: stacked-plant surface-height independence profile was not exercised",flush=True)
+                return False
             # Segment rejection happens after queue acceptance, so it is a subset of accepted, not a pre-queue rejection.
             reasons=(invalid,budget,chunk,heightmap,non_leaf,headroom,height,pattern,duplicate)
             if (attempts>GROUND_MESH_SAMPLES+80

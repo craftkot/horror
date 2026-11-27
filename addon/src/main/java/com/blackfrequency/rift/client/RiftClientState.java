@@ -3020,9 +3020,13 @@ public final class RiftClientState {
         }
 
         private static double canopyAccentPlantSurfaceParticleY(int surfaceY,double shapeHeight,int skippedPlants) {
-            if(!Double.isFinite(shapeHeight) || shapeHeight<=0.0D
-                || skippedPlants<0 || skippedPlants>GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS) return Double.NaN;
-            if(skippedPlants==0) return canopyAccentParticleY(surfaceY,shapeHeight);
+            if(skippedPlants<0 || skippedPlants>GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS) return Double.NaN;
+            if(skippedPlants==0) {
+                if(!Double.isFinite(shapeHeight) || shapeHeight<=0.0D) return Double.NaN;
+                return canopyAccentParticleY(surfaceY,shapeHeight);
+            }
+            // Once the accent is lifted above skipped plants, the clear cell—not the
+            // original plant's visual shape height—determines the particle position.
             long clearY=(long)surfaceY+1L+(long)skippedPlants;
             if(clearY<Integer.MIN_VALUE || clearY>Integer.MAX_VALUE) return Double.NaN;
             return canopyAccentParticleY((int)clearY,0.0D);
@@ -3362,7 +3366,9 @@ public final class RiftClientState {
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,.8D,-1))
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,.8D,3))
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,Double.NaN,0))
-                && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,0.0D,1))
+                && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,0.0D,0))
+                && Math.abs(canopyAccentPlantSurfaceParticleY(70,0.0D,1)-72.32D)<1.0E-9D
+                && Math.abs(canopyAccentPlantSurfaceParticleY(70,Double.NaN,2)-73.32D)<1.0E-9D
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(Integer.MAX_VALUE,.8D,1));
             boolean plantCollisionShapePrefilterProfile=
                 isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState())
@@ -3517,6 +3523,8 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PLANT_CLEARANCE_PROFILE_VERIFIED maxLift={} bushOnly=true collisionEmpty=true leavesRejected=true fluidsRejected=true solidRejected=true",
                 GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_STACKED_PLANT_HEIGHT_INDEPENDENCE_VERIFIED directSurfaceRequiresShape=true liftedSurfaceIgnoresShape=true zeroShape=true nonFiniteShape=true bounded=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SURFACE_PLANT_LIFT_PROFILE_VERIFIED maxLift={} stackedBushes=true collisionEmpty=true leavesRejected=true fluidsRejected=true solidRejected=true",
                 GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS);
