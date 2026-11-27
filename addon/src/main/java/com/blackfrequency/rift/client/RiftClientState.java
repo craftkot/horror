@@ -3282,8 +3282,8 @@ public final class RiftClientState {
             long secondDimensionSalt=0x02468ACE13579BDFL;
             double driftX=canopyAccentHorizontalVelocity(516,515,0,emissionEpoch,firstDimensionSalt);
             double driftZ=canopyAccentHorizontalVelocity(516,515,1,emissionEpoch,firstDimensionSalt);
-            double nextDriftX=canopyAccentHorizontalVelocity(516,515,0,emissionEpoch+1L,firstWorldSeed);
-            double nextDriftZ=canopyAccentHorizontalVelocity(516,515,1,emissionEpoch+1L,firstWorldSeed);
+            double nextDriftX=canopyAccentHorizontalVelocity(516,515,0,emissionEpoch+1L,firstDimensionSalt);
+            double nextDriftZ=canopyAccentHorizontalVelocity(516,515,1,emissionEpoch+1L,firstDimensionSalt);
             double repeatedWorldDriftZ=canopyAccentHorizontalVelocity(516,515,1,emissionEpoch,firstDimensionSalt);
             double secondWorldDriftZ=canopyAccentHorizontalVelocity(516,515,1,emissionEpoch,secondDimensionSalt);
             boolean particleDriftProfile=Double.isFinite(GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED)
