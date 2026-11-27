@@ -3,7 +3,7 @@ import java.util.*;
 import java.io.*;
 /** Server-side policy; game adapter supplies observations once per second. */
 public final class HorrorDirector {
- public enum Event { FOOTSTEPS, DISTANT_SILHOUETTE, ECHO, FALSE_PRESENCE, LOCAL_ANOMALY, BREATH, DOOR, TEXT }
+ public enum Event { FOOTSTEPS, DISTANT_SILHOUETTE, ECHO, FALSE_PRESENCE, LOCAL_ANOMALY, BREATH, DOOR, TEXT, NULL_NEAR, NULL_WHISPER }
  public record Observation(boolean dark, boolean alone, boolean underground, boolean safe, int moralDelta) {}
  public record Decision(Event event, int stage) {}
  private final Random random;
@@ -11,6 +11,7 @@ public final class HorrorDirector {
  private Event last;
  private int bonemealUses;
  private int sleepCooldown;
+ private boolean nullPresent;
  public enum Sleep { ALLOW, GUILT, WATCHED, CALL }
  public HorrorDirector(long seed){random=new Random(seed);}
  public Optional<Decision> tick(Observation o){
@@ -25,13 +26,16 @@ public final class HorrorDirector {
   var choices=new ArrayList<>(List.of(Event.FOOTSTEPS,Event.ECHO,Event.BREATH,Event.DOOR));
   if(stage>=2)choices.add(Event.DISTANT_SILHOUETTE);
   if(stage>=3){choices.add(Event.FALSE_PRESENCE);choices.add(Event.TEXT);}
-  if(stage>=4)choices.add(Event.LOCAL_ANOMALY);
+  if(stage>=4){choices.add(Event.LOCAL_ANOMALY);choices.add(Event.NULL_NEAR);}
+  if(nullPresent)choices.add(Event.NULL_WHISPER);
   if(choices.size()>1)choices.remove(last);
   last=choices.get(random.nextInt(choices.size()));
+  if(last==Event.NULL_NEAR)nullPresent=true;
   cooldown=45+random.nextInt(76);
   pressure=Math.max(0,pressure-35);
   return Optional.of(new Decision(last,stage));
  }
+ public boolean nullPresent(){return nullPresent;}
  public Sleep sleep(boolean watched){
   if(sleepCooldown>0)return Sleep.ALLOW;
   Sleep result=watched?Sleep.WATCHED:karma<0?Sleep.GUILT:karma>0&&random.nextInt(10)==0?Sleep.CALL:Sleep.ALLOW;
@@ -44,11 +48,11 @@ public final class HorrorDirector {
  public void explosion(){adjustKarma(-3);}
  public void adjustKarma(int delta){karma=Math.clamp(karma+Math.clamp(delta,-100,100),-100,100);}
  public void write(DataOutput out)throws IOException{
-  out.writeInt(3);out.writeInt(pressure);out.writeInt(karma);out.writeInt(cooldown);out.writeInt(quiet);
-  out.writeUTF(last==null?"":last.name());out.writeInt(bonemealUses);out.writeInt(sleepCooldown);
+  out.writeInt(4);out.writeInt(pressure);out.writeInt(karma);out.writeInt(cooldown);out.writeInt(quiet);
+  out.writeUTF(last==null?"":last.name());out.writeInt(bonemealUses);out.writeInt(sleepCooldown);out.writeBoolean(nullPresent);
  }
  public static HorrorDirector read(DataInput in,long seed)throws IOException{
-  int version=in.readInt();if(version<1||version>3)throw new IOException("Unknown director version");
+  int version=in.readInt();if(version<1||version>4)throw new IOException("Unknown director version");
   var d=new HorrorDirector(seed);
   d.pressure=in.readInt();d.karma=in.readInt();d.cooldown=in.readInt();d.quiet=in.readInt();
   if(d.pressure<0||d.pressure>1000||Math.abs((long)d.karma)>100||d.cooldown<0||d.cooldown>120||d.quiet<0||d.quiet>120)throw new IOException("Invalid director state");
@@ -56,6 +60,7 @@ public final class HorrorDirector {
   try{d.last=name.isEmpty()?null:Event.valueOf(name);}catch(IllegalArgumentException ex){throw new IOException("Invalid event",ex);}
   if(version>=2){d.bonemealUses=in.readInt();if(d.bonemealUses<0||d.bonemealUses>=5)throw new IOException("Invalid bonemeal counter");}
   if(version>=3){d.sleepCooldown=in.readInt();if(d.sleepCooldown<0||d.sleepCooldown>180)throw new IOException("Invalid sleep cooldown");}
+  if(version>=4)d.nullPresent=in.readBoolean();
   return d;
  }
  public int pressure(){return pressure;}

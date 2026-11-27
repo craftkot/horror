@@ -12,6 +12,14 @@ import net.minecraft.world.entity.player.Player;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.ExplosionEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.level.block.Block;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -27,6 +35,8 @@ public final class UnwrittenMod {
     private int ticks;
     private final Apparitions apparitions = new Apparitions();
     private final LocalAnomalies anomalies = new LocalAnomalies();
+    private final OreEncounter ores = new OreEncounter();
+    private static final TagKey<Block> ORES=TagKey.create(Registries.BLOCK,Identifier.fromNamespaceAndPath("c","ores"));
     public UnwrittenMod() {
         NeoForge.EVENT_BUS.addListener(this::tick);
         NeoForge.EVENT_BUS.addListener(this::stop);
@@ -36,9 +46,10 @@ public final class UnwrittenMod {
         NeoForge.EVENT_BUS.addListener(this::sleep);
         NeoForge.EVENT_BUS.addListener(this::trample);
         NeoForge.EVENT_BUS.addListener(this::explosion);
+        NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST,this::oreBreak);
     }
-    private void stop(ServerStoppedEvent event) { sessions.clear(); apparitions.clear(); anomalies.clear(); ticks=0; stateDirectory=null; }
-    private void stopping(ServerStoppingEvent event) { sessions.forEach(this::save); anomalies.restoreAll(); }
+    private void stop(ServerStoppedEvent event) { sessions.clear(); apparitions.clear(); anomalies.clear(); ores.clear(); ticks=0; stateDirectory=null; }
+    private void stopping(ServerStoppingEvent event) { sessions.forEach(this::save); anomalies.restoreAll(); ores.restoreAll(); }
     private void save(UUID id, PlayerStateStore.State state) {
         if(stateDirectory==null)return;
         try { PlayerStateStore.save(stateDirectory,id,state); }
@@ -76,11 +87,18 @@ public final class UnwrittenMod {
     private void explosion(ExplosionEvent.Detonate event){
         if(event.getExplosion().getIndirectSourceEntity() instanceof ServerPlayer p&&eligible(p))session(p).director().explosion();
     }
+    private void oreBreak(BlockEvent.BreakEvent event){
+        if(event.isCanceled()||!(event.getPlayer() instanceof ServerPlayer p)||!eligible(p)||!p.isAlive())return;
+        if(!event.getState().is(ORES))return;
+        if(OrePolicy.triggers(session(p).director().nullPresent(),true,p.getRandom().nextDouble()))
+            ores.queue(p,event.getPos(),event.getState());
+    }
     private void tick(ServerTickEvent.Post event) {
         ++ticks;
         if(stateDirectory==null)stateDirectory=event.getServer().getWorldPath(LevelResource.ROOT).resolve("unwritten");
         apparitions.tick(event.getServer().getPlayerList().getPlayers());
         anomalies.tick(event.getServer().getPlayerList().getPlayers());
+        ores.tick(event.getServer().getPlayerList().getPlayers(),apparitions);
         if (ticks % 20 != 0) return;
         var players = event.getServer().getPlayerList().getPlayers();
         var online = new HashSet<UUID>();
@@ -115,6 +133,16 @@ public final class UnwrittenMod {
             case BREATH -> Apparitions.soundBehind(p,SoundEvents.PLAYER_BREATH,1.0f,0.5f);
             case DOOR -> ReferenceEvents.toggleDoor(p);
             case TEXT -> p.sendSystemMessage(Component.translatable("event.unwritten.presence"));
+            case NULL_NEAR -> {
+                var effect=BuiltInRegistries.MOB_EFFECT.getOrThrow(ResourceKey.create(Registries.MOB_EFFECT,Identifier.withDefaultNamespace("blindness")));
+                if(!p.hasEffect(effect))p.addEffect(new MobEffectInstance(effect,120,0,false,false));
+                Apparitions.soundBehind(p,SoundEvents.AMBIENT_CAVE.value(),0.8f,0.6f);
+            }
+            case NULL_WHISPER -> {
+                int variant=p.getRandom().nextInt(3);
+                p.sendSystemMessage(Component.translatable("commands.message.display.incoming",
+                    Component.literal("Null"),Component.translatable("event.unwritten.null."+variant)).withStyle(ChatFormatting.GRAY,ChatFormatting.ITALIC));
+            }
         }
     }
 }

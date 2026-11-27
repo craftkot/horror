@@ -2,5 +2,8 @@
   "event.unwritten.presence": "Здесь кто-то есть?",
   "event.unwritten.sleep.guilt": "Не могу уснуть. Не перестаю думать о своих поступках.",
   "event.unwritten.sleep.watched": "Кто-то наблюдает за кроватью.",
-  "event.unwritten.sleep.call": "Кто-то зовёт из темноты."
+  "event.unwritten.sleep.call": "Кто-то зовёт из темноты.",
+  "event.unwritten.null.0": "Ты слышал это?",
+  "event.unwritten.null.1": "Я всё ещё здесь.",
+  "event.unwritten.null.2": "Не оборачивайся."
 }
