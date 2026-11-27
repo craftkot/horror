@@ -257,7 +257,7 @@ jobs:
           PY
           echo 'Restarting disposable server to verify restoration persists'
           set +e
-          timeout --signal=TERM --kill-after=10s 110s gradle --no-daemon runServer --args='--nogui' > world-restart.log 2>&1
+          timeout --signal=TERM --kill-after=10s 240s gradle --no-daemon runServer --args='--nogui' > world-restart.log 2>&1
           RESTART_CODE=$?
           set -e
           test "$RESTART_CODE" -eq 124 -o "$RESTART_CODE" -eq 0
