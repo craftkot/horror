@@ -593,7 +593,7 @@ def verify_restoration_particle_source():
         "Blocks.TALL_GRASS","Blocks.LARGE_FERN","Blocks.LILAC",
         "Blocks.PEONY","Blocks.ROSE_BUSH","Blocks.SUNFLOWER"
     )
-    if (double_plant_marker not in log_after
+    if (double_plant_marker not in client_source
             or "DoublePlantBlock.HALF" not in client_source
             or "DoubleBlockHalf.LOWER" not in client_source
             or "DoubleBlockHalf.UPPER" not in client_source
@@ -5297,6 +5297,10 @@ def capture_test_world():
             rejection_counts=[int(value) for value in canopy_rejections.groups()]
             (attempts,accepted,invalid,budget,chunk,heightmap,heightmap_top_adjusted,non_leaf,headroom,
              height,pattern,duplicate,segment,plant_lifted)=rejection_counts
+            if ("BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_VANILLA_DOUBLE_PLANT_PROFILE_VERIFIED "
+                    "blocks=6 halves=lower,upper stateAllowlist=true maxSkipped=2") not in log_after:
+                print("WORLD_CAPTURE_FAIL: vanilla double-plant runtime profile marker was not emitted",flush=True)
+                return False
             if plant_lifted==0:
                 print("WORLD_CAPTURE_NOTE: no stacked plant column intersected the sampled fissure in this world; vanilla double-plant state coverage passed, live lift remains unproven",flush=True)
             else:
