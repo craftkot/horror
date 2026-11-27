@@ -3095,6 +3095,7 @@ public final class RiftClientState {
             long gameTime=level.getGameTime();
             if(!shouldAttemptCanopyAccentScan(gameTime,groundCanopyAccentLastAttemptTick)) return;
             long emissionEpoch=Math.floorDiv(gameTime,(long)GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS);
+            long worldSeed=level.getSeed();
             int start=canopyAccentCandidateIndex(groundCanopyAccentCandidateCursor,0,candidateCount);
             int visited=0;
             for(int offset=0;offset<candidateCount
@@ -3114,8 +3115,8 @@ public final class RiftClientState {
                 if(!level.getWorldBorder().isWithinBounds(SURFACE_CURSOR)
                     || !level.hasChunk(x>>4,z>>4)
                     || !canopyAccentCandidateTouchesMesh(x,z,groundY,segments)) continue;
-                double velocityX=canopyAccentHorizontalVelocity(x,z,0,emissionEpoch);
-                double velocityZ=canopyAccentHorizontalVelocity(x,z,1,emissionEpoch);
+                double velocityX=canopyAccentHorizontalVelocity(x,z,0,emissionEpoch,worldSeed);
+                double velocityZ=canopyAccentHorizontalVelocity(x,z,1,emissionEpoch,worldSeed);
                 if(!canopyAccentHorizontalDriftWithinBounds(velocityX,velocityZ)) continue;
                 level.addParticle(GROUND_CANOPY_ACCENT_DUST,x+.5D,accentY,z+.5D,
                     velocityX,GROUND_CANOPY_ACCENT_VERTICAL_SPEED,velocityZ);
@@ -3134,12 +3135,13 @@ public final class RiftClientState {
             return surfaceY+boundedHeight+GROUND_CANOPY_ACCENT_VERTICAL_OFFSET;
         }
 
-        // SplitMix64 combines the block column, axis and ten-tick emission epoch.
-        // Each column is stable within one emission window but drifts differently in the next;
-        // no Random, vector, or stream is allocated while emitting the eight-mote budget.
-        private static double canopyAccentHorizontalVelocity(int blockX,int blockZ,int axis,long emissionEpoch) {
+        // SplitMix64 combines the world seed, block column, axis and ten-tick emission epoch.
+        // A column is stable inside one window; different worlds and later windows drift differently.
+        // The seed is read once per scan, with no Random, vector, or stream allocation per mote.
+        private static double canopyAccentHorizontalVelocity(int blockX,int blockZ,int axis,
+                long emissionEpoch,long worldSeed) {
             if(axis<0 || axis>1) return Double.NaN;
-            long hash=(((long)blockX)<<32) ^ (blockZ&0xffffffffL);
+            long hash=(((long)blockX)<<32) ^ (blockZ&0xffffffffL) ^ worldSeed;
             hash^=emissionEpoch*0xD1B54A32D192ED03L;
             hash+=axis==0?0x9E3779B97F4A7C15L:0xD1B54A32D192ED03L;
             hash=(hash^(hash>>>30))*0xBF58476D1CE4E5B9L;
@@ -3275,22 +3277,27 @@ public final class RiftClientState {
                 && GROUND_CANOPY_ACCENT_VERTICAL_SPEED>=.002D
                 && GROUND_CANOPY_ACCENT_VERTICAL_SPEED<=.004D;
             long emissionEpoch=10L;
-            double driftX=canopyAccentHorizontalVelocity(516,515,0,emissionEpoch);
-            double driftZ=canopyAccentHorizontalVelocity(516,515,1,emissionEpoch);
-            double nextDriftX=canopyAccentHorizontalVelocity(516,515,0,emissionEpoch+1L);
-            double nextDriftZ=canopyAccentHorizontalVelocity(516,515,1,emissionEpoch+1L);
+            long firstWorldSeed=0x13579BDF2468ACE0L;
+            long secondWorldSeed=0x02468ACE13579BDFL;
+            double driftX=canopyAccentHorizontalVelocity(516,515,0,emissionEpoch,firstWorldSeed);
+            double driftZ=canopyAccentHorizontalVelocity(516,515,1,emissionEpoch,firstWorldSeed);
+            double nextDriftX=canopyAccentHorizontalVelocity(516,515,0,emissionEpoch+1L,firstWorldSeed);
+            double nextDriftZ=canopyAccentHorizontalVelocity(516,515,1,emissionEpoch+1L,firstWorldSeed);
+            double repeatedWorldDriftZ=canopyAccentHorizontalVelocity(516,515,1,emissionEpoch,firstWorldSeed);
+            double secondWorldDriftZ=canopyAccentHorizontalVelocity(516,515,1,emissionEpoch,secondWorldSeed);
             boolean particleDriftProfile=Double.isFinite(GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED)
                 && GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED>=.003D
                 && GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED<=.006D
                 && canopyAccentHorizontalDriftWithinBounds(driftX,driftZ)
-                && driftX==canopyAccentHorizontalVelocity(516,515,0,emissionEpoch)
-                && driftZ==canopyAccentHorizontalVelocity(516,515,1,emissionEpoch)
+                && driftX==canopyAccentHorizontalVelocity(516,515,0,emissionEpoch,firstWorldSeed)
+                && driftZ==repeatedWorldDriftZ
                 && (driftX!=nextDriftX || driftZ!=nextDriftZ)
+                && Math.abs(driftZ-secondWorldDriftZ)>.001D
                 && canopyAccentHorizontalDriftWithinBounds(nextDriftX,nextDriftZ)
-                && Double.isNaN(canopyAccentHorizontalVelocity(516,515,2,emissionEpoch))
                 && canopyAccentHorizontalDriftWithinBounds(
-                    canopyAccentHorizontalVelocity(Integer.MIN_VALUE,Integer.MAX_VALUE,0,Long.MIN_VALUE),
-                    canopyAccentHorizontalVelocity(Integer.MIN_VALUE,Integer.MAX_VALUE,1,Long.MIN_VALUE));
+                    canopyAccentHorizontalVelocity(Integer.MIN_VALUE,Integer.MAX_VALUE,0,Long.MIN_VALUE,Long.MIN_VALUE),
+                    canopyAccentHorizontalVelocity(Integer.MIN_VALUE,Integer.MAX_VALUE,1,Long.MIN_VALUE,Long.MIN_VALUE))
+                && Double.isNaN(canopyAccentHorizontalVelocity(516,515,2,emissionEpoch,firstWorldSeed));
             boolean particleColorTransitionProfile=
                 isCanopyAccentTransitionColorValid(GROUND_CANOPY_ACCENT_START_COLOR)
                 && isCanopyAccentTransitionColorValid(GROUND_CANOPY_ACCENT_END_COLOR)
@@ -3445,7 +3452,7 @@ public final class RiftClientState {
                 GROUND_CANOPY_ACCENT_PARTICLE_SCALE,GROUND_CANOPY_ACCENT_VERTICAL_OFFSET,
                 GROUND_CANOPY_ACCENT_VERTICAL_SPEED);
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DRIFT_PROFILE_VERIFIED deterministic=true temporalVariation=true epochTicks={} horizontalMax={} verticalUnchanged=true bounded=true",
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DRIFT_PROFILE_VERIFIED deterministic=true temporalVariation=true worldSeedScoped=true epochTicks={} horizontalMax={} verticalUnchanged=true bounded=true",
                 GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS,GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_COLOR_TRANSITION_VERIFIED brightVioletToDeepViolet=true cachedOptions=true perParticleUpdate=true budgetUnchanged=true");
