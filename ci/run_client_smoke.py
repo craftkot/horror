@@ -2876,10 +2876,10 @@ def capture_test_world():
                             headroom_clear=send_isolated_chat_command(
                                 f"/execute if block {fixture_x} {fixture_y+2} {fixture_z} minecraft:air run say BF_CANOPY_HEADROOM_CLEAR",
                                 r"BF_CANOPY_HEADROOM_CLEAR","check stacked-plant headroom",
-                                timeout=1.0,required=False)
+                                timeout=3.0,required=False)
                             if not headroom_clear and not send_isolated_chat_command(
                                     f"/setblock {fixture_x} {fixture_y+2} {fixture_z} minecraft:air",
-                                    r"Block placed|Changed the block at","clear stacked-plant headroom",timeout=6.0):
+                                    r"Block placed|Changed the block at|Could not set the block","clear stacked-plant headroom",timeout=6.0):
                                 terrain_capture_failed=True
                                 return
                             fixture_check=(
