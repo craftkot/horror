@@ -4554,6 +4554,9 @@ public final class RiftClientState {
             groundCanopyAccentNeighborDuplicateScans=0;
             groundCanopyAccentDiagonalHits=0;
             groundCanopyAccentParticlesEmitted=0;
+            // A discarded mesh cannot keep a fixture probe from its previous anchor.
+            groundCanopyAccentLiftedLoggedCount=0;
+            canopyAccentFixtureSampleLogged=false;
         }
 
         private static void clearGeometryCacheIfPresent() {
