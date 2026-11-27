@@ -890,7 +890,7 @@ public final class RiftClientState {
             GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE*GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE;
         private static final double GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA=.35D;
         // Leaf-top accents may rise above the ground ribbon, but stay inside a bounded canopy envelope.
-        private static final double GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=16.0D;
+        private static final double GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=24.0D;
         // A mote may rise above at most two non-colliding bush plants, never through leaves or solids.
         private static final int GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS=2;
         // Slightly enlarge canopy motes for foliage contrast; the eight-particle emission budget stays unchanged.
@@ -3190,14 +3190,16 @@ public final class RiftClientState {
             double leafTop=canopyAccentParticleY(70,1.0D);
             boolean leafHeightBounded=isCanopyAccentHeightWithinBounds(64.1D,leafTop)
                 && isCanopyAccentHeightWithinBounds(64.1D,80.1D)
-                && !isCanopyAccentHeightWithinBounds(64.1D,80.100001D)
-                && !isCanopyAccentHeightWithinBounds(64.1D,canopyAccentParticleY(79,1.0D))
+                && isCanopyAccentHeightWithinBounds(64.1D,88.1D)
+                && !isCanopyAccentHeightWithinBounds(64.1D,88.100001D)
+                && !isCanopyAccentHeightWithinBounds(64.1D,canopyAccentParticleY(87,1.0D))
                 && !isCanopyAccentHeightWithinBounds(Double.NaN,leafTop);
             boolean heightmapPrefilterProfile=
                 !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,64)
                 && canopyAccentHeightmapMayContainValidLeafAccent(64.1D,68)
                 && canopyAccentHeightmapMayContainValidLeafAccent(64.26D,81)
-                && !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,81)
+                && canopyAccentHeightmapMayContainValidLeafAccent(64.26D,89)
+                && !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,89)
                 && !canopyAccentHeightmapMayContainValidLeafAccent(Double.NaN,68)
                 && !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,Integer.MIN_VALUE)
                 && !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,Integer.MAX_VALUE);
