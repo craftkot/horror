@@ -59,6 +59,18 @@ DEFERRED_CHUNK_READINESS_RE=re.compile(
     r"spawnChunkX=(-?\d+) spawnChunkZ=(-?\d+) loadedOnly=true")
 FINALE_ANCHOR_RE=re.compile(
     r"BLACK_FREQUENCY_TEST FINALE_ANCHOR_VALID x=(-?\d+) z=(-?\d+)")
+FIRST_BLOCK_REMOVED_RE=re.compile(
+    r"BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x=(-?\d+) y=(-?\d+) z=(-?\d+) surfaceY=(-?\d+) scanOrder=surface-first-center-out")
+CANOPY_FIXTURE_SAMPLE_RE=re.compile(
+    r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED "
+    r"sampleX=(-?\d+) sampleZ=(-?\d+) groundY=([-+0-9.eE]+) "
+    r"plantX=(-?\d+) plantZ=(-?\d+) arm=(\d+) segment=(\d+) "
+    r"nextScan=true loadedOnly=true radius=48")
+if (not FIRST_BLOCK_REMOVED_RE.fullmatch(
+        "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x=1 y=2 z=3 surfaceY=4 scanOrder=surface-first-center-out")
+        or not CANOPY_FIXTURE_SAMPLE_RE.fullmatch(
+        "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED sampleX=1 sampleZ=2 groundY=64.01 plantX=1 plantZ=1 arm=0 segment=5 nextScan=true loadedOnly=true radius=48")):
+    raise RuntimeError("BLACK FREQUENCY canopy fixture log regex regression")
 
 def is_valid_deferred_restore_chunk_event(x,z,chunk_x,chunk_z,anchor_x,anchor_z,radius):
     values=(x,z,chunk_x,chunk_z,anchor_x,anchor_z,radius)
@@ -2871,15 +2883,8 @@ def capture_test_world():
                 if os.environ.get("BF_ISOLATED_TEST")=="1":
                     if not canopy_fixture_seeded and marker and safe_pad:
                         anchor_match=FINALE_ANCHOR_RE.search(logs)
-                        first_edit=re.search(
-                            r"BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x=(-?\\d+) y=(-?\\d+) z=(-?\\d+) surfaceY=(-?\\d+) scanOrder=surface-first-center-out",
-                            logs)
-                        fixture_sample_match=re.search(
-                            r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED "
-                            r"sampleX=(-?\\d+) sampleZ=(-?\\d+) groundY=([-+0-9.eE]+) "
-                            r"plantX=(-?\\d+) plantZ=(-?\\d+) arm=(\\d+) segment=(\\d+) "
-                            r"nextScan=true loadedOnly=true radius=48",
-                            logs)
+                        first_edit=FIRST_BLOCK_REMOVED_RE.search(logs)
+                        fixture_sample_match=CANOPY_FIXTURE_SAMPLE_RE.search(logs)
                         if anchor_match and first_edit and fixture_sample_match:
                             anchor_x,anchor_z=map(int,anchor_match.groups())
                             sample_x,sample_z=map(int,fixture_sample_match.groups()[:2])
