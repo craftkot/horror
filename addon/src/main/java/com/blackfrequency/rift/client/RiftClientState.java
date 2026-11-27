@@ -3910,8 +3910,8 @@ public final class RiftClientState {
                                     cursor.set(neighborX,(int)Math.floor(sampleGroundY),neighborZ);
                                     if(level.getWorldBorder().isWithinBounds(cursor)) {
                                         com.mojang.logging.LogUtils.getLogger().info(
-                                            "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED sampleX={} sampleZ={} groundY={} plantX={} plantZ={} arm={} segment={} nextScan=true loadedOnly=true radius=48",
-                                            blockX,blockZ,sampleGroundY,neighborX,neighborZ,arm,segment);
+                                            "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED sampleX={} sampleZ={} groundY={} plantX={} plantZ={} arm={} segment={} anchorX={} anchorZ={} nextScan=true loadedOnly=true radius=48",
+                                            blockX,blockZ,sampleGroundY,neighborX,neighborZ,arm,segment,worldAnchorX,worldAnchorZ);
                                         canopyAccentFixtureSampleLogged=true;
                                     }
                                 }

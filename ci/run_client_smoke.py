@@ -65,20 +65,23 @@ CANOPY_FIXTURE_SAMPLE_RE=re.compile(
     r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED "
     r"sampleX=(-?\d+) sampleZ=(-?\d+) groundY=([-+0-9.eE]+) "
     r"plantX=(-?\d+) plantZ=(-?\d+) arm=(\d+) segment=(\d+) "
-    r"nextScan=true loadedOnly=true radius=48")
+    r"anchorX=(-?\d+) anchorZ=(-?\d+) nextScan=true loadedOnly=true radius=48")
 if (not FIRST_BLOCK_REMOVED_RE.fullmatch(
-        "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x=1 y=2 z=3 surfaceY=4 scanOrder=surface-first-center-out")
+        "BLACK FREQUENCY_TEST FIRST_BLOCK_REMOVED x=1 y=2 z=3 surfaceY=4 scanOrder=surface-first-center-out")
         or not CANOPY_FIXTURE_SAMPLE_RE.fullmatch(
-        "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED sampleX=1 sampleZ=2 groundY=64.01 plantX=1 plantZ=1 arm=0 segment=5 nextScan=true loadedOnly=true radius=48")):
+        "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED sampleX=1 sampleZ=2 groundY=64.01 plantX=1 plantZ=1 arm=0 segment=5 anchorX=0 anchorZ=0 nextScan=true loadedOnly=true radius=48")):
     raise RuntimeError("BLACK FREQUENCY canopy fixture log regex regression")
 
 def find_canopy_fixture_sample_for_anchor(log_text,anchor_x,anchor_z):
-    # The renderer can log a sample at the initial spawn before the finale anchor
-    # is established. Select the newest sample whose source and plant columns both
-    # remain inside the active 48-block fracture, never the first stale match.
+    # A fixture sample must come from the exact active mesh anchor. A sample from
+    # the initial spawn may still be geometrically inside the later 48-block
+    # fracture, but it is not part of that mesh and cannot be retried there.
     for match in reversed(list(CANOPY_FIXTURE_SAMPLE_RE.finditer(log_text))):
         sample_x,sample_z=map(int,match.groups()[:2])
         plant_x,plant_z=map(int,match.groups()[3:5])
+        sample_anchor_x,sample_anchor_z=map(int,match.groups()[7:9])
+        if sample_anchor_x!=anchor_x or sample_anchor_z!=anchor_z:
+            continue
         sample_dx=sample_x-anchor_x
         sample_dz=sample_z-anchor_z
         plant_dx=plant_x-anchor_x
@@ -90,15 +93,20 @@ def find_canopy_fixture_sample_for_anchor(log_text,anchor_x,anchor_z):
 
 _fixture_sample_probe_log=(
     "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED "
-    "sampleX=2 sampleZ=0 groundY=66.01 plantX=2 plantZ=-1 arm=0 segment=5 "
-    "nextScan=true loadedOnly=true radius=48\n"
+    "sampleX=510 sampleZ=512 groundY=74.01 plantX=510 plantZ=511 arm=0 segment=5 "
+    "anchorX=500 anchorZ=512 nextScan=true loadedOnly=true radius=48\n"
     "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED "
     "sampleX=514 sampleZ=512 groundY=74.01 plantX=514 plantZ=511 arm=0 segment=5 "
-    "nextScan=true loadedOnly=true radius=48")
+    "anchorX=512 anchorZ=512 nextScan=true loadedOnly=true radius=48")
 _selected_fixture_sample=find_canopy_fixture_sample_for_anchor(_fixture_sample_probe_log,512,512)
 if _selected_fixture_sample is None or int(_selected_fixture_sample.group(4))!=514:
     raise RuntimeError("BLACK FREQUENCY canopy fixture anchor selection regression")
-
+_stale_only_probe=(
+    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED "
+    "sampleX=510 sampleZ=512 groundY=74.01 plantX=510 plantZ=511 arm=0 segment=5 "
+    "anchorX=500 anchorZ=512 nextScan=true loadedOnly=true radius=48")
+if find_canopy_fixture_sample_for_anchor(_stale_only_probe,512,512) is not None:
+    raise RuntimeError("BLACK FREQUENCY stale canopy fixture anchor regression")
 def is_valid_deferred_restore_chunk_event(x,z,chunk_x,chunk_z,anchor_x,anchor_z,radius):
     values=(x,z,chunk_x,chunk_z,anchor_x,anchor_z,radius)
     if any(type(value) is not int for value in values):
