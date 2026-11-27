@@ -782,6 +782,16 @@ def verify_restoration_particle_source():
             or "GROUND_CANOPY_ACCENT_FIXTURE_ANCHOR_RESET_VERIFIED" not in fixture_anchor_reset_body
             or fixture_anchor_reset_call is None):
         raise RuntimeError("BLACK FREQUENCY canopy fixture probe must reset when the active mesh anchor changes")
+    geometry_cache_clear_start=client_source.find("private static void clearGeometryCache()")
+    geometry_cache_clear_end=client_source.find(
+        "\n        private static void clearGeometryCacheIfPresent",geometry_cache_clear_start+1)
+    geometry_cache_clear_body=(client_source[geometry_cache_clear_start:geometry_cache_clear_end]
+        if geometry_cache_clear_start>=0 and geometry_cache_clear_end>geometry_cache_clear_start else "")
+    if ("groundCanopyAccentLiftedLoggedCount=0;" not in geometry_cache_clear_body
+            or "canopyAccentFixtureSampleLogged=false;" not in geometry_cache_clear_body
+            or "groundCanopyAccentNeighborSampleCount=0;" not in geometry_cache_clear_body
+            or "groundCanopyAccentCandidateCount=0;" not in geometry_cache_clear_body):
+        raise RuntimeError("BLACK FREQUENCY geometry cache invalidation must reset per-mesh canopy probe state")
     fixture_queue_call=neighbor_scan_body.find("boolean queued=queueAdjacentExposedLeafCanopyAccent")
     fixture_retry_branch=neighbor_scan_body.find("if(!queued) {",fixture_queue_call)
     fixture_marker=neighbor_scan_body.find("GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED",fixture_queue_call)
