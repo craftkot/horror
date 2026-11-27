@@ -84,8 +84,11 @@ def verify_stacked_plant_fixture_command_profile():
                 or f"execute if block 513 {y} 518 {state} run say {marker}" not in verification
                 or marker_text not in verification):
             raise RuntimeError("BLACK FREQUENCY idempotent stacked-plant fixture command regression")
+    if not math.isclose(75+3.32,78.32,rel_tol=0.0,abs_tol=1.0E-9):
+        raise RuntimeError("BLACK FREQUENCY two-block plant mote clearance regression")
     print("CI_PROFILE: stacked-plant fixture offsets and idempotent block commands verified",
-          "plantY=75","supportY=74","upperY=76","headroomY=77",
+          "supportY=74","lowerY=75","upperY=76","headroomY=77",
+          "skippedPlants=2","particleOffset=3.32",
           "alreadyCorrectNoOp=true","buildBounds=true",flush=True)
 
 verify_stacked_plant_fixture_command_profile()
@@ -3078,9 +3081,11 @@ def capture_test_world():
                             lifted_y=float(lifted_match.group(2))
                             skipped=int(lifted_match.group(4))
                             # The marker is the lower plant half; the mote clears both halves by 2.32 blocks.
-                            expected_particle_y=canopy_fixture_position[1]+2.32
+                            # Two occupied plant cells are skipped; the mote is emitted
+                            # in the first clear cell above them, then raised by the 0.32 offset.
+                            expected_particle_y=canopy_fixture_position[1]+3.32
                             if (fixture_from_log!=canopy_fixture_position
-                                    or skipped<1
+                                    or skipped!=2
                                     or not math.isclose(lifted_y,expected_particle_y,
                                                         rel_tol=0.0,abs_tol=1.0E-6)):
                                 terrain_capture_failed=True
@@ -5634,8 +5639,8 @@ def capture_test_world():
                 skipped=int(lifted_match.group(4))
                 anchor_x,anchor_z=map(int,anchor_match.groups())
                 dx,dz=fixture_x-anchor_x,fixture_z-anchor_z
-                if (skipped<1 or dx*dx+dz*dz>48*48
-                        or not math.isclose(lifted_y,fixture_y+2.32,rel_tol=0.0,abs_tol=1.0E-6)):
+                if (skipped!=2 or dx*dx+dz*dz>48*48
+                        or not math.isclose(lifted_y,fixture_y+3.32,rel_tol=0.0,abs_tol=1.0E-6)):
                     print("WORLD_CAPTURE_FAIL: adjacent lifted-particle coordinates, clearance, or radius were invalid",
                           {"fixture":(fixture_x,fixture_y,fixture_z),"lifted":lifted_match.groups(),
                            "anchor":(anchor_x,anchor_z)},flush=True)
