@@ -5101,13 +5101,13 @@ def capture_test_world():
                 return False
             canopy_particle_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED "
-                "scale=1.25 verticalOffset=0.26 verticalSpeed=0.003 "
+                "scale=1.65 verticalOffset=0.26 verticalSpeed=0.003 "
                 "scaleBounded=true heightBounded=true speedBounded=true"
             )
             if (canopy_particle_marker not in log_after
-                    or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE=1.25F;" not in camera_source
-                    or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE>=1.20F" not in camera_source
-                    or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=1.30F" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE=1.65F;" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE>=1.55F" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=1.70F" not in camera_source
                     or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.26D;" not in camera_source
                     or "GROUND_CANOPY_ACCENT_VERTICAL_SPEED=.003D;" not in camera_source
                     or "0.0D,GROUND_CANOPY_ACCENT_VERTICAL_SPEED,0.0D" not in camera_source):

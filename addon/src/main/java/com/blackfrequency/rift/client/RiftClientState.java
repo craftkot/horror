@@ -893,8 +893,8 @@ public final class RiftClientState {
         private static final double GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=16.0D;
         // A mote may rise above at most two non-colliding bush plants, never through leaves or solids.
         private static final int GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS=2;
-        // Keep sparse violet motes legible over foliage without increasing their emission budget.
-        private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=1.25F;
+        // Slightly enlarge canopy motes for foliage contrast; the eight-particle emission budget stays unchanged.
+        private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=1.65F;
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.26D;
         // Keep canopy accents close to the fissure instead of letting them drift above the foliage.
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_SPEED=.003D;
@@ -3217,8 +3217,8 @@ public final class RiftClientState {
             double invalidHeight=canopyAccentParticleY(70,Double.NaN);
             double excessiveHeight=canopyAccentParticleY(70,2.0D);
             boolean particleScaleBounded=Float.isFinite(GROUND_CANOPY_ACCENT_PARTICLE_SCALE)
-                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE>=1.20F
-                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=1.30F;
+                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE>=1.55F
+                && GROUND_CANOPY_ACCENT_PARTICLE_SCALE<=1.70F;
             boolean particleOffsetBounded=Double.isFinite(GROUND_CANOPY_ACCENT_VERTICAL_OFFSET)
                 && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET>=.20D
                 && GROUND_CANOPY_ACCENT_VERTICAL_OFFSET<=.28D;
