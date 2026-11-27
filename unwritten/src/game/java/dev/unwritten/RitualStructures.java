@@ -61,5 +61,63 @@ final class RitualStructures {
   }
   return true;
  }
+ static Optional<BlockPos> trySacrifice(ServerPlayer p){
+  var level=p.level();
+  if(!level.dimension().identifier().toString().equals("minecraft:overworld"))return Optional.empty();
+  var player=p.blockPosition();var rng=p.getRandom();
+  for(int i=0;i<16;i++){
+   double a=Math.toRadians(p.getYRot())+(rng.nextDouble()-.5)*Math.PI;
+   int radius=24+rng.nextInt(13),direction=rng.nextInt(4);
+   var center=player.offset((int)Math.round(Math.sin(a)*radius),0,(int)Math.round(-Math.cos(a)*radius));
+   for(int y=1;y>=-2;y--){
+    var origin=at(center.offset(0,y,0),-2,0,-8,direction);
+    if(!sacrificeAvailable(level,origin,direction))continue;
+    var plan=new ArrayList<Placement>();
+    for(var cell:SacrificeLayout.cells()){
+     var state=switch(cell.material()){
+      case COBBLE -> Blocks.COBBLESTONE.defaultBlockState();
+      case MOSS -> Blocks.MOSSY_COBBLESTONE.defaultBlockState();
+      case WALL -> Blocks.COBBLESTONE_WALL.defaultBlockState();
+      case BARS -> Blocks.IRON_BARS.defaultBlockState();
+      case ALTAR -> Blocks.RED_STAINED_GLASS.defaultBlockState();
+      case LANTERN -> Blocks.SOUL_LANTERN.defaultBlockState();
+      case TORCH -> Blocks.REDSTONE_TORCH.defaultBlockState();
+      case DUST -> Blocks.REDSTONE_WIRE.defaultBlockState();
+     };
+     plan.add(new Placement(at(origin,cell.x(),cell.y(),cell.z(),direction),state));
+    }
+    if(placePlan(level,plan))return Optional.of(at(origin,2,1,13,direction));
+   }
+  }
+  return Optional.empty();
+ }
+ private static boolean sacrificeAvailable(ServerLevel level,BlockPos origin,int direction){
+  if(level.isOutsideBuildHeight(origin.below())||level.isOutsideBuildHeight(origin.above(3)))return false;
+  for(int x=-1;x<=SacrificeLayout.WIDTH;x++)for(int z=-1;z<=SacrificeLayout.LENGTH;z++){
+   var base=at(origin,x,0,z,direction);
+   if(!level.hasChunkAt(base.getX(),base.getZ())||!level.getWorldBorder().isWithinBounds(base))return false;
+   if(x<0||x>=SacrificeLayout.WIDTH)continue;
+   if(!level.getBlockState(base.below()).isSolidRender())return false;
+   for(int y=0;y<SacrificeLayout.HEIGHT;y++)if(!level.getBlockState(base.above(y)).isAir())return false;
+  }
+  var far=at(origin,4,3,15,direction);
+  var box=new AABB(Math.min(origin.getX(),far.getX()),origin.getY(),Math.min(origin.getZ(),far.getZ()),Math.max(origin.getX(),far.getX())+1,origin.getY()+4,Math.max(origin.getZ(),far.getZ())+1);
+  return level.players().stream().noneMatch(p->box.inflate(8).contains(p.position()))&&level.noCollision(box);
+ }
+ private static boolean placePlan(ServerLevel level,List<Placement> plan){
+  var done=new ArrayList<Placement>();
+  for(var cell:plan){
+   if(!level.getBlockState(cell.pos()).isAir()||!cell.state().canSurvive(level,cell.pos())||!level.setBlock(cell.pos(),cell.state(),3)){
+    for(int i=done.size()-1;i>=0;i--){
+     var old=done.get(i);
+     // Wall, bar and dust connections update their properties as adjacent pieces are added.
+     if(level.getBlockState(old.pos()).is(old.state().getBlock()))level.setBlock(old.pos(),Blocks.AIR.defaultBlockState(),3);
+    }
+    return false;
+   }
+   done.add(cell);
+  }
+  return true;
+ }
  private RitualStructures(){}
 }

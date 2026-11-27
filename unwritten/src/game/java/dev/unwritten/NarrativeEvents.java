@@ -13,7 +13,7 @@ import net.minecraft.ChatFormatting;
 
 /** Targeted narrative, with optional air-only Help structure placement. */
 final class NarrativeEvents {
- private enum Kind { COORDS, HELP }
+ private enum Kind { COORDS, HELP, RITUAL }
  private record Sequence(ServerPlayer player,Object world,Kind kind,int age,HorrorDirector director,BlockPos corridor){}
  private final Map<UUID,Sequence> active=new HashMap<>();
  boolean busy(ServerPlayer p){return active.containsKey(p.getUUID());}
@@ -23,6 +23,15 @@ final class NarrativeEvents {
   active.put(p.getUUID(),new Sequence(p,p.level(),Kind.HELP,0,director,null));
   p.sendSystemMessage(Component.translatable("event.unwritten.help.request").withStyle(ChatFormatting.GRAY));
   Apparitions.soundBehind(p,SoundEvents.AMBIENT_CAVE.value(),.5f,.8f);
+ }
+ void discoverRitual(ServerPlayer p,HorrorDirector director){
+  if(busy(p)||director.ritualHeard()||!p.level().dimension().identifier().toString().equals("minecraft:overworld"))return;
+  var site=director.ritualSite().orElse(null);if(site==null)return;
+  var anchor=new BlockPos(site.x(),site.y(),site.z());
+  if(!p.level().hasChunkAt(anchor.getX(),anchor.getZ())||!SacrificeLayout.within(p.distanceToSqr(anchor.getX()+.5,anchor.getY()+.5,anchor.getZ()+.5)))return;
+  if(!p.level().getBlockState(anchor).is(net.minecraft.world.level.block.Blocks.RED_STAINED_GLASS))return;
+  active.put(p.getUUID(),new Sequence(p,p.level(),Kind.RITUAL,0,director,anchor));
+  Apparitions.soundBehind(p,SoundEvents.AMBIENT_CAVE.value(),.8f,.55f);
  }
  static void title(ServerPlayer p){
   p.connection.send(new ClientboundSetTitlesAnimationPacket(5,35,10));
@@ -34,7 +43,14 @@ final class NarrativeEvents {
    var entry=it.next();var s=entry.getValue();var p=s.player();
    if(!players.contains(p)||p.level()!=s.world()||!p.isAlive()||p.isCreative()||p.isSpectator()){it.remove();continue;}
    int age=s.age();
-   int duration=s.kind()==Kind.COORDS?NarrativePolicy.COORDS_TICKS:NarrativePolicy.HELP_TICKS;
+   int duration=switch(s.kind()){case COORDS->NarrativePolicy.COORDS_TICKS;case HELP->NarrativePolicy.HELP_TICKS;case RITUAL->SacrificeLayout.DIALOG_TICKS;};
+   if(s.kind()==Kind.RITUAL){
+    var anchor=s.corridor();
+    if(!p.level().hasChunkAt(anchor.getX(),anchor.getZ())||!SacrificeLayout.within(p.distanceToSqr(anchor.getX()+.5,anchor.getY()+.5,anchor.getZ()+.5))||!p.level().getBlockState(anchor).is(net.minecraft.world.level.block.Blocks.RED_STAINED_GLASS)){it.remove();continue;}
+    if(age>=duration){s.director().markRitualHeard();it.remove();continue;}
+    int line=SacrificeLayout.dialogLine(age);
+    if(line>=0)p.sendSystemMessage(Component.translatable("event.unwritten.ritual.line."+line).withStyle(ChatFormatting.GRAY));
+   }
    if(NarrativePolicy.expired(age,duration)){it.remove();continue;}
    if(s.kind()==Kind.COORDS&&NarrativePolicy.coordsFrame(age)){
     var pos=p.blockPosition();

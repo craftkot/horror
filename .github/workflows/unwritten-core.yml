@@ -32,3 +32,4 @@ jobs:
           java -cp /tmp/unwritten-classes dev.unwritten.SocialPolicyTest
           java -cp /tmp/unwritten-classes dev.unwritten.SkinLinksTest
           java -cp /tmp/unwritten-classes dev.unwritten.HelpCorridorTest
+          java -cp /tmp/unwritten-classes dev.unwritten.SacrificeLayoutTest

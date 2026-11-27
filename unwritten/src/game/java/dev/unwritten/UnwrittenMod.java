@@ -133,6 +133,7 @@ public final class UnwrittenMod {
             boolean underground = pos.getY() < 50 && !level.canSeeSky(pos);
             boolean alone = players.stream().noneMatch(other -> other != p && other.level() == level && other.distanceToSqr(p) < 1024);
             boolean safe = !dark && session.history().dwell() > 20;
+            if(!chases.hasChase(p)&&!mimics.active(p)&&!social.busy(p)&&!apparitions.hasWatcher(p))narrative.discoverRitual(p,session.director());
             var obs = new HorrorDirector.Observation(dark,alone,underground,safe,0);
             session.director().tick(obs,!chases.hasChase(p)&&!mimics.active(p)&&!narrative.busy(p)&&!social.busy(p)).ifPresent(decision -> play(p, decision));
         }
@@ -159,6 +160,13 @@ public final class UnwrittenMod {
             case BREATH -> Apparitions.soundBehind(p,SoundEvents.PLAYER_BREATH,1.0f,0.5f);
             case DOOR -> ReferenceEvents.toggleDoor(p);
             case TEXT -> p.sendSystemMessage(Component.translatable("event.unwritten.presence"));
+            case SACRIFICE -> {
+                var director=session(p).director();
+                if(director.ritualSite().isEmpty())RitualStructures.trySacrifice(p).ifPresent(pos->{
+                    director.rememberRitual(new HorrorDirector.RitualSite(pos.getX(),pos.getY(),pos.getZ()));
+                    p.sendSystemMessage(Component.translatable("event.unwritten.ritual.location",pos.getX(),pos.getY(),pos.getZ()).withStyle(ChatFormatting.GRAY));
+                });
+            }
             case FALSE_JOIN -> social.join(p,p.level().getServer().getPlayerList().getPlayers());
             case FALSE_LEAVE -> social.hideReal(p,p.level().getServer().getPlayerList().getPlayers());
             case FALSE_KICK -> { if(!apparitions.hasWatcher(p)&&!social.busy(p))net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(p,SocialPayload.INSTANCE); }

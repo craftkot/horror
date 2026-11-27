@@ -11,5 +11,16 @@
   "event.unwritten.help.request": "<God> Help me. He won't let me leave.",
   "event.unwritten.help.warning": "<God> He's here. Run.",
   "event.unwritten.fakekick.reason": "Connection lost.",
-  "event.unwritten.help.location": "<God> I left you a path. %s, %s, %s."
+  "event.unwritten.help.location": "<God> I left you a path. %s, %s, %s.",
+  "event.unwritten.ritual.location": "Something awaits you. %s, %s, %s.",
+  "event.unwritten.ritual.line.0": "Interesting.",
+  "event.unwritten.ritual.line.1": "So this is the path you chose.",
+  "event.unwritten.ritual.line.2": "Let me tell you a story.",
+  "event.unwritten.ritual.line.3": "The one who rules now does not deserve his place.",
+  "event.unwritten.ritual.line.4": "He was once close to the former God. That God was too kind.",
+  "event.unwritten.ritual.line.5": "And then the former God vanished.",
+  "event.unwritten.ritual.line.6": "I never expected it to end like this.",
+  "event.unwritten.ritual.line.7": "You can help me. I will not forget it.",
+  "event.unwritten.ritual.line.8": "Who am I?",
+  "event.unwritten.ritual.line.9": "My name is…"
 }

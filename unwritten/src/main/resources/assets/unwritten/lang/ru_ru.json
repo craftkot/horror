@@ -11,5 +11,16 @@
   "event.unwritten.help.request": "<Бог> Помоги мне. Он не отпускает меня.",
   "event.unwritten.help.warning": "<Бог> Он пришёл. Беги.",
   "event.unwritten.fakekick.reason": "Соединение потеряно.",
-  "event.unwritten.help.location": "<Бог> Я оставил тебе путь. %s, %s, %s."
+  "event.unwritten.help.location": "<Бог> Я оставил тебе путь. %s, %s, %s.",
+  "event.unwritten.ritual.location": "Нечто ждёт тебя. %s, %s, %s.",
+  "event.unwritten.ritual.line.0": "Интересно.",
+  "event.unwritten.ritual.line.1": "Значит, ты выбрал этот путь.",
+  "event.unwritten.ritual.line.2": "Я расскажу тебе одну историю.",
+  "event.unwritten.ritual.line.3": "Тот, кто правит сейчас, не заслуживает своего места.",
+  "event.unwritten.ritual.line.4": "Когда-то он был близок к прежнему Богу. Тот был слишком добрым.",
+  "event.unwritten.ritual.line.5": "А потом прежний Бог исчез.",
+  "event.unwritten.ritual.line.6": "Я не ожидал, что всё закончится так.",
+  "event.unwritten.ritual.line.7": "Ты можешь помочь мне. Я не останусь в долгу.",
+  "event.unwritten.ritual.line.8": "Кто я?",
+  "event.unwritten.ritual.line.9": "Моё имя…"
 }

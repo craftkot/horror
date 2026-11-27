@@ -3,7 +3,7 @@ import java.util.*;
 import java.io.*;
 /** Server-side policy; game adapter supplies observations once per second. */
 public final class HorrorDirector {
- public enum Event { FOOTSTEPS, DISTANT_SILHOUETTE, ECHO, FALSE_PRESENCE, LOCAL_ANOMALY, BREATH, DOOR, TEXT, NULL_NEAR, NULL_WHISPER, MIMIC, NULL_TITLE, COORDS, FREEZE_SKY, FALSE_TIME, FALSE_JOIN, FALSE_KICK, FALSE_LEAVE }
+ public enum Event { FOOTSTEPS, DISTANT_SILHOUETTE, ECHO, FALSE_PRESENCE, LOCAL_ANOMALY, BREATH, DOOR, TEXT, NULL_NEAR, NULL_WHISPER, MIMIC, NULL_TITLE, COORDS, FREEZE_SKY, FALSE_TIME, FALSE_JOIN, FALSE_KICK, FALSE_LEAVE, SACRIFICE }
  public record Observation(boolean dark, boolean alone, boolean underground, boolean safe, int moralDelta) {}
  public record Decision(Event event, int stage) {}
  private final Random random;
@@ -14,6 +14,9 @@ public final class HorrorDirector {
  private boolean nullPresent;
  private int mineCooldown;
  private boolean helpBuilt;
+ public record RitualSite(int x,int y,int z){}
+ private RitualSite ritualSite;
+ private boolean ritualHeard;
  public enum Sleep { ALLOW, GUILT, WATCHED, CALL }
  public HorrorDirector(long seed){random=new Random(seed);}
  public Optional<Decision> tick(Observation o){return tick(o,true);}
@@ -35,6 +38,7 @@ public final class HorrorDirector {
   if(nullPresent){choices.add(Event.NULL_WHISPER);choices.add(Event.NULL_TITLE);choices.add(Event.COORDS);}
   if(nullPresent&&stage>=4){choices.add(Event.MIMIC);choices.add(Event.FALSE_JOIN);choices.add(Event.FALSE_LEAVE);}
   if(nullPresent&&stage>=5)choices.add(Event.FALSE_KICK);
+  if(stage>=4&&karma<=-25&&ritualSite==null)choices.add(Event.SACRIFICE);
   if(choices.size()>1)choices.remove(last);
   last=choices.get(random.nextInt(choices.size()));
   if(last==Event.NULL_NEAR)nullPresent=true;
@@ -42,6 +46,10 @@ public final class HorrorDirector {
   pressure=Math.max(0,pressure-35);
   return Optional.of(new Decision(last,stage));
  }
+ public Optional<RitualSite> ritualSite(){return Optional.ofNullable(ritualSite);}
+ public void rememberRitual(RitualSite site){if(ritualSite==null)ritualSite=Objects.requireNonNull(site);}
+ public boolean ritualHeard(){return ritualHeard;}
+ public void markRitualHeard(){if(ritualSite!=null)ritualHeard=true;}
  public boolean helpBuilt(){return helpBuilt;}
  public void markHelpBuilt(){helpBuilt=true;}
  public boolean mineReady(){return mineCooldown==0;}
@@ -59,11 +67,12 @@ public final class HorrorDirector {
  public void explosion(){adjustKarma(-3);}
  public void adjustKarma(int delta){karma=Math.clamp(karma+Math.clamp(delta,-100,100),-100,100);}
  public void write(DataOutput out)throws IOException{
-  out.writeInt(6);out.writeInt(pressure);out.writeInt(karma);out.writeInt(cooldown);out.writeInt(quiet);
+  out.writeInt(7);out.writeInt(pressure);out.writeInt(karma);out.writeInt(cooldown);out.writeInt(quiet);
   out.writeUTF(last==null?"":last.name());out.writeInt(bonemealUses);out.writeInt(sleepCooldown);out.writeBoolean(nullPresent);out.writeInt(mineCooldown);out.writeBoolean(helpBuilt);
+  out.writeBoolean(ritualSite!=null);if(ritualSite!=null){out.writeInt(ritualSite.x());out.writeInt(ritualSite.y());out.writeInt(ritualSite.z());}out.writeBoolean(ritualHeard);
  }
  public static HorrorDirector read(DataInput in,long seed)throws IOException{
-  int version=in.readInt();if(version<1||version>6)throw new IOException("Unknown director version");
+  int version=in.readInt();if(version<1||version>7)throw new IOException("Unknown director version");
   var d=new HorrorDirector(seed);
   d.pressure=in.readInt();d.karma=in.readInt();d.cooldown=in.readInt();d.quiet=in.readInt();
   if(d.pressure<0||d.pressure>1000||Math.abs((long)d.karma)>100||d.cooldown<0||d.cooldown>120||d.quiet<0||d.quiet>120)throw new IOException("Invalid director state");
@@ -74,6 +83,7 @@ public final class HorrorDirector {
   if(version>=4)d.nullPresent=in.readBoolean();
   if(version>=5){d.mineCooldown=in.readInt();if(d.mineCooldown<0||d.mineCooldown>MinePolicy.COOLDOWN_SECONDS)throw new IOException("Invalid mine cooldown");}
   if(version>=6)d.helpBuilt=in.readBoolean();
+  if(version>=7){if(in.readBoolean())d.ritualSite=new RitualSite(in.readInt(),in.readInt(),in.readInt());d.ritualHeard=in.readBoolean();if(d.ritualHeard&&d.ritualSite==null)throw new IOException("Ritual completion without site");}
   return d;
  }
  public int pressure(){return pressure;}
