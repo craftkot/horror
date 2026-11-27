@@ -511,6 +511,9 @@ def verify_restoration_particle_source():
     heightmap_prefilter_at=leaf_accent_body.find("canopyAccentHeightmapMayContainValidLeafAccent(groundY,topY)")
     leaf_state_at=leaf_accent_body.find("BlockState leaf=level.getBlockState(cursor);")
     if ("GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=24.0D;" not in client_source
+            or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.32D;" not in client_source
+            or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET>=.28D" not in client_source
+            or "GROUND_CANOPY_ACCENT_VERTICAL_OFFSET<=.36D" not in client_source
             or heightmap_prefilter_at<0 or leaf_state_at<0 or heightmap_prefilter_at>leaf_state_at
             or "Double.isFinite(groundY)" not in heightmap_prefilter_body
             or "maximumPossibleAccentY>groundY+1.0D" not in heightmap_prefilter_body
