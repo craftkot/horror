@@ -779,6 +779,10 @@ def verify_restoration_particle_source():
     if (not fixture_anchor_reset_body
             or "canopyAccentFixtureSampleLogged=false;" not in fixture_anchor_reset_body
             or "groundCanopyAccentLiftedLoggedCount=0;" not in fixture_anchor_reset_body
+            or "previousAnchorX!=Integer.MIN_VALUE" not in fixture_anchor_reset_body
+            or "previousAnchorZ!=Integer.MIN_VALUE" not in fixture_anchor_reset_body
+            or "if(VERIFY_GROUND_MESH_PROFILES && previousAnchorValid)" not in fixture_anchor_reset_body
+            or "previousSampleLogged" in fixture_anchor_reset_body
             or "GROUND_CANOPY_ACCENT_FIXTURE_ANCHOR_RESET_VERIFIED" not in fixture_anchor_reset_body
             or fixture_anchor_reset_call is None):
         raise RuntimeError("BLACK FREQUENCY canopy fixture probe must reset when the active mesh anchor changes")
