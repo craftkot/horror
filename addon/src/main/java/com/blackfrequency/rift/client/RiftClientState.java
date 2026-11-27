@@ -3095,7 +3095,7 @@ public final class RiftClientState {
             long gameTime=level.getGameTime();
             if(!shouldAttemptCanopyAccentScan(gameTime,groundCanopyAccentLastAttemptTick)) return;
             long emissionEpoch=Math.floorDiv(gameTime,(long)GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS);
-            long dimensionSalt=level.dimension().location().hashCode();
+            long dimensionSalt=canopyAccentDimensionSalt(level.dimension().location().toString());
             int start=canopyAccentCandidateIndex(groundCanopyAccentCandidateCursor,0,candidateCount);
             int visited=0;
             for(int offset=0;offset<candidateCount
@@ -3138,6 +3138,17 @@ public final class RiftClientState {
         // SplitMix64 combines the dimension key, block column, axis and ten-tick emission epoch.
         // A column is stable inside one window; dimensions and later windows drift differently.
         // The key hash is read once per scan; no Random, vector, or stream is allocated per mote.
+        // ResourceLocation keys are ASCII-safe; FNV-1a 64-bit avoids the collision space of String.hashCode().
+        private static long canopyAccentDimensionSalt(String dimensionKey) {
+            if(dimensionKey==null || dimensionKey.isEmpty()) return 0L;
+            long hash=0xcbf29ce484222325L;
+            for(int i=0;i<dimensionKey.length();i++) {
+                hash^=dimensionKey.charAt(i);
+                hash*=0x100000001b3L;
+            }
+            return hash;
+        }
+
         private static double canopyAccentHorizontalVelocity(int blockX,int blockZ,int axis,
                 long emissionEpoch,long dimensionSalt) {
             if(axis<0 || axis>1) return Double.NaN;
@@ -3281,8 +3292,14 @@ public final class RiftClientState {
                 && GROUND_CANOPY_ACCENT_VERTICAL_SPEED>=.002D
                 && GROUND_CANOPY_ACCENT_VERTICAL_SPEED<=.004D;
             long emissionEpoch=10L;
-            long firstDimensionSalt=0x13579BDF2468ACE0L;
-            long secondDimensionSalt=0x02468ACE13579BDFL;
+            long firstDimensionSalt=canopyAccentDimensionSalt("minecraft:overworld");
+            long secondDimensionSalt=canopyAccentDimensionSalt("minecraft:the_nether");
+            boolean dimensionSaltProfile=firstDimensionSalt!=0L
+                && firstDimensionSalt==canopyAccentDimensionSalt("minecraft:overworld")
+                && secondDimensionSalt==canopyAccentDimensionSalt("minecraft:the_nether")
+                && firstDimensionSalt!=secondDimensionSalt
+                && canopyAccentDimensionSalt(null)==0L
+                && canopyAccentDimensionSalt("")==0L;
             double driftX=canopyAccentHorizontalVelocity(516,515,0,emissionEpoch,firstDimensionSalt);
             double driftZ=canopyAccentHorizontalVelocity(516,515,1,emissionEpoch,firstDimensionSalt);
             double nextDriftX=canopyAccentHorizontalVelocity(516,515,0,emissionEpoch+1L,firstDimensionSalt);
@@ -3408,7 +3425,7 @@ public final class RiftClientState {
             boolean zeroEmissionScanRecorded=nextCanopyAccentAttemptTick(110L,100L,12)==110L;
             boolean emptyScanPreservesAttempt=nextCanopyAccentAttemptTick(110L,100L,0)==100L;
             if(!(selected && sparse && threeOfFourPattern && negativeCoordinatePattern && deterministic && candidateBudgetRejected && negativeCounterRejected
-                && rotationProfile && emissionThrottleProfile
+                && rotationProfile && emissionThrottleProfile && dimensionSaltProfile
                 && zeroEmissionScanRecorded && emptyScanPreservesAttempt
                 && leafSelected && leafSparse && nonAccentSurfacesRejected && leafHeightBounded
                 && adjacentScanProfile && oppositeSideScanProfile && secondRingScanProfile
@@ -3455,6 +3472,8 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PARTICLE_PROFILE_VERIFIED scale={} verticalOffset={} verticalSpeed={} scaleBounded=true heightBounded=true speedBounded=true",
                 GROUND_CANOPY_ACCENT_PARTICLE_SCALE,GROUND_CANOPY_ACCENT_VERTICAL_OFFSET,
                 GROUND_CANOPY_ACCENT_VERTICAL_SPEED);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DIMENSION_SALT_PROFILE_VERIFIED algorithm=fnv1a64 stable=true distinct=true emptyFallback=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DRIFT_PROFILE_VERIFIED deterministic=true temporalVariation=true dimensionScoped=true epochTicks={} horizontalMax={} verticalUnchanged=true bounded=true",
                 GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS,GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED);
