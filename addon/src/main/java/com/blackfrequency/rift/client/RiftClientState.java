@@ -929,6 +929,7 @@ public final class RiftClientState {
         private static long groundCanopyAccentLastAttemptTick=Long.MIN_VALUE;
         private static int groundCanopyAccentParticlesEmitted;
         private static int groundCanopyAccentLiftedLoggedCount;
+        private static boolean canopyAccentFixtureSampleLogged;
         // Rejection counters are populated only by the isolated client smoke profile.
         private static int groundCanopyAccentQueueAttempts;
         private static int groundCanopyAccentQueueAccepted;
@@ -3888,6 +3889,28 @@ public final class RiftClientState {
                     int scan=groundCanopyAccentNeighborScans++;
                     GROUND_CANOPY_ACCENT_SCANNED_X[scan]=neighborX;
                     GROUND_CANOPY_ACCENT_SCANNED_Z[scan]=neighborZ;
+                    // Publish one candidate that the next rebuild will scan first. CI can
+                    // seed a real stacked plant at the exact sampled ground height without
+                    // guessing from the unrelated first block removed at the anchor.
+                    if(VERIFY_GROUND_MESH_PROFILES && !canopyAccentFixtureSampleLogged
+                        && pass==0 && offset>0
+                        && level.hasChunk(neighborX>>4,neighborZ>>4)
+                        && ((neighborX&1)==0 || (neighborZ&1)==0)) {
+                        double sampleGroundY=GROUND_CANOPY_ACCENT_NEIGHBOR_SAMPLE_GROUND_Y[sample];
+                        if(Double.isFinite(sampleGroundY)) {
+                            double fractionalGroundY=sampleGroundY-Math.floor(sampleGroundY);
+                            if(fractionalGroundY<=GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA
+                                && canopyAccentCandidateTouchesMesh(neighborX,neighborZ,sampleGroundY,segments)) {
+                                cursor.set(neighborX,(int)Math.floor(sampleGroundY),neighborZ);
+                                if(level.getWorldBorder().isWithinBounds(cursor)) {
+                                    com.mojang.logging.LogUtils.getLogger().info(
+                                        "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED sampleX={} sampleZ={} groundY={} plantX={} plantZ={} arm={} segment={} nextScan=true loadedOnly=true radius=48",
+                                        blockX,blockZ,sampleGroundY,neighborX,neighborZ,arm,segment);
+                                    canopyAccentFixtureSampleLogged=true;
+                                }
+                            }
+                        }
+                    }
                     int candidatesBefore=groundCanopyAccentCandidateCount;
                     boolean queued=queueAdjacentExposedLeafCanopyAccent(level,blockX,blockZ,
                         GROUND_CANOPY_ACCENT_NEIGHBOR_SAMPLE_GROUND_Y[sample],arm,segment,
@@ -4570,6 +4593,7 @@ public final class RiftClientState {
             canopyAccentBuildProfileLogged=false;
             canopyAccentEmissionLogged=false;
             groundCanopyAccentLiftedLoggedCount=0;
+            canopyAccentFixtureSampleLogged=false;
             groundCanopyAccentCandidateCount=0;
             groundCanopyAccentCandidateCursor=0;
             groundCanopyAccentNeighborSampleCursor=0;

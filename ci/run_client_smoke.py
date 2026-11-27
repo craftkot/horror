@@ -129,6 +129,10 @@ def verify_deferred_restore_chunk_bounds_profile():
     if (not input_ready_body or "DEFERRED_CLIENT_INPUT_READY_MARKER" not in input_ready_body
             or DEFERRED_CLIENT_INPUT_READY_MARKER not in client_source
             or "wait_for_isolated_client_input_ready()" not in isolated_command_body
+            or "nonlocal isolated_chat_open" not in isolated_command_body
+            or "if isolated_chat_open:" not in isolated_command_body
+            or "if confirmation is None:" not in isolated_command_body
+            or 'print("WORLD_CAPTURE: submitted",description,flush=True)' not in isolated_command_body
             or "for attempt in range(2 if required else 1)" not in isolated_command_body
             or "command acknowledgement delayed; retrying" not in isolated_command_body
             or "isolated_chat_command_body(command)" not in isolated_command_body
@@ -648,6 +652,10 @@ def verify_restoration_particle_source():
             or "GROUND_CANOPY_ACCENT_ADJACENT_PLANT_SCAN_PROFILE_VERIFIED supportChecked=true groundTolerance=0.35 loadedOnly=true radius=48 maxSkipped=2" not in client_source
             or "GROUND_CANOPY_ACCENT_ADJACENT_PLANT[groundCanopyAccentCandidateCount-1]=true" not in client_source
             or "GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_EMITTED" not in client_source
+            or "GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED" not in neighbor_scan_body
+            or "offset>0" not in neighbor_scan_body
+            or "level.hasChunk(neighborX>>4,neighborZ>>4)" not in neighbor_scan_body
+            or "canopyAccentCandidateTouchesMesh(neighborX,neighborZ,sampleGroundY,segments)" not in neighbor_scan_body
             or "&& !directLiftedAccent" not in client_source
             or "for(int candidate=candidatesBeforeSample;candidate<groundCanopyAccentCandidateCount;candidate++)" not in client_source
             or "for(int pass=0;pass<4;pass++)" not in neighbor_scan_body
@@ -1424,7 +1432,9 @@ def capture_test_world():
                 return True
             time.sleep(0.1)
         return False
+    isolated_chat_open=False
     def send_isolated_chat_command(command,confirmation,description,timeout=8.0,required=True):
+        nonlocal isolated_chat_open
         # This helper is used only in the disposable isolated client world.
         # A player teleport loads chunks through normal player movement; it never
         # calls setChunkForced or any server-side chunk-loading API.
@@ -1443,12 +1453,23 @@ def capture_test_world():
             log_offset=latest.stat().st_size if latest.exists() else 0
             print("WORLD_CAPTURE_INPUT: Minecraft window focus confirmed for",description,
                   "attempt",attempt+1,flush=True)
-            closed=key("Escape",focus=False)
-            time.sleep(0.12)
+            # Escape only when a previous input attempt left ChatScreen open. Sending
+            # Escape unconditionally toggles the pause menu in a clean world and pauses
+            # the integrated server between fixture commands.
+            if isolated_chat_open:
+                closed=key("Escape",focus=False)
+                if closed.returncode!=0:
+                    print("WORLD_CAPTURE: could not close the previous chat screen; retrying",
+                          description,"attempt",attempt+1,flush=True)
+                    continue
+                isolated_chat_open=False
+                time.sleep(0.12)
             # The slash key opens ChatScreen with '/' already entered. Waiting before
             # typing the body prevents early xdotool characters from being lost during
             # the screen transition (which previously turned /setworldspawn into chat text).
             opened=key("slash",focus=False)
+            if opened.returncode==0:
+                isolated_chat_open=True
             time.sleep(1.25)
             print("WORLD_CAPTURE_INPUT: command chat opened with slash key; typing body",
                   description,flush=True)
@@ -1457,11 +1478,17 @@ def capture_test_world():
                 check=False)
             time.sleep(0.20)
             submitted=key("Return",focus=False)
-            if (closed.returncode!=0 or opened.returncode!=0
-                    or typed.returncode!=0 or submitted.returncode!=0):
+            if submitted.returncode==0:
+                isolated_chat_open=False
+            if (opened.returncode!=0 or typed.returncode!=0 or submitted.returncode!=0):
                 print("WORLD_CAPTURE: isolated command input failed; retrying",
                       description,"attempt",attempt+1,flush=True)
                 continue
+            # Mutating fixture commands are followed by unique execute-if-block
+            # assertions. Do not accept a delayed generic setblock response as proof.
+            if confirmation is None:
+                print("WORLD_CAPTURE: submitted",description,flush=True)
+                return True
             deadline=time.monotonic()+timeout
             while time.monotonic()<deadline and p.poll() is None:
                 try:
@@ -2845,43 +2872,70 @@ def capture_test_world():
                     if not canopy_fixture_seeded and marker and safe_pad:
                         anchor_match=FINALE_ANCHOR_RE.search(logs)
                         first_edit=re.search(
-                            r"BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x=(-?\d+) y=(-?\d+) z=(-?\d+) surfaceY=(-?\d+) scanOrder=surface-first-center-out",
+                            r"BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x=(-?\\d+) y=(-?\\d+) z=(-?\\d+) surfaceY=(-?\\d+) scanOrder=surface-first-center-out",
                             logs)
-                        if anchor_match and first_edit:
+                        fixture_sample_match=re.search(
+                            r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED "
+                            r"sampleX=(-?\\d+) sampleZ=(-?\\d+) groundY=([-+0-9.eE]+) "
+                            r"plantX=(-?\\d+) plantZ=(-?\\d+) arm=(\\d+) segment=(\\d+) "
+                            r"nextScan=true loadedOnly=true radius=48",
+                            logs)
+                        if anchor_match and first_edit and fixture_sample_match:
                             anchor_x,anchor_z=map(int,anchor_match.groups())
-                            fixture_y=int(first_edit.group(4))
-                            # Arm 0, segment 5: one normal neighbor of a deterministic ground-mesh sample.
-                            fixture_x=anchor_x+2
-                            fixture_z=anchor_z-1
+                            sample_x,sample_z=map(int,fixture_sample_match.groups()[:2])
+                            sample_ground_y=float(fixture_sample_match.group(3))
+                            fixture_x,fixture_z=map(int,fixture_sample_match.groups()[3:5])
+                            if not math.isfinite(sample_ground_y):
+                                terrain_capture_failed=True
+                                print("WORLD_CAPTURE_FAIL: renderer published a non-finite canopy fixture height",
+                                      {"sample":(sample_x,sample_z),"groundY":sample_ground_y},flush=True)
+                                return
+                            fixture_y=math.floor(sample_ground_y)
                             dx=fixture_x-anchor_x
                             dz=fixture_z-anchor_z
-                            if dx*dx+dz*dz>48*48:
+                            sample_dx=sample_x-anchor_x
+                            sample_dz=sample_z-anchor_z
+                            if (fixture_y < -63 or fixture_y > 317
+                                    or sample_dx*sample_dx+sample_dz*sample_dz>48*48
+                                    or dx*dx+dz*dz>48*48):
                                 terrain_capture_failed=True
-                                print("WORLD_CAPTURE_FAIL: stacked-plant fixture escaped the bounded fracture radius",
-                                      {"anchor":(anchor_x,anchor_z),"fixture":(fixture_x,fixture_z)},flush=True)
+                                print("WORLD_CAPTURE_FAIL: sampled stacked-plant fixture escaped build or fracture bounds",
+                                      {"anchor":(anchor_x,anchor_z),"sample":(sample_x,sample_z),
+                                       "fixture":(fixture_x,fixture_y,fixture_z),"groundY":sample_ground_y},flush=True)
                                 return
-                            fixture_commands=(
+                            fixture_mutations=(
                                 (f"/setblock {fixture_x} {fixture_y-1} {fixture_z} minecraft:grass_block",
-                                 "prepare adjacent stacked-plant support"),
+                                 "prepare sampled adjacent-plant support"),
                                 (f"/setblock {fixture_x} {fixture_y} {fixture_z} minecraft:tall_grass[half=lower]",
-                                 "place lower tall-grass half"),
+                                 "place sampled lower tall-grass half"),
                                 (f"/setblock {fixture_x} {fixture_y+1} {fixture_z} minecraft:tall_grass[half=upper]",
-                                 "place upper tall-grass half"),
+                                 "place sampled upper tall-grass half"),
+                                (f"/setblock {fixture_x} {fixture_y+2} {fixture_z} minecraft:air",
+                                 "clear sampled stacked-plant headroom"),
                             )
-                            for command,description in fixture_commands:
-                                if not send_isolated_chat_command(
-                                        command,r"Block placed|Changed the block at",description,timeout=6.0):
+                            for command,description in fixture_mutations:
+                                if not send_isolated_chat_command(command,None,description):
                                     terrain_capture_failed=True
                                     return
-                            headroom_clear=send_isolated_chat_command(
-                                f"/execute if block {fixture_x} {fixture_y+2} {fixture_z} minecraft:air run say BF_CANOPY_HEADROOM_CLEAR",
-                                r"BF_CANOPY_HEADROOM_CLEAR","check stacked-plant headroom",
-                                timeout=3.0,required=False)
-                            if not headroom_clear and not send_isolated_chat_command(
-                                    f"/setblock {fixture_x} {fixture_y+2} {fixture_z} minecraft:air",
-                                    r"Block placed|Changed the block at|Could not set the block","clear stacked-plant headroom",timeout=6.0):
-                                terrain_capture_failed=True
-                                return
+                            fixture_checks=(
+                                (f"/execute if block {fixture_x} {fixture_y-1} {fixture_z} minecraft:grass_block run say BF_CANOPY_SUPPORT_VERIFIED x={fixture_x} y={fixture_y-1} z={fixture_z}",
+                                 f"BF_CANOPY_SUPPORT_VERIFIED x={fixture_x} y={fixture_y-1} z={fixture_z}",
+                                 "verify sampled plant support"),
+                                (f"/execute if block {fixture_x} {fixture_y} {fixture_z} minecraft:tall_grass[half=lower] run say BF_CANOPY_LOWER_VERIFIED x={fixture_x} y={fixture_y} z={fixture_z}",
+                                 f"BF_CANOPY_LOWER_VERIFIED x={fixture_x} y={fixture_y} z={fixture_z}",
+                                 "verify sampled lower plant half"),
+                                (f"/execute if block {fixture_x} {fixture_y+1} {fixture_z} minecraft:tall_grass[half=upper] run say BF_CANOPY_UPPER_VERIFIED x={fixture_x} y={fixture_y+1} z={fixture_z}",
+                                 f"BF_CANOPY_UPPER_VERIFIED x={fixture_x} y={fixture_y+1} z={fixture_z}",
+                                 "verify sampled upper plant half"),
+                                (f"/execute if block {fixture_x} {fixture_y+2} {fixture_z} minecraft:air run say BF_CANOPY_HEADROOM_VERIFIED x={fixture_x} y={fixture_y+2} z={fixture_z}",
+                                 f"BF_CANOPY_HEADROOM_VERIFIED x={fixture_x} y={fixture_y+2} z={fixture_z}",
+                                 "verify sampled plant headroom"),
+                            )
+                            for command,marker_text,description in fixture_checks:
+                                if not send_isolated_chat_command(
+                                        command,re.escape(marker_text),description,timeout=6.0):
+                                    terrain_capture_failed=True
+                                    return
                             fixture_check=(
                                 f"/execute if block {fixture_x} {fixture_y-1} {fixture_z} minecraft:grass_block "
                                 f"if block {fixture_x} {fixture_y} {fixture_z} minecraft:tall_grass[half=lower] "
@@ -2897,10 +2951,12 @@ def capture_test_world():
                             canopy_fixture_seeded=True
                             canopy_fixture_position=(fixture_x,fixture_y,fixture_z)
                             canopy_fixture_seeded_at=time.monotonic()
-                            print("WORLD_CAPTURE: placed a verified two-block tall-grass fixture beside fissure sample",
-                                  {"anchor":(anchor_x,anchor_z),"fixture":canopy_fixture_position,
+                            print("WORLD_CAPTURE: placed a verified two-block tall-grass fixture at the next loaded fissure-neighbor sample",
+                                  {"anchor":(anchor_x,anchor_z),"sample":(sample_x,sample_ground_y,sample_z),
+                                   "fixture":canopy_fixture_position,"arm":int(fixture_sample_match.group(6)),
+                                   "segment":int(fixture_sample_match.group(7)),
                                    "radiusSquared":dx*dx+dz*dz,"loadedOnly":True},flush=True)
-                            time.sleep(.65)
+                            time.sleep(.25)
                             return
                     if canopy_fixture_seeded and not canopy_fixture_verified:
                         fixture_match=re.search(
