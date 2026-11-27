@@ -597,7 +597,7 @@ def verify_restoration_particle_source():
             or "return isCanopyAccentPlantCandidate(state) && level!=null && pos!=null\n                && state.getCollisionShape(level,pos).isEmpty();" not in client_source):
         raise RuntimeError("BLACK FREQUENCY stacked ground-plant accents must use bounded non-colliding clearance and complete queue accounting")
     plant_shape_helper_start=client_source.find("private static double canopyAccentPlantSurfaceShapeHeight(")
-    plant_shape_helper_end=client_source.find("\\n        private static boolean queueAdjacentPlantSurfaceCanopyAccent",plant_shape_helper_start+1)
+    plant_shape_helper_end=client_source.find("\n        private static boolean queueAdjacentPlantSurfaceCanopyAccent",plant_shape_helper_start+1)
     plant_shape_helper_body=(client_source[plant_shape_helper_start:plant_shape_helper_end]
         if plant_shape_helper_start>=0 and plant_shape_helper_end>plant_shape_helper_start else "")
     if ("if(skippedPlants>0) return 0.0D;" not in plant_shape_helper_body
