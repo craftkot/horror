@@ -127,7 +127,7 @@ def verify_deferred_restore_chunk_bounds_profile():
     if (not input_ready_body or "DEFERRED_CLIENT_INPUT_READY_MARKER" not in input_ready_body
             or DEFERRED_CLIENT_INPUT_READY_MARKER not in client_source
             or "wait_for_isolated_client_input_ready()" not in isolated_command_body
-            or "for attempt in range(2)" not in isolated_command_body
+            or "for attempt in range(2 if required else 1)" not in isolated_command_body
             or "command acknowledgement delayed; retrying" not in isolated_command_body
             or "isolated_chat_command_body(command)" not in isolated_command_body
             or 'key("Escape",focus=False)' not in isolated_command_body
@@ -589,6 +589,7 @@ def verify_restoration_particle_source():
             or "if(!Double.isFinite(shapeHeight) || shapeHeight<=0.0D) return Double.NaN;" not in plant_surface_particle_body
             or "long clearY=(long)surfaceY+1L+(long)skippedPlants;" not in plant_surface_particle_body
             or "GROUND_CANOPY_ACCENT_STACKED_PLANT_HEIGHT_INDEPENDENCE_VERIFIED" not in client_source
+            or "GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[candidate]=skippedPlants;" not in client_source
             or "GROUND_CANOPY_ACCENT_SURFACE_PLANT_LIFT_PROFILE_VERIFIED" not in client_source
             or "private static boolean isCanopyAccentPlantCandidate(BlockState state)" not in client_source
             or "return isCanopyAccentPlantCandidate(state) && level!=null && pos!=null\n                && state.getCollisionShape(level,pos).isEmpty();" not in client_source):
@@ -610,6 +611,10 @@ def verify_restoration_particle_source():
     adjacent_accent_start=client_source.find("private static boolean queueAdjacentExposedLeafCanopyAccent(")
     adjacent_accent_end=client_source.find("\n        private static double sampleGroundY",adjacent_accent_start+1)
     adjacent_accent_body=client_source[adjacent_accent_start:adjacent_accent_end] if adjacent_accent_start>=0 and adjacent_accent_end>adjacent_accent_start else ""
+    adjacent_plant_start=client_source.find("private static boolean queueAdjacentPlantSurfaceCanopyAccent(")
+    adjacent_plant_end=client_source.find("\\n        private static boolean queueAdjacentExposedLeafCanopyAccent",adjacent_plant_start+1)
+    adjacent_plant_body=(client_source[adjacent_plant_start:adjacent_plant_end]
+        if adjacent_plant_start>=0 and adjacent_plant_end>adjacent_plant_start else "")
     neighbor_scan_start=client_source.find("private static void scanCanopyAccentNeighborSamples(")
     neighbor_scan_end=client_source.find("\n        private static double sampleGroundY",neighbor_scan_start+1)
     neighbor_scan_body=client_source[neighbor_scan_start:neighbor_scan_end] if neighbor_scan_start>=0 and neighbor_scan_end>neighbor_scan_start else ""
@@ -617,7 +622,20 @@ def verify_restoration_particle_source():
             or "canopyAccentAdjacentColumnZ(blockZ,arm,segment,oppositeSide,distance)" not in adjacent_accent_body
             or "Math.abs(dx)>RADIUS" not in adjacent_accent_body
             or "Math.abs(dz)>RADIUS" not in adjacent_accent_body
+            or "queueAdjacentPlantSurfaceCanopyAccent(level,(int)adjacentX,(int)adjacentZ,groundY,cursor)" not in adjacent_accent_body
             or "queueExposedLeafCanopyAccent(level,(int)adjacentX,(int)adjacentZ,groundY,cursor)" not in adjacent_accent_body
+            or "Math.floor(groundY)" not in adjacent_plant_body
+            or "level.hasChunk(blockX>>4,blockZ>>4)" not in adjacent_plant_body
+            or "isGroundSupport(support)" not in adjacent_plant_body
+            or "groundSupportHeight(support,level,cursor)" not in adjacent_plant_body
+            or "canopyAccentPlantSurfaceSkippedPlants" not in adjacent_plant_body
+            or "GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA" not in adjacent_plant_body
+            or "getChunk(" in adjacent_plant_body
+            or "GROUND_CANOPY_ACCENT_ADJACENT_PLANT_SCAN_PROFILE_VERIFIED supportChecked=true groundTolerance=0.35 loadedOnly=true radius=48 maxSkipped=2" not in client_source
+            or "GROUND_CANOPY_ACCENT_ADJACENT_PLANT[candidate]=true" not in client_source
+            or "GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_EMITTED" not in client_source
+            or "&& !directLiftedAccent" not in client_source
+            or "for(int candidate=candidatesBeforeSample;candidate<groundCanopyAccentCandidateCount;candidate++)" not in client_source
             or "for(int pass=0;pass<4;pass++)" not in neighbor_scan_body
             or "canopyAccentNeighborScanDistance(pass)" not in neighbor_scan_body
             or "canopyAccentNeighborScanOppositeSide(pass)" not in neighbor_scan_body
@@ -1392,7 +1410,7 @@ def capture_test_world():
                 return True
             time.sleep(0.1)
         return False
-    def send_isolated_chat_command(command,confirmation,description,timeout=8.0):
+    def send_isolated_chat_command(command,confirmation,description,timeout=8.0,required=True):
         # This helper is used only in the disposable isolated client world.
         # A player teleport loads chunks through normal player movement; it never
         # calls setChunkForced or any server-side chunk-loading API.
@@ -1403,7 +1421,7 @@ def capture_test_world():
         if not wait_for_isolated_client_input_ready():
             print("WORLD_CAPTURE_FAIL: client input was not ready for",description,flush=True)
             return False
-        for attempt in range(2):
+        for attempt in range(2 if required else 1):
             if not focus_game():
                 print("WORLD_CAPTURE: Minecraft window focus was not confirmed; retrying",
                       description,"attempt",attempt+1,flush=True)
@@ -1450,6 +1468,8 @@ def capture_test_world():
                 print("WORLD_CAPTURE: command acknowledgement delayed; retrying",
                       description,flush=True)
                 time.sleep(0.25)
+        if not required:
+            return False
         print("WORLD_CAPTURE_FAIL: no server acknowledgement for",description,flush=True)
         return False
     def click(x,y,focus=True):
@@ -2776,12 +2796,17 @@ def capture_test_world():
             terrain_shot=False
             terrain_capture_attempted=False
             terrain_capture_failed=False
+            canopy_fixture_seeded=False
+            canopy_fixture_verified=False
+            canopy_fixture_position=None
+            canopy_fixture_seeded_at=None
             sky_shot=False
             sky_capture_attempted=False
             shader_reload_attempted=False
             shader_reload_verified=False
             def capture_terrain_fracture(logs):
                 nonlocal terrain_shot,terrain_capture_attempted,terrain_capture_failed
+                nonlocal canopy_fixture_seeded,canopy_fixture_verified,canopy_fixture_position,canopy_fixture_seeded_at
                 # A server particle marker alone is not proof that the client can
                 # see the crack. Wait for the safe-pad teleport, then aim at the
                 # original surface coordinates before taking the screenshot.
@@ -2802,6 +2827,107 @@ def capture_test_world():
                 safe_pad=re.search(
                     r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
                     logs)
+                if os.environ.get("BF_ISOLATED_TEST")=="1":
+                    if not canopy_fixture_seeded and marker and safe_pad:
+                        anchor_match=FINALE_ANCHOR_RE.search(logs)
+                        first_edit=re.search(
+                            r"BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED x=(-?\\d+) y=(-?\\d+) z=(-?\\d+) surfaceY=(-?\\d+) scanOrder=surface-first-center-out",
+                            logs)
+                        if anchor_match and first_edit:
+                            anchor_x,anchor_z=map(int,anchor_match.groups())
+                            fixture_y=int(first_edit.group(4))
+                            # Arm 0, segment 5: one normal neighbor of a deterministic ground-mesh sample.
+                            fixture_x=anchor_x+2
+                            fixture_z=anchor_z-1
+                            dx=fixture_x-anchor_x
+                            dz=fixture_z-anchor_z
+                            if dx*dx+dz*dz>48*48:
+                                terrain_capture_failed=True
+                                print("WORLD_CAPTURE_FAIL: stacked-plant fixture escaped the bounded fracture radius",
+                                      {"anchor":(anchor_x,anchor_z),"fixture":(fixture_x,fixture_z)},flush=True)
+                                return
+                            fixture_commands=(
+                                (f"/setblock {fixture_x} {fixture_y-1} {fixture_z} minecraft:grass_block",
+                                 "prepare adjacent stacked-plant support"),
+                                (f"/setblock {fixture_x} {fixture_y} {fixture_z} minecraft:tall_grass[half=lower]",
+                                 "place lower tall-grass half"),
+                                (f"/setblock {fixture_x} {fixture_y+1} {fixture_z} minecraft:tall_grass[half=upper]",
+                                 "place upper tall-grass half"),
+                            )
+                            for command,description in fixture_commands:
+                                if not send_isolated_chat_command(
+                                        command,r"Block placed|Changed the block at",description,timeout=6.0):
+                                    terrain_capture_failed=True
+                                    return
+                            headroom_clear=send_isolated_chat_command(
+                                f"/execute if block {fixture_x} {fixture_y+2} {fixture_z} minecraft:air run say BF_CANOPY_HEADROOM_CLEAR",
+                                r"BF_CANOPY_HEADROOM_CLEAR","check stacked-plant headroom",
+                                timeout=1.0,required=False)
+                            if not headroom_clear and not send_isolated_chat_command(
+                                    f"/setblock {fixture_x} {fixture_y+2} {fixture_z} minecraft:air",
+                                    r"Block placed|Changed the block at","clear stacked-plant headroom",timeout=6.0):
+                                terrain_capture_failed=True
+                                return
+                            fixture_check=(
+                                f"/execute if block {fixture_x} {fixture_y-1} {fixture_z} minecraft:grass_block "
+                                f"if block {fixture_x} {fixture_y} {fixture_z} minecraft:tall_grass[half=lower] "
+                                f"if block {fixture_x} {fixture_y+1} {fixture_z} minecraft:tall_grass[half=upper] "
+                                f"if block {fixture_x} {fixture_y+2} {fixture_z} minecraft:air "
+                                f"run say BF_CANOPY_STACKED_FIXTURE_VERIFIED x={fixture_x} y={fixture_y} z={fixture_z}"
+                            )
+                            if not send_isolated_chat_command(
+                                    fixture_check,r"BF_CANOPY_STACKED_FIXTURE_VERIFIED",
+                                    "verify adjacent stacked-plant fixture",timeout=6.0):
+                                terrain_capture_failed=True
+                                return
+                            canopy_fixture_seeded=True
+                            canopy_fixture_position=(fixture_x,fixture_y,fixture_z)
+                            canopy_fixture_seeded_at=time.monotonic()
+                            print("WORLD_CAPTURE: placed a verified two-block tall-grass fixture beside fissure sample",
+                                  {"anchor":(anchor_x,anchor_z),"fixture":canopy_fixture_position,
+                                   "radiusSquared":dx*dx+dz*dz,"loadedOnly=true"},flush=True)
+                            time.sleep(.65)
+                            return
+                    if canopy_fixture_seeded and not canopy_fixture_verified:
+                        fixture_match=re.search(
+                            r"BF_CANOPY_STACKED_FIXTURE_VERIFIED x=(-?\\d+) y=(-?\\d+) z=(-?\\d+)",
+                            logs)
+                        lifted_pattern=(
+                            r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_EMITTED "
+                            r"x=(-?\\d+) y=([-+0-9.eE]+) z=(-?\\d+) skippedPlants=(\\d+) "
+                            r"source=adjacent loadedOnly=true radius=48 clientOnly=true"
+                        )
+                        lifted_match=next((match for match in re.finditer(lifted_pattern,logs)
+                            if canopy_fixture_position
+                            and int(match.group(1))==canopy_fixture_position[0]
+                            and int(match.group(3))==canopy_fixture_position[2]),None)
+                        if fixture_match and lifted_match and canopy_fixture_position:
+                            fixture_from_log=tuple(map(int,fixture_match.groups()))
+                            lifted_y=float(lifted_match.group(2))
+                            skipped=int(lifted_match.group(4))
+                            expected_particle_y=canopy_fixture_position[1]+2.32
+                            if (fixture_from_log!=canopy_fixture_position
+                                    or skipped<1
+                                    or not math.isclose(lifted_y,expected_particle_y,
+                                                        rel_tol=0.0,abs_tol=1.0E-6)):
+                                terrain_capture_failed=True
+                                print("WORLD_CAPTURE_FAIL: adjacent stacked-plant mote did not match the verified fixture",
+                                      {"fixture":canopy_fixture_position,"lifted":lifted_match.groups(),
+                                       "expectedParticleY":expected_particle_y},flush=True)
+                                return
+                            canopy_fixture_verified=True
+                            print("WORLD_CAPTURE: adjacent stacked-plant particle emitted above the upper half",
+                                  {"fixture":canopy_fixture_position,"particleY":lifted_y,
+                                   "skippedPlants":skipped,"source":"adjacent"},flush=True)
+                        elif canopy_fixture_seeded_at is not None and time.monotonic()-canopy_fixture_seeded_at>20.0:
+                            terrain_capture_failed=True
+                            print("WORLD_CAPTURE_FAIL: no adjacent stacked-plant particle was emitted within 20 seconds",
+                                  {"fixture":canopy_fixture_position},flush=True)
+                            return
+                        else:
+                            return
+                if os.environ.get("BF_ISOLATED_TEST")=="1" and not canopy_fixture_verified:
+                    return
                 pad_profile=re.search(
                     r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset=0 playerOffset=1 lateralRadius=0 axis=([XZ]) firstSolidRow=3 gapRow=2 lastSolidRow=3 standoff=3\.0 distanceSquared=([-+0-9.eE]+) padBlocks=(\d+) withinReach=true beamColumnUntouched=true withinRiftRadius=true perpendicular=true",
                     logs)
@@ -5310,9 +5436,41 @@ def capture_test_world():
                 print("WORLD_CAPTURE_FAIL: vanilla double-plant runtime profile marker was not emitted",flush=True)
                 return False
             if plant_lifted==0:
-                print("WORLD_CAPTURE_NOTE: no stacked plant column intersected the sampled fissure in this world; vanilla double-plant state coverage passed, live lift remains unproven",flush=True)
+                print("WORLD_CAPTURE: initial sampled columns had no stacked plant; the deterministic adjacent fixture is checked by the emitted-particle marker",flush=True)
             else:
-                print(f"WORLD_CAPTURE: stacked plant lift observed in {plant_lifted} canopy candidates",flush=True)
+                print(f"WORLD_CAPTURE: initial sampled columns queued {plant_lifted} stacked-plant accents",flush=True)
+            if os.environ.get("BF_ISOLATED_TEST")=="1":
+                fixture_match=re.search(
+                    r"BF_CANOPY_STACKED_FIXTURE_VERIFIED x=(-?\\d+) y=(-?\\d+) z=(-?\\d+)",log_after)
+                lifted_pattern=(
+                    r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_EMITTED "
+                    r"x=(-?\\d+) y=([-+0-9.eE]+) z=(-?\\d+) skippedPlants=(\\d+) "
+                    r"source=adjacent loadedOnly=true radius=48 clientOnly=true"
+                )
+                anchor_match=FINALE_ANCHOR_RE.search(log_after)
+                if not fixture_match or not anchor_match:
+                    print("WORLD_CAPTURE_FAIL: the seeded adjacent double-plant fixture was not verified",flush=True)
+                    return False
+                fixture_x,fixture_y,fixture_z=map(int,fixture_match.groups())
+                lifted_match=next((match for match in re.finditer(lifted_pattern,log_after)
+                    if int(match.group(1))==fixture_x and int(match.group(3))==fixture_z),None)
+                if not lifted_match:
+                    print("WORLD_CAPTURE_FAIL: no emitted adjacent lifted-particle marker matched the fixture",flush=True)
+                    return False
+                lifted_y=float(lifted_match.group(2))
+                skipped=int(lifted_match.group(4))
+                anchor_x,anchor_z=map(int,anchor_match.groups())
+                dx,dz=fixture_x-anchor_x,fixture_z-anchor_z
+                if (skipped<1 or dx*dx+dz*dz>48*48
+                        or not math.isclose(lifted_y,fixture_y+2.32,rel_tol=0.0,abs_tol=1.0E-6)):
+                    print("WORLD_CAPTURE_FAIL: adjacent lifted-particle coordinates, clearance, or radius were invalid",
+                          {"fixture":(fixture_x,fixture_y,fixture_z),"lifted":lifted_match.groups(),
+                           "anchor":(anchor_x,anchor_z)},flush=True)
+                    return False
+                print("WORLD_CAPTURE: adjacent stacked-plant particle verified",
+                      {"fixture":(fixture_x,fixture_y,fixture_z),"particleY":lifted_y,
+                       "skippedPlants":skipped,"radiusSquared":dx*dx+dz*dz,
+                       "loadedOnly=true"},flush=True)
             stacked_height_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_STACKED_PLANT_HEIGHT_INDEPENDENCE_VERIFIED "
                 "directSurfaceRequiresShape=true liftedSurfaceIgnoresShape=true zeroShape=true nonFiniteShape=true bounded=true"
