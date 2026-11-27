@@ -34,7 +34,7 @@ final class NarrativeEvents {
    if(NarrativePolicy.expired(age,duration)){it.remove();continue;}
    if(s.kind()==Kind.COORDS&&NarrativePolicy.coordsFrame(age)){
     var pos=p.blockPosition();
-    p.displayClientMessage(Component.translatable("event.unwritten.coords",pos.getX(),pos.getY(),pos.getZ()).withStyle(ChatFormatting.GRAY),true);
+    p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket(Component.translatable("event.unwritten.coords",pos.getX(),pos.getY(),pos.getZ()).withStyle(ChatFormatting.GRAY)));
    }
    if(s.kind()==Kind.HELP&&NarrativePolicy.warning(age)){
     p.sendSystemMessage(Component.translatable("event.unwritten.help.warning").withStyle(ChatFormatting.GRAY));

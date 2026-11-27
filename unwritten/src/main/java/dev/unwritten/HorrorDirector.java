@@ -3,7 +3,7 @@ import java.util.*;
 import java.io.*;
 /** Server-side policy; game adapter supplies observations once per second. */
 public final class HorrorDirector {
- public enum Event { FOOTSTEPS, DISTANT_SILHOUETTE, ECHO, FALSE_PRESENCE, LOCAL_ANOMALY, BREATH, DOOR, TEXT, NULL_NEAR, NULL_WHISPER, MIMIC, NULL_TITLE, COORDS }
+ public enum Event { FOOTSTEPS, DISTANT_SILHOUETTE, ECHO, FALSE_PRESENCE, LOCAL_ANOMALY, BREATH, DOOR, TEXT, NULL_NEAR, NULL_WHISPER, MIMIC, NULL_TITLE, COORDS, FREEZE_SKY, FALSE_TIME }
  public record Observation(boolean dark, boolean alone, boolean underground, boolean safe, int moralDelta) {}
  public record Decision(Event event, int stage) {}
  private final Random random;
@@ -28,7 +28,8 @@ public final class HorrorDirector {
   if(random.nextDouble()>0.008*stage*(1.0-karma/250.0))return Optional.empty();
   var choices=new ArrayList<>(List.of(Event.FOOTSTEPS,Event.ECHO,Event.BREATH,Event.DOOR));
   if(stage>=2)choices.add(Event.DISTANT_SILHOUETTE);
-  if(stage>=3){choices.add(Event.FALSE_PRESENCE);choices.add(Event.TEXT);}
+  if(stage>=3){choices.add(Event.FALSE_PRESENCE);choices.add(Event.TEXT);choices.add(Event.FALSE_TIME);}
+  if(stage>=4)choices.add(Event.FREEZE_SKY);
   if(stage>=4){choices.add(Event.LOCAL_ANOMALY);choices.add(Event.NULL_NEAR);}
   if(nullPresent){choices.add(Event.NULL_WHISPER);choices.add(Event.NULL_TITLE);choices.add(Event.COORDS);}
   if(nullPresent&&stage>=4)choices.add(Event.MIMIC);

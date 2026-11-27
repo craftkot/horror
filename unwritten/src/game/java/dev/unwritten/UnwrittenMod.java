@@ -43,6 +43,7 @@ public final class UnwrittenMod {
     private final ChaseEncounter chases = new ChaseEncounter();
     private final MimicEncounter mimics = new MimicEncounter();
     private final NarrativeEvents narrative = new NarrativeEvents();
+    private final TimeAnomalies timeAnomalies = new TimeAnomalies();
     private static final TagKey<Block> ORES=TagKey.create(Registries.BLOCK,Identifier.fromNamespaceAndPath("c","ores"));
     public UnwrittenMod() {
         NeoForge.EVENT_BUS.addListener(this::tick);
@@ -61,8 +62,8 @@ public final class UnwrittenMod {
         NeoForge.EVENT_BUS.addListener(mimics::onDamage);
         NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST,this::oreBreak);
     }
-    private void stop(ServerStoppedEvent event) { sessions.clear(); apparitions.clear(); anomalies.clear(); ores.clear(); chases.clear(); mimics.clear(); narrative.clear(); ticks=0; stateDirectory=null; }
-    private void stopping(ServerStoppingEvent event) { sessions.forEach(this::save); anomalies.restoreAll(); ores.restoreAll(); mimics.clear(); chases.clear(); }
+    private void stop(ServerStoppedEvent event) { sessions.clear(); apparitions.clear(); anomalies.clear(); ores.clear(); chases.clear(); mimics.clear(); narrative.clear(); timeAnomalies.clear(); ticks=0; stateDirectory=null; }
+    private void stopping(ServerStoppingEvent event) { sessions.forEach(this::save); anomalies.restoreAll(); ores.restoreAll(); mimics.clear(); chases.clear(); timeAnomalies.restoreAll(); }
     private void save(UUID id, PlayerStateStore.State state) {
         if(stateDirectory==null)return;
         try { PlayerStateStore.save(stateDirectory,id,state); }
@@ -112,6 +113,7 @@ public final class UnwrittenMod {
         chases.tick(event.getServer().getPlayerList().getPlayers());
         mimics.tick(event.getServer().getPlayerList().getPlayers(),chases);
         narrative.tick(event.getServer().getPlayerList().getPlayers(),apparitions,chases,mimics);
+        timeAnomalies.tick(event.getServer().getPlayerList().getPlayers());
         apparitions.tick(event.getServer().getPlayerList().getPlayers(),chases);
         anomalies.tick(event.getServer().getPlayerList().getPlayers());
         ores.tick(event.getServer().getPlayerList().getPlayers(),apparitions);
@@ -155,6 +157,8 @@ public final class UnwrittenMod {
             case BREATH -> Apparitions.soundBehind(p,SoundEvents.PLAYER_BREATH,1.0f,0.5f);
             case DOOR -> ReferenceEvents.toggleDoor(p);
             case TEXT -> p.sendSystemMessage(Component.translatable("event.unwritten.presence"));
+            case FREEZE_SKY -> timeAnomalies.start(p,true);
+            case FALSE_TIME -> timeAnomalies.start(p,false);
             case NULL_TITLE -> NarrativeEvents.title(p);
             case COORDS -> narrative.coords(p);
             case MIMIC -> { if(!apparitions.hasWatcher(p))mimics.start(p); }
