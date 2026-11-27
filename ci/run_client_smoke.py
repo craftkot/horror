@@ -674,6 +674,19 @@ def verify_restoration_particle_source():
     neighbor_scan_start=client_source.find("private static void scanCanopyAccentNeighborSamples(")
     neighbor_scan_end=client_source.find("\n        private static double sampleGroundY",neighbor_scan_start+1)
     neighbor_scan_body=client_source[neighbor_scan_start:neighbor_scan_end] if neighbor_scan_start>=0 and neighbor_scan_end>neighbor_scan_start else ""
+    fixture_queue_call=neighbor_scan_body.find("boolean queued=queueAdjacentExposedLeafCanopyAccent")
+    fixture_retry_branch=neighbor_scan_body.find("if(!queued) {",fixture_queue_call)
+    fixture_marker=neighbor_scan_body.find("GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED",fixture_queue_call)
+    fixture_retry_continue=neighbor_scan_body.find("continue;",fixture_retry_branch)
+    fixture_found=neighbor_scan_body.find("GROUND_CANOPY_ACCENT_NEIGHBOR_SAMPLE_FOUND[sample]=true",fixture_queue_call)
+    if not (fixture_queue_call>=0 and fixture_retry_branch>fixture_queue_call
+            and fixture_marker>fixture_retry_branch
+            and fixture_retry_continue>fixture_marker
+            and fixture_found>fixture_retry_continue):
+        raise RuntimeError(
+            "BLACK FREQUENCY fixture samples must be published only after an unqueued "
+            "neighbor attempt so the sample remains eligible for the next scan"
+        )
     if ("canopyAccentAdjacentColumnX(blockX,arm,segment,oppositeSide,distance)" not in adjacent_accent_body
             or "canopyAccentAdjacentColumnZ(blockZ,arm,segment,oppositeSide,distance)" not in adjacent_accent_body
             or "Math.abs(dx)>RADIUS" not in adjacent_accent_body
