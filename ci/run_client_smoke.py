@@ -819,8 +819,8 @@ def verify_restoration_particle_source():
             or "canopyAccentAdjacentColumnZ(blockZ,arm,segment,oppositeSide,distance)" not in adjacent_accent_body
             or "Math.abs(dx)>RADIUS" not in adjacent_accent_body
             or "Math.abs(dz)>RADIUS" not in adjacent_accent_body
-            or "queueAdjacentPlantSurfaceCanopyAccent(level,(int)adjacentX,(int)adjacentZ,groundY,cursor)" not in adjacent_accent_body
-            or "queueExposedLeafCanopyAccent(level,(int)adjacentX,(int)adjacentZ,groundY,cursor)" not in adjacent_accent_body
+            or "queueAdjacentPlantSurfaceCanopyAccent(level,(int)adjacentX,(int)adjacentZ,groundY,arm,cursor)" not in adjacent_accent_body
+            or "queueExposedLeafCanopyAccent(level,(int)adjacentX,(int)adjacentZ,groundY,arm,cursor)" not in adjacent_accent_body
             or "Math.floor(groundY)" not in adjacent_plant_body
             or "level.hasChunk(blockX>>4,blockZ>>4)" not in adjacent_plant_body
             or "isGroundSupport(support)" not in adjacent_plant_body
@@ -5567,7 +5567,9 @@ def capture_test_world():
                     or "armCounts[arm]<=armSelected[arm]" not in camera_source
                     or "int i=GROUND_CANOPY_ACCENT_SPATIAL_ORDER[offset];" not in camera_source
                     or "candidateDistanceSquared<nearestDistanceSquared[candidate]" not in camera_source
-                    or "groundCanopyAccentCandidateCursor=canopyAccentCandidateIndex(start,1,candidateCount);" not in camera_source):
+                    or "groundCanopyAccentCandidateCursor=canopyAccentCandidateIndex(start,1,candidateCount);" not in camera_source
+                    or "unevenBranchBalanceProfile" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_UNEVEN_BRANCH_BALANCE_VERIFIED" not in log_after):
                 print("WORLD_CAPTURE_FAIL: canopy accents are not balanced across the four bounded fissure arms",flush=True)
                 return False
             canopy_emission_throttle_marker=(
