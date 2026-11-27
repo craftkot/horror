@@ -809,7 +809,8 @@ public final class RiftClientState {
         // A server login is earlier than a usable client input surface: the
         // ReceivingLevelScreen can still cover the world for several seconds.
         // Only announce readiness after that screen is gone and a player exists.
-        if(Boolean.getBoolean("blackfrequency.ciDeferredChunkProbe")
+        if((Boolean.getBoolean("blackfrequency.ciTestMode")
+                || Boolean.getBoolean("blackfrequency.ciDeferredChunkProbe"))
                 && minecraft.player!=null && minecraft.screen==null && !minecraft.isPaused()
                 && !ciDeferredClientInputReadyLogged) {
             com.mojang.logging.LogUtils.getLogger().info(

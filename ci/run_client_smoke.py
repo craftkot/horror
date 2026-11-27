@@ -102,6 +102,8 @@ def verify_deferred_restore_chunk_bounds_profile():
             or "if(!deferredClientProbeAnchorReady(level))" not in controller_source
             or "DEFERRED_CLIENT_ANCHOR_PROFILE_VERIFIED" not in controller_source
             or "BLACK_FREQUENCY_TEST CLIENT_INPUT_READY screen=null player=true" not in client_state_source
+            or 'Boolean.getBoolean("blackfrequency.ciTestMode")' not in client_state_source
+            or 'Boolean.getBoolean("blackfrequency.ciDeferredChunkProbe")' not in client_state_source
             or "minecraft.screen==null" not in client_state_source):
         raise RuntimeError("BLACK FREQUENCY deferred probe must wait for natural chunk-ticket expiry and report loaded-only readiness")
     if ('if(Boolean.getBoolean("blackfrequency.ciDeferredChunkProbe")' not in controller_source
