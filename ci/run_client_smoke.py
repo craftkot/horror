@@ -5556,6 +5556,17 @@ def capture_test_world():
                     or "canopyAccentCandidateIndex" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: canopy accent emission window does not rotate across queued fissure candidates",flush=True)
                 return False
+            canopy_spread_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_SPREAD_PROFILE_VERIFIED "
+                "candidateBudget=32 particleBudget=8 stride=5 coprime=true uniqueWindow=true balancedCoverage=true cursorStep=1"
+            )
+            if (canopy_spread_marker not in log_after
+                    or "int stride=canopyAccentCandidateStride(candidateCount);" not in camera_source
+                    or "canopyAccentCandidateIndex(start,offset*stride,candidateCount)" not in camera_source
+                    or "groundCanopyAccentCandidateCursor=canopyAccentCandidateIndex(start,1,candidateCount);" not in camera_source
+                    or "canopyAccentCandidateGcd(stride,candidateCount)!=1" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: canopy accent emission windows are not evenly spread across the bounded candidate pool",flush=True)
+                return False
             canopy_emission_throttle_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_EMISSION_THROTTLE_PROFILE_VERIFIED "
                 "intervalTicks=10 first=true sameTickBlocked=true beforeBoundaryBlocked=true "
