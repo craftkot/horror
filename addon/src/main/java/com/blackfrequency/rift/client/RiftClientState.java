@@ -3620,6 +3620,46 @@ public final class RiftClientState {
                 && buildCanopyAccentSpatialOrder(branchFixtureX,branchFixtureZ,branchFixtureArm,
                     branchFixtureX.length+1,0,branchOrder,branchSelected,branchNearest,
                     branchCounts,branchSelectedCounts)==0;
+            int[] unevenArmFixtureX={0,1,2,3,4,5,6,7,0,0,0,0,-1,-2,0,0};
+            int[] unevenArmFixtureZ={0,0,0,0,0,0,0,0,1,2,3,4,0,0,-1,-2};
+            int[] unevenArmFixtureArm={0,0,0,0,0,0,0,0,1,1,1,1,2,2,3,3};
+            int[] unevenArmOrder=new int[unevenArmFixtureX.length];
+            int[] unevenArmOrderCopy=new int[unevenArmFixtureX.length];
+            boolean[] unevenArmSelected=new boolean[unevenArmFixtureX.length];
+            boolean[] unevenArmSeen=new boolean[unevenArmFixtureX.length];
+            double[] unevenArmNearest=new double[unevenArmFixtureX.length];
+            int[] unevenArmCounts=new int[ARM_COUNT];
+            int[] unevenArmSelectedCounts=new int[ARM_COUNT];
+            int[] unevenArmWindowCounts=new int[ARM_COUNT];
+            boolean unevenBranchBalanceProfile=ARM_COUNT==4
+                && GROUND_CANOPY_ACCENT_PARTICLE_BUDGET==8;
+            for(int cursorStart=0;cursorStart<unevenArmFixtureX.length;cursorStart++) {
+                int ordered=buildCanopyAccentSpatialOrder(unevenArmFixtureX,unevenArmFixtureZ,
+                    unevenArmFixtureArm,unevenArmFixtureX.length,cursorStart,unevenArmOrder,
+                    unevenArmSelected,unevenArmNearest,unevenArmCounts,unevenArmSelectedCounts);
+                unevenBranchBalanceProfile &= ordered==unevenArmFixtureX.length;
+                for(int i=0;i<unevenArmSeen.length;i++) unevenArmSeen[i]=false;
+                for(int arm=0;arm<ARM_COUNT;arm++) unevenArmWindowCounts[arm]=0;
+                for(int i=0;i<ordered;i++) {
+                    int candidate=unevenArmOrder[i];
+                    if(candidate<0 || candidate>=unevenArmFixtureX.length || unevenArmSeen[candidate]) {
+                        unevenBranchBalanceProfile=false;
+                        continue;
+                    }
+                    unevenArmSeen[candidate]=true;
+                    if(i<GROUND_CANOPY_ACCENT_PARTICLE_BUDGET)
+                        unevenArmWindowCounts[unevenArmFixtureArm[candidate]]++;
+                }
+                for(int arm=0;arm<ARM_COUNT;arm++)
+                    unevenBranchBalanceProfile &= unevenArmWindowCounts[arm]==2;
+                System.arraycopy(unevenArmOrder,0,unevenArmOrderCopy,0,ordered);
+                int repeated=buildCanopyAccentSpatialOrder(unevenArmFixtureX,unevenArmFixtureZ,
+                    unevenArmFixtureArm,unevenArmFixtureX.length,cursorStart,unevenArmOrder,
+                    unevenArmSelected,unevenArmNearest,unevenArmCounts,unevenArmSelectedCounts);
+                unevenBranchBalanceProfile &= repeated==ordered;
+                for(int i=0;i<repeated;i++)
+                    unevenBranchBalanceProfile &= unevenArmOrder[i]==unevenArmOrderCopy[i];
+            }
             boolean emissionThrottleProfile=GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS==10L
                 && shouldAttemptCanopyAccentScan(0L,Long.MIN_VALUE)
                 && !shouldAttemptCanopyAccentScan(100L,100L)
@@ -3632,7 +3672,7 @@ public final class RiftClientState {
             boolean zeroEmissionScanRecorded=nextCanopyAccentAttemptTick(110L,100L,12)==110L;
             boolean emptyScanPreservesAttempt=nextCanopyAccentAttemptTick(110L,100L,0)==100L;
             if(!(selected && sparse && threeOfFourPattern && negativeCoordinatePattern && deterministic && candidateBudgetRejected && negativeCounterRejected
-                && rotationProfile && branchBalanceProfile && emissionThrottleProfile && dimensionSaltProfile
+                && rotationProfile && branchBalanceProfile && unevenBranchBalanceProfile && emissionThrottleProfile && dimensionSaltProfile
                 && zeroEmissionScanRecorded && emptyScanPreservesAttempt
                 && leafSelected && leafSparse && nonAccentSurfacesRejected && leafHeightBounded
                 && adjacentScanProfile && oppositeSideScanProfile && secondRingScanProfile
@@ -3673,6 +3713,8 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BRANCH_BALANCE_PROFILE_VERIFIED candidateBudget={} particleBudget={} arms={} selection=round-robin-arm-then-farthest uniqueOrder=true perArmBudget=2 deterministic=true scratchArrays=true allocationFree=true cursorStep=1",
                 GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET,GROUND_CANOPY_ACCENT_PARTICLE_BUDGET,ARM_COUNT);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_UNEVEN_BRANCH_BALANCE_VERIFIED counts=8,4,2,2 activeArms=4 firstWindow=2,2,2,2 deterministic=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_EMISSION_THROTTLE_PROFILE_VERIFIED intervalTicks={} first=true sameTickBlocked=true beforeBoundaryBlocked=true boundaryAllowed=true clockRollbackReset=true overflowSafe=true",
                 GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS);
