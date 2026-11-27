@@ -930,6 +930,10 @@ public final class RiftClientState {
         private static int groundCanopyAccentParticlesEmitted;
         private static int groundCanopyAccentLiftedLoggedCount;
         private static boolean canopyAccentFixtureSampleLogged;
+        // Preserve the last fixture anchor across mesh-cache invalidation so an anchor
+        // transition can still be diagnosed after cachedAnchorX/Z have been cleared.
+        private static int canopyAccentFixtureSampleAnchorX=Integer.MIN_VALUE;
+        private static int canopyAccentFixtureSampleAnchorZ=Integer.MIN_VALUE;
         // Rejection counters are populated only by the isolated client smoke profile.
         private static int groundCanopyAccentQueueAttempts;
         private static int groundCanopyAccentQueueAccepted;
@@ -3912,6 +3916,8 @@ public final class RiftClientState {
                                         com.mojang.logging.LogUtils.getLogger().info(
                                             "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED sampleX={} sampleZ={} groundY={} plantX={} plantZ={} arm={} segment={} anchorX={} anchorZ={} nextScan=true loadedOnly=true radius=48",
                                             blockX,blockZ,sampleGroundY,neighborX,neighborZ,arm,segment,worldAnchorX,worldAnchorZ);
+                                        canopyAccentFixtureSampleAnchorX=worldAnchorX;
+                                        canopyAccentFixtureSampleAnchorZ=worldAnchorZ;
                                         canopyAccentFixtureSampleLogged=true;
                                     }
                                 }
@@ -4574,21 +4580,24 @@ public final class RiftClientState {
                 || !SURFACE_Y_BY_COLUMN.isEmpty()) clearGeometryCache();
         }
 
-        private static void resetCanopyAccentFixtureProbeForAnchorChange(
-                int previousAnchorX,int previousAnchorZ,int nextAnchorX,int nextAnchorZ) {
-            // Anchor changes do not necessarily clear the mesh cache: both anchors may
-            // already be in loaded chunks. The fixture probe must nevertheless belong
-            // to the new mesh, or CI can only see a stale sample from the spawn anchor.
-            boolean previousAnchorValid=previousAnchorX!=Integer.MIN_VALUE
-                && previousAnchorZ!=Integer.MIN_VALUE;
+        private static void resetCanopyAccentFixtureProbeForAnchorChange(int nextAnchorX,int nextAnchorZ) {
+            // The cached anchor can already be MIN_VALUE after an unavailable-chunk
+            // cleanup. Keep the last sampled fixture anchor separately so that this
+            // transition remains observable after any geometry-cache invalidation.
+            int previousSampleAnchorX=canopyAccentFixtureSampleAnchorX;
+            int previousSampleAnchorZ=canopyAccentFixtureSampleAnchorZ;
+            boolean previousSampleAnchorValid=previousSampleAnchorX!=Integer.MIN_VALUE
+                && previousSampleAnchorZ!=Integer.MIN_VALUE;
+            boolean sampleAnchorChanged=previousSampleAnchorValid
+                && (previousSampleAnchorX!=nextAnchorX || previousSampleAnchorZ!=nextAnchorZ);
             canopyAccentFixtureSampleLogged=false;
             groundCanopyAccentLiftedLoggedCount=0;
-            // Cache invalidation may already have cleared the sample flag. The
-            // previous anchor is the durable signal that this is a real transition.
-            if(VERIFY_GROUND_MESH_PROFILES && previousAnchorValid) {
+            canopyAccentFixtureSampleAnchorX=nextAnchorX;
+            canopyAccentFixtureSampleAnchorZ=nextAnchorZ;
+            if(VERIFY_GROUND_MESH_PROFILES && sampleAnchorChanged) {
                 com.mojang.logging.LogUtils.getLogger().info(
                     "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_FIXTURE_ANCHOR_RESET_VERIFIED previousX={} previousZ={} anchorX={} anchorZ={} sampleReset=true liftedCounterReset=true",
-                    previousAnchorX,previousAnchorZ,nextAnchorX,nextAnchorZ);
+                    previousSampleAnchorX,previousSampleAnchorZ,nextAnchorX,nextAnchorZ);
             }
         }
 
@@ -4802,8 +4811,7 @@ public final class RiftClientState {
             long tick=level.getGameTime();
             boolean anchorChanged=level!=cachedLevel || worldAnchorX!=cachedAnchorX || worldAnchorZ!=cachedAnchorZ;
             if(anchorChanged) {
-                resetCanopyAccentFixtureProbeForAnchorChange(
-                    cachedAnchorX,cachedAnchorZ,worldAnchorX,worldAnchorZ);
+                resetCanopyAccentFixtureProbeForAnchorChange(worldAnchorX,worldAnchorZ);
             }
             double cachedVerticalDelta=camera.y-cachedAnchorSurfaceY;
             if(shouldCullCachedGroundMeshBeforeRebuild(anchorChanged,!cachedSegments.isEmpty(),
