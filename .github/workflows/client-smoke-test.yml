@@ -75,7 +75,7 @@ jobs:
             sleep "$delay"
           done
           for attempt in 1 2 3; do
-            if sudo apt-get "${APT_RETRIES[@]}" install -y --no-install-recommends xvfb xdotool x11-xserver-utils scrot mesa-utils libgl1-mesa-dri libx11-6 libxext6 libxrender1 libxtst6 libxi6 libxrandr2 libxcursor1 libxinerama1 libxxf86vm1; then
+            if sudo apt-get "${APT_RETRIES[@]}" install -y --no-install-recommends xvfb xdotool xclip x11-xserver-utils scrot mesa-utils libgl1-mesa-dri libx11-6 libxext6 libxrender1 libxtst6 libxi6 libxrandr2 libxcursor1 libxinerama1 libxxf86vm1; then
               break
             fi
             if [ "$attempt" -eq 3 ]; then

@@ -186,7 +186,9 @@ def verify_deferred_restore_chunk_bounds_profile():
             or 'key("Escape",focus=False)' not in isolated_command_body
             or 'key("slash",focus=False)' not in isolated_command_body
             or "time.sleep(1.75)" not in isolated_command_body
-            or '"--delay","35"' not in isolated_command_body):
+             or '["xclip","-selection","clipboard","-loops","1","-i"]' not in isolated_command_body
+             or 'key("ctrl+v",focus=False)' not in isolated_command_body
+             or "time.sleep(0.35)" not in isolated_command_body):
         raise RuntimeError("BLACK FREQUENCY isolated spawn relocation must wait for client readiness and retry an unacknowledged idempotent command")
     spawn_verified_at=client_source.find('print("WORLD_CAPTURE: player spawn verified in log"')
     client_world_ready_wait=client_source.find('client_world_ready_deadline=time.monotonic()+60.0',spawn_verified_at)
@@ -1533,14 +1535,16 @@ def capture_test_world():
             time.sleep(1.75)
             print("WORLD_CAPTURE_INPUT: command chat opened with slash key; typing body",
                   description,flush=True)
-            typed=subprocess.run(
-                ["xdotool","type","--clearmodifiers","--delay","35",command_body],
-                check=False)
-            time.sleep(0.20)
+            clipboard=subprocess.run(
+                ["xclip","-selection","clipboard","-loops","1","-i"],
+                input=command_body.encode("utf-8"),check=False)
+            pasted=key("ctrl+v",focus=False)
+            time.sleep(0.35)
             submitted=key("Return",focus=False)
             if submitted.returncode==0:
                 isolated_chat_open=False
-            if (opened.returncode!=0 or typed.returncode!=0 or submitted.returncode!=0):
+            if (opened.returncode!=0 or clipboard.returncode!=0
+                    or pasted.returncode!=0 or submitted.returncode!=0):
                 print("WORLD_CAPTURE: isolated command input failed; retrying",
                       description,"attempt",attempt+1,flush=True)
                 continue
