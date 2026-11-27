@@ -27,3 +27,4 @@ jobs:
           java -cp /tmp/unwritten-classes dev.unwritten.ChasePolicyTest
           java -cp /tmp/unwritten-classes dev.unwritten.MinePolicyTest
           java -cp /tmp/unwritten-classes dev.unwritten.MimicPolicyTest
+          java -cp /tmp/unwritten-classes dev.unwritten.NarrativePolicyTest

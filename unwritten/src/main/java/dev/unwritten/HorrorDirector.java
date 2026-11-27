@@ -3,7 +3,7 @@ import java.util.*;
 import java.io.*;
 /** Server-side policy; game adapter supplies observations once per second. */
 public final class HorrorDirector {
- public enum Event { FOOTSTEPS, DISTANT_SILHOUETTE, ECHO, FALSE_PRESENCE, LOCAL_ANOMALY, BREATH, DOOR, TEXT, NULL_NEAR, NULL_WHISPER, MIMIC }
+ public enum Event { FOOTSTEPS, DISTANT_SILHOUETTE, ECHO, FALSE_PRESENCE, LOCAL_ANOMALY, BREATH, DOOR, TEXT, NULL_NEAR, NULL_WHISPER, MIMIC, NULL_TITLE, COORDS }
  public record Observation(boolean dark, boolean alone, boolean underground, boolean safe, int moralDelta) {}
  public record Decision(Event event, int stage) {}
  private final Random random;
@@ -30,7 +30,7 @@ public final class HorrorDirector {
   if(stage>=2)choices.add(Event.DISTANT_SILHOUETTE);
   if(stage>=3){choices.add(Event.FALSE_PRESENCE);choices.add(Event.TEXT);}
   if(stage>=4){choices.add(Event.LOCAL_ANOMALY);choices.add(Event.NULL_NEAR);}
-  if(nullPresent)choices.add(Event.NULL_WHISPER);
+  if(nullPresent){choices.add(Event.NULL_WHISPER);choices.add(Event.NULL_TITLE);choices.add(Event.COORDS);}
   if(nullPresent&&stage>=4)choices.add(Event.MIMIC);
   if(choices.size()>1)choices.remove(last);
   last=choices.get(random.nextInt(choices.size()));

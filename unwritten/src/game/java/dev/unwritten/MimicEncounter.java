@@ -9,6 +9,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
+import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 
 /** Movement adapter for the reference FakePlayerMimic; model remains a proxy. */
 final class MimicEncounter {
@@ -35,7 +36,7 @@ final class MimicEncounter {
    if(!clearPosition(p,v))continue;
    body.setPos(v.x,v.y,v.z);
    if(!level.noCollision(body))continue;
-   body.setNoAi(true);body.setNoGravity(true);body.setInvulnerable(true);body.setSilent(true);body.setCanPickUpLoot(false);
+   body.setNoAi(true);body.setNoGravity(true);body.setSilent(true);body.setCanPickUpLoot(false);
    body.getPersistentData().putBoolean(MARK,true);
    rotate(body,p);
    owned.add(body.getUUID());
@@ -70,6 +71,7 @@ final class MimicEncounter {
  void onJoin(EntityJoinLevelEvent event){
   if(!event.getLevel().isClientSide()&&event.getEntity().getPersistentData().contains(MARK)&&!owned.contains(event.getEntity().getUUID()))event.setCanceled(true);
  }
+ void onDamage(LivingIncomingDamageEvent event){if(owned.contains(event.getEntity().getUUID()))event.setCanceled(true);}
  void onDrops(LivingDropsEvent event){if(event.getEntity().getPersistentData().contains(MARK))event.setCanceled(true);}
  private void remove(Echo e){owned.remove(e.body().getUUID());e.body().discard();}
  void clear(){active.values().forEach(this::remove);active.clear();owned.clear();}

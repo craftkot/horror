@@ -5,5 +5,9 @@
   "event.unwritten.sleep.call": "Кто-то зовёт из темноты.",
   "event.unwritten.null.0": "Ты слышал это?",
   "event.unwritten.null.1": "Я всё ещё здесь.",
-  "event.unwritten.null.2": "Не оборачивайся."
+  "event.unwritten.null.2": "Не оборачивайся.",
+  "event.unwritten.null.title": "NULL",
+  "event.unwritten.coords": "X: %s  Y: %s  Z: %s",
+  "event.unwritten.help.request": "<Бог> Помоги мне. Он не отпускает меня.",
+  "event.unwritten.help.warning": "<Бог> Он пришёл. Беги."
 }
