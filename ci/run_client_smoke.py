@@ -577,6 +577,8 @@ def verify_restoration_particle_source():
             or "isCanopyAccentHeadroomAvailable(head)" not in surface_plant_clearance_body
             or "isCanopyAccentSkippablePlant(head,level,cursor)" not in surface_plant_clearance_body
             or "canopyAccentPlantSurfaceParticleY" not in sample_ground_body
+            or "canopyAccentPlantSurfaceShapeHeight(level,surface,blockX,candidateY,blockZ," not in sample_ground_body
+            or "canopyAccentPlantSurfaceSkippedPlants(" not in sample_ground_body
             or "if(!Double.isFinite(shapeHeight) || shapeHeight<=0.0D" not in client_source
             or "skippedPlantSurfaceBlocks>=0" not in sample_ground_body
             or "skippedPlantSurfaceBlocks<0" not in sample_ground_body
@@ -5480,7 +5482,7 @@ def capture_test_world():
                 print("WORLD_CAPTURE: adjacent stacked-plant particle verified",
                       {"fixture":(fixture_x,fixture_y,fixture_z),"particleY":lifted_y,
                        "skippedPlants":skipped,"radiusSquared":dx*dx+dz*dz,
-                       "loadedOnly=true"},flush=True)
+                       "loadedOnly":True},flush=True)
             stacked_height_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_STACKED_PLANT_HEIGHT_INDEPENDENCE_VERIFIED "
                 "directSurfaceRequiresShape=true liftedSurfaceIgnoresShape=true zeroShape=true nonFiniteShape=true bounded=true"

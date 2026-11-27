@@ -4021,8 +4021,6 @@ public final class RiftClientState {
                 double snowLayerHeight=surface.is(net.minecraft.world.level.block.Blocks.SNOW)
                     ? surface.getShape(level,cursor).max(Direction.Axis.Y) : Double.NaN;
                 boolean plantSurface=surface.getBlock() instanceof net.minecraft.world.level.block.BushBlock;
-                double plantShapeHeight=plantSurface
-                    ? surface.getShape(level,cursor).max(Direction.Axis.Y) : Double.NaN;
 
                 cursor.set(blockX,candidateY+1,blockZ);
                 BlockState head=level.getBlockState(cursor);
@@ -4032,6 +4030,10 @@ public final class RiftClientState {
                 double groundY=candidateY-1+surfaceOffset+GROUND_SURFACE_CLEARANCE;
                 int skippedPlantSurfaceBlocks=emitCanopyAccent && plantSurface
                     ? canopyAccentPlantSurfaceSkippedPlants(level,blockX,candidateY,blockZ,head,cursor) : -1;
+                // Stacked plants use the free cell above them; querying the lower outline shape is wasted work.
+                double plantShapeHeight=emitCanopyAccent && plantSurface && skippedPlantSurfaceBlocks>=0
+                    ? canopyAccentPlantSurfaceShapeHeight(level,surface,blockX,candidateY,blockZ,
+                        skippedPlantSurfaceBlocks,cursor) : Double.NaN;
                 if(emitCanopyAccent && plantSurface && skippedPlantSurfaceBlocks>=0) {
                     double accentY=canopyAccentPlantSurfaceParticleY(candidateY,plantShapeHeight,
                         skippedPlantSurfaceBlocks);
