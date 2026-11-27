@@ -10,5 +10,6 @@
   "event.unwritten.coords": "X: %s  Y: %s  Z: %s",
   "event.unwritten.help.request": "<God> Help me. He won't let me leave.",
   "event.unwritten.help.warning": "<God> He's here. Run.",
-  "event.unwritten.fakekick.reason": "Connection lost."
+  "event.unwritten.fakekick.reason": "Connection lost.",
+  "event.unwritten.help.location": "<God> I left you a path. %s, %s, %s."
 }

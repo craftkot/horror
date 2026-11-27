@@ -92,7 +92,7 @@ public final class UnwrittenMod {
         switch(s.director().sleep(apparitions.hasWatcher(p)||chases.hasChase(p)||mimics.active(p))){
             case GUILT -> {event.setProblem(Player.BedSleepingProblem.OTHER_PROBLEM);p.sendSystemMessage(Component.translatable("event.unwritten.sleep.guilt"));}
             case WATCHED -> {event.setProblem(Player.BedSleepingProblem.OTHER_PROBLEM);p.sendSystemMessage(Component.translatable("event.unwritten.sleep.watched"));}
-            case CALL -> {p.sendSystemMessage(Component.translatable("event.unwritten.sleep.call"));narrative.help(p);}
+            case CALL -> {p.sendSystemMessage(Component.translatable("event.unwritten.sleep.call"));narrative.help(p,s.director());}
             case ALLOW -> {}
         }
     }

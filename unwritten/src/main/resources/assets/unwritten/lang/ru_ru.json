@@ -10,5 +10,6 @@
   "event.unwritten.coords": "X: %s  Y: %s  Z: %s",
   "event.unwritten.help.request": "<Бог> Помоги мне. Он не отпускает меня.",
   "event.unwritten.help.warning": "<Бог> Он пришёл. Беги.",
-  "event.unwritten.fakekick.reason": "Соединение потеряно."
+  "event.unwritten.fakekick.reason": "Соединение потеряно.",
+  "event.unwritten.help.location": "<Бог> Я оставил тебе путь. %s, %s, %s."
 }

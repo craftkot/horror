@@ -13,6 +13,7 @@ public final class HorrorDirector {
  private int sleepCooldown;
  private boolean nullPresent;
  private int mineCooldown;
+ private boolean helpBuilt;
  public enum Sleep { ALLOW, GUILT, WATCHED, CALL }
  public HorrorDirector(long seed){random=new Random(seed);}
  public Optional<Decision> tick(Observation o){return tick(o,true);}
@@ -41,6 +42,8 @@ public final class HorrorDirector {
   pressure=Math.max(0,pressure-35);
   return Optional.of(new Decision(last,stage));
  }
+ public boolean helpBuilt(){return helpBuilt;}
+ public void markHelpBuilt(){helpBuilt=true;}
  public boolean mineReady(){return mineCooldown==0;}
  public void mineStarted(){mineCooldown=MinePolicy.COOLDOWN_SECONDS;}
  public boolean nullPresent(){return nullPresent;}
@@ -56,11 +59,11 @@ public final class HorrorDirector {
  public void explosion(){adjustKarma(-3);}
  public void adjustKarma(int delta){karma=Math.clamp(karma+Math.clamp(delta,-100,100),-100,100);}
  public void write(DataOutput out)throws IOException{
-  out.writeInt(5);out.writeInt(pressure);out.writeInt(karma);out.writeInt(cooldown);out.writeInt(quiet);
-  out.writeUTF(last==null?"":last.name());out.writeInt(bonemealUses);out.writeInt(sleepCooldown);out.writeBoolean(nullPresent);out.writeInt(mineCooldown);
+  out.writeInt(6);out.writeInt(pressure);out.writeInt(karma);out.writeInt(cooldown);out.writeInt(quiet);
+  out.writeUTF(last==null?"":last.name());out.writeInt(bonemealUses);out.writeInt(sleepCooldown);out.writeBoolean(nullPresent);out.writeInt(mineCooldown);out.writeBoolean(helpBuilt);
  }
  public static HorrorDirector read(DataInput in,long seed)throws IOException{
-  int version=in.readInt();if(version<1||version>5)throw new IOException("Unknown director version");
+  int version=in.readInt();if(version<1||version>6)throw new IOException("Unknown director version");
   var d=new HorrorDirector(seed);
   d.pressure=in.readInt();d.karma=in.readInt();d.cooldown=in.readInt();d.quiet=in.readInt();
   if(d.pressure<0||d.pressure>1000||Math.abs((long)d.karma)>100||d.cooldown<0||d.cooldown>120||d.quiet<0||d.quiet>120)throw new IOException("Invalid director state");
@@ -70,6 +73,7 @@ public final class HorrorDirector {
   if(version>=3){d.sleepCooldown=in.readInt();if(d.sleepCooldown<0||d.sleepCooldown>180)throw new IOException("Invalid sleep cooldown");}
   if(version>=4)d.nullPresent=in.readBoolean();
   if(version>=5){d.mineCooldown=in.readInt();if(d.mineCooldown<0||d.mineCooldown>MinePolicy.COOLDOWN_SECONDS)throw new IOException("Invalid mine cooldown");}
+  if(version>=6)d.helpBuilt=in.readBoolean();
   return d;
  }
  public int pressure(){return pressure;}
