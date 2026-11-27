@@ -497,6 +497,10 @@ def verify_restoration_particle_source():
     leaf_accent_start=client_source.find("private static boolean queueExposedLeafCanopyAccent(")
     leaf_accent_end=client_source.find("\n        private static double sampleGroundY",leaf_accent_start+1)
     leaf_accent_body=client_source[leaf_accent_start:leaf_accent_end] if leaf_accent_start>=0 and leaf_accent_end>leaf_accent_start else ""
+    leaf_surface_clearance_start=client_source.find("private static int canopyAccentLeafSurfaceSkippedPlants(")
+    leaf_surface_clearance_end=client_source.find("\n        private static double canopyAccentLiftedParticleY",leaf_surface_clearance_start+1)
+    leaf_surface_clearance_body=(client_source[leaf_surface_clearance_start:leaf_surface_clearance_end]
+        if leaf_surface_clearance_start>=0 and leaf_surface_clearance_end>leaf_surface_clearance_start else "")
     heightmap_prefilter_start=client_source.find("private static boolean canopyAccentHeightmapMayContainValidLeafAccent(")
     heightmap_prefilter_end=client_source.find("\n        // Sample one deterministic column",heightmap_prefilter_start+1)
     heightmap_prefilter_body=(client_source[heightmap_prefilter_start:heightmap_prefilter_end]
@@ -522,7 +526,7 @@ def verify_restoration_particle_source():
             or "isCanopyAccentHeadroomAvailable(head)" not in leaf_accent_body
             or "canopyAccentPlantSurfaceParticleY((int)leafY,shapeHeight,skippedPlants)" not in leaf_accent_body
             or "private static int canopyAccentLeafSurfaceSkippedPlants(" not in client_source
-            or "isCanopyAccentSkippablePlant(candidate,level,cursor)" not in leaf_accent_body
+            or "isCanopyAccentSkippablePlant(candidate,level,cursor)" not in leaf_surface_clearance_body
             or "GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS" not in client_source
             or "GROUND_CANOPY_LEAF_HEIGHTMAP_SOURCE_VERIFIED heightmap=world_surface includesLeaves=true includesPlants=true downwardPlantScan=2 roofRejected=true headroomAir=true loadedOnly=true" not in client_source
             or "GROUND_CANOPY_ACCENT_HEIGHTMAP_TOP_NORMALIZATION_PROFILE_VERIFIED" not in client_source
