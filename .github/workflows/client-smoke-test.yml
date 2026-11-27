@@ -59,6 +59,13 @@ jobs:
             echo "Using archive.ubuntu.com fallback for the unreachable Azure Ubuntu mirror"
             cat "$MIRROR_LIST"
           fi
+          # The client smoke job only installs Ubuntu packages. Some hosted runner images
+          # include a Microsoft feed that currently answers 403 and makes apt-get update
+          # fail globally, even though every required package is available from Ubuntu.
+          while IFS= read -r source; do
+            echo "Disabling nonessential Microsoft APT feed for this job: $source"
+            sudo mv "$source" "${source}.blackfrequency-disabled"
+          done < <(grep -rl 'packages.microsoft.com' /etc/apt/sources.list.d 2>/dev/null || true)
           # Force IPv4: hosted runners sometimes have no IPv6 route to Ubuntu mirrors.
           # Keep per-request retries bounded, then retry the package transaction as a whole.
           APT_RETRIES=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::ForceIPv4=true)
