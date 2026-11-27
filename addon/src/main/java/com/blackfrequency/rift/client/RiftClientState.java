@@ -3328,15 +3328,15 @@ public final class RiftClientState {
                     net.minecraft.world.phys.shapes.Shapes.empty())
                 && !isCanopyAccentSkippablePlant(net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState(),
                     net.minecraft.world.phys.shapes.Shapes.block())
-                && Math.abs(canopyAccentLiftedParticleY(70,0)-70.26D)<1.0E-9D
-                && Math.abs(canopyAccentLiftedParticleY(70,1)-71.26D)<1.0E-9D
-                && Math.abs(canopyAccentLiftedParticleY(70,2)-72.26D)<1.0E-9D
+                && Math.abs(canopyAccentLiftedParticleY(70,0)-70.32D)<1.0E-9D
+                && Math.abs(canopyAccentLiftedParticleY(70,1)-71.32D)<1.0E-9D
+                && Math.abs(canopyAccentLiftedParticleY(70,2)-72.32D)<1.0E-9D
                 && Double.isNaN(canopyAccentLiftedParticleY(70,-1))
                 && Double.isNaN(canopyAccentLiftedParticleY(70,3))
                 && Double.isNaN(canopyAccentLiftedParticleY(Integer.MAX_VALUE,2))
-                && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,0)-71.06D)<1.0E-9D
-                && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,1)-72.26D)<1.0E-9D
-                && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,2)-73.26D)<1.0E-9D
+                && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,0)-71.12D)<1.0E-9D
+                && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,1)-72.32D)<1.0E-9D
+                && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,2)-73.32D)<1.0E-9D
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,.8D,-1))
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,.8D,3))
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(70,Double.NaN,0))
