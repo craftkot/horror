@@ -96,7 +96,93 @@ def verify_stacked_plant_fixture_command_profile():
           "skippedPlants=1","particleOffset=2.40",
           "alreadyCorrectNoOp=true","buildBounds=true",flush=True)
 
+def leaf_edge_fixture_positions(x,y,z,anchor_x,anchor_z):
+    values=(x,y,z,anchor_x,anchor_z)
+    if any(type(value) is not int or value<-(1<<31) or value>(1<<31)-1 for value in values):
+        return None
+    if y < -63 or y > 317 or x==-(1<<31) or z==-(1<<31):
+        return None
+    # The negative diagonal camera is eight blocks beyond +X/+Z. Keep all three
+    # target cells in the already-loaded fixture chunk so the probe never crosses
+    # a chunk boundary just to test the alternate axis.
+    if (x&15)==0 or (z&15)==0:
+        return None
+    primary=(x-1,y+1,z-1)
+    first_fallback=(x-1,y+1,z)
+    alternate=(x,y+1,z-1)
+    for target in (primary,first_fallback,alternate):
+        if (target[0]<-(1<<31) or target[0]>(1<<31)-1
+                or target[1]<-64 or target[1]>319
+                or target[2]<-(1<<31) or target[2]>(1<<31)-1
+                or (target[0]>>4)!=(x>>4) or (target[2]>>4)!=(z>>4)):
+            return None
+        dx=target[0]-anchor_x
+        dz=target[2]-anchor_z
+        if abs(dx)>48 or abs(dz)>48 or dx*dx+dz*dz>48*48:
+            return None
+    camera=(x+8.5,y+4.0,z+8.5)
+    camera_dx=camera[0]-anchor_x
+    camera_dz=camera[2]-anchor_z
+    if camera_dx*camera_dx+camera_dz*camera_dz>64*64:
+        return None
+    return primary,first_fallback,alternate,camera
+
+
+def leaf_edge_fixture_commands(x,y,z,anchor_x,anchor_z):
+    positions=leaf_edge_fixture_positions(x,y,z,anchor_x,anchor_z)
+    if positions is None:
+        return None
+    primary,first_fallback,alternate,camera=positions
+    support=(x,y-1,z)
+    mutations=(
+        (f"/execute unless block {support[0]} {support[1]} {support[2]} minecraft:grass_block "
+         f"run setblock {support[0]} {support[1]} {support[2]} minecraft:grass_block"),
+        (f"/execute unless block {x} {y} {z} minecraft:oak_leaves[persistent=true] "
+         f"run setblock {x} {y} {z} minecraft:oak_leaves[persistent=true]"),
+        (f"/execute unless block {x} {y+1} {z} minecraft:air "
+         f"run setblock {x} {y+1} {z} minecraft:air"),
+        (f"/fill {primary[0]} {primary[1]} {primary[2]} "
+         f"{first_fallback[0]} {first_fallback[1]} {first_fallback[2]} minecraft:barrier replace"),
+        (f"/setblock {alternate[0]} {alternate[1]} {alternate[2]} minecraft:air replace"),
+    )
+    marker=f"BF_CANOPY_LEAF_EDGE_FIXTURE_VERIFIED x={x} y={y} z={z}"
+    verification=(
+        f"/execute if block {support[0]} {support[1]} {support[2]} minecraft:grass_block "
+        f"if block {x} {y} {z} minecraft:oak_leaves[persistent=true] "
+        f"if block {x} {y+1} {z} minecraft:air "
+        f"if block {primary[0]} {primary[1]} {primary[2]} minecraft:barrier "
+        f"if block {first_fallback[0]} {first_fallback[1]} {first_fallback[2]} minecraft:barrier "
+        f"if block {alternate[0]} {alternate[1]} {alternate[2]} minecraft:air run say {marker}"
+    )
+    return mutations,verification,marker,positions
+
+
+def verify_leaf_edge_fixture_command_profile():
+    positions=leaf_edge_fixture_positions(514,74,511,512,512)
+    if positions is None:
+        raise RuntimeError("BLACK FREQUENCY diagonal leaf-edge fixture was rejected")
+    primary,first_fallback,alternate,camera=positions
+    if (primary!=(513,75,510) or first_fallback!=(513,75,511)
+            or alternate!=(514,75,510) or camera!=(522.5,78.0,519.5)
+            or leaf_edge_fixture_positions(512,74,511,512,512) is not None
+            or leaf_edge_fixture_positions(514,74,512,512,512) is not None
+            or leaf_edge_fixture_positions(514,318,511,512,512) is not None
+            or leaf_edge_fixture_positions(570,74,511,512,512) is not None):
+        raise RuntimeError("BLACK FREQUENCY diagonal leaf-edge fixture bounds regression")
+    commands=leaf_edge_fixture_commands(514,74,511,512,512)
+    if (commands is None or len(commands[0])!=5
+            or "minecraft:barrier" not in commands[0][3]
+            or "minecraft:air" not in commands[0][4]
+            or "minecraft:oak_leaves[persistent=true]" not in commands[0][1]
+            or "BF_CANOPY_LEAF_EDGE_FIXTURE_VERIFIED x=514 y=74 z=511" not in commands[1]):
+        raise RuntimeError("BLACK FREQUENCY diagonal leaf-edge fixture command regression")
+    print("CI_PROFILE: diagonal leaf-edge fixture cells verified",
+          "primary=513,75,510","firstFallback=513,75,511",
+          "alternate=514,75,510","loadedChunkOnly=true","radius=48",flush=True)
+
+
 verify_stacked_plant_fixture_command_profile()
+verify_leaf_edge_fixture_command_profile()
 
 if (isolated_chat_command_body("/setworldspawn 1024 64 1024")!="setworldspawn 1024 64 1024"
         or isolated_chat_command_body("/tp @s 512 120 512")!="tp @s 512 120 512"
@@ -3069,6 +3155,11 @@ def capture_test_world():
             canopy_fixture_verified=False
             canopy_fixture_position=None
             canopy_fixture_seeded_at=None
+            leaf_edge_fixture_seeded=False
+            leaf_edge_fixture_verified=False
+            leaf_edge_fixture_position=None
+            leaf_edge_fixture_anchor=None
+            leaf_edge_fixture_seeded_at=None
             sky_shot=False
             sky_capture_attempted=False
             shader_reload_attempted=False
@@ -3076,6 +3167,8 @@ def capture_test_world():
             def capture_terrain_fracture(logs):
                 nonlocal terrain_shot,terrain_capture_attempted,terrain_capture_failed
                 nonlocal canopy_fixture_seeded,canopy_fixture_verified,canopy_fixture_position,canopy_fixture_seeded_at
+                nonlocal leaf_edge_fixture_seeded,leaf_edge_fixture_verified,leaf_edge_fixture_position
+                nonlocal leaf_edge_fixture_anchor,leaf_edge_fixture_seeded_at
                 # A server particle marker alone is not proof that the client can
                 # see the crack. Wait for the safe-pad teleport, then aim at the
                 # original surface coordinates before taking the screenshot.
@@ -3237,6 +3330,110 @@ def capture_test_world():
                             return
                 if os.environ.get("BF_ISOLATED_TEST")=="1" and not canopy_fixture_verified:
                     return
+                if os.environ.get("BF_ISOLATED_TEST")=="1" and not leaf_edge_fixture_seeded:
+                    if canopy_fixture_position is None:
+                        terrain_capture_failed=True
+                        print("WORLD_CAPTURE_FAIL: stacked-plant fixture position was lost before leaf-edge probe",flush=True)
+                        return
+                    anchor_match=FINALE_ANCHOR_RE.search(logs)
+                    if not anchor_match:
+                        return
+                    anchor_x,anchor_z=map(int,anchor_match.groups())
+                    fixture_x,fixture_y,fixture_z=canopy_fixture_position
+                    fixture_plan=leaf_edge_fixture_commands(
+                        fixture_x,fixture_y,fixture_z,anchor_x,anchor_z)
+                    if fixture_plan is None:
+                        terrain_capture_failed=True
+                        print("WORLD_CAPTURE_FAIL: deterministic alternate leaf-edge fixture escaped loaded-chunk or radius bounds",
+                              {"anchor":(anchor_x,anchor_z),"fixture":canopy_fixture_position},flush=True)
+                        return
+                    fixture_mutations,fixture_check,fixture_marker,fixture_positions=fixture_plan
+                    for mutation,description in zip(fixture_mutations,(
+                            "prepare leaf-edge support","place persistent leaf candidate",
+                            "clear leaf headroom","block primary and first fallback cells",
+                            "clear alternate fallback cell")):
+                        if not send_isolated_chat_command(mutation,None,description):
+                            terrain_capture_failed=True
+                            print("WORLD_CAPTURE_FAIL: could not submit deterministic leaf-edge fixture mutation",
+                                  description,flush=True)
+                            return
+                    if not send_isolated_chat_command(
+                            fixture_check,r"BF_CANOPY_LEAF_EDGE_FIXTURE_VERIFIED",
+                            "verify diagonal leaf-edge fixture",timeout=8.0):
+                        terrain_capture_failed=True
+                        return
+                    primary,first_fallback,alternate,camera=fixture_positions
+                    if not send_isolated_chat_command(
+                            "/gamemode spectator @s",None,"enter spectator for camera-facing leaf-edge probe"):
+                        terrain_capture_failed=True
+                        return
+                    camera_command=f"/tp @s {camera[0]:.1f} {camera[1]:.1f} {camera[2]:.1f} 135 17.5"
+                    if not send_isolated_chat_command(
+                            camera_command,None,"position camera on the negative diagonal of the leaf fixture"):
+                        terrain_capture_failed=True
+                        return
+                    if not send_isolated_chat_command(
+                            "/say BF_CANOPY_LEAF_EDGE_CAMERA_READY",
+                            r"BF_CANOPY_LEAF_EDGE_CAMERA_READY",
+                            "confirm diagonal leaf-edge camera placement",timeout=8.0):
+                        terrain_capture_failed=True
+                        return
+                    leaf_edge_fixture_seeded=True
+                    leaf_edge_fixture_seeded_at=time.monotonic()
+                    leaf_edge_fixture_position=(fixture_x,fixture_y,fixture_z)
+                    leaf_edge_fixture_anchor=(anchor_x,anchor_z)
+                    print("WORLD_CAPTURE: seeded deterministic leaf-edge alternate fixture",
+                          {"fixture":leaf_edge_fixture_position,"anchor":leaf_edge_fixture_anchor,
+                           "primaryBlocked":primary,"firstFallbackBlocked":first_fallback,
+                           "alternateAir":alternate,"camera":camera,
+                           "loadedChunkOnly":True,"radius":48},flush=True)
+                    return
+                if (os.environ.get("BF_ISOLATED_TEST")=="1"
+                        and leaf_edge_fixture_seeded and not leaf_edge_fixture_verified):
+                    fixture_x,fixture_y,fixture_z=leaf_edge_fixture_position
+                    primary,first_fallback,alternate,camera=leaf_edge_fixture_positions(
+                        fixture_x,fixture_y,fixture_z,*leaf_edge_fixture_anchor)
+                    alternate_pattern=(
+                        r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_EDGE_ALTERNATE_APPLIED "
+                        r"x=(-?\d+) z=(-?\d+) cameraDeltaX=([-+0-9.eE]+) cameraDeltaZ=([-+0-9.eE]+) "
+                        r"primaryTargetX=(-?\d+) primaryTargetY=(-?\d+) primaryTargetZ=(-?\d+) "
+                        r"firstFallbackTargetX=(-?\d+) firstFallbackTargetY=(-?\d+) firstFallbackTargetZ=(-?\d+) "
+                        r"alternateTargetX=(-?\d+) alternateTargetY=(-?\d+) alternateTargetZ=(-?\d+) "
+                        r"primarySafe=false firstFallbackSafe=false alternateSafe=true loadedOnly=true radius=48"
+                    )
+                    alternate_match=next((match for match in reversed(list(re.finditer(alternate_pattern,logs)))
+                        if (int(match.group(1))==fixture_x and int(match.group(2))==fixture_z
+                            and tuple(map(int,match.groups()[4:7]))==primary
+                            and tuple(map(int,match.groups()[7:10]))==first_fallback
+                            and tuple(map(int,match.groups()[10:13]))==alternate
+                            and math.isclose(float(match.group(3)),-8.0,rel_tol=0.0,abs_tol=0.15)
+                            and math.isclose(float(match.group(4)),-8.0,rel_tol=0.0,abs_tol=0.15)),None)
+                    camera_pose_pattern=re.compile(
+                        r"BLACK_FREQUENCY_TEST CLIENT_CAMERA_POSE x=([-+0-9.eE]+) y=([-+0-9.eE]+) "
+                        r"z=([-+0-9.eE]+) yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)"
+                    )
+                    camera_pose_verified=any(
+                        math.isclose(float(match.group(1)),camera[0],rel_tol=0.0,abs_tol=0.15)
+                        and math.isclose(float(match.group(3)),camera[2],rel_tol=0.0,abs_tol=0.15)
+                        and math.isclose(float(match.group(4)),135.0,rel_tol=0.0,abs_tol=1.0)
+                        and math.isclose(float(match.group(5)),17.5,rel_tol=0.0,abs_tol=1.0)
+                        for match in camera_pose_pattern.finditer(logs)
+                    )
+                    if alternate_match and camera_pose_verified:
+                        leaf_edge_fixture_verified=True
+                        print("WORLD_CAPTURE: actual alternate leaf-edge fallback applied",
+                              {"fixture":leaf_edge_fixture_position,"primaryBlocked":primary,
+                               "firstFallbackBlocked":first_fallback,"alternateAir":alternate,
+                               "cameraDelta":(-8.0,-8.0),"loadedOnly":True,"radius":48},flush=True)
+                    elif leaf_edge_fixture_seeded_at is not None and time.monotonic()-leaf_edge_fixture_seeded_at>25.0:
+                        terrain_capture_failed=True
+                        print("WORLD_CAPTURE_FAIL: actual alternate leaf-edge fallback was not applied within 25 seconds",
+                              {"fixture":leaf_edge_fixture_position,
+                               "alternateMarker":alternate_match is not None,
+                               "cameraPose":camera_pose_verified},flush=True)
+                        return
+                    else:
+                        return
                 pad_profile=re.search(
                     r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_PAD_PROFILE_VERIFIED floorOffset=0 playerOffset=1 lateralRadius=0 axis=([XZ]) firstSolidRow=3 gapRow=2 lastSolidRow=3 standoff=3\.0 distanceSquared=([-+0-9.eE]+) padBlocks=(\d+) withinReach=true beamColumnUntouched=true withinRiftRadius=true perpendicular=true",
                     logs)
@@ -5695,11 +5892,19 @@ def capture_test_world():
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_EDGE_FALLBACK_PROFILE_VERIFIED "
                 "minMinorRatio=0.25 dominantRejectedFallback=true cameraFacing=true loadedAirOnly=true radiusBounded=true"
             )
+            leaf_edge_alternate_cell_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_EDGE_ALTERNATE_CELL_PROFILE_VERIFIED "
+                "cameraDelta=-8,-8 primaryDistinct=true firstFallbackDistinct=true alternateDistinct=true cameraFacing=true"
+            )
             if (leaf_edge_fallback_marker not in log_after
+                    or leaf_edge_alternate_cell_marker not in log_after
                     or "private static int canopyAccentLeafEdgeFallbackAxis(double cameraDeltaX,double cameraDeltaZ)" not in camera_source
+                    or "private static int canopyAccentLeafEdgeAlternateFallbackAxis(int fallbackAxis)" not in camera_source
                     or "int fallbackAxis=canopyAccentLeafEdgeFallbackAxis(cameraDeltaX,cameraDeltaZ);" not in camera_source
+                    or "leafEdgeAlternateApplied++;" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_LEAF_EDGE_ALTERNATE_APPLIED" not in camera_source
                     or "isCanopyAccentLeafEdgeOffsetSafe(" not in camera_source):
-                print("WORLD_CAPTURE_FAIL: secondary camera-facing leaf-edge fallback was not verified",flush=True)
+                print("WORLD_CAPTURE_FAIL: camera-facing alternate leaf-edge cell profile was not verified",flush=True)
                 return False
             leaf_top_particle_emitted=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_TOP_PARTICLE_EMITTED" in log_after
