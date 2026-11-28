@@ -103,16 +103,22 @@ def leaf_edge_fixture_positions(x,y,z,anchor_x,anchor_z):
     values=(x,y,z,anchor_x,anchor_z)
     if any(type(value) is not int or value<-(1<<31) or value>(1<<31)-1 for value in values):
         return None
-    if y < -63 or y > 317 or x==-(1<<31) or z==-(1<<31):
+    # Keep the two-block refresh teleport inside build height as well as the camera.
+    if y < -63 or y > 313 or x==-(1<<31) or z==-(1<<31):
         return None
-    # The negative diagonal camera is eight blocks beyond +X/+Z. Keep all three
-    # target cells in the already-loaded fixture chunk so the probe never crosses
-    # a chunk boundary just to test the alternate axis.
-    if (x&15)==0 or (z&15)==0:
+    # Camera is on +X/+Z and looks back along the negative diagonal. Java computes
+    # cameraDelta as camera minus particle, so all three blocked/clear cells must
+    # be on +X/+Z. Keep the camera and targets inside the candidate's loaded chunk.
+    if (x&15)>7 or (z&15)>7:
         return None
-    primary=(x-1,y+1,z-1)
-    first_fallback=(x-1,y+1,z)
-    alternate=(x,y+1,z-1)
+    candidate_dx=x-anchor_x
+    candidate_dz=z-anchor_z
+    if (abs(candidate_dx)>48 or abs(candidate_dz)>48
+            or candidate_dx*candidate_dx+candidate_dz*candidate_dz>48*48):
+        return None
+    primary=(x+1,y+1,z+1)
+    first_fallback=(x+1,y+1,z)
+    alternate=(x,y+1,z+1)
     for target in (primary,first_fallback,alternate):
         if (target[0]<-(1<<31) or target[0]>(1<<31)-1
                 or target[1]<-64 or target[1]>319
@@ -129,6 +135,20 @@ def leaf_edge_fixture_positions(x,y,z,anchor_x,anchor_z):
     if camera_dx*camera_dx+camera_dz*camera_dz>64*64:
         return None
     return primary,first_fallback,alternate,camera
+
+
+def leaf_edge_fixture_camera_refresh_commands(camera):
+    if (not isinstance(camera,(tuple,list)) or len(camera)!=3
+            or any(not isinstance(value,(int,float)) or not math.isfinite(value) for value in camera)):
+        return None
+    x,y,z=camera
+    refresh_y=y+2.0
+    if refresh_y>319.0 or refresh_y< -64.0:
+        return None
+    return (
+        f"/tp @s {x:.1f} {refresh_y:.1f} {z:.1f} 135 17.5",
+        f"/tp @s {x:.1f} {y:.1f} {z:.1f} 135 17.5",
+    )
 
 
 def leaf_edge_fixture_commands(x,y,z,anchor_x,anchor_z):
@@ -168,18 +188,23 @@ def leaf_edge_fixture_commands(x,y,z,anchor_x,anchor_z):
 
 
 def verify_leaf_edge_fixture_command_profile():
-    positions=leaf_edge_fixture_positions(514,74,511,512,512)
+    positions=leaf_edge_fixture_positions(514,74,518,512,512)
     if positions is None:
         raise RuntimeError("BLACK FREQUENCY diagonal leaf-edge fixture was rejected")
     primary,first_fallback,alternate,camera=positions
-    if (primary!=(513,75,510) or first_fallback!=(513,75,511)
-            or alternate!=(514,75,510) or camera!=(522.5,78.0,519.5)
-            or leaf_edge_fixture_positions(512,74,511,512,512) is not None
-            or leaf_edge_fixture_positions(514,74,512,512,512) is not None
-            or leaf_edge_fixture_positions(514,318,511,512,512) is not None
-            or leaf_edge_fixture_positions(570,74,511,512,512) is not None):
+    if (primary!=(515,75,519) or first_fallback!=(515,75,518)
+            or alternate!=(514,75,519) or camera!=(522.5,78.0,526.5)
+            or leaf_edge_fixture_positions(520,74,518,512,512) is not None
+            or leaf_edge_fixture_positions(514,74,520,512,512) is not None
+            or leaf_edge_fixture_positions(514,314,518,512,512) is not None
+            or leaf_edge_fixture_positions(570,74,518,512,512) is not None):
         raise RuntimeError("BLACK FREQUENCY diagonal leaf-edge fixture bounds regression")
-    commands=leaf_edge_fixture_commands(514,74,511,512,512)
+    refresh_commands=leaf_edge_fixture_camera_refresh_commands(camera)
+    if (refresh_commands is None or len(refresh_commands)!=2
+            or any(len(command)>MAX_ISOLATED_CHAT_COMMAND_LENGTH for command in refresh_commands)
+            or "80.0" not in refresh_commands[0] or "78.0" not in refresh_commands[1]):
+        raise RuntimeError("BLACK FREQUENCY vertical mesh refresh command regression")
+    commands=leaf_edge_fixture_commands(514,74,518,512,512)
     if commands is None:
         raise RuntimeError("BLACK FREQUENCY diagonal leaf-edge fixture command regression")
     mutations,checks,returned_positions=commands
@@ -199,9 +224,9 @@ def verify_leaf_edge_fixture_command_profile():
             or isolated_chat_command_body("/"+"x"*MAX_ISOLATED_CHAT_COMMAND_LENGTH) is not None):
         raise RuntimeError("BLACK FREQUENCY Minecraft chat command length boundary regression")
     print("CI_PROFILE: diagonal leaf-edge fixture cells and chat-safe verification commands verified",
-          "mutations=6","checks=3","maxCommandLength=256",
-          "primary=513,75,510","firstFallback=513,75,511",
-          "alternate=514,75,510","loadedChunkOnly=true","radius=48",flush=True)
+          "mutations=6","checks=3","maxCommandLength=256","verticalRefresh=2",
+          "primary=515,75,519","firstFallback=515,75,518",
+          "alternate=514,75,519","cameraDelta=8,8","loadedChunkOnly=true","radius=48",flush=True)
 
 
 verify_stacked_plant_fixture_command_profile()
@@ -3397,6 +3422,21 @@ def capture_test_world():
                             camera_command,None,"position camera on the negative diagonal of the leaf fixture"):
                         terrain_capture_failed=True
                         return
+                    refresh_commands=leaf_edge_fixture_camera_refresh_commands(camera)
+                    if refresh_commands is None:
+                        terrain_capture_failed=True
+                        print("WORLD_CAPTURE_FAIL: leaf-edge fixture camera refresh escaped build height",flush=True)
+                        return
+                    for refresh_command,description in zip(refresh_commands,(
+                            "raise camera by two blocks to invalidate the cached ground sample",
+                            "return camera to the leaf-edge fixture after the vertical rebuild")):
+                        if not send_isolated_chat_command(refresh_command,None,description):
+                            terrain_capture_failed=True
+                            print("WORLD_CAPTURE_FAIL: could not force the leaf-edge mesh refresh",
+                                  description,flush=True)
+                            return
+                    print("WORLD_CAPTURE: forced a two-block vertical mesh refresh after fixture placement",
+                          {"camera":camera,"loadedChunkOnly":True,"radius":48},flush=True)
                     if not send_isolated_chat_command(
                             "/say BF_CANOPY_LEAF_EDGE_CAMERA_READY",
                             r"BF_CANOPY_LEAF_EDGE_CAMERA_READY",
@@ -3433,20 +3473,26 @@ def capture_test_world():
                                 and tuple(map(int,candidate_match.groups()[4:7]))==primary
                                 and tuple(map(int,candidate_match.groups()[7:10]))==first_fallback
                                 and tuple(map(int,candidate_match.groups()[10:13]))==alternate
-                                and math.isclose(float(candidate_match.group(3)),-8.0,rel_tol=0.0,abs_tol=0.15)
-                                and math.isclose(float(candidate_match.group(4)),-8.0,rel_tol=0.0,abs_tol=0.15)):
+                                and math.isclose(float(candidate_match.group(3)),8.0,rel_tol=0.0,abs_tol=0.15)
+                                and math.isclose(float(candidate_match.group(4)),8.0,rel_tol=0.0,abs_tol=0.15)):
                             alternate_match=candidate_match
                             break
                     camera_pose_pattern=re.compile(
                         r"BLACK_FREQUENCY_TEST CLIENT_CAMERA_POSE x=([-+0-9.eE]+) y=([-+0-9.eE]+) "
                         r"z=([-+0-9.eE]+) yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)"
                     )
-                    camera_pose_verified=any(
-                        math.isclose(float(match.group(1)),camera[0],rel_tol=0.0,abs_tol=0.15)
-                        and math.isclose(float(match.group(3)),camera[2],rel_tol=0.0,abs_tol=0.15)
-                        and math.isclose(float(match.group(4)),135.0,rel_tol=0.0,abs_tol=1.0)
-                        and math.isclose(float(match.group(5)),17.5,rel_tol=0.0,abs_tol=1.0)
-                        for match in camera_pose_pattern.finditer(logs)
+                    camera_pose_matches=list(camera_pose_pattern.finditer(logs))
+                    camera_ready_matches=list(re.finditer(r"BF_CANOPY_LEAF_EDGE_CAMERA_READY",logs))
+                    latest_camera_pose=camera_pose_matches[-1] if camera_pose_matches else None
+                    latest_camera_ready=camera_ready_matches[-1] if camera_ready_matches else None
+                    camera_pose_verified=(
+                        latest_camera_pose is not None and latest_camera_ready is not None
+                        and latest_camera_pose.start()>latest_camera_ready.start()
+                        and math.isclose(float(latest_camera_pose.group(1)),camera[0],rel_tol=0.0,abs_tol=0.15)
+                        and math.isclose(float(latest_camera_pose.group(2)),camera[1],rel_tol=0.0,abs_tol=0.15)
+                        and math.isclose(float(latest_camera_pose.group(3)),camera[2],rel_tol=0.0,abs_tol=0.15)
+                        and math.isclose(float(latest_camera_pose.group(4)),135.0,rel_tol=0.0,abs_tol=1.0)
+                        and math.isclose(float(latest_camera_pose.group(5)),17.5,rel_tol=0.0,abs_tol=1.0)
                     )
                     if alternate_match and camera_pose_verified:
                         leaf_edge_fixture_verified=True
