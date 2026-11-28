@@ -2113,7 +2113,8 @@ def capture_test_world():
             raise ValueError("Invalid physical beacon camera rotation")
         # Cheats are enabled only in the disposable isolated CI world. Relative
         # coordinates preserve the player's safe-pad position; only view rotation changes.
-        return f"/tp @s ~ ~ ~ {target_yaw:.6f} {target_pitch:.6f}"
+        # The slash is supplied by the command-chat opener below.
+        return f"tp @s ~ ~ ~ {target_yaw:.6f} {target_pitch:.6f}"
 
     def set_camera_orientation_in_disposable_world(target_yaw,target_pitch):
         if os.environ.get("BF_ISOLATED_TEST")!="1":
@@ -2125,7 +2126,9 @@ def capture_test_world():
             return current
         log_offset=latest.stat().st_size if latest.exists() else 0
         focus_game()
-        key("t",focus=False)
+        # Open command chat with '/', then type only the command body. Opening
+        # with 't' leaves a literal leading t and turns '/tp' into plain chat.
+        key("/",focus=False)
         time.sleep(0.12)
         command=camera_rotation_command(target_yaw,target_pitch)
         typed=subprocess.run(
@@ -2271,8 +2274,9 @@ def capture_test_world():
         raise RuntimeError("BLACK FREQUENCY camera pitch overshoot correction regression")
     print("WORLD_CAPTURE: closed-loop camera pitch overshoot correction verified",flush=True)
     exact_rotation_sample=camera_rotation_command(89.999985,35.247574)
-    if exact_rotation_sample!="/tp @s ~ ~ ~ 89.999985 35.247574":
-        raise RuntimeError("BLACK FREQUENCY disposable camera rotation command regression")
+    if (exact_rotation_sample!="tp @s ~ ~ ~ 89.999985 35.247574"
+            or exact_rotation_sample.startswith("/")):
+        raise RuntimeError("BLACK FREQUENCY disposable camera rotation command-body regression")
     try:
         camera_rotation_command(0.0,float("nan"))
     except ValueError:
