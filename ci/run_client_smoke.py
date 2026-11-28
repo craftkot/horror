@@ -41,6 +41,17 @@ def isolated_chat_command_body(command):
         return None
     return command[1:]
 
+
+def isolated_chat_input_payload(command):
+    body=isolated_chat_command_body(command)
+    if body is None:
+        return None
+    # Open ordinary chat with T and paste the complete slash-prefixed command.
+    # xdotool's "slash" keysym resolves to "/" on this runner, but that symbol is
+    # not present in its active keymap; relying on it silently leaves the camera
+    # commands in chat or drops the leading slash.
+    return "t","/"+body
+
 # The lower half is the sampled surface; only the upper half contributes to skippedPlants.
 STACKED_PLANT_FIXTURE_SKIPPED_PLANTS=1
 STACKED_PLANT_FIXTURE_PARTICLE_OFFSET=2.40
@@ -265,8 +276,11 @@ verify_leaf_edge_fixture_command_profile()
 if (isolated_chat_command_body("/setworldspawn 1024 64 1024")!="setworldspawn 1024 64 1024"
         or isolated_chat_command_body("/tp @s 512 120 512")!="tp @s 512 120 512"
         or isolated_chat_command_body("setworldspawn 1024 64 1024") is not None
-        or isolated_chat_command_body("/") is not None):
-    raise RuntimeError("BLACK FREQUENCY isolated chat command prefix regression")
+        or isolated_chat_command_body("/") is not None
+        or isolated_chat_input_payload("/tp @s 512 120 512")!=("t","/tp @s 512 120 512")
+        or isolated_chat_input_payload("/setworldspawn 1024 64 1024")!=("t","/setworldspawn 1024 64 1024")
+        or isolated_chat_input_payload("tp @s 512 120 512") is not None):
+    raise RuntimeError("BLACK FREQUENCY isolated chat command prefix/input regression")
 
 DEFERRED_CLIENT_INPUT_READY_MARKER="BLACK_FREQUENCY_TEST CLIENT_INPUT_READY screen=null player=true"
 INITIAL_PLAYER_SPAWN_RE=re.compile(
@@ -1806,10 +1820,11 @@ def capture_test_world():
         # This helper is used only in the disposable isolated client world.
         # A player teleport loads chunks through normal player movement; it never
         # calls setChunkForced or any server-side chunk-loading API.
-        command_body=isolated_chat_command_body(command)
-        if command_body is None:
+        input_payload=isolated_chat_input_payload(command)
+        if input_payload is None:
             print("WORLD_CAPTURE_FAIL: isolated command must start with '/' for",description,flush=True)
             return False
+        chat_key,clipboard_text=input_payload
         if not wait_for_isolated_client_input_ready():
             print("WORLD_CAPTURE_FAIL: client input was not ready for",description,flush=True)
             return False
@@ -1832,18 +1847,17 @@ def capture_test_world():
                     continue
                 isolated_chat_open=False
                 time.sleep(0.12)
-            # The slash key opens ChatScreen with '/' already entered. Waiting before
-            # typing the body prevents early xdotool characters from being lost during
-            # the screen transition (which previously turned /setworldspawn into chat text).
-            opened=key("slash",focus=False)
+            # Use the ordinary chat binding rather than the unavailable "/" keysym.
+            # Paste the complete command only after ChatScreen has finished opening.
+            opened=key(chat_key,focus=False)
             if opened.returncode==0:
                 isolated_chat_open=True
             time.sleep(1.75)
-            print("WORLD_CAPTURE_INPUT: command chat opened with slash key; typing body",
+            print("WORLD_CAPTURE_INPUT: ordinary chat opened; pasting slash-prefixed command",
                   description,flush=True)
             clipboard=subprocess.run(
                 ["xclip","-selection","clipboard","-loops","1","-i"],
-                input=command_body.encode("utf-8"),check=False)
+                input=clipboard_text.encode("utf-8"),check=False)
             pasted=key("ctrl+v",focus=False)
             time.sleep(0.35)
             submitted=key("Return",focus=False)
