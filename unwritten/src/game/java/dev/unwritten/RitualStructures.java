@@ -9,6 +9,9 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 /** A small, bounded, air-only structure placement. No chunk generation or terrain carving. */
 final class RitualStructures {
+ static net.minecraft.world.level.block.Block altarBlock(){
+  return net.minecraft.core.registries.BuiltInRegistries.BLOCK.getOrThrow(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.BLOCK,net.minecraft.resources.Identifier.withDefaultNamespace("red_stained_glass"))).value();
+ }
  private record Placement(BlockPos pos,BlockState state){}
  private static BlockPos at(BlockPos origin,int x,int y,int z,int direction){
   return origin.offset(HelpCorridor.dx(x,z,direction),y,HelpCorridor.dz(x,z,direction));
@@ -79,7 +82,7 @@ final class RitualStructures {
       case MOSS -> Blocks.MOSSY_COBBLESTONE.defaultBlockState();
       case WALL -> Blocks.COBBLESTONE_WALL.defaultBlockState();
       case BARS -> Blocks.IRON_BARS.defaultBlockState();
-      case ALTAR -> Blocks.RED_STAINED_GLASS.defaultBlockState();
+      case ALTAR -> altarBlock().defaultBlockState();
       case LANTERN -> Blocks.SOUL_LANTERN.defaultBlockState();
       case TORCH -> Blocks.REDSTONE_TORCH.defaultBlockState();
       case DUST -> Blocks.REDSTONE_WIRE.defaultBlockState();

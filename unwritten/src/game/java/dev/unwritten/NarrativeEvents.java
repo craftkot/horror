@@ -29,7 +29,7 @@ final class NarrativeEvents {
   var site=director.ritualSite().orElse(null);if(site==null)return;
   var anchor=new BlockPos(site.x(),site.y(),site.z());
   if(!p.level().hasChunkAt(anchor.getX(),anchor.getZ())||!SacrificeLayout.within(p.distanceToSqr(anchor.getX()+.5,anchor.getY()+.5,anchor.getZ()+.5)))return;
-  if(!p.level().getBlockState(anchor).is(net.minecraft.world.level.block.Blocks.RED_STAINED_GLASS))return;
+  if(!p.level().getBlockState(anchor).is(RitualStructures.altarBlock()))return;
   active.put(p.getUUID(),new Sequence(p,p.level(),Kind.RITUAL,0,director,anchor));
   Apparitions.soundBehind(p,SoundEvents.AMBIENT_CAVE.value(),.8f,.55f);
  }
@@ -46,7 +46,7 @@ final class NarrativeEvents {
    int duration=switch(s.kind()){case COORDS->NarrativePolicy.COORDS_TICKS;case HELP->NarrativePolicy.HELP_TICKS;case RITUAL->SacrificeLayout.DIALOG_TICKS;};
    if(s.kind()==Kind.RITUAL){
     var anchor=s.corridor();
-    if(!p.level().hasChunkAt(anchor.getX(),anchor.getZ())||!SacrificeLayout.within(p.distanceToSqr(anchor.getX()+.5,anchor.getY()+.5,anchor.getZ()+.5))||!p.level().getBlockState(anchor).is(net.minecraft.world.level.block.Blocks.RED_STAINED_GLASS)){it.remove();continue;}
+    if(!p.level().hasChunkAt(anchor.getX(),anchor.getZ())||!SacrificeLayout.within(p.distanceToSqr(anchor.getX()+.5,anchor.getY()+.5,anchor.getZ()+.5))||!p.level().getBlockState(anchor).is(RitualStructures.altarBlock())){it.remove();continue;}
     if(age>=duration){s.director().markRitualHeard();it.remove();continue;}
     int line=SacrificeLayout.dialogLine(age);
     if(line>=0)p.sendSystemMessage(Component.translatable("event.unwritten.ritual.line."+line).withStyle(ChatFormatting.GRAY));
