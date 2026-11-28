@@ -467,6 +467,20 @@ def verify_deferred_restore_chunk_bounds_profile():
     if (creative_command<0 or travel_command<=creative_command
             or return_command<=travel_command or survival_command<=return_command):
         raise RuntimeError("BLACK FREQUENCY deferred travel must protect the player and restore Survival before the physical beacon test")
+    leaf_edge_creative_command=client_source.find(
+        '"/gamemode creative @s",None,"enter creative for camera-facing leaf-edge probe"')
+    beacon_click_start=client_source.find("    def try_beacon_click(")
+    beacon_click_end=client_source.find("\\n    def ",beacon_click_start+1)
+    beacon_click_body=(client_source[beacon_click_start:beacon_click_end]
+        if beacon_click_start>=0 and beacon_click_end>beacon_click_start else "")
+    beacon_aim_position=beacon_click_body.find("aim_camera_at_beacon(fresh_logs")
+    survival_restore_position=beacon_click_body.find(
+        '"/gamemode survival @s",',beacon_aim_position)
+    physical_click_position=beacon_click_body.find('["xdotool","mousedown","3"]',beacon_aim_position)
+    if (leaf_edge_creative_command<0 or beacon_aim_position<0
+            or survival_restore_position<=beacon_aim_position
+            or physical_click_position<=survival_restore_position):
+        raise RuntimeError("BLACK FREQUENCY leaf-edge camera probe must keep fissure witness active and restore Survival before the physical click")
     fixtures=(
         (48,0,3,0,0,0,48,True),
         (-48,0,-3,0,0,0,48,True),
@@ -2959,6 +2973,15 @@ def capture_test_world():
         if not aim_camera_at_beacon(fresh_logs,allow_disposable_teleport=isolated_camera_command):
             return
         if isolated_camera_command:
+            # The leaf-edge probe uses Creative rather than Spectator so the server
+            # continues emitting witness-gated ground fissure particles. Restore Survival
+            # only after the player has been returned to the verified beacon pad.
+            if not send_isolated_chat_command(
+                    "/gamemode survival @s",
+                    r"Set own game mode to Survival Mode",
+                    "restore Survival before the physical beacon interaction"):
+                return
+            print("WORLD_CAPTURE: restored Survival after camera probe; physicalInteraction=true",flush=True)
             print("WORLD_CAPTURE: isolated beacon aim set from server telemetry; following right-click remains physical",flush=True)
         beacon_aim_verified=True
         if beacon_attempts==0:
@@ -3473,7 +3496,7 @@ def capture_test_world():
                             return
                     primary,first_fallback,alternate,camera=fixture_positions
                     if not send_isolated_chat_command(
-                            "/gamemode spectator @s",None,"enter spectator for camera-facing leaf-edge probe"):
+                            "/gamemode creative @s",None,"enter creative for camera-facing leaf-edge probe"):
                         terrain_capture_failed=True
                         return
                     camera_command=f"/tp @s {camera[0]:.1f} {camera[1]:.1f} {camera[2]:.1f} 135 17.5"
