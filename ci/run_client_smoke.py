@@ -719,7 +719,9 @@ def verify_restoration_particle_source():
             or "skippedPlantSurfaceBlocks<0" not in sample_ground_body
             or "queuePlantSurfaceCanopyAccent" not in sample_ground_body
             or "groundCanopyAccentQueueAttempts++" not in surface_plant_queue_body
-            or "hasCanopyAccentCandidate(blockX,blockZ)" not in surface_plant_queue_body
+            or "findCanopyAccentCandidateIndex(blockX,blockZ," not in surface_plant_queue_body
+            or "canUpgradeLeafTopCanopyAccentCandidate(existingCandidate," not in surface_plant_queue_body
+            or "GROUND_CANOPY_ACCENT_LEAF_TOP[existingCandidate]=false;" not in surface_plant_queue_body
             or "groundCanopyAccentQueueAccepted++" not in surface_plant_queue_body
             or "groundCanopyAccentQueuePlantLifted++" not in surface_plant_queue_body
             or "if(skippedPlants==0) {" not in plant_surface_particle_body
@@ -830,7 +832,7 @@ def verify_restoration_particle_source():
             or "GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA" not in adjacent_plant_body
             or "getChunk(" in adjacent_plant_body
             or "GROUND_CANOPY_ACCENT_ADJACENT_PLANT_SCAN_PROFILE_VERIFIED supportChecked=true groundTolerance=0.35 loadedOnly=true radius=48 maxSkipped=2" not in client_source
-            or "GROUND_CANOPY_ACCENT_ADJACENT_PLANT[groundCanopyAccentCandidateCount-1]=true" not in client_source
+            or "queuePlantSurfaceCanopyAccent(\n                level,surface,blockX,blockZ,plantGroundY,accentY,skippedPlants,arm,true)" not in adjacent_plant_body
             or "GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_EMITTED" not in client_source
             or "GROUND_CANOPY_ACCENT_FIXTURE_SAMPLE_VERIFIED" not in neighbor_scan_body
             or "offset>0" not in neighbor_scan_body
@@ -3068,7 +3070,8 @@ def capture_test_world():
                     r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
                     logs)
                 if os.environ.get("BF_ISOLATED_TEST")=="1":
-                    if not canopy_fixture_seeded and marker and safe_pad:
+                    if (not canopy_fixture_seeded and marker and safe_pad
+                            and "WORLD_CAPTURE: live vertical cull probe completed before terrain camera sweep and packet expiry" in logs):
                         anchor_match=FINALE_ANCHOR_RE.search(logs)
                         first_edit=FIRST_BLOCK_REMOVED_RE.search(logs)
                         if anchor_match and first_edit:
@@ -3154,12 +3157,13 @@ def capture_test_world():
                             canopy_fixture_seeded=True
                             canopy_fixture_position=(fixture_x,fixture_y,fixture_z)
                             canopy_fixture_seeded_at=time.monotonic()
-                            print("WORLD_CAPTURE: placed a verified two-block tall-grass fixture on the sampled support",
+                            print("WORLD_CAPTURE: placed a verified two-block tall-grass fixture after vertical-cull probe",
                                   {"anchor":(anchor_x,anchor_z),"sample":(sample_x,sample_ground_y,sample_z),
                                    "support":(fixture_x,support_y,fixture_z),
                                    "fixture":canopy_fixture_position,"arm":int(fixture_sample_match.group(6)),
                                    "segment":int(fixture_sample_match.group(7)),
-                                   "radiusSquared":dx*dx+dz*dz,"loadedOnly":True},flush=True)
+                                   "radiusSquared":dx*dx+dz*dz,"loadedOnly":True,
+                                   "afterVerticalCull":True},flush=True)
                             time.sleep(.25)
                             return
                     if canopy_fixture_seeded and not canopy_fixture_verified:
@@ -3197,7 +3201,7 @@ def capture_test_world():
                                    "skippedPlants":skipped,"source":"adjacent"},flush=True)
                         elif canopy_fixture_seeded_at is not None and time.monotonic()-canopy_fixture_seeded_at>20.0:
                             terrain_capture_failed=True
-                            print("WORLD_CAPTURE_FAIL: no adjacent stacked-plant particle was emitted within 20 seconds",
+                            print("WORLD_CAPTURE_FAIL: no adjacent stacked-plant particle was emitted within 20 seconds after vertical-cull probe",
                                   {"fixture":canopy_fixture_position},flush=True)
                             return
                         else:
@@ -5619,6 +5623,8 @@ def capture_test_world():
             )
             if (canopy_lifted_particle_marker not in log_after
                     or "GROUND_CANOPY_ACCENT_LEAF_TOP_MOTION_PROFILE_VERIFIED" not in camera_source
+                    or "private static int findCanopyAccentCandidateIndex(" not in camera_source
+                    or "private static boolean canUpgradeLeafTopCanopyAccentCandidate(" not in camera_source
                     or "GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE=1.95F;" not in camera_source
                     or "GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE>=1.90F" not in camera_source
                     or "GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE<=2.00F" not in camera_source
@@ -5642,7 +5648,8 @@ def capture_test_world():
                 "leafTopUsesLiftedDust=true leafTopUsesLiftedSpeed=true adjacentStackedUnchanged=true "
                 "regularGroundUnchanged=true invalidSkippedRejected=true bounded=true"
             )
-            if (canopy_lifted_motion_marker not in log_after
+            if ("GROUND_CANOPY_ACCENT_LEAF_TOP_UPGRADE_PROFILE_VERIFIED sameColumn=true plantWins=true budgetIndependent=true existingPlantPreserved=true" not in log_after
+                    or canopy_lifted_motion_marker not in log_after
                     or leaf_top_motion_marker not in log_after
                     or "GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED=.006D;" not in camera_source
                     or "GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED>=.005D" not in camera_source
