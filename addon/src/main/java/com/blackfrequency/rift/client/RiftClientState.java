@@ -890,6 +890,8 @@ public final class RiftClientState {
         private static final double GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE_SQR=
             GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE*GROUND_CANOPY_ACCENT_MAX_HORIZONTAL_DISTANCE;
         private static final double GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA=.35D;
+        // Leaf-top motes clear the leaf billboard edge; plant and ground accents keep the lower offset.
+        private static final double GROUND_CANOPY_ACCENT_LEAF_EXTRA_OFFSET=.25D;
         // Leaf-top accents may rise above the ground ribbon, but stay inside a bounded canopy envelope.
         private static final double GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=24.0D;
         // A mote may rise above at most two non-colliding bush plants, never through leaves or solids.
@@ -3065,6 +3067,16 @@ public final class RiftClientState {
             return canopyAccentParticleY((int)clearY,0.0D);
         }
 
+        // Lift only leaf-top accents above the foliage edge; the base plant accent remains at 0.4.
+        private static double canopyAccentLeafParticleY(double baseY,int skippedPlants) {
+            if(!Double.isFinite(baseY) || skippedPlants<0
+                || skippedPlants>GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS) return Double.NaN;
+            double offset=GROUND_CANOPY_ACCENT_LEAF_EXTRA_OFFSET;
+            if(!Double.isFinite(offset) || offset<0.0D || offset>.5D) return Double.NaN;
+            double liftedY=baseY+offset;
+            return Double.isFinite(liftedY) && liftedY>baseY ? liftedY : Double.NaN;
+        }
+
         private static boolean canopyAccentCandidateInsideExpandedSegmentBounds(double x,double z,
                 GroundPoint a,GroundPoint b) {
             if(a==null || b==null || !Double.isFinite(x) || !Double.isFinite(z)
@@ -3356,7 +3368,8 @@ public final class RiftClientState {
             boolean nonAccentSurfacesRejected=
                 !shouldQueueCanopyAccentCandidate(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),0,0,0)
                 && !shouldQueueCanopyAccentCandidate(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),0,0,0);
-            double leafTop=canopyAccentParticleY(70,1.0D);
+            double leafTop=canopyAccentLeafParticleY(
+                canopyAccentPlantSurfaceParticleY(70,1.0D,0),0);
             boolean leafHeightBounded=isCanopyAccentHeightWithinBounds(64.1D,leafTop)
                 && isCanopyAccentHeightWithinBounds(64.1D,80.1D)
                 && isCanopyAccentHeightWithinBounds(64.1D,88.1D)
@@ -3367,8 +3380,8 @@ public final class RiftClientState {
                 !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,64)
                 && canopyAccentHeightmapMayContainValidLeafAccent(64.1D,68)
                 && canopyAccentHeightmapMayContainValidLeafAccent(64.26D,81)
-                && canopyAccentHeightmapMayContainValidLeafAccent(64.4D,89)
-                && !canopyAccentHeightmapMayContainValidLeafAccent(64.399999D,89)
+                && canopyAccentHeightmapMayContainValidLeafAccent(64.650001D,89)
+                && !canopyAccentHeightmapMayContainValidLeafAccent(64.649999D,89)
                 && !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,89)
                 && !canopyAccentHeightmapMayContainValidLeafAccent(Double.NaN,68)
                 && !canopyAccentHeightmapMayContainValidLeafAccent(64.1D,Integer.MIN_VALUE)
@@ -3546,6 +3559,21 @@ public final class RiftClientState {
                 && Math.abs(canopyAccentPlantSurfaceParticleY(70,0.0D,1)-72.40D)<1.0E-9D
                 && Math.abs(canopyAccentPlantSurfaceParticleY(70,Double.NaN,2)-73.40D)<1.0E-9D
                 && Double.isNaN(canopyAccentPlantSurfaceParticleY(Integer.MAX_VALUE,.8D,1));
+            double directLeafAccent=canopyAccentLeafParticleY(
+                canopyAccentPlantSurfaceParticleY(70,1.0D,0),0);
+            double stackedLeafAccent=canopyAccentLeafParticleY(
+                canopyAccentPlantSurfaceParticleY(70,.8D,1),1);
+            boolean leafAccentClearanceProfile=Double.isFinite(GROUND_CANOPY_ACCENT_LEAF_EXTRA_OFFSET)
+                && GROUND_CANOPY_ACCENT_LEAF_EXTRA_OFFSET>=.20D
+                && GROUND_CANOPY_ACCENT_LEAF_EXTRA_OFFSET<=.30D
+                && Math.abs(directLeafAccent-71.65D)<1.0E-9D
+                && Math.abs(stackedLeafAccent-72.65D)<1.0E-9D
+                && Math.abs(canopyAccentPlantSurfaceParticleY(70,.8D,1)-72.40D)<1.0E-9D
+                && Double.isNaN(canopyAccentLeafParticleY(Double.NaN,0))
+                && Double.isNaN(canopyAccentLeafParticleY(Double.POSITIVE_INFINITY,1))
+                && Double.isNaN(canopyAccentLeafParticleY(70.0D,-1))
+                && Double.isNaN(canopyAccentLeafParticleY(70.0D,GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS+1))
+                && Double.isNaN(canopyAccentLeafParticleY(Double.MAX_VALUE,0));
             boolean plantCollisionShapePrefilterProfile=
                 isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState())
                 && isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.TALL_GRASS.defaultBlockState())
@@ -3732,7 +3760,8 @@ public final class RiftClientState {
                 && particleVelocityBounded && liftedParticleVelocityBounded && liftedMotionVariationProfile
                 && particleDriftProfile && particleColorTransitionProfile
                 && foliageClearanceProfile && canopyAccentHeadroomProfile
-                && plantClearanceProfile && plantCollisionShapePrefilterProfile && vanillaDoublePlantProfile
+                && plantClearanceProfile && leafAccentClearanceProfile
+                && plantCollisionShapePrefilterProfile && vanillaDoublePlantProfile
                 && leafSurfaceScanProfile && heightmapTopNormalizationProfile
                 && Math.abs(plantTop-71.20D)<1.0E-9D
                 && Math.abs(invalidHeight-70.40D)<1.0E-9D
@@ -3797,6 +3826,10 @@ public final class RiftClientState {
                 GROUND_CANOPY_ACCENT_VERTICAL_OFFSET,GROUND_CANOPY_ACCENT_PARTICLE_SCALE,
                 GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE);
             com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_CLEARANCE_PROFILE_VERIFIED extraOffset={} effectiveOffset={} directShape=true stackedClearCell=true basePlantOffset=0.4 bounded=true",
+                GROUND_CANOPY_ACCENT_LEAF_EXTRA_OFFSET,
+                GROUND_CANOPY_ACCENT_VERTICAL_OFFSET+GROUND_CANOPY_ACCENT_LEAF_EXTRA_OFFSET);
+            com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_HEADROOM_POLICY_VERIFIED airOnlyOrLiftedBush=true leavesRejected=true plantsBounded=true fluidsRejected=true solidRejected=true ribbonStillAllowed=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_PLANT_CLEARANCE_PROFILE_VERIFIED maxLift={} bushOnly=true collisionEmpty=true leavesRejected=true fluidsRejected=true solidRejected=true",
@@ -3833,8 +3866,9 @@ public final class RiftClientState {
         // block-state/shape reads only when no possible leaf height can pass final bounds.
         private static boolean canopyAccentHeightmapMayContainValidLeafAccent(double groundY,int topY) {
             if(!Double.isFinite(groundY)) return false;
-            double minimumPossibleAccentY=topY-1.0D+GROUND_CANOPY_ACCENT_VERTICAL_OFFSET;
-            double maximumPossibleAccentY=topY+GROUND_CANOPY_ACCENT_VERTICAL_OFFSET;
+            double leafOffset=GROUND_CANOPY_ACCENT_VERTICAL_OFFSET+GROUND_CANOPY_ACCENT_LEAF_EXTRA_OFFSET;
+            double minimumPossibleAccentY=topY-1.0D+leafOffset;
+            double maximumPossibleAccentY=topY+leafOffset;
             return Double.isFinite(minimumPossibleAccentY) && Double.isFinite(maximumPossibleAccentY)
                 && maximumPossibleAccentY>groundY+1.0D
                 && minimumPossibleAccentY-groundY<=GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND;
@@ -4022,7 +4056,8 @@ public final class RiftClientState {
                 return false;
             }
             double shapeHeight=leaf.getShape(level,cursor).max(Direction.Axis.Y);
-            double accentY=canopyAccentPlantSurfaceParticleY((int)leafY,shapeHeight,skippedPlants);
+            double accentY=canopyAccentLeafParticleY(
+                canopyAccentPlantSurfaceParticleY((int)leafY,shapeHeight,skippedPlants),skippedPlants);
             if(!Double.isFinite(accentY)) {
                 if(VERIFY_GROUND_MESH_PROFILES) groundCanopyAccentQueueInvalidRejected++;
                 return false;
