@@ -137,6 +137,19 @@ def leaf_edge_fixture_positions(x,y,z,anchor_x,anchor_z):
     return primary,first_fallback,alternate,camera
 
 
+def leaf_edge_fixture_safe_origin(x,y,z,anchor_x,anchor_z):
+    values=(x,y,z,anchor_x,anchor_z)
+    if any(type(value) is not int or value<-(1<<31) or value>(1<<31)-1 for value in values):
+        return None
+    # The +8.5 camera offset and +1 fallback cells must stay in the candidate's
+    # already-loaded chunk. Snap backward only; never cross or load a chunk.
+    safe_x=x-max(0,(x&15)-7)
+    safe_z=z-max(0,(z&15)-7)
+    if leaf_edge_fixture_positions(safe_x,y,safe_z,anchor_x,anchor_z) is None:
+        return None
+    return safe_x,y,safe_z
+
+
 def leaf_edge_fixture_camera_refresh_commands(camera):
     if (not isinstance(camera,(tuple,list)) or len(camera)!=3
             or any(not isinstance(value,(int,float)) or not math.isfinite(value) for value in camera)):
@@ -188,6 +201,23 @@ def leaf_edge_fixture_commands(x,y,z,anchor_x,anchor_z):
 
 
 def verify_leaf_edge_fixture_command_profile():
+    safe_origin=leaf_edge_fixture_safe_origin(514,74,511,512,512)
+    safe_positions=(leaf_edge_fixture_positions(
+        safe_origin[0],safe_origin[1],safe_origin[2],512,512)
+        if safe_origin is not None else None)
+    if (safe_origin!=(514,74,503) or safe_positions is None
+            or safe_positions[0]!=(515,75,504)
+            or safe_positions[1]!=(515,75,503)
+            or safe_positions[2]!=(514,75,504)
+            or safe_positions[3]!=(522.5,78.0,511.5)
+            or (int(safe_positions[3][0])>>4)!=(safe_origin[0]>>4)
+            or (int(safe_positions[3][2])>>4)!=(safe_origin[2]>>4)
+            or any((target[0]>>4)!=(safe_origin[0]>>4)
+                   or (target[2]>>4)!=(safe_origin[2]>>4)
+                   for target in safe_positions[:3])
+            or leaf_edge_fixture_safe_origin(514,314,511,512,512) is not None
+            or leaf_edge_fixture_safe_origin(570,74,511,512,512) is not None):
+        raise RuntimeError("BLACK FREQUENCY same-loaded-chunk leaf-edge origin regression")
     positions=leaf_edge_fixture_positions(514,74,518,512,512)
     if positions is None:
         raise RuntimeError("BLACK FREQUENCY diagonal leaf-edge fixture was rejected")
@@ -3387,13 +3417,23 @@ def capture_test_world():
                     if not anchor_match:
                         return
                     anchor_x,anchor_z=map(int,anchor_match.groups())
-                    fixture_x,fixture_y,fixture_z=canopy_fixture_position
+                    source_fixture=canopy_fixture_position
+                    fixture_x,fixture_y,fixture_z=source_fixture
+                    safe_origin=leaf_edge_fixture_safe_origin(
+                        fixture_x,fixture_y,fixture_z,anchor_x,anchor_z)
+                    if safe_origin is None:
+                        terrain_capture_failed=True
+                        print("WORLD_CAPTURE_FAIL: no camera-safe fixture origin exists inside the source chunk and 48-block radius",
+                              {"anchor":(anchor_x,anchor_z),"sourceFixture":source_fixture},flush=True)
+                        return
+                    fixture_x,fixture_y,fixture_z=safe_origin
                     fixture_plan=leaf_edge_fixture_commands(
                         fixture_x,fixture_y,fixture_z,anchor_x,anchor_z)
                     if fixture_plan is None:
                         terrain_capture_failed=True
-                        print("WORLD_CAPTURE_FAIL: deterministic alternate leaf-edge fixture escaped loaded-chunk or radius bounds",
-                              {"anchor":(anchor_x,anchor_z),"fixture":canopy_fixture_position},flush=True)
+                        print("WORLD_CAPTURE_FAIL: normalized leaf-edge fixture failed final loaded-chunk or radius checks",
+                              {"anchor":(anchor_x,anchor_z),"sourceFixture":source_fixture,
+                               "fixture":safe_origin},flush=True)
                         return
                     fixture_mutations,fixture_checks,fixture_positions=fixture_plan
                     for mutation,description in zip(fixture_mutations,(
@@ -3448,10 +3488,10 @@ def capture_test_world():
                     leaf_edge_fixture_position=(fixture_x,fixture_y,fixture_z)
                     leaf_edge_fixture_anchor=(anchor_x,anchor_z)
                     print("WORLD_CAPTURE: seeded deterministic leaf-edge alternate fixture",
-                          {"fixture":leaf_edge_fixture_position,"anchor":leaf_edge_fixture_anchor,
-                           "primaryBlocked":primary,"firstFallbackBlocked":first_fallback,
-                           "alternateAir":alternate,"camera":camera,
-                           "loadedChunkOnly":True,"radius":48},flush=True)
+                          {"sourceFixture":source_fixture,"fixture":leaf_edge_fixture_position,
+                           "anchor":leaf_edge_fixture_anchor,"primaryBlocked":primary,
+                           "firstFallbackBlocked":first_fallback,"alternateAir":alternate,
+                           "camera":camera,"loadedChunkOnly":True,"radius":48},flush=True)
                     return
                 if (os.environ.get("BF_ISOLATED_TEST")=="1"
                         and leaf_edge_fixture_seeded and not leaf_edge_fixture_verified):
@@ -6651,6 +6691,10 @@ def capture_test_world():
                 return False
             if "BLACK_FREQUENCY_TEST FOG_INPUT_GUARDS_VERIFIED" not in log_after:
                 print("WORLD_CAPTURE_FAIL: non-finite fog inputs were not guarded",flush=True)
+                return False
+            if ("BLACK_FREQUENCY_TEST FOG_PLANE_ORDER_GUARDS_VERIFIED "
+                    "negativeNearRejected=true equalRejected=true reversedRejected=true zeroNearAccepted=true") not in log_after:
+                print("WORLD_CAPTURE_FAIL: negative, equal, or reversed fog planes were not rejected",flush=True)
                 return False
             fog_color_profile=re.search(
                 r"BLACK_FREQUENCY_TEST FOG_COLOR_BLEND_PROFILE_VERIFIED blendMin=([0-9.]+) blendMax=([0-9.]+)",

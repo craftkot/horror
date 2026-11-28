@@ -18,7 +18,7 @@ public final class RiftAtmosphere {
     }
 
     private static boolean validFogPlanes(float near,float far) {
-        return Float.isFinite(near) && Float.isFinite(far) && far>0.0F;
+        return Float.isFinite(near) && Float.isFinite(far) && near>=0.0F && far>near;
     }
 
     // Preserve some vanilla fog color for distant terrain. Cloud geometry is
@@ -63,13 +63,18 @@ public final class RiftAtmosphere {
         boolean nanFarRejected=validFogPlanes(0.05F,Float.NaN);
         boolean infiniteFarRejected=validFogPlanes(0.05F,Float.POSITIVE_INFINITY);
         boolean zeroFarRejected=validFogPlanes(0.05F,0.0F);
+        boolean negativeNearRejected=validFogPlanes(-0.01F,256.0F);
+        boolean equalPlanesRejected=validFogPlanes(64.0F,64.0F);
+        boolean reversedPlanesRejected=validFogPlanes(65.0F,64.0F);
+        boolean zeroNearAccepted=validFogPlanes(0.0F,0.01F);
         if(Math.abs(midpoint-42.5D)>1.0E-9D || tickBoundary!=43.0D
             || invalid!=42.0D || negative!=42.0D || over!=43.0D)
             throw new IllegalStateException("BLACK FREQUENCY fog interpolation regression");
         if(nanStrength!=0.0F || positiveInfinityStrength!=0.0F
             || negativeInfinityStrength!=0.0F || lowStrength!=0.0F || highStrength!=1.0F
             || !validPlanes || nanNearRejected || nanFarRejected
-            || infiniteFarRejected || zeroFarRejected)
+            || infiniteFarRejected || zeroFarRejected || negativeNearRejected
+            || equalPlanesRejected || reversedPlanesRejected || !zeroNearAccepted)
             throw new IllegalStateException("BLACK FREQUENCY fog input guard regression");
         float lowPulseBlend=fogColorBlend(1.0F,0.0F);
         float highPulseBlend=fogColorBlend(1.0F,1.0F);
@@ -95,6 +100,9 @@ public final class RiftAtmosphere {
             "BLACK_FREQUENCY_TEST FOG_INTERPOLATION_VERIFIED");
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST FOG_INPUT_GUARDS_VERIFIED");
+        com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST FOG_PLANE_ORDER_GUARDS_VERIFIED negativeNearRejected={} equalRejected={} reversedRejected={} zeroNearAccepted={}",
+            negativeNearRejected,equalPlanesRejected,reversedPlanesRejected,zeroNearAccepted);
         com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST FOG_COLOR_BLEND_PROFILE_VERIFIED blendMin={} blendMax={}",
             lowPulseBlend,highPulseBlend);
