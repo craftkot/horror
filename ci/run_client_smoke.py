@@ -690,7 +690,12 @@ def verify_restoration_particle_source():
             or "isCanopyAccentHeightWithinBounds(groundY,accentY)" not in leaf_accent_body
             or "hasCanopyAccentCandidate(blockX,blockZ)" not in leaf_accent_body
             or "queueExposedLeafCanopyAccent(level,blockX,blockZ,groundY,arm,cursor)" not in client_source
-            or "GROUND_CANOPY_LEAF_ACCENT_PROFILE_VERIFIED" not in client_source):
+            or "GROUND_CANOPY_LEAF_ACCENT_PROFILE_VERIFIED" not in client_source
+            or "GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET=.52D;" not in client_source
+            or "private static double canopyAccentLeafEdgeOffset(" not in client_source
+            or "private static boolean isCanopyAccentLeafEdgeTargetSafe(" not in client_source
+            or "level.hasChunk(targetX>>4,targetZ>>4)" not in client_source
+            or "level.getBlockState(SURFACE_CURSOR).isAir()" not in client_source):
         raise RuntimeError("BLACK FREQUENCY leaf canopy accents must use exposed top leaves from already-loaded chunks only")
     surface_plant_clearance_start=client_source.find("private static int canopyAccentPlantSurfaceSkippedPlants(")
     surface_plant_clearance_end=client_source.find("\n        private static double canopyAccentLiftedParticleY(",surface_plant_clearance_start+1)
@@ -5657,6 +5662,24 @@ def capture_test_world():
                     or "GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED>=.005D" not in camera_source
                     or "GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED<=.007D" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: lifted canopy mote motion was not bounded or verified",flush=True)
+                return False
+            leaf_edge_offset_profile_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET_PROFILE_VERIFIED "
+                "maxOffset=0.52 dominantAxisCrossesBoundary=true cameraFacing=true loadedAirOnly=true radiusBounded=true"
+            )
+            if (leaf_edge_offset_profile_marker not in log_after
+                    or "private static boolean isCanopyAccentLeafEdgeTargetWithinRadius(" not in camera_source
+                    or "canopyAccentLeafEdgeOffset(cameraDeltaX,cameraDeltaZ,true)" not in camera_source
+                    or "canopyAccentLeafEdgeOffset(cameraDeltaX,cameraDeltaZ,false)" not in camera_source
+                    or "GroundMesh mesh=buildSegments(level,worldAnchorX,worldAnchorZ,surfaceReferenceY,camera);" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: camera-facing leaf-edge offset policy was not verified",flush=True)
+                return False
+            leaf_edge_offset_applied=re.search(
+                r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_EDGE_CAMERA_OFFSET_APPLIED "
+                r"applied=(\d+) maxOffset=0\.52 cameraFacing=true loadedAirOnly=true radiusBounded=true",
+                log_after)
+            if not leaf_edge_offset_applied or int(leaf_edge_offset_applied.group(1))<=0:
+                print("WORLD_CAPTURE_FAIL: no leaf-top mote reached a verified camera-facing loaded air cell",flush=True)
                 return False
             canopy_drift_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DRIFT_PROFILE_VERIFIED "

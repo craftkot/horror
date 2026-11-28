@@ -892,6 +892,8 @@ public final class RiftClientState {
         private static final double GROUND_CANOPY_ACCENT_MAX_GROUND_DELTA=.35D;
         // Leaf-top motes clear the leaf billboard edge; plant and ground accents keep the lower offset.
         private static final double GROUND_CANOPY_ACCENT_LEAF_EXTRA_OFFSET=.25D;
+        // Move leaf-top motes just beyond the camera-facing canopy edge, but only into loaded air.
+        private static final double GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET=.52D;
         // Leaf-top accents may rise above the ground ribbon, but stay inside a bounded canopy envelope.
         private static final double GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=24.0D;
         // A mote may rise above at most two non-colliding bush plants, never through leaves or solids.
@@ -978,6 +980,7 @@ public final class RiftClientState {
         private static boolean canopyAccentSelectorProfileLogged;
         private static boolean canopyAccentBuildProfileLogged;
         private static boolean canopyAccentEmissionLogged;
+        private static boolean canopyAccentLeafEdgeOffsetLogged;
         private static boolean sampleCacheReuseLogged;
         private static boolean surfaceSearchProfileLogged;
         private static net.minecraft.client.multiplayer.ClientLevel cachedLevel;
@@ -3079,6 +3082,35 @@ public final class RiftClientState {
             return Double.isFinite(liftedY) && liftedY>baseY ? liftedY : Double.NaN;
         }
 
+        // L-infinity normalization puts the mote just past the dominant camera-facing block edge.
+        private static double canopyAccentLeafEdgeOffset(double cameraDeltaX,double cameraDeltaZ,boolean xAxis) {
+            if(!Double.isFinite(cameraDeltaX) || !Double.isFinite(cameraDeltaZ)) return 0.0D;
+            double dominant=Math.max(Math.abs(cameraDeltaX),Math.abs(cameraDeltaZ));
+            if(!Double.isFinite(dominant) || dominant<=1.0E-6D) return 0.0D;
+            double component=xAxis?cameraDeltaX:cameraDeltaZ;
+            double offset=GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET*component/dominant;
+            return Double.isFinite(offset) && Math.abs(offset)<=GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET
+                ? offset : 0.0D;
+        }
+
+        private static boolean isCanopyAccentLeafEdgeTargetWithinRadius(
+                int targetX,int targetZ,int anchorX,int anchorZ) {
+            long dx=(long)targetX-anchorX,dz=(long)targetZ-anchorZ;
+            return Math.abs(dx)<=RADIUS && Math.abs(dz)<=RADIUS
+                && dx*dx+dz*dz<=(long)RADIUS*RADIUS;
+        }
+
+        // Never query an adjacent column until its chunk is already loaded; only an air cell can receive the offset.
+        private static boolean isCanopyAccentLeafEdgeTargetSafe(Level level,int targetX,int targetY,int targetZ,
+                int worldAnchorX,int worldAnchorZ) {
+            if(level==null || targetY<level.getMinBuildHeight() || targetY>=level.getMaxBuildHeight()
+                || !isCanopyAccentLeafEdgeTargetWithinRadius(targetX,targetZ,worldAnchorX,worldAnchorZ)) return false;
+            SURFACE_CURSOR.set(targetX,targetY,targetZ);
+            return level.getWorldBorder().isWithinBounds(SURFACE_CURSOR)
+                && level.hasChunk(targetX>>4,targetZ>>4)
+                && level.getBlockState(SURFACE_CURSOR).isAir();
+        }
+
         private static boolean canopyAccentCandidateInsideExpandedSegmentBounds(double x,double z,
                 GroundPoint a,GroundPoint b) {
             if(a==null || b==null || !Double.isFinite(x) || !Double.isFinite(z)
@@ -3208,14 +3240,14 @@ public final class RiftClientState {
             return candidatesVisited>0 ? gameTime : lastAttemptTick;
         }
 
-        private static void emitCanopyAccentCandidates(Level level,List<GroundSegment> segments,
-                int worldAnchorX,int worldAnchorZ) {
+        private static int emitCanopyAccentCandidates(Level level,List<GroundSegment> segments,
+                int worldAnchorX,int worldAnchorZ,Vec3 camera) {
             groundCanopyAccentParticlesEmitted=0;
-            if(level==null || segments==null || segments.isEmpty()) return;
+            if(level==null || segments==null || segments.isEmpty()) return 0;
             int candidateCount=Math.min(groundCanopyAccentCandidateCount,GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET);
-            if(candidateCount<=0) return;
+            if(candidateCount<=0) return 0;
             long gameTime=level.getGameTime();
-            if(!shouldAttemptCanopyAccentScan(gameTime,groundCanopyAccentLastAttemptTick)) return;
+            if(!shouldAttemptCanopyAccentScan(gameTime,groundCanopyAccentLastAttemptTick)) return 0;
             long emissionEpoch=Math.floorDiv(gameTime,(long)GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS);
             long dimensionSalt=canopyAccentDimensionSalt(level.dimension().location().toString());
             int start=canopyAccentCandidateIndex(groundCanopyAccentCandidateCursor,0,candidateCount);
@@ -3223,8 +3255,9 @@ public final class RiftClientState {
                 GROUND_CANOPY_ACCENT_ARM,candidateCount,start,GROUND_CANOPY_ACCENT_SPATIAL_ORDER,
                 GROUND_CANOPY_ACCENT_SPATIAL_SELECTED,GROUND_CANOPY_ACCENT_SPATIAL_NEAREST_DISTANCE_SQUARED,
                 GROUND_CANOPY_ACCENT_SPATIAL_ARM_COUNTS,GROUND_CANOPY_ACCENT_SPATIAL_ARM_SELECTED_COUNTS);
-            if(orderedCount<=0) return;
+            if(orderedCount<=0) return 0;
             int visited=0;
+            int leafEdgeOffsetsApplied=0;
             for(int offset=0;offset<orderedCount
                 && groundCanopyAccentParticlesEmitted<GROUND_CANOPY_ACCENT_PARTICLE_BUDGET;offset++) {
                 int i=GROUND_CANOPY_ACCENT_SPATIAL_ORDER[offset];
@@ -3251,8 +3284,30 @@ public final class RiftClientState {
                 double verticalSpeed=canopyAccentVerticalSpeed(liftedAccent);
                 if(liftedAccent)
                     verticalSpeed=canopyAccentLiftedVerticalSpeed(x,z,emissionEpoch,dimensionSalt);
+                double particleX=x+.5D,particleZ=z+.5D;
+                if(leafTopAccent && isSafeCameraPosition(camera)) {
+                    double cameraDeltaX=camera.x-particleX,cameraDeltaZ=camera.z-particleZ;
+                    double leafEdgeOffsetX=canopyAccentLeafEdgeOffset(cameraDeltaX,cameraDeltaZ,true);
+                    double leafEdgeOffsetZ=canopyAccentLeafEdgeOffset(cameraDeltaX,cameraDeltaZ,false);
+                    if(leafEdgeOffsetX!=0.0D || leafEdgeOffsetZ!=0.0D) {
+                        double targetXValue=Math.floor(particleX+leafEdgeOffsetX);
+                        double targetZValue=Math.floor(particleZ+leafEdgeOffsetZ);
+                        if(Double.isFinite(targetXValue) && Double.isFinite(targetZValue)
+                            && targetXValue>=Integer.MIN_VALUE && targetXValue<=Integer.MAX_VALUE
+                            && targetZValue>=Integer.MIN_VALUE && targetZValue<=Integer.MAX_VALUE) {
+                            int targetX=(int)targetXValue,targetZ=(int)targetZValue;
+                            int targetY=(int)Math.floor(accentY);
+                            if(isCanopyAccentLeafEdgeTargetSafe(
+                                    level,targetX,targetY,targetZ,worldAnchorX,worldAnchorZ)) {
+                                particleX+=leafEdgeOffsetX;
+                                particleZ+=leafEdgeOffsetZ;
+                                leafEdgeOffsetsApplied++;
+                            }
+                        }
+                    }
+                }
                 level.addParticle(liftedAccent ? GROUND_CANOPY_ACCENT_LIFTED_DUST
-                    : GROUND_CANOPY_ACCENT_DUST,x+.5D,accentY,z+.5D,
+                    : GROUND_CANOPY_ACCENT_DUST,particleX,accentY,particleZ,
                     velocityX,verticalSpeed,velocityZ);
                 groundCanopyAccentParticlesEmitted++;
                 if(VERIFY_GROUND_MESH_PROFILES && liftedAccent) {
@@ -3286,6 +3341,7 @@ public final class RiftClientState {
             // invalidations can repeat the same 32 distance/segment checks inside one rebuild interval.
             groundCanopyAccentLastAttemptTick=nextCanopyAccentAttemptTick(
                 gameTime,groundCanopyAccentLastAttemptTick,visited);
+            return leafEdgeOffsetsApplied;
         }
 
         private static double canopyAccentVerticalSpeed(boolean liftedAccent) {
@@ -3614,6 +3670,22 @@ public final class RiftClientState {
                 && Double.isNaN(canopyAccentLeafParticleY(70.0D,-1))
                 && Double.isNaN(canopyAccentLeafParticleY(70.0D,GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS+1))
                 && Double.isNaN(canopyAccentLeafParticleY(Double.MAX_VALUE,0));
+            double eastLeafEdgeX=canopyAccentLeafEdgeOffset(8.0D,0.0D,true);
+            double eastLeafEdgeZ=canopyAccentLeafEdgeOffset(8.0D,0.0D,false);
+            double diagonalLeafEdgeX=canopyAccentLeafEdgeOffset(3.0D,4.0D,true);
+            double diagonalLeafEdgeZ=canopyAccentLeafEdgeOffset(3.0D,4.0D,false);
+            boolean leafEdgeOffsetProfile=Double.isFinite(GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET)
+                && GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET>=.50D
+                && GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET<=.54D
+                && Math.abs(eastLeafEdgeX-.52D)<1.0E-9D && eastLeafEdgeZ==0.0D
+                && Math.abs(diagonalLeafEdgeX-.39D)<1.0E-9D
+                && Math.abs(diagonalLeafEdgeZ-.52D)<1.0E-9D
+                && canopyAccentLeafEdgeOffset(0.0D,0.0D,true)==0.0D
+                && canopyAccentLeafEdgeOffset(Double.NaN,1.0D,true)==0.0D
+                && canopyAccentLeafEdgeOffset(1.0D,Double.POSITIVE_INFINITY,false)==0.0D
+                && isCanopyAccentLeafEdgeTargetWithinRadius(48,0,0,0)
+                && !isCanopyAccentLeafEdgeTargetWithinRadius(49,0,0,0)
+                && !isCanopyAccentLeafEdgeTargetWithinRadius(34,34,0,0);
             boolean plantCollisionShapePrefilterProfile=
                 isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState())
                 && isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.TALL_GRASS.defaultBlockState())
@@ -3801,7 +3873,7 @@ public final class RiftClientState {
                 && leafTopMotionProfile
                 && particleDriftProfile && particleColorTransitionProfile
                 && foliageClearanceProfile && canopyAccentHeadroomProfile
-                && plantClearanceProfile && leafAccentClearanceProfile
+                && plantClearanceProfile && leafAccentClearanceProfile && leafEdgeOffsetProfile
                 && plantCollisionShapePrefilterProfile && vanillaDoublePlantProfile
                 && leafSurfaceScanProfile && heightmapTopNormalizationProfile
                 && Math.abs(plantTop-71.20D)<1.0E-9D
@@ -3874,6 +3946,9 @@ public final class RiftClientState {
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_CLEARANCE_PROFILE_VERIFIED extraOffset={} effectiveOffset={} directShape=true stackedClearCell=true basePlantOffset=0.4 bounded=true",
                 GROUND_CANOPY_ACCENT_LEAF_EXTRA_OFFSET,
                 GROUND_CANOPY_ACCENT_VERTICAL_OFFSET+GROUND_CANOPY_ACCENT_LEAF_EXTRA_OFFSET);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET_PROFILE_VERIFIED maxOffset={} dominantAxisCrossesBoundary=true cameraFacing=true loadedAirOnly=true radiusBounded=true",
+                GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_HEADROOM_POLICY_VERIFIED airOnlyOrLiftedBush=true leavesRejected=true plantsBounded=true fluidsRejected=true solidRejected=true ribbonStillAllowed=true");
             com.mojang.logging.LogUtils.getLogger().info(
@@ -4475,7 +4550,7 @@ public final class RiftClientState {
 
         private static GroundMesh buildSegments(
                 net.minecraft.client.multiplayer.ClientLevel level,int worldAnchorX,int worldAnchorZ,
-                int referenceY) {
+                int referenceY,Vec3 camera) {
             if(VERIFY_GROUND_MESH_PROFILES) {
                 if(!groundMeshProfileModeLogged) {
                     com.mojang.logging.LogUtils.getLogger().info(
@@ -4659,7 +4734,15 @@ public final class RiftClientState {
                 if(result.size()>armStart) activeArms++;
             }
             scanCanopyAccentNeighborSamples(level,result,worldAnchorX,worldAnchorZ,SURFACE_CURSOR);
-            emitCanopyAccentCandidates(level,result,worldAnchorX,worldAnchorZ);
+            int leafEdgeOffsetsApplied=emitCanopyAccentCandidates(
+                level,result,worldAnchorX,worldAnchorZ,camera);
+            if(VERIFY_GROUND_MESH_PROFILES && !canopyAccentLeafEdgeOffsetLogged
+                && leafEdgeOffsetsApplied>0) {
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_EDGE_CAMERA_OFFSET_APPLIED applied={} maxOffset={} cameraFacing=true loadedAirOnly=true radiusBounded=true",
+                    leafEdgeOffsetsApplied,GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET);
+                canopyAccentLeafEdgeOffsetLogged=true;
+            }
             if(VERIFY_GROUND_MESH_PROFILES && !canopyAccentBuildProfileLogged) {
                 com.mojang.logging.LogUtils.getLogger().info(
                     "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_BUDGET_VERIFIED candidates={} emitted={} candidateBudget={} budget={} loadedOnly=true radius=48 clientOnly=true plantOrLeafTop=true segmentBounded=true neighborScans={} neighborScanBudget={} fallbackScans={} fallbackHits={} diagonalHits={} neighborDuplicates={} neighborSamples={}",
@@ -5195,7 +5278,7 @@ public final class RiftClientState {
                     !cachedSegments.isEmpty())) {
                 boolean measureBuildTiming=shouldMeasureGroundMeshBuild(groundBuildTimingSamplesLogged);
                 long buildStartedNanos=measureBuildTiming?System.nanoTime():0L;
-                GroundMesh mesh=buildSegments(level,worldAnchorX,worldAnchorZ,surfaceReferenceY);
+                GroundMesh mesh=buildSegments(level,worldAnchorX,worldAnchorZ,surfaceReferenceY,camera);
                 if(measureBuildTiming) {
                     long buildElapsedNanos=System.nanoTime()-buildStartedNanos;
                     int timingSample=groundBuildTimingSamplesLogged++;
