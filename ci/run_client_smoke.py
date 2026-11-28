@@ -3419,7 +3419,7 @@ def capture_test_world():
                         return
                     camera_command=f"/tp @s {camera[0]:.1f} {camera[1]:.1f} {camera[2]:.1f} 135 17.5"
                     if not send_isolated_chat_command(
-                            camera_command,None,"position camera on the negative diagonal of the leaf fixture"):
+                            camera_command,None,"position camera on the +X/+Z side, looking back along the negative diagonal"):
                         terrain_capture_failed=True
                         return
                     refresh_commands=leaf_edge_fixture_camera_refresh_commands(camera)
@@ -3482,14 +3482,13 @@ def capture_test_world():
                         r"z=([-+0-9.eE]+) yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)"
                     )
                     camera_pose_matches=list(camera_pose_pattern.finditer(logs))
-                    camera_ready_matches=list(re.finditer(r"BF_CANOPY_LEAF_EDGE_CAMERA_READY",logs))
                     latest_camera_pose=camera_pose_matches[-1] if camera_pose_matches else None
-                    latest_camera_ready=camera_ready_matches[-1] if camera_ready_matches else None
+                    # Camera.getPosition() is the rendered eye, 1.62 blocks above the /tp feet.
+                    # RiftSkyRenderer logs only when the rendered pose changes, so verify the latest pose.
                     camera_pose_verified=(
-                        latest_camera_pose is not None and latest_camera_ready is not None
-                        and latest_camera_pose.start()>latest_camera_ready.start()
+                        latest_camera_pose is not None
                         and math.isclose(float(latest_camera_pose.group(1)),camera[0],rel_tol=0.0,abs_tol=0.15)
-                        and math.isclose(float(latest_camera_pose.group(2)),camera[1],rel_tol=0.0,abs_tol=0.15)
+                        and math.isclose(float(latest_camera_pose.group(2)),camera[1]+1.62,rel_tol=0.0,abs_tol=0.15)
                         and math.isclose(float(latest_camera_pose.group(3)),camera[2],rel_tol=0.0,abs_tol=0.15)
                         and math.isclose(float(latest_camera_pose.group(4)),135.0,rel_tol=0.0,abs_tol=1.0)
                         and math.isclose(float(latest_camera_pose.group(5)),17.5,rel_tol=0.0,abs_tol=1.0)
