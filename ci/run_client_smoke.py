@@ -5606,33 +5606,44 @@ def capture_test_world():
                     or "canopyAccentHorizontalVelocity(x,z,1,emissionEpoch,dimensionSalt)" not in camera_source
                     or "long dimensionSalt=canopyAccentDimensionSalt(level.dimension().location().toString());" not in camera_source
                     or "Math.floorDiv(gameTime,(long)GROUND_CANOPY_ACCENT_EMISSION_INTERVAL_TICKS)" not in camera_source
-                    or "private static double canopyAccentVerticalSpeed(boolean liftedPlantAccent)" not in camera_source
-                    or "return liftedPlantAccent ? GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED : GROUND_CANOPY_ACCENT_VERTICAL_SPEED;" not in camera_source
-                    or "double verticalSpeed=canopyAccentVerticalSpeed(liftedPlantAccent);" not in camera_source
+                    or "private static double canopyAccentVerticalSpeed(boolean liftedAccent)" not in camera_source
+                    or "return liftedAccent ? GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED : GROUND_CANOPY_ACCENT_VERTICAL_SPEED;" not in camera_source
+                    or "double verticalSpeed=canopyAccentVerticalSpeed(liftedAccent);" not in camera_source
                     or "velocityX,verticalSpeed,velocityZ" not in camera_source
                     or "&& liftedParticleVelocityBounded" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: bounded canopy accent particle profile was not verified",flush=True)
                 return False
             canopy_lifted_particle_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_PROFILE_VERIFIED "
-                "regularScale=1.75 liftedScale=1.95 adjacentPlantOnly=true samePalette=true cachedOptions=true budgetUnchanged=true"
+                "regularScale=1.75 liftedScale=1.95 leafTopOrAdjacentStacked=true samePalette=true cachedOptions=true budgetUnchanged=true"
             )
             if (canopy_lifted_particle_marker not in log_after
+                    or "GROUND_CANOPY_ACCENT_LEAF_TOP_MOTION_PROFILE_VERIFIED" not in camera_source
                     or "GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE=1.95F;" not in camera_source
                     or "GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE>=1.90F" not in camera_source
                     or "GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE<=2.00F" not in camera_source
                     or "GROUND_CANOPY_ACCENT_LIFTED_DUST=" not in camera_source
-                    or "boolean liftedPlantAccent=GROUND_CANOPY_ACCENT_ADJACENT_PLANT[i]" not in camera_source
-                    or "&& GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[i]>0;" not in camera_source
-                    or "liftedPlantAccent ? GROUND_CANOPY_ACCENT_LIFTED_DUST" not in camera_source
+                    or "boolean leafTopAccent=GROUND_CANOPY_ACCENT_LEAF_TOP[i];" not in camera_source
+                    or "isLiftedCanopyAccent(leafTopAccent," not in camera_source
+                    or "GROUND_CANOPY_ACCENT_ADJACENT_PLANT[i],GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[i]);" not in camera_source
+                    or "liftedAccent ? GROUND_CANOPY_ACCENT_LIFTED_DUST" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_LEAF_TOP[candidate]=true;" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_LEAF_TOP[candidate]=false;" not in camera_source
+                    or "GROUND_CANOPY_ACCENT_LEAF_TOP=new boolean[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];" not in camera_source
                     or "&& particleScaleBounded && liftedParticleScaleBounded && particleOffsetBounded" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: lifted bush accents did not use the bounded cached high-visibility option",flush=True)
                 return False
             canopy_lifted_motion_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_MOTION_PROFILE_VERIFIED "
-                "regularVerticalSpeed=0.003 liftedVerticalSpeed=0.006 adjacentPlantOnly=true bounded=true particleBudgetUnchanged=true"
+                "regularVerticalSpeed=0.003 liftedVerticalSpeed=0.006 leafTopOrAdjacentStacked=true bounded=true particleBudgetUnchanged=true"
+            )
+            leaf_top_motion_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_TOP_MOTION_PROFILE_VERIFIED "
+                "leafTopUsesLiftedDust=true leafTopUsesLiftedSpeed=true adjacentStackedUnchanged=true "
+                "regularGroundUnchanged=true invalidSkippedRejected=true bounded=true"
             )
             if (canopy_lifted_motion_marker not in log_after
+                    or leaf_top_motion_marker not in log_after
                     or "GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED=.006D;" not in camera_source
                     or "GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED>=.005D" not in camera_source
                     or "GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED<=.007D" not in camera_source):

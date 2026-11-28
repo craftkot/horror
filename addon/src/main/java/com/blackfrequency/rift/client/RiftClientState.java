@@ -898,12 +898,12 @@ public final class RiftClientState {
         private static final int GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS=2;
         // Lift canopy motes clear of the leaf billboard edge; the eight-particle emission budget stays unchanged.
         private static final float GROUND_CANOPY_ACCENT_PARTICLE_SCALE=1.75F;
-        // Lifted bush accents get a slightly stronger silhouette without increasing particle count.
+        // Leaf-top and lifted-bush accents get a stronger silhouette without increasing particle count.
         private static final float GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE=1.95F;
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_OFFSET=.40D;
         // Keep canopy accents close to the fissure instead of letting them drift above the foliage.
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_SPEED=.003D;
-        // Lifted bush motes rise twice as fast to remain readable above short foliage.
+        // Leaf-top and lifted-bush motes rise faster to remain readable above foliage.
         private static final double GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED=.006D;
         // Per-emission variation keeps lifted motes from tracing identical vertical paths.
         private static final double GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED_MIN=.0045D;
@@ -927,6 +927,8 @@ public final class RiftClientState {
         private static final double[] GROUND_CANOPY_ACCENT_GROUND_Y=new double[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final int[] GROUND_CANOPY_ACCENT_SKIPPED_PLANTS=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final boolean[] GROUND_CANOPY_ACCENT_ADJACENT_PLANT=new boolean[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
+        // Preserve the source of each canopy mote so exposed leaf-top accents receive the lifted profile too.
+        private static final boolean[] GROUND_CANOPY_ACCENT_LEAF_TOP=new boolean[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final int[] GROUND_CANOPY_ACCENT_LIFTED_LOGGED_X=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         private static final int[] GROUND_CANOPY_ACCENT_LIFTED_LOGGED_Z=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
         // Vanilla's transition dust animates each mote from a bright violet core to a deep purple edge.
@@ -936,7 +938,7 @@ public final class RiftClientState {
         private static final DustColorTransitionOptions GROUND_CANOPY_ACCENT_DUST=
             new DustColorTransitionOptions(GROUND_CANOPY_ACCENT_START_COLOR,GROUND_CANOPY_ACCENT_END_COLOR,
                 GROUND_CANOPY_ACCENT_PARTICLE_SCALE);
-        // Reuse a second cached option only for motes lifted above non-colliding bush plants.
+        // Reuse a second cached option for leaf-top and lifted-bush motes.
         private static final DustColorTransitionOptions GROUND_CANOPY_ACCENT_LIFTED_DUST=
             new DustColorTransitionOptions(GROUND_CANOPY_ACCENT_START_COLOR,GROUND_CANOPY_ACCENT_END_COLOR,
                 GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE);
@@ -3243,17 +3245,17 @@ public final class RiftClientState {
                 double velocityX=canopyAccentHorizontalVelocity(x,z,0,emissionEpoch,dimensionSalt);
                 double velocityZ=canopyAccentHorizontalVelocity(x,z,1,emissionEpoch,dimensionSalt);
                 if(!canopyAccentHorizontalDriftWithinBounds(velocityX,velocityZ)) continue;
-                boolean liftedPlantAccent=GROUND_CANOPY_ACCENT_ADJACENT_PLANT[i]
-                    && GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[i]>0;
-                double verticalSpeed=canopyAccentVerticalSpeed(liftedPlantAccent);
-                if(liftedPlantAccent)
+                boolean leafTopAccent=GROUND_CANOPY_ACCENT_LEAF_TOP[i];
+                boolean liftedAccent=isLiftedCanopyAccent(leafTopAccent,
+                    GROUND_CANOPY_ACCENT_ADJACENT_PLANT[i],GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[i]);
+                double verticalSpeed=canopyAccentVerticalSpeed(liftedAccent);
+                if(liftedAccent)
                     verticalSpeed=canopyAccentLiftedVerticalSpeed(x,z,emissionEpoch,dimensionSalt);
-                level.addParticle(liftedPlantAccent ? GROUND_CANOPY_ACCENT_LIFTED_DUST
+                level.addParticle(liftedAccent ? GROUND_CANOPY_ACCENT_LIFTED_DUST
                     : GROUND_CANOPY_ACCENT_DUST,x+.5D,accentY,z+.5D,
                     velocityX,verticalSpeed,velocityZ);
                 groundCanopyAccentParticlesEmitted++;
-                if(VERIFY_GROUND_MESH_PROFILES && GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[i]>0
-                    && GROUND_CANOPY_ACCENT_ADJACENT_PLANT[i]) {
+                if(VERIFY_GROUND_MESH_PROFILES && liftedAccent) {
                     boolean alreadyLogged=false;
                     for(int logged=0;logged<groundCanopyAccentLiftedLoggedCount;logged++) {
                         if(GROUND_CANOPY_ACCENT_LIFTED_LOGGED_X[logged]==x
@@ -3266,9 +3268,15 @@ public final class RiftClientState {
                         int logged=groundCanopyAccentLiftedLoggedCount++;
                         GROUND_CANOPY_ACCENT_LIFTED_LOGGED_X[logged]=x;
                         GROUND_CANOPY_ACCENT_LIFTED_LOGGED_Z[logged]=z;
-                        com.mojang.logging.LogUtils.getLogger().info(
-                            "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_EMITTED x={} y={} z={} skippedPlants={} source=adjacent loadedOnly=true radius=48 clientOnly=true",
-                            x,accentY,z,GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[i]);
+                        if(leafTopAccent) {
+                            com.mojang.logging.LogUtils.getLogger().info(
+                                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_TOP_PARTICLE_EMITTED x={} y={} z={} skippedPlants={} scale={} loadedOnly=true radius=48 clientOnly=true",
+                                x,accentY,z,GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[i],GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE);
+                        } else {
+                            com.mojang.logging.LogUtils.getLogger().info(
+                                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_EMITTED x={} y={} z={} skippedPlants={} source=adjacent loadedOnly=true radius=48 clientOnly=true",
+                                x,accentY,z,GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[i]);
+                        }
                     }
                 }
             }
@@ -3280,8 +3288,8 @@ public final class RiftClientState {
                 gameTime,groundCanopyAccentLastAttemptTick,visited);
         }
 
-        private static double canopyAccentVerticalSpeed(boolean liftedPlantAccent) {
-            return liftedPlantAccent ? GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED : GROUND_CANOPY_ACCENT_VERTICAL_SPEED;
+        private static double canopyAccentVerticalSpeed(boolean liftedAccent) {
+            return liftedAccent ? GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED : GROUND_CANOPY_ACCENT_VERTICAL_SPEED;
         }
 
         // Stable per-column/per-dimension/per-cadence variation; no Random or per-particle allocation.
@@ -3344,6 +3352,12 @@ public final class RiftClientState {
                 && color.x>=0.0F && color.x<=1.0F
                 && color.y>=0.0F && color.y<=1.0F
                 && color.z>=0.0F && color.z<=1.0F;
+        }
+
+        private static boolean isLiftedCanopyAccent(boolean leafTopAccent,
+                boolean adjacentPlantAccent,int skippedPlants) {
+            if(skippedPlants<0 || skippedPlants>GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS) return false;
+            return leafTopAccent || (adjacentPlantAccent && skippedPlants>0);
         }
 
         private static void verifyCanopyAccentProfile() {
@@ -3473,6 +3487,14 @@ public final class RiftClientState {
                 && regularVerticalSpeed==GROUND_CANOPY_ACCENT_VERTICAL_SPEED
                 && liftedVerticalSpeed==GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED
                 && liftedVerticalSpeed>regularVerticalSpeed;
+            boolean leafTopMotionProfile=
+                isLiftedCanopyAccent(true,false,0)
+                && isLiftedCanopyAccent(true,false,1)
+                && !isLiftedCanopyAccent(false,false,0)
+                && !isLiftedCanopyAccent(false,true,0)
+                && isLiftedCanopyAccent(false,true,1)
+                && !isLiftedCanopyAccent(true,false,-1)
+                && !isLiftedCanopyAccent(true,false,GROUND_CANOPY_ACCENT_MAX_SKIPPED_PLANTS+1);
             long emissionEpoch=10L;
             long firstDimensionSalt=canopyAccentDimensionSalt("minecraft:overworld");
             long secondDimensionSalt=canopyAccentDimensionSalt("minecraft:the_nether");
@@ -3758,6 +3780,7 @@ public final class RiftClientState {
                 && candidateDedupProfile && heightmapPrefilterProfile
                 && particleScaleBounded && liftedParticleScaleBounded && particleOffsetBounded
                 && particleVelocityBounded && liftedParticleVelocityBounded && liftedMotionVariationProfile
+                && leafTopMotionProfile
                 && particleDriftProfile && particleColorTransitionProfile
                 && foliageClearanceProfile && canopyAccentHeadroomProfile
                 && plantClearanceProfile && leafAccentClearanceProfile
@@ -3806,11 +3829,13 @@ public final class RiftClientState {
                 GROUND_CANOPY_ACCENT_PARTICLE_SCALE,GROUND_CANOPY_ACCENT_VERTICAL_OFFSET,
                 GROUND_CANOPY_ACCENT_VERTICAL_SPEED);
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_PROFILE_VERIFIED regularScale={} liftedScale={} adjacentPlantOnly=true samePalette=true cachedOptions=true budgetUnchanged=true",
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_PROFILE_VERIFIED regularScale={} liftedScale={} leafTopOrAdjacentStacked=true samePalette=true cachedOptions=true budgetUnchanged=true",
                 GROUND_CANOPY_ACCENT_PARTICLE_SCALE,GROUND_CANOPY_ACCENT_LIFTED_PARTICLE_SCALE);
             com.mojang.logging.LogUtils.getLogger().info(
-                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_MOTION_PROFILE_VERIFIED regularVerticalSpeed={} liftedVerticalSpeed={} adjacentPlantOnly=true bounded=true particleBudgetUnchanged=true",
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_MOTION_PROFILE_VERIFIED regularVerticalSpeed={} liftedVerticalSpeed={} leafTopOrAdjacentStacked=true bounded=true particleBudgetUnchanged=true",
                 regularVerticalSpeed,liftedVerticalSpeed);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_TOP_MOTION_PROFILE_VERIFIED leafTopUsesLiftedDust=true leafTopUsesLiftedSpeed=true adjacentStackedUnchanged=true regularGroundUnchanged=true invalidSkippedRejected=true bounded=true");
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_MOTION_VARIATION_PROFILE_VERIFIED min={} max={} coordinateStable=true epochVaries=true dimensionScoped=true extremeSafe=true bounded=true",
                 GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED_MIN,GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED_MAX);
@@ -4082,6 +4107,7 @@ public final class RiftClientState {
             GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[candidate]=skippedPlants;
             GROUND_CANOPY_ACCENT_ARM[candidate]=arm;
             GROUND_CANOPY_ACCENT_ADJACENT_PLANT[candidate]=false;
+            GROUND_CANOPY_ACCENT_LEAF_TOP[candidate]=true;
             if(VERIFY_GROUND_MESH_PROFILES) {
                 groundCanopyAccentQueueAccepted++;
                 if(skippedPlants>0) groundCanopyAccentQueuePlantLifted++;
@@ -4126,6 +4152,7 @@ public final class RiftClientState {
             GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[candidate]=skippedPlants;
             GROUND_CANOPY_ACCENT_ARM[candidate]=arm;
             GROUND_CANOPY_ACCENT_ADJACENT_PLANT[candidate]=false;
+            GROUND_CANOPY_ACCENT_LEAF_TOP[candidate]=false;
             if(VERIFY_GROUND_MESH_PROFILES) {
                 groundCanopyAccentQueueAccepted++;
                 if(skippedPlants>0) groundCanopyAccentQueuePlantLifted++;
