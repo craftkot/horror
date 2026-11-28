@@ -903,6 +903,9 @@ public final class RiftClientState {
         private static final double GROUND_CANOPY_ACCENT_VERTICAL_SPEED=.003D;
         // Lifted bush motes rise twice as fast to remain readable above short foliage.
         private static final double GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED=.006D;
+        // Per-emission variation keeps lifted motes from tracing identical vertical paths.
+        private static final double GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED_MIN=.0045D;
+        private static final double GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED_MAX=.0085D;
         // A tiny coordinate-stable drift keeps motes moving without random state or per-particle allocations.
         private static final double GROUND_CANOPY_ACCENT_HORIZONTAL_SPEED=.0045D;
         private static final int[] GROUND_CANOPY_ACCENT_X=new int[GROUND_CANOPY_ACCENT_CANDIDATE_BUDGET];
@@ -3231,6 +3234,8 @@ public final class RiftClientState {
                 boolean liftedPlantAccent=GROUND_CANOPY_ACCENT_ADJACENT_PLANT[i]
                     && GROUND_CANOPY_ACCENT_SKIPPED_PLANTS[i]>0;
                 double verticalSpeed=canopyAccentVerticalSpeed(liftedPlantAccent);
+                if(liftedPlantAccent)
+                    verticalSpeed=canopyAccentLiftedVerticalSpeed(x,z,emissionEpoch,dimensionSalt);
                 level.addParticle(liftedPlantAccent ? GROUND_CANOPY_ACCENT_LIFTED_DUST
                     : GROUND_CANOPY_ACCENT_DUST,x+.5D,accentY,z+.5D,
                     velocityX,verticalSpeed,velocityZ);
@@ -3265,6 +3270,21 @@ public final class RiftClientState {
 
         private static double canopyAccentVerticalSpeed(boolean liftedPlantAccent) {
             return liftedPlantAccent ? GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED : GROUND_CANOPY_ACCENT_VERTICAL_SPEED;
+        }
+
+        // Stable per-column/per-dimension/per-cadence variation; no Random or per-particle allocation.
+        private static double canopyAccentLiftedVerticalSpeed(int blockX,int blockZ,long emissionEpoch,long dimensionSalt) {
+            long hash=(((long)blockX)<<32) ^ (blockZ&0xffffffffL);
+            hash^=dimensionSalt;
+            hash^=emissionEpoch*0xD1B54A32D192ED03L;
+            hash+=0x94D049BB133111EBL;
+            hash=(hash^(hash>>>30))*0xBF58476D1CE4E5B9L;
+            hash=(hash^(hash>>>27))*0x94D049BB133111EBL;
+            hash^=hash>>>31;
+            double unit=(hash>>>11)*0x1.0p-53D;
+            return GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED_MIN
+                +unit*(GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED_MAX
+                    -GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED_MIN);
         }
 
         private static double canopyAccentParticleY(int surfaceY,double shapeHeight) {
@@ -3449,6 +3469,21 @@ public final class RiftClientState {
                 && firstDimensionSalt!=secondDimensionSalt
                 && canopyAccentDimensionSalt(null)==0L
                 && canopyAccentDimensionSalt("")==0L;
+            double liftedPulse=canopyAccentLiftedVerticalSpeed(516,515,emissionEpoch,firstDimensionSalt);
+            double repeatedLiftedPulse=canopyAccentLiftedVerticalSpeed(516,515,emissionEpoch,firstDimensionSalt);
+            double nextEpochLiftedPulse=canopyAccentLiftedVerticalSpeed(516,515,emissionEpoch+1L,firstDimensionSalt);
+            double otherDimensionLiftedPulse=canopyAccentLiftedVerticalSpeed(516,515,emissionEpoch,secondDimensionSalt);
+            double extremeLiftedPulse=canopyAccentLiftedVerticalSpeed(
+                Integer.MIN_VALUE,Integer.MAX_VALUE,Long.MIN_VALUE,Long.MIN_VALUE);
+            boolean liftedMotionVariationProfile=Double.isFinite(liftedPulse)
+                && liftedPulse>=GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED_MIN
+                && liftedPulse<=GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED_MAX
+                && liftedPulse==repeatedLiftedPulse
+                && Math.abs(liftedPulse-nextEpochLiftedPulse)>1.0E-9D
+                && Math.abs(liftedPulse-otherDimensionLiftedPulse)>1.0E-9D
+                && Double.isFinite(extremeLiftedPulse)
+                && extremeLiftedPulse>=GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED_MIN
+                && extremeLiftedPulse<=GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED_MAX;
             double driftX=canopyAccentHorizontalVelocity(516,515,0,emissionEpoch,firstDimensionSalt);
             double driftZ=canopyAccentHorizontalVelocity(516,515,1,emissionEpoch,firstDimensionSalt);
             double nextDriftX=canopyAccentHorizontalVelocity(516,515,0,emissionEpoch+1L,firstDimensionSalt);
@@ -3694,7 +3729,7 @@ public final class RiftClientState {
                 && neighborScanBudgetProfile && neighborScanPassProfile && neighborColumnDedupProfile
                 && candidateDedupProfile && heightmapPrefilterProfile
                 && particleScaleBounded && liftedParticleScaleBounded && particleOffsetBounded
-                && particleVelocityBounded && liftedParticleVelocityBounded
+                && particleVelocityBounded && liftedParticleVelocityBounded && liftedMotionVariationProfile
                 && particleDriftProfile && particleColorTransitionProfile
                 && foliageClearanceProfile && canopyAccentHeadroomProfile
                 && plantClearanceProfile && plantCollisionShapePrefilterProfile && vanillaDoublePlantProfile
@@ -3747,6 +3782,9 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_MOTION_PROFILE_VERIFIED regularVerticalSpeed={} liftedVerticalSpeed={} adjacentPlantOnly=true bounded=true particleBudgetUnchanged=true",
                 regularVerticalSpeed,liftedVerticalSpeed);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LIFTED_MOTION_VARIATION_PROFILE_VERIFIED min={} max={} coordinateStable=true epochVaries=true dimensionScoped=true extremeSafe=true bounded=true",
+                GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED_MIN,GROUND_CANOPY_ACCENT_LIFTED_VERTICAL_SPEED_MAX);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DIMENSION_SALT_PROFILE_VERIFIED algorithm=fnv1a64 stable=true distinct=true emptyFallback=true");
             com.mojang.logging.LogUtils.getLogger().info(
