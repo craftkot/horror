@@ -4,6 +4,7 @@ import minecraft_launcher_lib
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 MC=ROOT/"client"
 MOUSE_SENSITIVITY=0.6
+MAX_ISOLATED_CHAT_COMMAND_LENGTH=256
 CAMERA_ROTATION_LOG_THRESHOLD_DEGREES=0.25
 CAMERA_INPUT_PROBE_PIXELS=4
 MIN_GROUND_MESH_SEGMENTS=8
@@ -33,8 +34,10 @@ if DEFERRED_PLAYER_TRAVEL_DISTANCE<=DEFERRED_RESTORE_RADIUS+DEFERRED_SIMULATION_
     raise RuntimeError("Deferred probe travel must clear the fracture and simulation-distance halo")
 DEFERRED_SPAWN_ACK_RE=r"Set (?:the )?world spawn(?: point)? to "
 def isolated_chat_command_body(command):
-    # Open command chat with the slash key itself; do not race the chat-screen transition.
-    if not isinstance(command,str) or not command.startswith("/") or len(command)<2:
+    # Minecraft's client chat edit box caps the full command, including '/', at 256 chars.
+    # Reject overlong input instead of silently pasting a truncated command to the server.
+    if (not isinstance(command,str) or not command.startswith("/")
+            or len(command)<2 or len(command)>MAX_ISOLATED_CHAT_COMMAND_LENGTH):
         return None
     return command[1:]
 
@@ -141,20 +144,27 @@ def leaf_edge_fixture_commands(x,y,z,anchor_x,anchor_z):
          f"run setblock {x} {y} {z} minecraft:oak_leaves[persistent=true]"),
         (f"/execute unless block {x} {y+1} {z} minecraft:air "
          f"run setblock {x} {y+1} {z} minecraft:air"),
-        (f"/fill {primary[0]} {primary[1]} {primary[2]} "
-         f"{first_fallback[0]} {first_fallback[1]} {first_fallback[2]} minecraft:barrier replace"),
-        (f"/setblock {alternate[0]} {alternate[1]} {alternate[2]} minecraft:air replace"),
+        (f"/execute unless block {primary[0]} {primary[1]} {primary[2]} minecraft:barrier "
+         f"run setblock {primary[0]} {primary[1]} {primary[2]} minecraft:barrier"),
+        (f"/execute unless block {first_fallback[0]} {first_fallback[1]} {first_fallback[2]} minecraft:barrier "
+         f"run setblock {first_fallback[0]} {first_fallback[1]} {first_fallback[2]} minecraft:barrier"),
+        (f"/execute unless block {alternate[0]} {alternate[1]} {alternate[2]} minecraft:air "
+         f"run setblock {alternate[0]} {alternate[1]} {alternate[2]} minecraft:air"),
     )
-    marker=f"BF_CANOPY_LEAF_EDGE_FIXTURE_VERIFIED x={x} y={y} z={z}"
-    verification=(
-        f"/execute if block {support[0]} {support[1]} {support[2]} minecraft:grass_block "
-        f"if block {x} {y} {z} minecraft:oak_leaves[persistent=true] "
-        f"if block {x} {y+1} {z} minecraft:air "
-        f"if block {primary[0]} {primary[1]} {primary[2]} minecraft:barrier "
-        f"if block {first_fallback[0]} {first_fallback[1]} {first_fallback[2]} minecraft:barrier "
-        f"if block {alternate[0]} {alternate[1]} {alternate[2]} minecraft:air run say {marker}"
+    checks=(
+        (f"/execute if block {support[0]} {support[1]} {support[2]} minecraft:grass_block "
+         f"if block {x} {y} {z} minecraft:oak_leaves[persistent=true] "
+         f"if block {x} {y+1} {z} minecraft:air run say BF_CANOPY_LEAF_EDGE_BASE_VERIFIED",
+         r"BF_CANOPY_LEAF_EDGE_BASE_VERIFIED","verify leaf support, candidate, and headroom"),
+        (f"/execute if block {primary[0]} {primary[1]} {primary[2]} minecraft:barrier "
+         f"if block {first_fallback[0]} {first_fallback[1]} {first_fallback[2]} minecraft:barrier "
+         f"run say BF_CANOPY_LEAF_EDGE_BLOCKED_CELLS_VERIFIED",
+         r"BF_CANOPY_LEAF_EDGE_BLOCKED_CELLS_VERIFIED","verify blocked primary and first fallback cells"),
+        (f"/execute if block {alternate[0]} {alternate[1]} {alternate[2]} minecraft:air "
+         f"run say BF_CANOPY_LEAF_EDGE_ALTERNATE_AIR_VERIFIED",
+         r"BF_CANOPY_LEAF_EDGE_ALTERNATE_AIR_VERIFIED","verify clear alternate fallback cell"),
     )
-    return mutations,verification,marker,positions
+    return mutations,checks,positions
 
 
 def verify_leaf_edge_fixture_command_profile():
@@ -170,13 +180,26 @@ def verify_leaf_edge_fixture_command_profile():
             or leaf_edge_fixture_positions(570,74,511,512,512) is not None):
         raise RuntimeError("BLACK FREQUENCY diagonal leaf-edge fixture bounds regression")
     commands=leaf_edge_fixture_commands(514,74,511,512,512)
-    if (commands is None or len(commands[0])!=5
-            or "minecraft:barrier" not in commands[0][3]
-            or "minecraft:air" not in commands[0][4]
-            or "minecraft:oak_leaves[persistent=true]" not in commands[0][1]
-            or "BF_CANOPY_LEAF_EDGE_FIXTURE_VERIFIED x=514 y=74 z=511" not in commands[1]):
+    if commands is None:
         raise RuntimeError("BLACK FREQUENCY diagonal leaf-edge fixture command regression")
-    print("CI_PROFILE: diagonal leaf-edge fixture cells verified",
+    mutations,checks,returned_positions=commands
+    all_commands=mutations+tuple(check[0] for check in checks)
+    if (returned_positions!=positions or len(mutations)!=6 or len(checks)!=3
+            or any(not command.startswith("/") or len(command)>MAX_ISOLATED_CHAT_COMMAND_LENGTH
+                   for command in all_commands)
+            or "minecraft:barrier" not in mutations[3]
+            or "minecraft:barrier" not in mutations[4]
+            or "execute unless block" not in mutations[5]
+            or "minecraft:air" not in mutations[5]
+            or "minecraft:oak_leaves[persistent=true]" not in mutations[1]
+            or any(confirmation not in command for command,confirmation,_ in checks)
+            or not any("BF_CANOPY_LEAF_EDGE_ALTERNATE_AIR_VERIFIED" in command for command,_,_ in checks)):
+        raise RuntimeError("BLACK FREQUENCY diagonal leaf-edge fixture command regression")
+    if (isolated_chat_command_body("/"+"x"*(MAX_ISOLATED_CHAT_COMMAND_LENGTH-1)) is None
+            or isolated_chat_command_body("/"+"x"*MAX_ISOLATED_CHAT_COMMAND_LENGTH) is not None):
+        raise RuntimeError("BLACK FREQUENCY Minecraft chat command length boundary regression")
+    print("CI_PROFILE: diagonal leaf-edge fixture cells and chat-safe verification commands verified",
+          "mutations=6","checks=3","maxCommandLength=256",
           "primary=513,75,510","firstFallback=513,75,511",
           "alternate=514,75,510","loadedChunkOnly=true","radius=48",flush=True)
 
@@ -3347,21 +3370,23 @@ def capture_test_world():
                         print("WORLD_CAPTURE_FAIL: deterministic alternate leaf-edge fixture escaped loaded-chunk or radius bounds",
                               {"anchor":(anchor_x,anchor_z),"fixture":canopy_fixture_position},flush=True)
                         return
-                    fixture_mutations,fixture_check,fixture_marker,fixture_positions=fixture_plan
+                    fixture_mutations,fixture_checks,fixture_positions=fixture_plan
                     for mutation,description in zip(fixture_mutations,(
                             "prepare leaf-edge support","place persistent leaf candidate",
-                            "clear leaf headroom","block primary and first fallback cells",
-                            "clear alternate fallback cell")):
+                            "clear leaf headroom","block primary fallback cell",
+                            "block first fallback cell","clear alternate fallback cell")):
                         if not send_isolated_chat_command(mutation,None,description):
                             terrain_capture_failed=True
                             print("WORLD_CAPTURE_FAIL: could not submit deterministic leaf-edge fixture mutation",
                                   description,flush=True)
                             return
-                    if not send_isolated_chat_command(
-                            fixture_check,r"BF_CANOPY_LEAF_EDGE_FIXTURE_VERIFIED",
-                            "verify diagonal leaf-edge fixture",timeout=8.0):
-                        terrain_capture_failed=True
-                        return
+                    for check,confirmation,description in fixture_checks:
+                        if not send_isolated_chat_command(
+                                check,confirmation,description,timeout=8.0):
+                            terrain_capture_failed=True
+                            print("WORLD_CAPTURE_FAIL: deterministic leaf-edge fixture cell verification failed",
+                                  description,flush=True)
+                            return
                     primary,first_fallback,alternate,camera=fixture_positions
                     if not send_isolated_chat_command(
                             "/gamemode spectator @s",None,"enter spectator for camera-facing leaf-edge probe"):
