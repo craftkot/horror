@@ -3831,12 +3831,12 @@ public final class RiftClientState {
             boolean leafEdgeAlternateCellProfile=
                 diagonalFallbackAxis==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_X
                 && diagonalAlternateAxis==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_Z
-                && diagonalPrimaryCellX!=diagonalFallbackCellX
-                && diagonalPrimaryCellZ!=diagonalFallbackCellZ
-                && diagonalFallbackCellX!=diagonalAlternateCellX
-                && diagonalFallbackCellZ!=diagonalAlternateCellZ
-                && diagonalPrimaryCellX!=diagonalAlternateCellX
-                && diagonalPrimaryCellZ!=diagonalAlternateCellZ;
+                && (diagonalPrimaryCellX!=diagonalFallbackCellX
+                    || diagonalPrimaryCellZ!=diagonalFallbackCellZ)
+                && (diagonalFallbackCellX!=diagonalAlternateCellX
+                    || diagonalFallbackCellZ!=diagonalAlternateCellZ)
+                && (diagonalPrimaryCellX!=diagonalAlternateCellX
+                    || diagonalPrimaryCellZ!=diagonalAlternateCellZ);
             boolean plantCollisionShapePrefilterProfile=
                 isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState())
                 && isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.TALL_GRASS.defaultBlockState())

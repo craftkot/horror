@@ -3401,13 +3401,17 @@ def capture_test_world():
                         r"alternateTargetX=(-?\d+) alternateTargetY=(-?\d+) alternateTargetZ=(-?\d+) "
                         r"primarySafe=false firstFallbackSafe=false alternateSafe=true loadedOnly=true radius=48"
                     )
-                    alternate_match=next((match for match in reversed(list(re.finditer(alternate_pattern,logs)))
-                        if (int(match.group(1))==fixture_x and int(match.group(2))==fixture_z
-                            and tuple(map(int,match.groups()[4:7]))==primary
-                            and tuple(map(int,match.groups()[7:10]))==first_fallback
-                            and tuple(map(int,match.groups()[10:13]))==alternate
-                            and math.isclose(float(match.group(3)),-8.0,rel_tol=0.0,abs_tol=0.15)
-                            and math.isclose(float(match.group(4)),-8.0,rel_tol=0.0,abs_tol=0.15)),None)
+                    alternate_match=None
+                    for candidate_match in reversed(list(re.finditer(alternate_pattern,logs))):
+                        if (int(candidate_match.group(1))==fixture_x
+                                and int(candidate_match.group(2))==fixture_z
+                                and tuple(map(int,candidate_match.groups()[4:7]))==primary
+                                and tuple(map(int,candidate_match.groups()[7:10]))==first_fallback
+                                and tuple(map(int,candidate_match.groups()[10:13]))==alternate
+                                and math.isclose(float(candidate_match.group(3)),-8.0,rel_tol=0.0,abs_tol=0.15)
+                                and math.isclose(float(candidate_match.group(4)),-8.0,rel_tol=0.0,abs_tol=0.15)):
+                            alternate_match=candidate_match
+                            break
                     camera_pose_pattern=re.compile(
                         r"BLACK_FREQUENCY_TEST CLIENT_CAMERA_POSE x=([-+0-9.eE]+) y=([-+0-9.eE]+) "
                         r"z=([-+0-9.eE]+) yaw=([-+0-9.eE]+) pitch=([-+0-9.eE]+)"
