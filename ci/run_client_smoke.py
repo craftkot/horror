@@ -440,9 +440,10 @@ def verify_deferred_restore_chunk_bounds_profile():
             or 'print("WORLD_CAPTURE: submitted",description,flush=True)' not in isolated_command_body
             or "for attempt in range(2 if required else 1)" not in isolated_command_body
             or "command acknowledgement delayed; retrying" not in isolated_command_body
-            or "isolated_chat_command_body(command)" not in isolated_command_body
+            or "isolated_chat_input_payload(command)" not in isolated_command_body
+            or "chat_key,clipboard_text=input_payload" not in isolated_command_body
             or 'key("Escape",focus=False)' not in isolated_command_body
-            or 'key("slash",focus=False)' not in isolated_command_body
+            or "opened=key(chat_key,focus=False)" not in isolated_command_body
             or "time.sleep(1.75)" not in isolated_command_body
              or '["xclip","-selection","clipboard","-loops","1","-i"]' not in isolated_command_body
              or 'key("ctrl+v",focus=False)' not in isolated_command_body
