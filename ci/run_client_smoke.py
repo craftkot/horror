@@ -3070,8 +3070,10 @@ def capture_test_world():
                     r"BLACK_FREQUENCY_TEST PLAYER_BEACON_SAFE_TELEPORT x=(-?\d+) y=(-?\d+) z=(-?\d+) support=solid fallDistance=0\.0",
                     logs)
                 if os.environ.get("BF_ISOLATED_TEST")=="1":
+                    # The cull-complete marker is printed by this harness, not latest.log.
+                    # Gate on the verified probe state so the fixture is seeded after camera return.
                     if (not canopy_fixture_seeded and marker and safe_pad
-                            and "WORLD_CAPTURE: live vertical cull probe completed before terrain camera sweep and packet expiry" in logs):
+                            and vertical_cull_probe_verified):
                         anchor_match=FINALE_ANCHOR_RE.search(logs)
                         first_edit=FIRST_BLOCK_REMOVED_RE.search(logs)
                         if anchor_match and first_edit:
