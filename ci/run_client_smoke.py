@@ -2349,6 +2349,28 @@ def capture_test_world():
                      and metrics["particlePixels"]>=8 and metrics["particleTiles"]>=1)
         return visible_mesh and (distributed_dust or edge_accent)
 
+    def can_start_sky_capture_after_ground(terrain_shot,sky_capture_attempted,logs):
+        # The sky sweep blocks the capture loop for ~40s and can reload resources.
+        # Never let it pre-empt the player-visible ground fissure frame.
+        return (terrain_shot and not sky_capture_attempted
+                and "BLACK_FREQUENCY_RENDER_ACTIVE" in logs
+                and "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in logs
+                and "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" in logs
+                and "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" not in logs)
+
+    _sky_capture_gate_sample = "\n".join((
+        "BLACK_FREQUENCY_RENDER_ACTIVE",
+        "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED",
+        "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER",
+    ))
+    if (can_start_sky_capture_after_ground(False,False,_sky_capture_gate_sample)
+            or can_start_sky_capture_after_ground(True,True,_sky_capture_gate_sample)
+            or not can_start_sky_capture_after_ground(True,False,_sky_capture_gate_sample)
+            or can_start_sky_capture_after_ground(True,False,
+                _sky_capture_gate_sample+"\\nBLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION")):
+        raise RuntimeError("BLACK FREQUENCY sky capture must wait for the ground fissure frame")
+    print("WORLD_CAPTURE: blocking sky sweep is gated behind the player-visible ground fissure frame",flush=True)
+
     _ground_visibility_distributed_dust_no_accent = {
         "dustPixels":96, "dustTiles":2,
         "accentPixels":0, "accentTiles":0,
@@ -3437,13 +3459,8 @@ def capture_test_world():
                 return False
             def capture_sky_before_beacon():
                 nonlocal sky_shot,sky_capture_attempted
-                if sky_capture_attempted:
-                    return
                 current=latest.read_text(encoding="utf-8",errors="replace") if latest.exists() else ""
-                if not ("BLACK_FREQUENCY_RENDER_ACTIVE" in current
-                        and "BLACK_FREQUENCY_TEST FIRST_BLOCK_REMOVED" in current
-                        and "BLACK_FREQUENCY_TEST BEACON_READY_FOR_PLAYER" in current
-                        and "BLACK_FREQUENCY_TEST PLAYER_BEACON_INTERACTION" not in current):
+                if not can_start_sky_capture_after_ground(terrain_shot,sky_capture_attempted,current):
                     return
                 # F3+T can pause the integrated server during resource reload. The
                 # live vertical-cull probe must finish before any sky capture/reload
