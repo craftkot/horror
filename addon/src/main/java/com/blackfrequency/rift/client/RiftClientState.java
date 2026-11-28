@@ -986,6 +986,7 @@ public final class RiftClientState {
         private static boolean canopyAccentBuildProfileLogged;
         private static boolean canopyAccentEmissionLogged;
         private static boolean canopyAccentLeafEdgeOffsetLogged;
+        private static boolean canopyAccentLeafEdgeFallbackRuntimeLogged;
         private static boolean sampleCacheReuseLogged;
         private static boolean surfaceSearchProfileLogged;
         private static net.minecraft.client.multiplayer.ClientLevel cachedLevel;
@@ -3112,6 +3113,15 @@ public final class RiftClientState {
                 : CANOPY_ACCENT_LEAF_EDGE_FALLBACK_Z;
         }
 
+        // If the minor camera-facing side is blocked, try the other axis once; never reverse either sign.
+        private static int canopyAccentLeafEdgeAlternateFallbackAxis(int fallbackAxis) {
+            if(fallbackAxis==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_X)
+                return CANOPY_ACCENT_LEAF_EDGE_FALLBACK_Z;
+            if(fallbackAxis==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_Z)
+                return CANOPY_ACCENT_LEAF_EDGE_FALLBACK_X;
+            return CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK;
+        }
+
         private static boolean isCanopyAccentLeafEdgeTargetWithinRadius(
                 int targetX,int targetZ,int anchorX,int anchorZ) {
             long dx=(long)targetX-anchorX,dz=(long)targetZ-anchorZ;
@@ -3295,6 +3305,9 @@ public final class RiftClientState {
             if(orderedCount<=0) return 0;
             int visited=0;
             int leafEdgeOffsetsApplied=0;
+            int leafEdgeFallbackAttempts=0;
+            int leafEdgeAlternateAttempts=0;
+            int leafEdgeFallbacksApplied=0;
             for(int offset=0;offset<orderedCount
                 && groundCanopyAccentParticlesEmitted<GROUND_CANOPY_ACCENT_PARTICLE_BUDGET;offset++) {
                 int i=GROUND_CANOPY_ACCENT_SPATIAL_ORDER[offset];
@@ -3330,26 +3343,44 @@ public final class RiftClientState {
                         boolean edgeTargetSafe=isCanopyAccentLeafEdgeOffsetSafe(level,
                             particleX,accentY,particleZ,leafEdgeOffsetX,leafEdgeOffsetZ,
                             worldAnchorX,worldAnchorZ);
+                        boolean leafEdgeFallbackUsed=false;
                         if(!edgeTargetSafe) {
                             int fallbackAxis=canopyAccentLeafEdgeFallbackAxis(cameraDeltaX,cameraDeltaZ);
-                            if(fallbackAxis==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_X) {
-                                leafEdgeOffsetX=Math.copySign(GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET,cameraDeltaX);
-                                leafEdgeOffsetZ=0.0D;
-                            } else if(fallbackAxis==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_Z) {
-                                leafEdgeOffsetX=0.0D;
-                                leafEdgeOffsetZ=Math.copySign(GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET,cameraDeltaZ);
-                            } else {
-                                leafEdgeOffsetX=0.0D;
-                                leafEdgeOffsetZ=0.0D;
-                            }
-                            edgeTargetSafe=fallbackAxis!=CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK
-                                && isCanopyAccentLeafEdgeOffsetSafe(level,particleX,accentY,particleZ,
+                            if(fallbackAxis!=CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK) {
+                                leafEdgeFallbackAttempts++;
+                                if(fallbackAxis==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_X) {
+                                    leafEdgeOffsetX=Math.copySign(GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET,cameraDeltaX);
+                                    leafEdgeOffsetZ=0.0D;
+                                } else {
+                                    leafEdgeOffsetX=0.0D;
+                                    leafEdgeOffsetZ=Math.copySign(GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET,cameraDeltaZ);
+                                }
+                                edgeTargetSafe=isCanopyAccentLeafEdgeOffsetSafe(level,particleX,accentY,particleZ,
                                     leafEdgeOffsetX,leafEdgeOffsetZ,worldAnchorX,worldAnchorZ);
+                                leafEdgeFallbackUsed=edgeTargetSafe;
+                                if(!edgeTargetSafe) {
+                                    int alternateAxis=canopyAccentLeafEdgeAlternateFallbackAxis(fallbackAxis);
+                                    if(alternateAxis==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_X) {
+                                        leafEdgeOffsetX=Math.copySign(GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET,cameraDeltaX);
+                                        leafEdgeOffsetZ=0.0D;
+                                    } else if(alternateAxis==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_Z) {
+                                        leafEdgeOffsetX=0.0D;
+                                        leafEdgeOffsetZ=Math.copySign(GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET,cameraDeltaZ);
+                                    }
+                                    if(alternateAxis!=CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK) {
+                                        leafEdgeAlternateAttempts++;
+                                        edgeTargetSafe=isCanopyAccentLeafEdgeOffsetSafe(level,particleX,accentY,particleZ,
+                                            leafEdgeOffsetX,leafEdgeOffsetZ,worldAnchorX,worldAnchorZ);
+                                        leafEdgeFallbackUsed=edgeTargetSafe;
+                                    }
+                                }
+                            }
                         }
                         if(edgeTargetSafe) {
                             particleX+=leafEdgeOffsetX;
                             particleZ+=leafEdgeOffsetZ;
                             leafEdgeOffsetsApplied++;
+                            if(leafEdgeFallbackUsed) leafEdgeFallbacksApplied++;
                         }
                     }
                 }
@@ -3388,6 +3419,13 @@ public final class RiftClientState {
             // invalidations can repeat the same 32 distance/segment checks inside one rebuild interval.
             groundCanopyAccentLastAttemptTick=nextCanopyAccentAttemptTick(
                 gameTime,groundCanopyAccentLastAttemptTick,visited);
+            if(VERIFY_GROUND_MESH_PROFILES && !canopyAccentLeafEdgeFallbackRuntimeLogged
+                && leafEdgeFallbackAttempts>0) {
+                com.mojang.logging.LogUtils.getLogger().info(
+                    "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_EDGE_FALLBACK_RUNTIME attempts={} alternateAttempts={} applied={} cameraFacing=true loadedAirOnly=true radiusBounded=true",
+                    leafEdgeFallbackAttempts,leafEdgeAlternateAttempts,leafEdgeFallbacksApplied);
+                canopyAccentLeafEdgeFallbackRuntimeLogged=true;
+            }
             return leafEdgeOffsetsApplied;
         }
 
@@ -3742,7 +3780,10 @@ public final class RiftClientState {
                 && canopyAccentLeafEdgeFallbackAxis(1.99D,8.0D)==CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK
                 && canopyAccentLeafEdgeFallbackAxis(0.0D,8.0D)==CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK
                 && canopyAccentLeafEdgeFallbackAxis(Double.NaN,8.0D)==CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK
-                && canopyAccentLeafEdgeFallbackAxis(8.0D,Double.POSITIVE_INFINITY)==CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK;
+                && canopyAccentLeafEdgeFallbackAxis(8.0D,Double.POSITIVE_INFINITY)==CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK
+                && canopyAccentLeafEdgeAlternateFallbackAxis(CANOPY_ACCENT_LEAF_EDGE_FALLBACK_X)==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_Z
+                && canopyAccentLeafEdgeAlternateFallbackAxis(CANOPY_ACCENT_LEAF_EDGE_FALLBACK_Z)==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_X
+                && canopyAccentLeafEdgeAlternateFallbackAxis(CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK)==CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK;
             boolean plantCollisionShapePrefilterProfile=
                 isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState())
                 && isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.TALL_GRASS.defaultBlockState())
@@ -5134,6 +5175,7 @@ public final class RiftClientState {
             canopyAccentSelectorProfileLogged=false;
             canopyAccentBuildProfileLogged=false;
             canopyAccentEmissionLogged=false;
+            canopyAccentLeafEdgeFallbackRuntimeLogged=false;
             groundCanopyAccentLiftedLoggedCount=0;
             canopyAccentFixtureSampleLogged=false;
             groundCanopyAccentCandidateCount=0;
