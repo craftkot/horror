@@ -470,7 +470,7 @@ def verify_deferred_restore_chunk_bounds_profile():
     leaf_edge_creative_command=client_source.find(
         '"/gamemode creative @s",None,"enter creative for camera-facing leaf-edge probe"')
     beacon_click_start=client_source.find("    def try_beacon_click(")
-    beacon_click_end=client_source.find("\\n    def ",beacon_click_start+1)
+    beacon_click_end=client_source.find("\n    def ",beacon_click_start+1)
     beacon_click_body=(client_source[beacon_click_start:beacon_click_end]
         if beacon_click_start>=0 and beacon_click_end>beacon_click_start else "")
     beacon_aim_position=beacon_click_body.find("aim_camera_at_beacon(fresh_logs")

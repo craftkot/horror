@@ -20,6 +20,10 @@ public final class RiftAtmosphere {
     private static boolean validFogPlanes(float near,float far) {
         return Float.isFinite(near) && Float.isFinite(far) && near>=0.0F && far>near;
     }
+    // Other client mods may contribute malformed fog channels; never forward NaN/Infinity to the render pipeline.
+    private static float finiteFogChannel(float value,float fallback) {
+        return Float.isFinite(value) ? value : fallback;
+    }
 
     // Preserve some vanilla fog color for distant terrain. Cloud geometry is
     // controlled separately; this event only changes the fog color.
@@ -67,6 +71,10 @@ public final class RiftAtmosphere {
         boolean equalPlanesRejected=!validFogPlanes(64.0F,64.0F);
         boolean reversedPlanesRejected=!validFogPlanes(65.0F,64.0F);
         boolean zeroNearAccepted=validFogPlanes(0.0F,0.01F);
+        float nanFogChannel=finiteFogChannel(Float.NaN,.065F);
+        float positiveInfinityFogChannel=finiteFogChannel(Float.POSITIVE_INFINITY,.014F);
+        float negativeInfinityFogChannel=finiteFogChannel(Float.NEGATIVE_INFINITY,.14F);
+        float finiteFogChannel=finiteFogChannel(1.25F,.5F);
         if(Math.abs(midpoint-42.5D)>1.0E-9D || tickBoundary!=43.0D
             || invalid!=42.0D || negative!=42.0D || over!=43.0D)
             throw new IllegalStateException("BLACK FREQUENCY fog interpolation regression");
@@ -74,7 +82,11 @@ public final class RiftAtmosphere {
             || negativeInfinityStrength!=0.0F || lowStrength!=0.0F || highStrength!=1.0F
             || !validPlanes || nanNearRejected || nanFarRejected
             || infiniteFarRejected || zeroFarRejected || !negativeNearRejected
-            || !equalPlanesRejected || !reversedPlanesRejected || !zeroNearAccepted)
+            || !equalPlanesRejected || !reversedPlanesRejected || !zeroNearAccepted
+            || Math.abs(nanFogChannel-.065F)>1.0E-6F
+            || Math.abs(positiveInfinityFogChannel-.014F)>1.0E-6F
+            || Math.abs(negativeInfinityFogChannel-.14F)>1.0E-6F
+            || Math.abs(finiteFogChannel-1.25F)>1.0E-6F)
             throw new IllegalStateException("BLACK FREQUENCY fog input guard regression");
         float lowPulseBlend=fogColorBlend(1.0F,0.0F);
         float highPulseBlend=fogColorBlend(1.0F,1.0F);
@@ -104,6 +116,8 @@ public final class RiftAtmosphere {
             "BLACK_FREQUENCY_TEST FOG_PLANE_ORDER_GUARDS_VERIFIED negativeNearRejected={} equalRejected={} reversedRejected={} zeroNearAccepted={}",
             negativeNearRejected,equalPlanesRejected,reversedPlanesRejected,zeroNearAccepted);
         com.mojang.logging.LogUtils.getLogger().info(
+            "BLACK_FREQUENCY_TEST FOG_COLOR_CHANNEL_GUARDS_VERIFIED nonFiniteFallback=true finitePreserved=true");
+        com.mojang.logging.LogUtils.getLogger().info(
             "BLACK_FREQUENCY_TEST FOG_COLOR_BLEND_PROFILE_VERIFIED blendMin={} blendMax={}",
             lowPulseBlend,highPulseBlend);
         com.mojang.logging.LogUtils.getLogger().info(
@@ -127,9 +141,15 @@ public final class RiftAtmosphere {
         double time=interpolatedGameTime(Minecraft.getInstance().level.getGameTime(),event.getPartialTick());
         float pulse=(float)(.5D+.5D*Math.sin(time*.035D));
         float blend=fogColorBlend(f,pulse);
-        event.setRed(event.getRed()*(1f-blend)+(.065f+.018f*pulse)*blend);
-        event.setGreen(event.getGreen()*(1f-blend)+.014f*blend);
-        event.setBlue(event.getBlue()*(1f-blend)+(.14f+.035f*pulse)*blend);
+        float targetRed=.065F+.018F*pulse;
+        float targetGreen=.014F;
+        float targetBlue=.14F+.035F*pulse;
+        float baseRed=finiteFogChannel(event.getRed(),targetRed);
+        float baseGreen=finiteFogChannel(event.getGreen(),targetGreen);
+        float baseBlue=finiteFogChannel(event.getBlue(),targetBlue);
+        event.setRed(baseRed*(1f-blend)+targetRed*blend);
+        event.setGreen(baseGreen*(1f-blend)+targetGreen*blend);
+        event.setBlue(baseBlue*(1f-blend)+targetBlue*blend);
     }
 
     @SubscribeEvent
