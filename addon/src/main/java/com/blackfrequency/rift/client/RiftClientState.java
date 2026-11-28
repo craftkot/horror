@@ -894,6 +894,11 @@ public final class RiftClientState {
         private static final double GROUND_CANOPY_ACCENT_LEAF_EXTRA_OFFSET=.25D;
         // Move leaf-top motes just beyond the camera-facing canopy edge, but only into loaded air.
         private static final double GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET=.52D;
+        // Only try the secondary camera-facing axis when it still has a meaningful forward component.
+        private static final double GROUND_CANOPY_ACCENT_LEAF_EDGE_FALLBACK_MIN_RATIO=.25D;
+        private static final int CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK=0;
+        private static final int CANOPY_ACCENT_LEAF_EDGE_FALLBACK_X=1;
+        private static final int CANOPY_ACCENT_LEAF_EDGE_FALLBACK_Z=2;
         // Leaf-top accents may rise above the ground ribbon, but stay inside a bounded canopy envelope.
         private static final double GROUND_CANOPY_LEAF_ACCENT_MAX_HEIGHT_ABOVE_GROUND=24.0D;
         // A mote may rise above at most two non-colliding bush plants, never through leaves or solids.
@@ -3093,6 +3098,20 @@ public final class RiftClientState {
                 ? offset : 0.0D;
         }
 
+        private static int canopyAccentLeafEdgeFallbackAxis(double cameraDeltaX,double cameraDeltaZ) {
+            if(!Double.isFinite(cameraDeltaX) || !Double.isFinite(cameraDeltaZ))
+                return CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK;
+            double absX=Math.abs(cameraDeltaX),absZ=Math.abs(cameraDeltaZ);
+            double dominant=Math.max(absX,absZ),minor=Math.min(absX,absZ);
+            if(!Double.isFinite(dominant) || dominant<=1.0E-6D
+                || minor<dominant*GROUND_CANOPY_ACCENT_LEAF_EDGE_FALLBACK_MIN_RATIO)
+                return CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK;
+            // Prefer X on an exact diagonal tie so the fallback remains deterministic.
+            return absX<=absZ
+                ? CANOPY_ACCENT_LEAF_EDGE_FALLBACK_X
+                : CANOPY_ACCENT_LEAF_EDGE_FALLBACK_Z;
+        }
+
         private static boolean isCanopyAccentLeafEdgeTargetWithinRadius(
                 int targetX,int targetZ,int anchorX,int anchorZ) {
             long dx=(long)targetX-anchorX,dz=(long)targetZ-anchorZ;
@@ -3109,6 +3128,24 @@ public final class RiftClientState {
             return level.getWorldBorder().isWithinBounds(SURFACE_CURSOR)
                 && level.hasChunk(targetX>>4,targetZ>>4)
                 && level.getBlockState(SURFACE_CURSOR).isAir();
+        }
+
+        private static boolean isCanopyAccentLeafEdgeOffsetSafe(Level level,
+                double particleX,double accentY,double particleZ,double offsetX,double offsetZ,
+                int worldAnchorX,int worldAnchorZ) {
+            if(level==null || !Double.isFinite(particleX) || !Double.isFinite(accentY)
+                || !Double.isFinite(particleZ) || !Double.isFinite(offsetX) || !Double.isFinite(offsetZ)
+                || Math.abs(offsetX)>GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET
+                || Math.abs(offsetZ)>GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET) return false;
+            double targetXValue=Math.floor(particleX+offsetX);
+            double targetYValue=Math.floor(accentY);
+            double targetZValue=Math.floor(particleZ+offsetZ);
+            if(!Double.isFinite(targetXValue) || !Double.isFinite(targetYValue) || !Double.isFinite(targetZValue)
+                || targetXValue<Integer.MIN_VALUE || targetXValue>Integer.MAX_VALUE
+                || targetYValue<Integer.MIN_VALUE || targetYValue>Integer.MAX_VALUE
+                || targetZValue<Integer.MIN_VALUE || targetZValue>Integer.MAX_VALUE) return false;
+            return isCanopyAccentLeafEdgeTargetSafe(level,(int)targetXValue,(int)targetYValue,
+                (int)targetZValue,worldAnchorX,worldAnchorZ);
         }
 
         private static boolean canopyAccentCandidateInsideExpandedSegmentBounds(double x,double z,
@@ -3290,19 +3327,29 @@ public final class RiftClientState {
                     double leafEdgeOffsetX=canopyAccentLeafEdgeOffset(cameraDeltaX,cameraDeltaZ,true);
                     double leafEdgeOffsetZ=canopyAccentLeafEdgeOffset(cameraDeltaX,cameraDeltaZ,false);
                     if(leafEdgeOffsetX!=0.0D || leafEdgeOffsetZ!=0.0D) {
-                        double targetXValue=Math.floor(particleX+leafEdgeOffsetX);
-                        double targetZValue=Math.floor(particleZ+leafEdgeOffsetZ);
-                        if(Double.isFinite(targetXValue) && Double.isFinite(targetZValue)
-                            && targetXValue>=Integer.MIN_VALUE && targetXValue<=Integer.MAX_VALUE
-                            && targetZValue>=Integer.MIN_VALUE && targetZValue<=Integer.MAX_VALUE) {
-                            int targetX=(int)targetXValue,targetZ=(int)targetZValue;
-                            int targetY=(int)Math.floor(accentY);
-                            if(isCanopyAccentLeafEdgeTargetSafe(
-                                    level,targetX,targetY,targetZ,worldAnchorX,worldAnchorZ)) {
-                                particleX+=leafEdgeOffsetX;
-                                particleZ+=leafEdgeOffsetZ;
-                                leafEdgeOffsetsApplied++;
+                        boolean edgeTargetSafe=isCanopyAccentLeafEdgeOffsetSafe(level,
+                            particleX,accentY,particleZ,leafEdgeOffsetX,leafEdgeOffsetZ,
+                            worldAnchorX,worldAnchorZ);
+                        if(!edgeTargetSafe) {
+                            int fallbackAxis=canopyAccentLeafEdgeFallbackAxis(cameraDeltaX,cameraDeltaZ);
+                            if(fallbackAxis==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_X) {
+                                leafEdgeOffsetX=Math.copySign(GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET,cameraDeltaX);
+                                leafEdgeOffsetZ=0.0D;
+                            } else if(fallbackAxis==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_Z) {
+                                leafEdgeOffsetX=0.0D;
+                                leafEdgeOffsetZ=Math.copySign(GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET,cameraDeltaZ);
+                            } else {
+                                leafEdgeOffsetX=0.0D;
+                                leafEdgeOffsetZ=0.0D;
                             }
+                            edgeTargetSafe=fallbackAxis!=CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK
+                                && isCanopyAccentLeafEdgeOffsetSafe(level,particleX,accentY,particleZ,
+                                    leafEdgeOffsetX,leafEdgeOffsetZ,worldAnchorX,worldAnchorZ);
+                        }
+                        if(edgeTargetSafe) {
+                            particleX+=leafEdgeOffsetX;
+                            particleZ+=leafEdgeOffsetZ;
+                            leafEdgeOffsetsApplied++;
                         }
                     }
                 }
@@ -3686,6 +3733,16 @@ public final class RiftClientState {
                 && isCanopyAccentLeafEdgeTargetWithinRadius(48,0,0,0)
                 && !isCanopyAccentLeafEdgeTargetWithinRadius(49,0,0,0)
                 && !isCanopyAccentLeafEdgeTargetWithinRadius(34,34,0,0);
+            boolean leafEdgeFallbackProfile=Double.isFinite(GROUND_CANOPY_ACCENT_LEAF_EDGE_FALLBACK_MIN_RATIO)
+                && GROUND_CANOPY_ACCENT_LEAF_EDGE_FALLBACK_MIN_RATIO==.25D
+                && canopyAccentLeafEdgeFallbackAxis(8.0D,4.0D)==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_Z
+                && canopyAccentLeafEdgeFallbackAxis(4.0D,8.0D)==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_X
+                && canopyAccentLeafEdgeFallbackAxis(8.0D,8.0D)==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_X
+                && canopyAccentLeafEdgeFallbackAxis(2.0D,8.0D)==CANOPY_ACCENT_LEAF_EDGE_FALLBACK_X
+                && canopyAccentLeafEdgeFallbackAxis(1.99D,8.0D)==CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK
+                && canopyAccentLeafEdgeFallbackAxis(0.0D,8.0D)==CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK
+                && canopyAccentLeafEdgeFallbackAxis(Double.NaN,8.0D)==CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK
+                && canopyAccentLeafEdgeFallbackAxis(8.0D,Double.POSITIVE_INFINITY)==CANOPY_ACCENT_LEAF_EDGE_NO_FALLBACK;
             boolean plantCollisionShapePrefilterProfile=
                 isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.DANDELION.defaultBlockState())
                 && isCanopyAccentPlantCandidate(net.minecraft.world.level.block.Blocks.TALL_GRASS.defaultBlockState())
@@ -3874,6 +3931,7 @@ public final class RiftClientState {
                 && particleDriftProfile && particleColorTransitionProfile
                 && foliageClearanceProfile && canopyAccentHeadroomProfile
                 && plantClearanceProfile && leafAccentClearanceProfile && leafEdgeOffsetProfile
+                && leafEdgeFallbackProfile
                 && plantCollisionShapePrefilterProfile && vanillaDoublePlantProfile
                 && leafSurfaceScanProfile && heightmapTopNormalizationProfile
                 && Math.abs(plantTop-71.20D)<1.0E-9D
@@ -3949,6 +4007,9 @@ public final class RiftClientState {
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET_PROFILE_VERIFIED maxOffset={} dominantAxisCrossesBoundary=true cameraFacing=true loadedAirOnly=true radiusBounded=true",
                 GROUND_CANOPY_ACCENT_LEAF_EDGE_OFFSET);
+            com.mojang.logging.LogUtils.getLogger().info(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_EDGE_FALLBACK_PROFILE_VERIFIED minMinorRatio={} dominantRejectedFallback=true cameraFacing=true loadedAirOnly=true radiusBounded=true",
+                GROUND_CANOPY_ACCENT_LEAF_EDGE_FALLBACK_MIN_RATIO);
             com.mojang.logging.LogUtils.getLogger().info(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_HEADROOM_POLICY_VERIFIED airOnlyOrLiftedBush=true leavesRejected=true plantsBounded=true fluidsRejected=true solidRejected=true ribbonStillAllowed=true");
             com.mojang.logging.LogUtils.getLogger().info(

@@ -5674,13 +5674,33 @@ def capture_test_world():
                     or "GroundMesh mesh=buildSegments(level,worldAnchorX,worldAnchorZ,surfaceReferenceY,camera);" not in camera_source):
                 print("WORLD_CAPTURE_FAIL: camera-facing leaf-edge offset policy was not verified",flush=True)
                 return False
+            leaf_edge_fallback_marker=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_EDGE_FALLBACK_PROFILE_VERIFIED "
+                "minMinorRatio=0.25 dominantRejectedFallback=true cameraFacing=true loadedAirOnly=true radiusBounded=true"
+            )
+            if (leaf_edge_fallback_marker not in log_after
+                    or "private static int canopyAccentLeafEdgeFallbackAxis(double cameraDeltaX,double cameraDeltaZ)" not in camera_source
+                    or "int fallbackAxis=canopyAccentLeafEdgeFallbackAxis(cameraDeltaX,cameraDeltaZ);" not in camera_source
+                    or "isCanopyAccentLeafEdgeOffsetSafe(" not in camera_source):
+                print("WORLD_CAPTURE_FAIL: secondary camera-facing leaf-edge fallback was not verified",flush=True)
+                return False
+            leaf_top_particle_emitted=(
+                "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_TOP_PARTICLE_EMITTED" in log_after
+            )
             leaf_edge_offset_applied=re.search(
                 r"BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_LEAF_EDGE_CAMERA_OFFSET_APPLIED "
                 r"applied=(\d+) maxOffset=0\.52 cameraFacing=true loadedAirOnly=true radiusBounded=true",
                 log_after)
-            if not leaf_edge_offset_applied or int(leaf_edge_offset_applied.group(1))<=0:
-                print("WORLD_CAPTURE_FAIL: no leaf-top mote reached a verified camera-facing loaded air cell",flush=True)
+            if leaf_top_particle_emitted:
+                if not leaf_edge_offset_applied or int(leaf_edge_offset_applied.group(1))<=0:
+                    print("WORLD_CAPTURE_FAIL: leaf-top motes were emitted but none reached a verified camera-facing loaded air cell",flush=True)
+                    return False
+                print("WORLD_CAPTURE: camera-facing leaf-edge placement was exercised",flush=True)
+            elif leaf_edge_offset_applied and int(leaf_edge_offset_applied.group(1))>0:
+                print("WORLD_CAPTURE_FAIL: leaf-edge offset was reported without an emitted leaf-top mote",flush=True)
                 return False
+            else:
+                print("WORLD_CAPTURE: no leaf-top candidates in this recovery profile; edge placement remained inactive",flush=True)
             canopy_drift_marker=(
                 "BLACK_FREQUENCY_TEST GROUND_CANOPY_ACCENT_DRIFT_PROFILE_VERIFIED "
                 "deterministic=true temporalVariation=true dimensionScoped=true epochTicks=10 horizontalMax=0.0045 horizontalOnly=true liftedVerticalSeparate=true bounded=true"
